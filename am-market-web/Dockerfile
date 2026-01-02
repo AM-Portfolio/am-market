@@ -26,5 +26,7 @@ RUN flutter build web --release --base-href /market-ui/
 FROM nginx:alpine
 COPY --from=build /app/am-market/am-market-web/build/web /usr/share/nginx/html/market-ui
 COPY am-market/am-market-web/nginx.conf /etc/nginx/conf.d/default.conf
+# Fix permissions so nginx can read all files
+RUN chmod -R 755 /usr/share/nginx/html/market-ui
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
