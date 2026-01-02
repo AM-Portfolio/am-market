@@ -1,0 +1,107 @@
+package com.am.marketdata.common.model.tradeB.financials.dividend;
+
+import java.util.Map;
+
+import com.am.marketdata.common.model.tradeB.financials.adapter.FinancialDataJsonAdapter;
+import lombok.Data;
+
+@Data
+public class DividendMetrics {
+    private String yearEnd;
+    private Double netSalesGrowth;
+    private Double ebitdaGrowth;
+    private Double ebitGrowth;
+    private Double pe;
+    private Double evEbitda;
+    private Double priceBookValue;
+    private Double dividendYield;
+    private Double cashFlowPerShare;
+    private Double salesToCashflowRatio;
+    private Double currentRatio;
+    private Double quickRatio;
+    private Double receivableDays;
+    private Double inventoryDays;
+    private Double payableDays;
+    private Double pbditMargin;
+    private Double pbtMargin;
+    private Double ebitMargin;
+    private Double netProfitMargin;
+    private Double contributionProfitMargin;
+    private Double returnOnEquity;
+    private Double returnOnAssets;
+    private Double earningsPerShare;
+    private Double netProfitGrowth;
+    private Double marketCapToSales;
+    private Double priceToCashflow;
+    private Double fcfPerShare;
+    private Double priceToFreeCashflow;
+    private Double interestCoverageRatio;
+    private Double debtToEquityRatio;
+    private Double totalDebtToMarketCap;
+    private Double fixedCapitalToSalesRatio;
+    private Double returnOnCapitalEmployed;
+    private Double dividendPerShare;
+    private Double dividendPayoutRatio;
+    private Double pbitMargin;
+    private Double adjEarningsPerShare;
+    private Double enterpriseValue;
+    private Double pegRatio;
+    private Double priceSalesRatio;
+    private Double assetTurnoverRatio;
+    private Double workingCapitalDays;
+    private Double inventoryTurnoverRatio;
+    private Double adjDividendPerShare;
+    private Double freeCashFlowPerShare;
+    private Double cashConversionCycle;
+    private Double freeCashFlowYield;
+
+    public void populateFromMap(Map<String, String> data) {
+        yearEnd = data.get("year_end");
+        netSalesGrowth = FinancialDataJsonAdapter.parseDouble(data.get("net_sales_growth"));
+        ebitdaGrowth = FinancialDataJsonAdapter.parseDouble(data.get("ebitda_growth"));
+        ebitGrowth = FinancialDataJsonAdapter.parseDouble(data.get("ebit_growth"));
+        pe = FinancialDataJsonAdapter.parseDouble(data.get("pe"));
+        evEbitda = FinancialDataJsonAdapter.parseDouble(data.get("ev_ebitda"));
+        priceBookValue = FinancialDataJsonAdapter.parseDouble(data.get("price_book_value"));
+        dividendYield = FinancialDataJsonAdapter.parseDouble(data.get("dividend_yield"));
+        cashFlowPerShare = FinancialDataJsonAdapter.parseDouble(data.get("cash_flow_per_share"));
+        salesToCashflowRatio = FinancialDataJsonAdapter.parseDouble(data.get("sales_to_cashflow_ratio"));
+        currentRatio = FinancialDataJsonAdapter.parseDouble(data.get("current_ratio"));
+        quickRatio = FinancialDataJsonAdapter.parseDouble(data.get("quick_ratio"));
+        receivableDays = FinancialDataJsonAdapter.parseDouble(data.get("receivable_days"));
+        inventoryDays = FinancialDataJsonAdapter.parseDouble(data.get("inventory_days"));
+        payableDays = FinancialDataJsonAdapter.parseDouble(data.get("payable_days"));
+        pbditMargin = FinancialDataJsonAdapter.parseDouble(data.get("pbdit_margin"));
+        pbtMargin = FinancialDataJsonAdapter.parseDouble(data.get("pbt_margin"));
+        ebitMargin = FinancialDataJsonAdapter.parseDouble(data.get("ebit_margin"));
+        netProfitMargin = FinancialDataJsonAdapter.parseDouble(data.get("net_profit_margin"));
+        contributionProfitMargin = FinancialDataJsonAdapter.parseDouble(data.get("contribution_profit_margin"));
+        returnOnEquity = FinancialDataJsonAdapter.parseDouble(data.get("return_on_equity"));
+        returnOnAssets = FinancialDataJsonAdapter.parseDouble(data.get("return_on_assets"));
+        earningsPerShare = FinancialDataJsonAdapter.parseDouble(data.get("earnings_per_share"));
+        netProfitGrowth = FinancialDataJsonAdapter.parseDouble(data.get("net_profit_growth"));
+        marketCapToSales = FinancialDataJsonAdapter.parseDouble(data.get("market_cap_to_sales"));
+        priceToCashflow = FinancialDataJsonAdapter.parseDouble(data.get("price_to_cashflow"));
+        fcfPerShare = FinancialDataJsonAdapter.parseDouble(data.get("fcf_per_share"));
+        priceToFreeCashflow = FinancialDataJsonAdapter.parseDouble(data.get("price_to_free_cashflow"));
+        interestCoverageRatio = FinancialDataJsonAdapter.parseDouble(data.get("interest_voverage_ratio"));
+        debtToEquityRatio = FinancialDataJsonAdapter.parseDouble(data.get("debt_to_equity_ratio"));
+        totalDebtToMarketCap = FinancialDataJsonAdapter.parseDouble(data.get("total_debt_to_market_cap"));
+        fixedCapitalToSalesRatio = FinancialDataJsonAdapter.parseDouble(data.get("fixed_capital_to_sales_ratio"));
+        returnOnCapitalEmployed = FinancialDataJsonAdapter.parseDouble(data.get("return_on_cap_employed"));
+        dividendPerShare = FinancialDataJsonAdapter.parseDouble(data.get("dividend_per_share"));
+        dividendPayoutRatio = FinancialDataJsonAdapter.parseDouble(data.get("dividend_payout_ratio"));
+        pbitMargin = FinancialDataJsonAdapter.parseDouble(data.get("pbit_margin"));
+        adjEarningsPerShare = FinancialDataJsonAdapter.parseDouble(data.get("adj.earnings_per_share"));
+        enterpriseValue = FinancialDataJsonAdapter.parseDouble(data.get("enterprise_value"));
+        pegRatio = FinancialDataJsonAdapter.parseDouble(data.get("peg_ratio"));
+        priceSalesRatio = FinancialDataJsonAdapter.parseDouble(data.get("price_sales_ratio"));
+        assetTurnoverRatio = FinancialDataJsonAdapter.parseDouble(data.get("asset_turnover_ratio"));
+        workingCapitalDays = FinancialDataJsonAdapter.parseDouble(data.get("working_capital_days"));
+        inventoryTurnoverRatio = FinancialDataJsonAdapter.parseDouble(data.get("inventory_turnover_ratio"));
+        adjDividendPerShare = FinancialDataJsonAdapter.parseDouble(data.get("adj_dividend_per_share"));
+        freeCashFlowPerShare = FinancialDataJsonAdapter.parseDouble(data.get("free_cash_flow_per_share"));
+        cashConversionCycle = FinancialDataJsonAdapter.parseDouble(data.get("cash_conversion_cycle"));
+        freeCashFlowYield = FinancialDataJsonAdapter.parseDouble(data.get("free_cash_flow_yeild"));
+    }
+}

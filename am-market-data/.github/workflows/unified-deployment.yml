@@ -1,0 +1,136 @@
+name: Deployment
+
+on:
+  # Manual deployment with environment selection
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'preprod'
+        type: choice
+        options:
+          - preprod
+          - prod
+      image_tag:
+        description: 'Docker image tag to deploy (leave empty for latest build)'
+        required: false
+        type: string
+  
+  # Called by docker-build workflow
+  workflow_call:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/market-data-service
+  HELM_CHART_PATH: ./helm/market-data
+  IMAGE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag || inputs.image_tag }}
+
+jobs:
+  # Deploy to the selected environment
+  deploy:
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'preprod' }}
+    name: Deploy to Environment
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    
+    env:
+      # Set environment based on workflow_dispatch input or default to preprod for workflow_call
+      ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'preprod' }}
+    
+    steps:
+      # Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # Set environment-specific variables
+      - name: Set environment variables
+        id: set-vars
+        run: |
+          # Set environment-specific variables
+          if [[ "${{ env.ENVIRONMENT }}" == "prod" ]]; then
+            echo "RESOURCE_GROUP=am-investing" >> $GITHUB_ENV
+            echo "CLUSTER_NAME=am-np-west" >> $GITHUB_ENV
+            echo "NAMESPACE=dev" >> $GITHUB_ENV
+            echo "Deploying to PRODUCTION environment"
+          else
+            echo "RESOURCE_GROUP=am-investing" >> $GITHUB_ENV
+            echo "CLUSTER_NAME=am-np-west" >> $GITHUB_ENV
+            echo "NAMESPACE=dev" >> $GITHUB_ENV
+            echo "Deploying to PRE-PRODUCTION environment"
+          fi
+          
+          # Set image tag from input
+          echo "IMAGE_TAG=${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
+      
+      # Login to Azure
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      # Set AKS context
+      - name: Set AKS context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ env.RESOURCE_GROUP }}
+          cluster-name: ${{ env.CLUSTER_NAME }}
+      
+      # Setup Helm
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.3'  # Removed 'v' prefix for stability
+      
+      # Check and remove Helm locks if any exist
+      - name: Check and remove Helm locks
+        run: |
+          # Check if there's a release with pending operations
+          if kubectl get secret -n ${{ env.NAMESPACE }} | grep -q "sh.helm.release.v1.market-data-service"; then
+            echo "Found existing Helm release, checking for locks..."
+            # Get all Helm secrets and check for pending operations
+            HELM_SECRETS=$(kubectl get secrets -n ${{ env.NAMESPACE }} -l owner=helm -o name)
+            for secret in $HELM_SECRETS; do
+              if [[ $secret == *"market-data-service"* ]]; then
+                echo "Examining $secret for locks"
+                # Check if the secret contains a lock
+                LOCK_STATUS=$(kubectl get $secret -n ${{ env.NAMESPACE }} -o jsonpath='{.metadata.labels.status}')
+                if [[ $LOCK_STATUS == "pending-install" || $LOCK_STATUS == "pending-upgrade" || $LOCK_STATUS == "pending-rollback" ]]; then
+                  echo "Found lock in $secret with status $LOCK_STATUS, removing..."
+                  kubectl delete $secret -n ${{ env.NAMESPACE }}
+                  echo "Lock removed"
+                fi
+              fi
+            done
+          else
+            echo "No existing Helm release found, proceeding with installation"
+          fi
+      
+      # Deploy to AKS using Helm
+      - name: Deploy to AKS
+        run: |
+          # Create namespace if it doesn't exist
+          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Echo image and environment details for logging
+          echo "Deploying image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          echo "Environment: ${{ env.ENVIRONMENT }}"
+          echo "Resource Group: ${{ env.RESOURCE_GROUP }}"
+          echo "Cluster: ${{ env.CLUSTER_NAME }}"
+          echo "Namespace: ${{ env.NAMESPACE }}"
+          
+          # Deploy using Helm with the appropriate values file
+          helm upgrade --install market-data-service ${{ env.HELM_CHART_PATH }} \
+            --namespace ${{ env.NAMESPACE }} \
+            -f ${{ env.HELM_CHART_PATH }}/values/${{ env.ENVIRONMENT }}.yaml \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=${{ env.IMAGE_TAG }} \
+            --set deployment.version="${{ env.IMAGE_TAG }}" \
+            --wait --timeout 5m

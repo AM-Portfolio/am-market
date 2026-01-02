@@ -1,0 +1,38 @@
+# Kafka Configuration
+KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+KAFKA_SECURITY_PROTOCOL: SASL_PLAINTEXT
+KAFKA_SASL_MECHANISM: PLAIN
+KAFKA_SASL_JAAS_CONFIG:
+
+# Application-specific Kafka properties
+app:
+  kafka:
+    enabled: true
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    properties:
+      security-protocol: ${KAFKA_SECURITY_PROTOCOL}
+      sasl-mechanism: ${KAFKA_SASL_MECHANISM}
+      sasl-jaas-config: ${KAFKA_SASL_JAAS_CONFIG}
+
+    # Topic configuration
+    topics:
+      stock-price: ${STOKUPATE_TOPIC_NAME:am-stock-price-update}
+      nse-indices: ${NSE_INDICES_TOPIC_NAME:am-nse-indices}
+      stock-indices: ${NSE_STOCK_INDICES_TOPIC_NAME:am-stock-indices}
+      stock-board-of-directors: ${BOARD_OF_DIRECTORS_TOPIC_NAME:stock-board-of-directors}
+      stock-quaterly-financials: ${QUATERLY_FINANCIALS_TOPIC_NAME:stock-quaterly-financials}
+      stock-balance-sheet-financials: ${STOCK_BALANCE_SHEET_FINANCIALS_TOPIC_NAME:stock-balance-sheet-financials}
+      stock-cash-flow-financials: ${STOCK_CASH_FLOW_FINANCIALS_TOPIC_NAME:stock-cash-flow-financials}
+      stock-profit-and-loss-financials: ${STOCK_PROFIT_AND_LOSS_FINANCIALS_TOPIC_NAME:stock-profit-and-loss-financials}
+      stock-results-financials: ${STOCK_RESULTS_FINANCIALS_TOPIC_NAME:stock-results-financials}
+      stock-factsheet-dividend-financials: ${STOCK_FACT_SHEET_DIVIDEND_FINANCIALS_TOPIC_NAME:stock-fact-sheet-dividend-financials}
+    
+    # Producer configuration
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      batch-size: 16384
+      linger-ms: 1
+      buffer-memory: 33554432

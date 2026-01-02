@@ -1,0 +1,212 @@
+{
+    "info": {
+        "_postman_id": "portfolio-api-coll-id",
+        "name": "Portfolio Management API",
+        "description": "Endpoints for managing and analyzing user portfolios.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Get Portfolios",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/api/v1/portfolios?userId={{userId}}",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "portfolios"
+                    ],
+                    "query": [
+                        {
+                            "key": "userId",
+                            "value": "{{userId}}"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Get Portfolio by ID",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/api/v1/portfolios/{{portfolioId}}",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "portfolios",
+                        "{{portfolioId}}"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Get Portfolio List (Basic Info)",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/api/v1/portfolios/list?userId={{userId}}",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "portfolios",
+                        "list"
+                    ],
+                    "query": [
+                        {
+                            "key": "userId",
+                            "value": "{{userId}}"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Get Portfolio Analysis",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/api/v1/portfolios/{{portfolioId}}/analysis?userId={{userId}}&interval=1Y",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "portfolios",
+                        "{{portfolioId}}",
+                        "analysis"
+                    ],
+                    "query": [
+                        {
+                            "key": "userId",
+                            "value": "{{userId}}"
+                        },
+                        {
+                            "key": "interval",
+                            "value": "1Y"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Get Portfolio Summary",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/api/v1/portfolios/summary?userId={{userId}}",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "portfolios",
+                        "summary"
+                    ],
+                    "query": [
+                        {
+                            "key": "userId",
+                            "value": "{{userId}}"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Get Portfolio Holdings",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/api/v1/portfolios/holdings?userId={{userId}}",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "portfolios",
+                        "holdings"
+                    ],
+                    "query": [
+                        {
+                            "key": "userId",
+                            "value": "{{userId}}"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Advanced Portfolio Analytics",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"coreIdentifiers\": {\n        \"userId\": \"{{userId}}\"\n    },\n    \"timeFrame\": \"1Y\",\n    \"components\": [\"PERFORMANCE\", \"RISK\"]\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/api/v1/analytics/portfolio/{{portfolioId}}/advanced",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "analytics",
+                        "portfolio",
+                        "{{portfolioId}}",
+                        "advanced"
+                    ]
+                }
+            },
+            "response": []
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8060",
+            "type": "string"
+        },
+        {
+            "key": "userId",
+            "value": "user-uuid",
+            "type": "string"
+        },
+        {
+            "key": "portfolioId",
+            "value": "portfolio-uuid",
+            "type": "string"
+        }
+    ]
+}

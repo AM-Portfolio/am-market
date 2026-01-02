@@ -1,0 +1,128 @@
+{
+    "info": {
+        "_postman_id": "market-data-streaming-collection-v1",
+        "name": "Market Data Streaming (Polling)",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Connect Stream (Polling)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"instrumentKeys\": [\"NSE_EQ|INFY\", \"NSE_EQ|RELIANCE\"],\n    \"mode\": \"FULL\",\n    \"provider\": \"UPSTOX\",\n    \"timeFrame\": \"1D\",\n    \"expandIndices\": false\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/market-data/stream/connect",
+                    "protocol": "http",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "market-data",
+                        "stream",
+                        "connect"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Initiate Stream (Hybrid)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"instrumentKeys\": [\"NSE_EQ|INFY\"],\n    \"mode\": \"FULL\",\n    \"provider\": \"UPSTOX\",\n    \"timeFrame\": \"1D\",\n    \"expandIndices\": false,\n    \"isIndexSymbol\": false,\n    \"stream\": true\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/market-data/stream/initiate",
+                    "protocol": "http",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "market-data",
+                        "stream",
+                        "initiate"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Disconnect Stream",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/market-data/stream/disconnect?provider=UPSTOX",
+                    "protocol": "http",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "market-data",
+                        "stream",
+                        "disconnect"
+                    ],
+                    "query": [
+                        {
+                            "key": "provider",
+                            "value": "UPSTOX"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "WebSocket Connection",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "ws://localhost:8092/ws/market-data-stream",
+                    "protocol": "ws",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "8092",
+                    "path": [
+                        "ws",
+                        "market-data-stream"
+                    ]
+                }
+            },
+            "response": []
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8092",
+            "type": "string"
+        }
+    ]
+}

@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: am_influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=password
+      - DOCKER_INFLUXDB_INIT_ORG=am_investment
+      - DOCKER_INFLUXDB_INIT_BUCKET=market_data
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+      - influxdb_config:/etc/influxdb2
+    networks:
+      - am_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  chronograf:
+    image: chronograf:latest
+    container_name: am_chronograf
+    ports:
+      - "8888:8888"
+    environment:
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=my-super-secret-auth-token
+      - INFLUXDB_ORG=am_investment
+    depends_on:
+      - influxdb
+    volumes:
+      - chronograf_data:/var/lib/chronograf
+    networks:
+      - am_network
+
+volumes:
+  influxdb_data:
+  influxdb_config:
+  chronograf_data:
+
+networks:
+  am_network:
+    name: am_network

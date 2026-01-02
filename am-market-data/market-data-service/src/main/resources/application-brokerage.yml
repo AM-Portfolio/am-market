@@ -1,0 +1,69 @@
+# Brokerage Calculator Configuration
+market:
+  brokerage:
+    # Securities Transaction Tax (STT) rates in percentage
+    stt:
+      delivery: ${BROKERAGE_STT_DELIVERY:0.1}
+      intraday: ${BROKERAGE_STT_INTRADAY:0.025}
+    
+    # GST rate in percentage
+    gst: ${BROKERAGE_GST:18}
+    
+    # Exchange transaction charges in percentage
+    exchange:
+      nse: ${BROKERAGE_EXCHANGE_NSE:0.00325}
+      bse: ${BROKERAGE_EXCHANGE_BSE:0.00275}
+    
+    # SEBI turnover charges in percentage
+    sebi: ${BROKERAGE_SEBI:0.0001}
+    
+    # DP charges in INR (for delivery sell transactions)
+    dp:
+      charge: ${BROKERAGE_DP_CHARGE:13.5}
+    
+    # Stamp duty rates in percentage
+    stamp:
+      delivery: ${BROKERAGE_STAMP_DELIVERY:0.015}
+      intraday: ${BROKERAGE_STAMP_INTRADAY:0.003}
+    
+    # Broker-specific brokerage fees (per trade)
+    brokers:
+      # Discount brokers
+      zerodha: ${BROKERAGE_ZERODHA:20}
+      upstox: ${BROKERAGE_UPSTOX:20}
+      mstock: ${BROKERAGE_MSTOCK:20}
+      angelone: ${BROKERAGE_ANGELONE:20}
+      groww: ${BROKERAGE_GROWW:20}
+      dhan: ${BROKERAGE_DHAN:20}
+      fyers: ${BROKERAGE_FYERS:20}
+      icicidirect: ${BROKERAGE_ICICIDIRECT:20}
+      "5paisa": ${BROKERAGE_5PAISA:10}
+      aliceblue: ${BROKERAGE_ALICEBLUE:15}
+      finvasia: ${BROKERAGE_FINVASIA:0}
+      vested: ${BROKERAGE_VESTED:0}
+      flattrade: ${BROKERAGE_FLATTRADE:0}
+      
+      # Full-service brokers (percentage of transaction value)
+      "hdfcsec": ${BROKERAGE_HDFCSEC:0.5}
+      "kotaksecurities": ${BROKERAGE_KOTAKSECURITIES:0.5}
+      sharekhan: ${BROKERAGE_SHAREKHAN:0.5}
+      motilaloswal: ${BROKERAGE_MOTILALOSWAL:0.5}
+      
+    # Default broker fees (used when specific broker not found)
+    discount:
+      flat-fee: ${BROKERAGE_DISCOUNT_FLAT_FEE:20}
+    full-service:
+      percentage: ${BROKERAGE_FULL_SERVICE_PERCENTAGE:0.5}
+    
+    # Thread pool configuration
+    thread:
+      pool:
+        size: ${BROKERAGE_THREAD_POOL_SIZE:3}
+      queue:
+        capacity: ${BROKERAGE_THREAD_QUEUE_CAPACITY:10}
+
+# Logging configuration
+logging:
+  level:
+    com.marketdata.service.margin.BrokerageCalculatorService: ${BROKERAGE_LOG_LEVEL:INFO}
+    com.am.marketdata.api.service.BrokerageCalculatorApiService: ${BROKERAGE_API_LOG_LEVEL:INFO}

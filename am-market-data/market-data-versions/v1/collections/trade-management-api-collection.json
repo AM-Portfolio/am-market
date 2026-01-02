@@ -1,0 +1,347 @@
+{
+    "info": {
+        "_postman_id": "trade-mgmt-api-coll-id",
+        "name": "Trade Management API",
+        "description": "Comprehensive API for trade execution, metrics, journaling, and analysis.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Trades",
+            "item": [
+                {
+                    "name": "Get Trades by Portfolio and Symbols",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/trades/details/portfolio/{{portfolioId}}?symbols=RELIANCE,TCS",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "trades",
+                                "details",
+                                "portfolio",
+                                "{{portfolioId}}"
+                            ],
+                            "query": [
+                                {
+                                    "key": "symbols",
+                                    "value": "RELIANCE,TCS"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Add Trade",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"portfolioId\": \"{{portfolioId}}\",\n    \"symbol\": \"RELIANCE\",\n    \"quantity\": 10,\n    \"price\": 2500.0,\n    \"tradeType\": \"BUY\",\n    \"tradeDate\": \"2025-01-01\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/trades/details",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "trades",
+                                "details"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Trade",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"tradeId\": \"{{tradeId}}\",\n    \"userId\": \"{{userId}}\",\n    \"portfolioId\": \"{{portfolioId}}\",\n    \"symbol\": \"RELIANCE\",\n    \"quantity\": 15,\n    \"price\": 2550.0,\n    \"tradeType\": \"BUY\",\n    \"tradeDate\": \"2025-01-01\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/trades/details/{{tradeId}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "trades",
+                                "details",
+                                "{{tradeId}}"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Filter Trades",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/trades/filter?portfolioIds={{portfolioId}}&statuses=OPEN&startDate=2025-01-01&endDate=2025-12-31",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "trades",
+                                "filter"
+                            ],
+                            "query": [
+                                {
+                                    "key": "portfolioIds",
+                                    "value": "{{portfolioId}}"
+                                },
+                                {
+                                    "key": "statuses",
+                                    "value": "OPEN"
+                                },
+                                {
+                                    "key": "startDate",
+                                    "value": "2025-01-01"
+                                },
+                                {
+                                    "key": "endDate",
+                                    "value": "2025-12-31"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Metrics",
+            "item": [
+                {
+                    "name": "Get Metrics",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"portfolioIds\": [\"{{portfolioId}}\"],\n    \"metricTypes\": [\"PROFIT_LOSS\", \"ROI\"],\n    \"startDate\": \"2025-01-01\",\n    \"endDate\": \"2025-12-31\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/metrics",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "metrics"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Metric Types",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/metrics/types",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "metrics",
+                                "types"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Journal",
+            "item": [
+                {
+                    "name": "Create Journal Entry",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"tradeId\": \"{{tradeId}}\",\n    \"content\": \"Bought at dip, looking for a bounce.\",\n    \"mood\": \"CONFIDENT\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/journal",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "journal"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Journal Entries by User",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/journal/user/{{userId}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "journal",
+                                "user",
+                                "{{userId}}"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Heatmaps",
+            "item": [
+                {
+                    "name": "Yearly Heatmap",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/heatmap/yearly?portfolioId={{portfolioId}}&includeTradeDetails=true",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "heatmap",
+                                "yearly"
+                            ],
+                            "query": [
+                                {
+                                    "key": "portfolioId",
+                                    "value": "{{portfolioId}}"
+                                },
+                                {
+                                    "key": "includeTradeDetails",
+                                    "value": "true"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Summaries",
+            "item": [
+                {
+                    "name": "Trade Details by Time Period",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/trade-summary/trades?periodType=MONTH&year=2025&month=1&portfolioId={{portfolioId}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "trade-summary",
+                                "trades"
+                            ],
+                            "query": [
+                                {
+                                    "key": "periodType",
+                                    "value": "MONTH"
+                                },
+                                {
+                                    "key": "year",
+                                    "value": "2025"
+                                },
+                                {
+                                    "key": "month",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "portfolioId",
+                                    "value": "{{portfolioId}}"
+                                }
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8040",
+            "type": "string"
+        },
+        {
+            "key": "userId",
+            "value": "user-uuid",
+            "type": "string"
+        },
+        {
+            "key": "portfolioId",
+            "value": "portfolio-uuid",
+            "type": "string"
+        },
+        {
+            "key": "tradeId",
+            "value": "trade-uuid",
+            "type": "string"
+        }
+    ]
+}

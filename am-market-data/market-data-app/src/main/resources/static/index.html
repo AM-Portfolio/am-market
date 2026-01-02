@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Data Streamer</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+    <div
+        style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <h1>⚡ Market Data Streamer</h1>
+            <span id="connectionStatus" class="status-badge status-disconnected">Disconnected</span>
+        </div>
+        <div style="font-size: 0.85rem; color: var(--text-muted);" id="clock">--:--:--</div>
+    </div>
+
+    <div class="container">
+        <!-- Configuration Panel -->
+        <div class="card">
+            <h2>Configuration</h2>
+
+            <div class="form-group">
+                <label>Auth Provider</label>
+                <select id="provider">
+                    <option value="UPSTOX">Upstox</option>
+                    <option value="ZERODHA">Zerodha</option>
+                </select>
+                <div style="margin-top: 5px;">
+                    <button class="btn-outline" style="font-size:0.75rem; padding: 4px 8px;"
+                        onclick="getLoginUrl()">Login & Get Token</button>
+                    <div id="loginUrlResult" style="font-size: 0.75rem; margin-top: 5px; word-break: break-all;"></div>
+                </div>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 15px 0;">
+
+            <div class="form-group">
+                <label>Exchange Segment</label>
+                <select id="exchange">
+                    <option value="NSE_EQ">NSE Equity (NSE_EQ)</option>
+                    <option value="BSE_EQ">BSE Equity (BSE_EQ)</option>
+                    <option value="NSE_FO">NSE F&O (NSE_FO)</option>
+                    <option value="MCX_FO">MCX (MCX_FO)</option>
+                    <option value="">None (Raw Symbol)</option>
+                </select>
+                <div class="checkbox-wrapper">
+                    <input type="checkbox" id="autoPrefix" checked>
+                    <label for="autoPrefix">Auto-prefix Exchange?</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Symbols (Comma Separated)</label>
+                <textarea id="symbols" rows="4" placeholder="e.g. INFY, RELIANCE, TCS"></textarea>
+                <small style="color: var(--text-muted);">Enter symbols without exchange if Auto-prefix is on.</small>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn-primary" onclick="startStream()">Start Stream</button>
+                <button class="btn-danger" onclick="stopStream()">Stop</button>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <label>System Logs</label>
+                <div id="debugLog" class="log-container"></div>
+            </div>
+        </div>
+
+        <!-- Instrument Search Panel -->
+        <div class="card">
+            <h2>🔎 Instrument Search</h2>
+            <div class="form-group">
+                <input type="text" id="searchInput" placeholder="Search Symbol (e.g. Reliance, Nifty Bank)..."
+                    onkeypress="if(event.key === 'Enter') performSearch()">
+            </div>
+            <div class="btn-group">
+                <button class="btn-primary" onclick="performSearch()">Search</button>
+            </div>
+
+            <div id="searchResults" class="search-results-container">
+                <!-- Results will be injected here -->
+                <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+                    Enter a query to find instruments.
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Visualization Panel -->
+        <div class="card full-width">
+            <div class="filters">
+                <h2>Live Market Data Feed</h2>
+                <input type="text" id="filterInput" placeholder="Filter by Symbol (e.g. INFY)..."
+                    onkeyup="filterTable()">
+            </div>
+
+            <div class="table-container">
+                <table id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Symbol</th>
+                            <th>LTP</th>
+                            <th>Open</th>
+                            <th>High</th>
+                            <th>Low</th>
+                            <th>Close</th>
+                            <th>Prev Close</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data Rows Injected Here -->
+                    </tbody>
+                </table>
+            </div>
+            <div style="text-align: center; padding: 10px; color: var(--text-muted); font-size: 0.8rem;">
+                Showing last <span id="rowCount">0</span> updates
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden WebSocket URL for logic -->
+    <input type="hidden" id="wsUrl">
+
+    <script src="js/app.js"></script>
+</body>
+
+</html>

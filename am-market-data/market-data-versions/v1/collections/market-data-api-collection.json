@@ -1,0 +1,843 @@
+{
+    "info": {
+        "_postman_id": "market-data-api-collection",
+        "name": "Market Data API",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Instrument Management",
+            "item": [
+                {
+                    "name": "Update Instruments",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/instruments/update?provider=UPSTOX",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "instruments",
+                                "update"
+                            ],
+                            "query": [
+                                {
+                                    "key": "filePath",
+                                    "value": "",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "provider",
+                                    "value": "UPSTOX",
+                                    "description": "UPSTOX or ZERODHA"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Search Instruments (Default)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"provider\": \"UPSTOX\",\n  \"queries\": [\"RELIANCE\"],\n  \"exchanges\": [\"NSE_EQ\"],\n  \"instrumentTypes\": [],\n  \"segments\": [],\n  \"weekly\": false\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/instruments/search",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "instruments",
+                                "search"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Search Instruments (Advanced)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"provider\": \"UPSTOX\",\n  \"queries\": [\"RELIANCE\"],\n  \"exchanges\": [\"NSE_EQ\"],\n  \"instrumentTypes\": [\"EQUITY\"],\n  \"segments\": [\"NSE_EQ\"],\n  \"weekly\": false\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/instruments/search",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "instruments",
+                                "search"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Search Scenarios",
+            "item": [
+                {
+                    "name": "Search NIFTY 50 Index",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"provider\": \"UPSTOX\",\n  \"queries\": [\"NIFTY 50\", \"Nifty 50\"],\n  \"exchanges\": [],\n  \"instrumentTypes\": [],\n  \"segments\": [\"NSE_INDEX\"],\n  \"weekly\": false\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/instruments/search",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "instruments",
+                                "search"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Search RELIANCE Equity",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"provider\": \"UPSTOX\",\n  \"queries\": [\"RELIANCE\"],\n  \"exchanges\": [\"NSE_EQ\"],\n  \"instrumentTypes\": [\"EQUITY\"],\n  \"segments\": [\"NSE_EQ\"],\n  \"weekly\": false\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/instruments/search",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "instruments",
+                                "search"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Search BANKNIFTY Future",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"provider\": \"UPSTOX\",\n  \"queries\": [\"BANKNIFTY\"],\n  \"exchanges\": [\"NSE_FO\"],\n  \"instrumentTypes\": [\"FUTURE\"],\n  \"segments\": [\"NSE_FO\"],\n  \"weekly\": false\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/instruments/search",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "instruments",
+                                "search"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Search Securities",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/securities/search?query=RELIANCE",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "securities",
+                                "search"
+                            ],
+                            "query": [
+                                {
+                                    "key": "query",
+                                    "value": "RELIANCE"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Advanced Search Securities",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"query\": \"RELIANCE\",\n  \"sector\": \"ENERGY\",\n  \"index\": \"NIFTY 50\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/securities/search",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "securities",
+                                "search"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Market Data",
+            "item": [
+                {
+                    "name": "Get Login URL",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/auth/login-url?provider=UPSTOX",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "auth",
+                                "login-url"
+                            ],
+                            "query": [
+                                {
+                                    "key": "provider",
+                                    "value": "UPSTOX"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Generate Session",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/auth/session?request_token=xyz",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "auth",
+                                "session"
+                            ],
+                            "query": [
+                                {
+                                    "key": "request_token",
+                                    "value": "xyz"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Quotes",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/quotes?symbols=RELIANCE,TCS&timeFrame=5m",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "quotes"
+                            ],
+                            "query": [
+                                {
+                                    "key": "symbols",
+                                    "value": "RELIANCE,TCS"
+                                },
+                                {
+                                    "key": "timeFrame",
+                                    "value": "5m"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Quotes (POST)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"symbols\": \"RELIANCE,TCS\",\n  \"timeFrame\": \"5m\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/quotes",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "quotes"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get OHLC",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"symbols\": \"RELIANCE\",\n  \"timeFrame\": \"1D\",\n  \"forceRefresh\": false\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/ohlc",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "ohlc"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Historical Data",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"symbols\": \"RELIANCE\",\n  \"from\": \"2023-01-01\",\n  \"to\": \"2023-01-10\",\n  \"interval\": \"1D\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/historical-data",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "historical-data"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Search Symbols",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/symbols?symbol=REL&page=0&size=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "symbols"
+                            ],
+                            "query": [
+                                {
+                                    "key": "symbol",
+                                    "value": "REL"
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "0"
+                                },
+                                {
+                                    "key": "size",
+                                    "value": "10"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Symbols by Exchange",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/symbols/NSE",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "symbols",
+                                "NSE"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Logout",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/auth/logout",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "auth",
+                                "logout"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Option Chain",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/option-chain?symbol=NIFTY",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "option-chain"
+                            ],
+                            "query": [
+                                {
+                                    "key": "symbol",
+                                    "value": "NIFTY"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Mutual Fund Details",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/mutual-fund/123456",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "mutual-fund",
+                                "123456"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Mutual Fund History",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/mutual-fund/123456/history?from=2023-01-01&to=2023-01-31",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "mutual-fund",
+                                "123456",
+                                "history"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "2023-01-01"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "2023-01-31"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Live Prices",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/live-prices?symbols=RELIANCE,INFY",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "live-prices"
+                            ],
+                            "query": [
+                                {
+                                    "key": "symbols",
+                                    "value": "RELIANCE,INFY"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Brokerage Calculator",
+            "item": [
+                {
+                    "name": "Calculate",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"tradingSymbol\": \"RELIANCE\",\n  \"buyPrice\": 2500,\n  \"quantity\": 10,\n  \"exchange\": \"NSE\",\n  \"tradeType\": \"DELIVERY\",\n  \"brokerType\": \"DISCOUNT\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/brokerage/calculate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "brokerage",
+                                "calculate"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Calculate Async",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"tradingSymbol\": \"RELIANCE\",\n  \"buyPrice\": 2500,\n  \"quantity\": 10,\n  \"exchange\": \"NSE\",\n  \"tradeType\": \"DELIVERY\",\n  \"brokerType\": \"DISCOUNT\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/brokerage/calculate-async",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "brokerage",
+                                "calculate-async"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Breakeven",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/brokerage/breakeven?symbol=RELIANCE&price=2500&quantity=10&exchange=NSE&tradeType=DELIVERY&brokerType=DISCOUNT",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "brokerage",
+                                "breakeven"
+                            ],
+                            "query": [
+                                {
+                                    "key": "symbol",
+                                    "value": "RELIANCE"
+                                },
+                                {
+                                    "key": "price",
+                                    "value": "2500"
+                                },
+                                {
+                                    "key": "quantity",
+                                    "value": "10"
+                                },
+                                {
+                                    "key": "exchange",
+                                    "value": "NSE"
+                                },
+                                {
+                                    "key": "tradeType",
+                                    "value": "DELIVERY"
+                                },
+                                {
+                                    "key": "brokerType",
+                                    "value": "DISCOUNT"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Margin Calculator",
+            "item": [
+                {
+                    "name": "Calculate",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"positions\": []\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/margin/calculate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "margin",
+                                "calculate"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Calculate Async",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"positions\": []\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/margin/calculate-async",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "margin",
+                                "calculate-async"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Indices",
+            "item": [
+                {
+                    "name": "Available Indices",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/indices/available",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "indices",
+                                "available"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Batch Indices Data",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "[\"NIFTY 50\", \"BANKNIFTY\"]"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/indices/batch?forceRefresh=false",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "indices",
+                                "batch"
+                            ],
+                            "query": [
+                                {
+                                    "key": "forceRefresh",
+                                    "value": "false"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Historical Charts",
+            "item": [
+                {
+                    "name": "Get Historical Chart",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/market-data/historical-charts/RELIANCE?range=1Y",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "market-data",
+                                "historical-charts",
+                                "RELIANCE"
+                            ],
+                            "query": [
+                                {
+                                    "key": "range",
+                                    "value": "1Y",
+                                    "description": "1Y or 5Y"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "https://am.munish.org/api/market",
+            "type": "string"
+        }
+    ]
+}

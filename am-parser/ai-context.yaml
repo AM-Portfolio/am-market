@@ -1,0 +1,47 @@
+name: am-parser
+language: python
+python:
+  version: "3.11"
+entry_points:
+  cli: python -m am_parser.cli
+  external_cli: python -m am_api
+public_api:
+  - am_services.ManualParserService
+  - am_llm.LLMParserService
+  - am_common.Portfolio
+paths:
+  config: am_configs
+  header_maps: am_configs/header_maps.yaml
+  services: am_services
+  llm: am_llm
+  api: am_api
+  persistence: am_persistence
+  common: am_common
+  tests: tests
+  samples: data/samples
+  external_modules:
+    api: am-api
+    persistence: am-persistence
+    services: am-services
+    llm: am-llm
+    common: am-common
+    configs: am-configs
+rules:
+  - Keep CLI on click (no argparse/typer).
+  - Support both CSV and Excel input via utils.excel.load_tabular.
+  - Do not add hard dependencies on Mongo; keep them optional.
+  - Preserve exports from am_parser/parsers/__init__.py.
+  - Add tests for new public behavior.
+  - Max file length: 500 lines.
+  - Max function length: 50 lines.
+env:
+  - LLM_PROVIDER
+  - OPENAI_API_KEY
+  - OPENAI_MODEL
+quality_gates:
+  tests: python -m pytest -q
+  cli_help: python -m am_parser.cli --help
+  conventions: python scripts/validate_code_conventions.py
+non_goals:
+  - Vendoring provider SDKs
+  - Embedding secrets

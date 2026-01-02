@@ -1,0 +1,70 @@
+{
+    "info": {
+        "_postman_id": "market-index-collection",
+        "name": "Market Index API",
+        "description": "Collection for Market Index Controller endpoints",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Available Indices",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/indices/available",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "indices",
+                        "available"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Batch Indices Data",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "[\"NIFTY 50\", \"BANKNIFTY\"]"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/api/v1/indices/batch?forceRefresh=false",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "indices",
+                        "batch"
+                    ],
+                    "query": [
+                        {
+                            "key": "forceRefresh",
+                            "value": "false"
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8092",
+            "type": "string"
+        }
+    ]
+}

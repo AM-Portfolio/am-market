@@ -1,0 +1,39 @@
+# {{- if .Values.ingress.enabled -}}
+# {{- $fullName := include "am-market-data.fullname" . -}}
+# {{- $svcPort := .Values.service.port -}}
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: {{ $fullName }}
+#   labels:
+#     {{- include "am-market-data.labels" . | nindent 4 }}
+#   annotations:
+#     {{- if .Values.ingress.annotations }}
+#     {{- toYaml .Values.ingress.annotations | nindent 4 }}
+#     {{- end }}
+# spec:
+#   ingressClassName: nginx
+#   rules:
+#     {{- if .Values.ingress.ipAddress }}
+#     - host: {{ $fullName }}.{{ .Values.ingress.ipAddress }}.nip.io
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: {{ $fullName }}
+#                 port:
+#                   number: {{ $svcPort }}
+#     {{- else }}
+#     - http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: {{ $fullName }}
+#                 port:
+#                   number: {{ $svcPort }}
+#     {{- end }}
+# {{- end }}

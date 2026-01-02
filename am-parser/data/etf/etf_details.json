@@ -1,0 +1,3236 @@
+[
+  {
+    "symbol": "UTINIFTETF",
+    "name": "UTI Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF789F1AZC0"
+  },
+  {
+    "symbol": "UTINIFTETF",
+    "name": "UTI Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF789F1AZC0"
+  },
+  {
+    "symbol": "UTISENSETF",
+    "name": "UTI BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF789FB1X58"
+  },
+  {
+    "symbol": "UTISENSETF",
+    "name": "UTI BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF789FB1X58"
+  },
+  {
+    "symbol": "BANKNIFTY1",
+    "name": "Kotak Nifty Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF174K01F59"
+  },
+  {
+    "symbol": "BANKNIFTY1",
+    "name": "Kotak Nifty Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF174K01F59"
+  },
+  {
+    "symbol": "UTIBANKETF",
+    "name": "UTI Nifty Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF789F1AUV1"
+  },
+  {
+    "symbol": "UTIBANKETF",
+    "name": "UTI Nifty Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF789F1AUV1"
+  },
+  {
+    "symbol": "NIFTY1",
+    "name": "Kotak Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF174K014P6"
+  },
+  {
+    "symbol": "NIFTY1",
+    "name": "Kotak Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF174K014P6"
+  },
+  {
+    "symbol": "GOLDSHARE",
+    "name": "UTI Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF789F1AUX7"
+  },
+  {
+    "symbol": "GOLDSHARE",
+    "name": "UTI Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF789F1AUX7"
+  },
+  {
+    "symbol": "UTINEXT50",
+    "name": "UTI-Nifty Next 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF789F1AUW9"
+  },
+  {
+    "symbol": "UTINEXT50",
+    "name": "UTI-Nifty Next 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF789F1AUW9"
+  },
+  {
+    "symbol": "PSUBANK",
+    "name": "Kotak Nifty PSU Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF373I01023"
+  },
+  {
+    "symbol": "PSUBANK",
+    "name": "Kotak Nifty PSU Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF373I01023"
+  },
+  {
+    "symbol": "ALPHA",
+    "name": "Kotak Nifty Alpha 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF174KA1IA5"
+  },
+  {
+    "symbol": "SILVERETF",
+    "name": "UTI Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF789F1AYK6"
+  },
+  {
+    "symbol": "SILVERETF",
+    "name": "UTI Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF789F1AYK6"
+  },
+  {
+    "symbol": "IT",
+    "name": "Kotak Nifty IT ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF174KA1GC5"
+  },
+  {
+    "symbol": "LOWVOL1",
+    "name": "Kotak Nifty 100 Low Volatility 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF174KA1IY5"
+  },
+  {
+    "symbol": "NV20",
+    "name": "Kotak Nifty 50 value 20 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF174K01Z71"
+  },
+  {
+    "symbol": "MIDCAP",
+    "name": "Kotak Nifty Midcap 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF174KA1IB3"
+  },
+  {
+    "symbol": "UTISXN50",
+    "name": "UTI BSE Sensex Next 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF789F1AUU3"
+  },
+  {
+    "symbol": "UTISXN50",
+    "name": "UTI BSE Sensex Next 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF789F1AUU3"
+  },
+  {
+    "symbol": "SENSEX1",
+    "name": "Kotak S&P BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF174KA1JD7"
+  },
+  {
+    "symbol": "NIF5GETF",
+    "name": "UTI Nifty 5 Yr Benchmark G-Sec ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF789F1AZE6"
+  },
+  {
+    "symbol": "NIF5GETF",
+    "name": "UTI Nifty 5 Yr Benchmark G-Sec ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF789F1AZE6"
+  },
+  {
+    "symbol": "NIF10GETF",
+    "name": "UTI Nifty 10 yr Benchmark G-Sec ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF789F1AZF3"
+  },
+  {
+    "symbol": "NIF10GETF",
+    "name": "UTI Nifty 10 yr Benchmark G-Sec ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF789F1AZF3"
+  },
+  {
+    "symbol": "NIFMID150",
+    "name": "UTI Nifty Midcap 150 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF789F1AYX9"
+  },
+  {
+    "symbol": "NIFMID150",
+    "name": "UTI Nifty Midcap 150 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF789F1AYX9"
+  },
+  {
+    "symbol": "NIFITETF",
+    "name": "UTI Nifty IT ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF789F1AZD8"
+  },
+  {
+    "symbol": "NIFITETF",
+    "name": "UTI Nifty IT ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF789F1AZD8"
+  },
+  {
+    "symbol": "LIQUID1",
+    "name": "Kotak Nifty 1D Rate Liquid ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF174KA1LV5"
+  },
+  {
+    "symbol": "LIQUID1",
+    "name": "Kotak Nifty 1D Rate Liquid ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF174KA1LV5"
+  },
+  {
+    "symbol": "MNC",
+    "name": "Kotak Nifty MNC Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF174KA1JF2"
+  },
+  {
+    "symbol": "CONS",
+    "name": "Kotak Nifty India Consumption ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF174KA1JE5"
+  },
+  {
+    "symbol": "TVSINVIT",
+    "name": "TVS Infrastructure Trust Units",
+    "asset_class": null,
+    "market_cap_category": null,
+    "isin": "INE1JNC23012"
+  },
+  {
+    "symbol": "CPSEETF",
+    "name": "CPSE ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF457M01133"
+  },
+  {
+    "symbol": "ABGSEC",
+    "name": "Aditya Birla Sun Life CRISIL Broad Based Gilt ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF209KC1134"
+  },
+  {
+    "symbol": "TATSILV",
+    "name": "Tata Silver Exchange Traded Fund Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF277KA1984"
+  },
+  {
+    "symbol": "NV20IETF",
+    "name": "ICICI Prudential Nifty50 Value 20 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109KC11V0"
+  },
+  {
+    "symbol": "GSEC5IETF",
+    "name": "ICICI Prudential Nifty 5 yr Benchmark G-SEC ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF109KC14A8"
+  },
+  {
+    "symbol": "ABSLBANETF",
+    "name": "Aditya Birla Sun Life Nifty Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF209KB17D5"
+  },
+  {
+    "symbol": "MOMGF",
+    "name": "Motilal Oswal Nifty India Manufacturing ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Theme",
+    "isin": "INF247L01FK3"
+  },
+  {
+    "symbol": "GROWWRAIL",
+    "name": "Groww Nifty India Railways PSU ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Industrials",
+    "isin": "INF666M01JJ6"
+  },
+  {
+    "symbol": "MASPTOP50",
+    "name": "Mirae Asset S&P 500 Top 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF769K01HP3"
+  },
+  {
+    "symbol": "SILVERADD",
+    "name": "DSP Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF740KA1RE3"
+  },
+  {
+    "symbol": "NIFTYBEES",
+    "name": "Nippon India ETF Nifty 50 BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF204KB14I2"
+  },
+  {
+    "symbol": "SBIETFQLTY",
+    "name": "SBI - ETF Quality",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF200KA1WX6"
+  },
+  {
+    "symbol": "EVINDIA",
+    "name": "Mirae Asset Nifty EV and New Age Automotive ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Utilities",
+    "isin": "INF769K01LQ3"
+  },
+  {
+    "symbol": "MIDSELIETF",
+    "name": "ICICI Prudential BSE Midcap Select ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF109KC10W0"
+  },
+  {
+    "symbol": "LICMFGOLD",
+    "name": "LIC MF Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF397L01554"
+  },
+  {
+    "symbol": "GOLDETF",
+    "name": "Mirae Asset Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF769K01JP9"
+  },
+  {
+    "symbol": "MOHEALTH",
+    "name": "Motilal Oswal S&P BSE Healthcare ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF247L01BB1"
+  },
+  {
+    "symbol": "EQUAL50ADD",
+    "name": "DSP Nifty 50 Equal Weight ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF740KA1QK2"
+  },
+  {
+    "symbol": "IVZINNIFTY",
+    "name": "Invesco India Nifty ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF205K01DA9"
+  },
+  {
+    "symbol": "MOMENTUM50",
+    "name": "Motilal Oswal Nifty 500 Momentum 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01DK8"
+  },
+  {
+    "symbol": "MOVALUE",
+    "name": "Motilal Oswal S&P BSE Enhanced Value ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01BE5"
+  },
+  {
+    "symbol": "SILVER",
+    "name": "Aditya Birla Sun Life Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF209KB19F6"
+  },
+  {
+    "symbol": "NEXT50IETF",
+    "name": "ICICI Prudential Nifty Next 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109KC1NS5"
+  },
+  {
+    "symbol": "EBBETF0431",
+    "name": "BHARAT Bond ETF April 2031 Units Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF754K01LE1"
+  },
+  {
+    "symbol": "COMMOIETF",
+    "name": "ICICI Prudential Nifty Commodities ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Broad market",
+    "isin": "INF109KC19O8"
+  },
+  {
+    "symbol": "MOLOWVOL",
+    "name": "Motilal Oswal S&P BSE Low Volatility ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01BL0"
+  },
+  {
+    "symbol": "NIFTYETF",
+    "name": "Mirae Asset Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF769K01EG9"
+  },
+  {
+    "symbol": "SETFNIF50",
+    "name": "SBI-ETF Nifty 50",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF200KA1FS1"
+  },
+  {
+    "symbol": "PSUBNKIETF",
+    "name": "ICICI Prudential Nifty PSU Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC10S8"
+  },
+  {
+    "symbol": "EBBETF0430",
+    "name": "Bharat Bond ETF - April 2030 -Units- Exchange Traded Funds",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF754K01KO2"
+  },
+  {
+    "symbol": "SETFGOLD",
+    "name": "SBI Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF200KA16D8"
+  },
+  {
+    "symbol": "SBILIQETF",
+    "name": "SBI NIFTY 1D Rate Liquid ETF - Growth Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF200KB1969"
+  },
+  {
+    "symbol": "MIDSMALL",
+    "name": "Mirae Asset Nifty MidSmallcap400 Momentum Quality 100 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Extended market",
+    "isin": "INF769K01LJ8"
+  },
+  {
+    "symbol": "BSLGOLDETF",
+    "name": "Aditya Birla Sun Life Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF209KB18D3"
+  },
+  {
+    "symbol": "SILVERIETF",
+    "name": "ICICI Prudential Silver ETF Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF109KC1Y56"
+  },
+  {
+    "symbol": "AXISVALUE",
+    "name": "Axis Nifty500 Value 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF846KA1119"
+  },
+  {
+    "symbol": "METALIETF",
+    "name": "ICICI Prudential Nifty Metal ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Materials",
+    "isin": "INF109KC19W1"
+  },
+  {
+    "symbol": "SENSEXIETF",
+    "name": "ICICI Prudential BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF346A01034"
+  },
+  {
+    "symbol": "HDFCPVTBAN",
+    "name": "HDFC Nifty Private Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HZ7"
+  },
+  {
+    "symbol": "MULTICAP",
+    "name": "Mirae Asset Nifty500 Multicap 502525 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01LX9"
+  },
+  {
+    "symbol": "SENSEXADD",
+    "name": "DSP BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF740KA1SZ6"
+  },
+  {
+    "symbol": "LIQUID",
+    "name": "Mirae Asset Nifty 1D Rate Liquid ETF Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF769K01KS1"
+  },
+  {
+    "symbol": "MOPSE",
+    "name": "Motilal Oswal Nifty PSE ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01FO5"
+  },
+  {
+    "symbol": "SENSEXETF",
+    "name": "Mirae Asset S&P BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01KT9"
+  },
+  {
+    "symbol": "LTGILTBEES",
+    "name": "Reliance ETF Long Term Gilt",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF204KB1882"
+  },
+  {
+    "symbol": "LIQUIDSBI",
+    "name": "SBI NIFTY 1D Rate ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF200KA13Z8"
+  },
+  {
+    "symbol": "MAFANG",
+    "name": "Mirae Asset NYSE FANG+ ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Theme",
+    "isin": "INF769K01HF4"
+  },
+  {
+    "symbol": "CONSUMBEES",
+    "name": "Nippon India ETF Nifty India Consumption",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF204KA1LD7"
+  },
+  {
+    "symbol": "HDFCVALUE",
+    "name": "HDFC NIFTY50 Value 20 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1DK8"
+  },
+  {
+    "symbol": "GOLDBEES",
+    "name": "Nippon India ETF Gold BeES",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF204KB17I5"
+  },
+  {
+    "symbol": "MOINFRA",
+    "name": "Motilal Oswal BSE India Infrastructure ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Theme",
+    "isin": "INF247L01FL1"
+  },
+  {
+    "symbol": "SDL26BEES",
+    "name": "Nippon India ETF Nifty SDL Apr 2026 Top 20 Equal Weight",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF204KC1022"
+  },
+  {
+    "symbol": "MID150CASE",
+    "name": "Zerodha Nifty Midcap 150 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF0R8F01059"
+  },
+  {
+    "symbol": "HDFCSILVER",
+    "name": "Hdfc Silver ETF Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF179KC1DI2"
+  },
+  {
+    "symbol": "SETF10GILT",
+    "name": "SBI Nifty 10 YR Benchmark G-Sec ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF200KA1JT1"
+  },
+  {
+    "symbol": "MAHKTECH",
+    "name": "Mirae Asset Hang Seng TECH ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF769K01HS7"
+  },
+  {
+    "symbol": "GOLD360",
+    "name": "360 ONE Gold ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF579M01BB5"
+  },
+  {
+    "symbol": "NIFTY50ADD",
+    "name": "DSP Nifty 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF740KA1CL0"
+  },
+  {
+    "symbol": "SBIETFCON",
+    "name": "SBI Nifty Consumption ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Theme",
+    "isin": "INF200KA1X17"
+  },
+  {
+    "symbol": "MOSILVER",
+    "name": "Motilal Oswal Silver ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF247L01FZ1"
+  },
+  {
+    "symbol": "SILVER1",
+    "name": "Kotak Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF174KA1KU9"
+  },
+  {
+    "symbol": "ABSLNN50ET",
+    "name": "Aditya Birla Sun Life Nifty Next 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF209KB16D7"
+  },
+  {
+    "symbol": "MOGSEC",
+    "name": "MOTILAL OSWAL 5 YEAR G-SEC ETF Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF247L01AK4"
+  },
+  {
+    "symbol": "TOP15IETF",
+    "name": "ICICI Prudential Nifty Top 15 Equal Weight ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109K1A344"
+  },
+  {
+    "symbol": "PSUBNKBEES",
+    "name": "Nippon India ETF Nifty PSU Bank BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF204KB16I7"
+  },
+  {
+    "symbol": "TOP10ADD",
+    "name": "DSP Nifty Top 10 Equal Weight ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF740KA1UR9"
+  },
+  {
+    "symbol": "HDFCGOLD",
+    "name": "HDFC Gold Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF179KC1981"
+  },
+  {
+    "symbol": "EGOLD",
+    "name": "Edelweiss Gold ETF units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF754K01SE6"
+  },
+  {
+    "symbol": "NEXT50",
+    "name": "Mirae Asset Nifty Next 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF769K01FN2"
+  },
+  {
+    "symbol": "LOWVOL",
+    "name": "Mirae Asset Nifty 100 Low Volatility 30 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF769K01JU9"
+  },
+  {
+    "symbol": "GROWWNXT50",
+    "name": "Groww Nifty Next 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF666M01LZ8"
+  },
+  {
+    "symbol": "ITETFADD",
+    "name": "DSP Nifty IT ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF740KA1SX1"
+  },
+  {
+    "symbol": "MSCIINDIA",
+    "name": "Kotak MSCI India ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Extended market",
+    "isin": "INF174KA1VD2"
+  },
+  {
+    "symbol": "BANKBEES",
+    "name": "Nippon India ETF Nifty Bank BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF204KB15I9"
+  },
+  {
+    "symbol": "GOLD1",
+    "name": "Kotak Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF174KA1HJ8"
+  },
+  {
+    "symbol": "HDFCBSE500",
+    "name": "HDFC S&P BSE 500 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1EZ4"
+  },
+  {
+    "symbol": "ESILVER",
+    "name": "Edelweiss Silver ETF Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF754K01SF3"
+  },
+  {
+    "symbol": "HEALTHADD",
+    "name": "DSP Nifty Healthcare ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF740KA1UF4"
+  },
+  {
+    "symbol": "BANKETFADD",
+    "name": "DSP Mutual Fund - DSP Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF740KA1RX3"
+  },
+  {
+    "symbol": "AXISBNKETF",
+    "name": "Axis NIFTY Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF846K01X63"
+  },
+  {
+    "symbol": "HDFCNEXT50",
+    "name": "HDFC Nifty Next 50 Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF179KC1HS2"
+  },
+  {
+    "symbol": "GOLDETFADD",
+    "name": "DSP Gold ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF740KA1SW3"
+  },
+  {
+    "symbol": "EMULTIMQ",
+    "name": "Edelweiss Nifty500 Multicap Momentum Quality 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF754K01TF1"
+  },
+  {
+    "symbol": "HDFCSENSEX",
+    "name": "HDFC S&P BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF179KC1HX2"
+  },
+  {
+    "symbol": "AUTOBEES",
+    "name": "Nippon India Nifty Auto ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Consumer discretionary",
+    "isin": "INF204KC1337"
+  },
+  {
+    "symbol": "MONEXT50",
+    "name": "Motilal Oswal Nifty Next 50 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01FD8"
+  },
+  {
+    "symbol": "BANKBETF",
+    "name": "Bajaj Finserv Nifty Bank ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF0QA701714"
+  },
+  {
+    "symbol": "TATAGOLD",
+    "name": "Tata Gold Exchange Traded Fund Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF277KA1976"
+  },
+  {
+    "symbol": "LICNETFSEN",
+    "name": "LIC MF Exchange Traded Fund - Sensex",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF767K01OT5"
+  },
+  {
+    "symbol": "JETFREIGHT",
+    "name": "Jet Freight Logistics Ltd.",
+    "asset_class": null,
+    "market_cap_category": null,
+    "isin": "INE982V01025"
+  },
+  {
+    "symbol": "BANKIETF",
+    "name": "ICICI Prudential Nifty Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF109KC15I8"
+  },
+  {
+    "symbol": "BBNPPGOLD",
+    "name": "Baroda BNP Paribas Gold ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF251K01SU9"
+  },
+  {
+    "symbol": "AXISILVER",
+    "name": "Axis Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF846K011K1"
+  },
+  {
+    "symbol": "MIDCAPIETF",
+    "name": "ICICI Prudential Nifty Midcap 150 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF109KC11W8"
+  },
+  {
+    "symbol": "METAL",
+    "name": "Mirae Asset Nifty Metal ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Materials",
+    "isin": "INF769K01LY7"
+  },
+  {
+    "symbol": "QGOLDHALF",
+    "name": "Quantum Gold Fund ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF082J01408"
+  },
+  {
+    "symbol": "GROWWDEFNC",
+    "name": "Groww Nifty India Defence ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Industrials",
+    "isin": "INF666M01IO8"
+  },
+  {
+    "symbol": "MOQUALITY",
+    "name": "Motilal Oswal S&P BSE Quality ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01BH8"
+  },
+  {
+    "symbol": "ITBEES",
+    "name": "Nippon India ETF Nifty IT",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF204KB15V2"
+  },
+  {
+    "symbol": "SBINEQWETF",
+    "name": "SBI Nifty50 Equal Weight ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF200KB1282"
+  },
+  {
+    "symbol": "AONETOTAL",
+    "name": "Angel One Nifty Total Market ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF1J2R01015"
+  },
+  {
+    "symbol": "MOM30IETF",
+    "name": "ICICI Prudential Nifty 200 Momentum 30 ETF Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC17C7"
+  },
+  {
+    "symbol": "BFSI",
+    "name": "Mirae Asset Nifty Financial Services ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF769K01HI8"
+  },
+  {
+    "symbol": "LICNMID100",
+    "name": "LIC MF Nifty Midcap 100 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF767K01RN1"
+  },
+  {
+    "symbol": "MOSMALL250",
+    "name": "Motilal Oswal Nifty Smallcap 250 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Small cap",
+    "isin": "INF247L01CH6"
+  },
+  {
+    "symbol": "NPBET",
+    "name": "Tata Nifty Private Bank Exchange Traded Fund Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF277K010X4"
+  },
+  {
+    "symbol": "PHARMABEES",
+    "name": "Nippon India Nifty Pharma ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF204KC1089"
+  },
+  {
+    "symbol": "GOLDCASE",
+    "name": "Zerodha Gold ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF0R8F01042"
+  },
+  {
+    "symbol": "MOALPHA50",
+    "name": "Motilal Oswal Nifty Alpha 50 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01FR8"
+  },
+  {
+    "symbol": "LIQUIDPLUS",
+    "name": "Mirae Asset Nifty 1D Rate Liquid ETF - Growth Units -Growth",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF769K01MY5"
+  },
+  {
+    "symbol": "GOLDIETF",
+    "name": "ICICI Prudential Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF109KC1NT3"
+  },
+  {
+    "symbol": "ALPL30IETF",
+    "name": "ICICI Prudential Nifty Alpha Low- Volatility 30 ETF",
+    "asset_class": "Alternatives",
+    "market_cap_category": "Volatility",
+    "isin": "INF109KC17V7"
+  },
+  {
+    "symbol": "HDFCQUAL",
+    "name": "HDFC NIFTY 100 Quality 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Extended market",
+    "isin": "INF179KC1DL6"
+  },
+  {
+    "symbol": "MOMENTUM",
+    "name": "Aditya Birla Sun Life Nifty 200 Momentum 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF209KB14K7"
+  },
+  {
+    "symbol": "AXISBPSETF",
+    "name": "Axis Nifty AAA Bond Plus SDL Apr 2026 50:50 ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF846K01Z04"
+  },
+  {
+    "symbol": "IDFNIFTYET",
+    "name": "Bandhan Nifty 50 ETF Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF194KA1U07"
+  },
+  {
+    "symbol": "EBBETF0433",
+    "name": "Bharat Bond ETF - April 2033",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF754K01QX0"
+  },
+  {
+    "symbol": "INFRABEES",
+    "name": "Nippon India ETF Nifty Infrastructure BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Theme",
+    "isin": "INF732E01268"
+  },
+  {
+    "symbol": "QUAL30IETF",
+    "name": "ICICI Prudential Nifty 200 Quality 30 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC18V5"
+  },
+  {
+    "symbol": "AXISCETF",
+    "name": "Axis NIFTY India Consumption ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF846K016C7"
+  },
+  {
+    "symbol": "LIQUIDETF",
+    "name": "DSP NIFTY 1D Rate Liquid ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF740KA1EU7"
+  },
+  {
+    "symbol": "ECAPINSURE",
+    "name": "Edelweiss BSE Capital Markets & Insurance ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF754K01TX4"
+  },
+  {
+    "symbol": "MOM50",
+    "name": "Motilal Oswal M50 ETF Units Growth - Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF247L01536"
+  },
+  {
+    "symbol": "SILVERAG",
+    "name": "Mirae Asset Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF769K01KG6"
+  },
+  {
+    "symbol": "NIFTYBETF",
+    "name": "Bajaj Finserv Nifty 50 ETF Units Exchange traded fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF0QA701722"
+  },
+  {
+    "symbol": "NIFTYIETF",
+    "name": "ICICI Prudential Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109K012R6"
+  },
+  {
+    "symbol": "HDFCLOWVOL",
+    "name": "HDFC Nifty 100 Low Volatility 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HU8"
+  },
+  {
+    "symbol": "MIDQ50ADD",
+    "name": "DSP Nifty Midcap 150 Quality 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF740KA1QL0"
+  },
+  {
+    "symbol": "MANUFGBEES",
+    "name": "Nippon India Nifty India Manufacturing ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF204KC1GH6"
+  },
+  {
+    "symbol": "LTGILTCASE",
+    "name": "Zerodha Nifty 8-13 Yr G-Sec ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF0R8F01133"
+  },
+  {
+    "symbol": "NIF100IETF",
+    "name": "ICICI Prudential Nifty 100 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109KC16V9"
+  },
+  {
+    "symbol": "AXISGOLD",
+    "name": "Axis Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF846K01W80"
+  },
+  {
+    "symbol": "AXISNIFTY",
+    "name": "Axis NIFTY 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF846K01W98"
+  },
+  {
+    "symbol": "SBISILVER",
+    "name": "SBI Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF200KB1217"
+  },
+  {
+    "symbol": "LIQUIDBETF",
+    "name": "Bajaj Finserv Nifty 1D Rate Liquid ETF - Growth Units Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF0QA701854"
+  },
+  {
+    "symbol": "OILIETF",
+    "name": "ICICI Prudential Nifty Oil & Gas ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Energy",
+    "isin": "INF109KC18W3"
+  },
+  {
+    "symbol": "GSEC10YEAR",
+    "name": "Mirae Asset Nifty 8-13 Yr G-Sec ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF769K01KF8"
+  },
+  {
+    "symbol": "ALPHAETF",
+    "name": "Mirae Asset Nifty 200 Alpha 30 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01KU7"
+  },
+  {
+    "symbol": "SMALLCAP",
+    "name": "Mirae Asset Nifty Smallcap 250 Momentum Quality 100 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Small cap",
+    "isin": "INF769K01LC3"
+  },
+  {
+    "symbol": "GROWWGOLD",
+    "name": "Groww Gold ETF Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF666M01IW1"
+  },
+  {
+    "symbol": "SILVERCASE",
+    "name": "Zerodha Silver ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF0R8F01091"
+  },
+  {
+    "symbol": "HDFCGROWTH",
+    "name": "HDFC NIFTY Growth Sectors 15 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1DJ0"
+  },
+  {
+    "symbol": "MOMIDMTM",
+    "name": "Motilal Oswal Nifty Midcap150 Momentum 50 Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF247L01FQ0"
+  },
+  {
+    "symbol": "LIQUIDADD",
+    "name": "DSP BSE Liquid Rate ETF Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF740KA1UM0"
+  },
+  {
+    "symbol": "PVTBANKADD",
+    "name": "DSP Nifty Private Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF740KA1TA7"
+  },
+  {
+    "symbol": "NIFTY100EW",
+    "name": "Kotak Nifty 100 Equal Weight ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF174KA1UW4"
+  },
+  {
+    "symbol": "HEALTHY",
+    "name": "Aditya Birla Sun Life Nifty Healthcare ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF209KB10C2"
+  },
+  {
+    "symbol": "LICNETFN50",
+    "name": "LIC MF Exchange Traded fund - Nifty 50 Units Exchange Traded Fund - Growth Plan - Growth",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF767K01OS7"
+  },
+  {
+    "symbol": "HDFCNIFTY",
+    "name": "HDFC Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF179KC1965"
+  },
+  {
+    "symbol": "BSE500IETF",
+    "name": "ICICI Prudential BSE 500 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC1V59"
+  },
+  {
+    "symbol": "TECH",
+    "name": "Aditya Birla Sun Life Nifty IT ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF209KB11D8"
+  },
+  {
+    "symbol": "PSUBANKADD",
+    "name": "DSP Nifty PSU Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF740KA1SY9"
+  },
+  {
+    "symbol": "MONIFTY500",
+    "name": "Motilal Oswal Nifty 500 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01BU1"
+  },
+  {
+    "symbol": "ITIETF",
+    "name": "ICICI Prudential Nifty IT ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF109KC16I6"
+  },
+  {
+    "symbol": "FMCGIETF",
+    "name": "ICICI Prudential Nifty FMCG ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC19V3"
+  },
+  {
+    "symbol": "GROWWLIQID",
+    "name": "Groww Nifty 1D Rate Liquid ETF Units Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF666M01IP5"
+  },
+  {
+    "symbol": "GSEC10ABSL",
+    "name": "Aditya Birla Sun Life Crisil 10 Year Gilt ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF209KC1142"
+  },
+  {
+    "symbol": "HDFCPSUBK",
+    "name": "Hdfc Nifty PSU Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HW4"
+  },
+  {
+    "symbol": "QNIFTY",
+    "name": "Quantum Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF082J01028"
+  },
+  {
+    "symbol": "JUNIORBEES",
+    "name": "Nippon India ETF Nifty Next 50 Junior BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF732E01045"
+  },
+  {
+    "symbol": "LIQUIDIETF",
+    "name": "ICICI Prudential BSE Liquid Rate ETF - IDCW",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF109KC1KT9"
+  },
+  {
+    "symbol": "SETFNN50",
+    "name": "SBI-ETF Nifty Next 50",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF200KA1598"
+  },
+  {
+    "symbol": "DIVOPPBEES",
+    "name": "Nippon India ETF Nifty Dividend Opportunities 50",
+    "asset_class": "Equity",
+    "market_cap_category": "High dividend yield",
+    "isin": "INF204KA1MS3"
+  },
+  {
+    "symbol": "NIFTYQLITY",
+    "name": "Aditya Birla Sun Life Nifty 200 Quality 30 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF209KB15K4"
+  },
+  {
+    "symbol": "HEALTHIETF",
+    "name": "ICICI Prudential Nifty Healthcare ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF109KC1Q72"
+  },
+  {
+    "symbol": "PVTBANIETF",
+    "name": "ICICI Prudential Nifty Private Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF109KC18U7"
+  },
+  {
+    "symbol": "NEXT30ADD",
+    "name": "DSP BSE Sensex Next 30 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF740KA1VE5"
+  },
+  {
+    "symbol": "BSLNIFTY",
+    "name": "Aditya Birla Sun Life Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF209KB19D1"
+  },
+  {
+    "symbol": "MODEFENCE",
+    "name": "Motilal Oswal Nifty India Defence ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Industrials",
+    "isin": "INF247L01DJ0"
+  },
+  {
+    "symbol": "CONSUMER",
+    "name": "Mirae Asset Nifty India New Age Consumption Etf",
+    "asset_class": "Equity",
+    "market_cap_category": "Consumer discretionary",
+    "isin": "INF769K01NS5"
+  },
+  {
+    "symbol": "BANKPSU",
+    "name": "Mirae Asset Nifty PSU Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01LZ4"
+  },
+  {
+    "symbol": "UNIONGOLD",
+    "name": "Union Gold ETF Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF582M01KS4"
+  },
+  {
+    "symbol": "NV20BEES",
+    "name": "Nippon India ETF Nifty 50 Value 20",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF204KB18I3"
+  },
+  {
+    "symbol": "BANKETF",
+    "name": "Mirae Asset Nifty Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01KR3"
+  },
+  {
+    "symbol": "MOM100",
+    "name": "Motilal Oswal Midcap 100 ETF Units Exchange Traded Fund - Growth",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF247L01023"
+  },
+  {
+    "symbol": "LICNETFGSC",
+    "name": "LIC MF G-SEC Long Term ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF767K01MV5"
+  },
+  {
+    "symbol": "MOREALTY",
+    "name": "Motilal Oswal Nifty Realty ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Real estate",
+    "isin": "INF247L01CI4"
+  },
+  {
+    "symbol": "EVIETF",
+    "name": "ICICI Prudential Nifty EV & New Age Automotive ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Consumer discretionary",
+    "isin": "INF109K1A153"
+  },
+  {
+    "symbol": "HNGSNGBEES",
+    "name": "Nippon India ETF Hang Seng BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF204KB19I1"
+  },
+  {
+    "symbol": "MID150BEES",
+    "name": "Nippon India ETF Nifty Midcap 150",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF204KB1V68"
+  },
+  {
+    "symbol": "EQUAL200",
+    "name": "Mirae Asset BSE 200 Equal Weight ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01OA1"
+  },
+  {
+    "symbol": "CONSUMIETF",
+    "name": "ICICI Prudential Nifty India Consumption ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC1V42"
+  },
+  {
+    "symbol": "AXISTECETF",
+    "name": "Axis NIFTY IT ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF846K01Y96"
+  },
+  {
+    "symbol": "VAL30IETF",
+    "name": "ICICI Prudential Nifty200 Value 30 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC16X5"
+  },
+  {
+    "symbol": "SILVER360",
+    "name": "360 ONE Silver ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF579M01BC3"
+  },
+  {
+    "symbol": "MON100",
+    "name": "Motilal Oswal NASDAQ 100 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF247L01AP3"
+  },
+  {
+    "symbol": "NETF",
+    "name": "Tata Nifty 50 Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF277K015R5"
+  },
+  {
+    "symbol": "LICNFNHGP",
+    "name": "LIC MF Exchange Traded Fund - Nifty 100",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF767K01PC8"
+  },
+  {
+    "symbol": "LIQUIDBEES",
+    "name": "Nippon India ETF Nifty 1D Rate Liquid BeES",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF732E01037"
+  },
+  {
+    "symbol": "GROWWN200",
+    "name": "Groww Nifty 200 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF666M01JV1"
+  },
+  {
+    "symbol": "SNXT30BEES",
+    "name": "Nippon India BSE Sensex Next 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF204KC1EZ3"
+  },
+  {
+    "symbol": "CASHIETF",
+    "name": "ICICI Prudential BSE Liquid Rate ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF109K1A021"
+  },
+  {
+    "symbol": "TNIDETF",
+    "name": "Tata Nifty India Digital ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF277KA1364"
+  },
+  {
+    "symbol": "SETFNIFBK",
+    "name": "SBI-ETF Nifty Bank",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF200KA1580"
+  },
+  {
+    "symbol": "GROWWEV",
+    "name": "Groww Nifty EV & New Age Automotive ETF",
+    "asset_class": null,
+    "market_cap_category": null,
+    "isin": "INF666M01IH2"
+  },
+  {
+    "symbol": "LIQUIDSHRI",
+    "name": "Shriram NIfty 1D Rate Liquid ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF680P01422"
+  },
+  {
+    "symbol": "MAKEINDIA",
+    "name": "Mirae Asset Nifty India Manufacturing ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01IB1"
+  },
+  {
+    "symbol": "MIDCAPETF",
+    "name": "Mirae Asset Nifty Midcap 150 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF769K01IC9"
+  },
+  {
+    "symbol": "EQUAL50",
+    "name": "Mirae Asset Nifty50 Equal Weight ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF769K01OO2"
+  },
+  {
+    "symbol": "HDFCNIFBAN",
+    "name": "HDFC Nifty Banking ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF179KC1HY0"
+  },
+  {
+    "symbol": "IVZINGOLD",
+    "name": "Invesco India Gold Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF205K01361"
+  },
+  {
+    "symbol": "BBNPNBETF",
+    "name": "Baroda BNP Paribas Nifty Bank ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF251K01TL6"
+  },
+  {
+    "symbol": "GILT5YBEES",
+    "name": "Nippon India ETF Nifty 5 yr Benchmark G-Sec",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF204KC1030"
+  },
+  {
+    "symbol": "CPSEETF",
+    "name": "CPSE ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF457M01133"
+  },
+  {
+    "symbol": "SELECTIPO",
+    "name": "Mirae Asset BSE Select IPO ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01ON4"
+  },
+  {
+    "symbol": "HDFCNIF100",
+    "name": "HDFC Nifty 100 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HR4"
+  },
+  {
+    "symbol": "AUTOIETF",
+    "name": "ICICI Prudential Nifty Auto ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC10V2"
+  },
+  {
+    "symbol": "FINIETF",
+    "name": "ICICI Prudential Nifty Financial Services Ex-Bank ETF Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF109KC17L8"
+  },
+  {
+    "symbol": "TOP100CASE",
+    "name": "Zerodha Nifty 100 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF0R8F01067"
+  },
+  {
+    "symbol": "MOCAPITAL",
+    "name": "Motilal Oswal Nifty Capital Market ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01EV3"
+  },
+  {
+    "symbol": "SILVERBEES",
+    "name": "Nippon India Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF204KC1402"
+  },
+  {
+    "symbol": "SML100CASE",
+    "name": "Zerodha Nifty Smallcap 100 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Small cap",
+    "isin": "INF0R8F01141"
+  },
+  {
+    "symbol": "INFRAIETF",
+    "name": "ICICI Prudential Nifty Infrastructure ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Theme",
+    "isin": "INF109KC16E5"
+  },
+  {
+    "symbol": "ABSLLIQUID",
+    "name": "Aditya Birla Sun Life CRISIL Liquid Overnight ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF209KB18T9"
+  },
+  {
+    "symbol": "ICICIB22",
+    "name": "BHARAT 22 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KB15Y7"
+  },
+  {
+    "symbol": "EBANKNIFTY",
+    "name": "Edelweiss Nifty Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF754K01TE4"
+  },
+  {
+    "symbol": "SBIETFIT",
+    "name": "SBI ETF IT",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF200KA1S14"
+  },
+  {
+    "symbol": "MON50EQUAL",
+    "name": "Motilal Oswal Nifty 50 Equal Weight ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF247L01FC0"
+  },
+  {
+    "symbol": "GSEC10IETF",
+    "name": "ICICI Prudential Nifty 10 yr Benchmark G-Sec ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC18O0"
+  },
+  {
+    "symbol": "HDFCLIQUID",
+    "name": "HDFC Nifty 1D Rate Liquid ETF - Growth",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF179KC1JG3"
+  },
+  {
+    "symbol": "MOMOMENTUM",
+    "name": "Motilal Oswal Nifty 200 Momentum 30 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01BK2"
+  },
+  {
+    "symbol": "NIF100BEES",
+    "name": "Nippon India ETF Nifty100",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF204K014N5"
+  },
+  {
+    "symbol": "MOGOLD",
+    "name": "Motilal Oswal Gold ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF247L01FY4"
+  },
+  {
+    "symbol": "LIQUIDSBI",
+    "name": "SBI NIFTY 1D Rate ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF200KA13Z8"
+  },
+  {
+    "symbol": "HDFCSML250",
+    "name": "HDFC Nifty Smallcap 250 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Small cap",
+    "isin": "INF179KC1FB2"
+  },
+  {
+    "symbol": "LIQUIDSHRI",
+    "name": "Shriram NIfty 1D Rate Liquid ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF680P01422"
+  },
+  {
+    "symbol": "LIQUIDIETF",
+    "name": "ICICI Prudential BSE Liquid Rate ETF - IDCW",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF109KC1KT9"
+  },
+  {
+    "symbol": "LIQUIDBETF",
+    "name": "Bajaj Finserv Nifty 1D Rate Liquid ETF - Growth Units Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF0QA701854"
+  },
+  {
+    "symbol": "LTGILTCASE",
+    "name": "Zerodha Nifty 8-13 Yr G-Sec ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF0R8F01133"
+  },
+  {
+    "symbol": "CASHIETF",
+    "name": "ICICI Prudential BSE Liquid Rate ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF109K1A021"
+  },
+  {
+    "symbol": "GSEC5IETF",
+    "name": "ICICI Prudential Nifty 5 yr Benchmark G-SEC ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF109KC14A8"
+  },
+  {
+    "symbol": "ABSLLIQUID",
+    "name": "Aditya Birla Sun Life CRISIL Liquid Overnight ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF209KB18T9"
+  },
+  {
+    "symbol": "LIQUIDCASE",
+    "name": "Zerodha Nifty 1D Rate Liquid ETF Units Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF0R8F01034"
+  },
+  {
+    "symbol": "ABGSEC",
+    "name": "Aditya Birla Sun Life CRISIL Broad Based Gilt ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF209KC1134"
+  },
+  {
+    "symbol": "LIQUID",
+    "name": "Mirae Asset Nifty 1D Rate Liquid ETF Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF769K01KS1"
+  },
+  {
+    "symbol": "GSEC10YEAR",
+    "name": "Mirae Asset Nifty 8-13 Yr G-Sec ETF Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF769K01KF8"
+  },
+  {
+    "symbol": "LIQUIDETF",
+    "name": "DSP NIFTY 1D Rate Liquid ETF",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF740KA1EU7"
+  },
+  {
+    "symbol": "BBETF0432",
+    "name": "BHARAT Bond ETF - April 2032 Units Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF754K01OB1"
+  },
+  {
+    "symbol": "LIQUIDADD",
+    "name": "DSP BSE Liquid Rate ETF Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF740KA1UM0"
+  },
+  {
+    "symbol": "HDFCLIQUID",
+    "name": "HDFC Nifty 1D Rate Liquid ETF - Growth",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF179KC1JG3"
+  },
+  {
+    "symbol": "GSEC10IETF",
+    "name": "ICICI Prudential Nifty 10 yr Benchmark G-Sec ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC18O0"
+  },
+  {
+    "symbol": "ABSLPSE",
+    "name": "Aditya Birla Sun Life Nifty PSE ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF209KB19Z4"
+  },
+  {
+    "symbol": "EBBETF0431",
+    "name": "BHARAT Bond ETF April 2031 Units Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF754K01LE1"
+  },
+  {
+    "symbol": "SBILIQETF",
+    "name": "SBI NIFTY 1D Rate Liquid ETF - Growth Exchange Traded Fund Units",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF200KB1969"
+  },
+  {
+    "symbol": "MOGSEC",
+    "name": "MOTILAL OSWAL 5 YEAR G-SEC ETF Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF247L01AK4"
+  },
+  {
+    "symbol": "EBBETF0433",
+    "name": "Bharat Bond ETF - April 2033",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF754K01QX0"
+  },
+  {
+    "symbol": "EBBETF0430",
+    "name": "Bharat Bond ETF - April 2030 -Units- Exchange Traded Funds",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF754K01KO2"
+  },
+  {
+    "symbol": "ALPHAETF",
+    "name": "Mirae Asset Nifty 200 Alpha 30 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01KU7"
+  },
+  {
+    "symbol": "MOHEALTH",
+    "name": "Motilal Oswal S&P BSE Healthcare ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF247L01BB1"
+  },
+  {
+    "symbol": "NIFTYBETF",
+    "name": "Bajaj Finserv Nifty 50 ETF Units Exchange traded fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF0QA701722"
+  },
+  {
+    "symbol": "EVINDIA",
+    "name": "Mirae Asset Nifty EV and New Age Automotive ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Utilities",
+    "isin": "INF769K01LQ3"
+  },
+  {
+    "symbol": "HDFCNIFBAN",
+    "name": "HDFC Nifty Banking ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF179KC1HY0"
+  },
+  {
+    "symbol": "LIQUIDCASE",
+    "name": "Zerodha Nifty 1D Rate Liquid ETF Units Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF0R8F01034"
+  },
+  {
+    "symbol": "LICNFNHGP",
+    "name": "LIC MF Exchange Traded Fund - Nifty 100",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF767K01PC8"
+  },
+  {
+    "symbol": "BBNPPGOLD",
+    "name": "Baroda BNP Paribas Gold ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF251K01SU9"
+  },
+  {
+    "symbol": "EQUAL50",
+    "name": "Mirae Asset Nifty50 Equal Weight ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF769K01OO2"
+  },
+  {
+    "symbol": "MIDQ50ADD",
+    "name": "DSP Nifty Midcap 150 Quality 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF740KA1QL0"
+  },
+  {
+    "symbol": "MONQ50",
+    "name": "Motilal Oswal Nasdaq Q 50 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF247L01AU3"
+  },
+  {
+    "symbol": "HDFCMOMENT",
+    "name": "13 HDFC Nifty 200 Momentum 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HV6"
+  },
+  {
+    "symbol": "SBIETFPB",
+    "name": "SBI Nifty Private Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF200KA1S22"
+  },
+  {
+    "symbol": "GOLDETF",
+    "name": "Mirae Asset Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF769K01JP9"
+  },
+  {
+    "symbol": "SETFGOLD",
+    "name": "SBI Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF200KA16D8"
+  },
+  {
+    "symbol": "SILVER",
+    "name": "Aditya Birla Sun Life Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF209KB19F6"
+  },
+  {
+    "symbol": "OILIETF",
+    "name": "ICICI Prudential Nifty Oil & Gas ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Energy",
+    "isin": "INF109KC18W3"
+  },
+  {
+    "symbol": "JUNIORBEES",
+    "name": "Nippon India ETF Nifty Next 50 Junior BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF732E01045"
+  },
+  {
+    "symbol": "GOLDIETF",
+    "name": "ICICI Prudential Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF109KC1NT3"
+  },
+  {
+    "symbol": "HDFCGROWTH",
+    "name": "HDFC NIFTY Growth Sectors 15 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1DJ0"
+  },
+  {
+    "symbol": "QGOLDHALF",
+    "name": "Quantum Gold Fund ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF082J01408"
+  },
+  {
+    "symbol": "COMMOIETF",
+    "name": "ICICI Prudential Nifty Commodities ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Broad market",
+    "isin": "INF109KC19O8"
+  },
+  {
+    "symbol": "MON100",
+    "name": "Motilal Oswal NASDAQ 100 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF247L01AP3"
+  },
+  {
+    "symbol": "TATAGOLD",
+    "name": "Tata Gold Exchange Traded Fund Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF277KA1976"
+  },
+  {
+    "symbol": "SETFBSE100",
+    "name": "SBI ETF BSE 100",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF200KA1572"
+  },
+  {
+    "symbol": "MASPTOP50",
+    "name": "Mirae Asset S&P 500 Top 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF769K01HP3"
+  },
+  {
+    "symbol": "INFRAIETF",
+    "name": "ICICI Prudential Nifty Infrastructure ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Theme",
+    "isin": "INF109KC16E5"
+  },
+  {
+    "symbol": "HDFCPSUBK",
+    "name": "Hdfc Nifty PSU Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HW4"
+  },
+  {
+    "symbol": "ITIETF",
+    "name": "ICICI Prudential Nifty IT ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF109KC16I6"
+  },
+  {
+    "symbol": "MOMOMENTUM",
+    "name": "Motilal Oswal Nifty 200 Momentum 30 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01BK2"
+  },
+  {
+    "symbol": "IDFSENSEXE",
+    "name": "IDFC Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF194KA1T91"
+  },
+  {
+    "symbol": "LICNETFSEN",
+    "name": "LIC MF Exchange Traded Fund - Sensex",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF767K01OT5"
+  },
+  {
+    "symbol": "GOLD360",
+    "name": "360 ONE Gold ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF579M01BB5"
+  },
+  {
+    "symbol": "BANKBETF",
+    "name": "Bajaj Finserv Nifty Bank ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF0QA701714"
+  },
+  {
+    "symbol": "HDFCNIFIT",
+    "name": "HDFC Nifty IT ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF179KC1IA8"
+  },
+  {
+    "symbol": "HDFCSENSEX",
+    "name": "HDFC S&P BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF179KC1HX2"
+  },
+  {
+    "symbol": "ITETFADD",
+    "name": "DSP Nifty IT ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF740KA1SX1"
+  },
+  {
+    "symbol": "MOTOUR",
+    "name": "Motilal Oswal Nifty India Tourism ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF247L01FP2"
+  },
+  {
+    "symbol": "ABSLPSE",
+    "name": "Aditya Birla Sun Life Nifty PSE ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF209KB19Z4"
+  },
+  {
+    "symbol": "HDFCVALUE",
+    "name": "HDFC NIFTY50 Value 20 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1DK8"
+  },
+  {
+    "symbol": "TOP10ADD",
+    "name": "DSP Nifty Top 10 Equal Weight ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF740KA1UR9"
+  },
+  {
+    "symbol": "ITETF",
+    "name": "Mirae Asset Nifty IT ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01KV5"
+  },
+  {
+    "symbol": "QUAL30IETF",
+    "name": "ICICI Prudential Nifty 200 Quality 30 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC18V5"
+  },
+  {
+    "symbol": "LICNMID100",
+    "name": "LIC MF Nifty Midcap 100 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF767K01RN1"
+  },
+  {
+    "symbol": "BSLSENETFG",
+    "name": "Aditya Birla Sun Life BSE Sensex ETF - Growth Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF209KB10E8"
+  },
+  {
+    "symbol": "SHARIABEES",
+    "name": "Nippon India ETF Nifty 50 Shariah BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF732E01128"
+  },
+  {
+    "symbol": "EQUAL200",
+    "name": "Mirae Asset BSE 200 Equal Weight ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01OA1"
+  },
+  {
+    "symbol": "AXISVALUE",
+    "name": "Axis Nifty500 Value 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF846KA1119"
+  },
+  {
+    "symbol": "ECAPINSURE",
+    "name": "Edelweiss BSE Capital Markets & Insurance ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF754K01TX4"
+  },
+  {
+    "symbol": "ESG",
+    "name": "Mirae Asset Nifty 100 ESG Sector Leaders ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01GS9"
+  },
+  {
+    "symbol": "BANKETFADD",
+    "name": "DSP Mutual Fund - DSP Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF740KA1RX3"
+  },
+  {
+    "symbol": "NIF100BEES",
+    "name": "Nippon India ETF Nifty100",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF204K014N5"
+  },
+  {
+    "symbol": "HDFCMID150",
+    "name": "HDFC Nifty Midcap 150 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HT0"
+  },
+  {
+    "symbol": "LICNETFN50",
+    "name": "LIC MF Exchange Traded fund - Nifty 50 Units Exchange Traded Fund - Growth Plan - Growth",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF767K01OS7"
+  },
+  {
+    "symbol": "SETFNIF50",
+    "name": "SBI-ETF Nifty 50",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF200KA1FS1"
+  },
+  {
+    "symbol": "HDFCPVTBAN",
+    "name": "HDFC Nifty Private Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HZ7"
+  },
+  {
+    "symbol": "TECH",
+    "name": "Aditya Birla Sun Life Nifty IT ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF209KB11D8"
+  },
+  {
+    "symbol": "AXISHCETF",
+    "name": "Axis NIFTY Healthcare ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF846K01Z12"
+  },
+  {
+    "symbol": "LIQUIDPLUS",
+    "name": "Mirae Asset Nifty 1D Rate Liquid ETF - Growth Units -Growth",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Broad credit",
+    "isin": "INF769K01MY5"
+  },
+  {
+    "symbol": "MID150CASE",
+    "name": "Zerodha Nifty Midcap 150 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF0R8F01059"
+  },
+  {
+    "symbol": "AXSENSEX",
+    "name": "AXIS S&P BSE SENSEX ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF846K010Q0"
+  },
+  {
+    "symbol": "HDFCBSE500",
+    "name": "HDFC S&P BSE 500 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1EZ4"
+  },
+  {
+    "symbol": "MONQ50",
+    "name": "Motilal Oswal Nasdaq Q 50 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF247L01AU3"
+  },
+  {
+    "symbol": "PVTBANIETF",
+    "name": "ICICI Prudential Nifty Private Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF109KC18U7"
+  },
+  {
+    "symbol": "ABSLNN50ET",
+    "name": "Aditya Birla Sun Life Nifty Next 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF209KB16D7"
+  },
+  {
+    "symbol": "SMALLCAP",
+    "name": "Mirae Asset Nifty Smallcap 250 Momentum Quality 100 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Small cap",
+    "isin": "INF769K01LC3"
+  },
+  {
+    "symbol": "FINIETF",
+    "name": "ICICI Prudential Nifty Financial Services Ex-Bank ETF Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF109KC17L8"
+  },
+  {
+    "symbol": "HDFCLOWVOL",
+    "name": "HDFC Nifty 100 Low Volatility 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HU8"
+  },
+  {
+    "symbol": "TOP15IETF",
+    "name": "ICICI Prudential Nifty Top 15 Equal Weight ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109K1A344"
+  },
+  {
+    "symbol": "FMCGIETF",
+    "name": "ICICI Prudential Nifty FMCG ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC19V3"
+  },
+  {
+    "symbol": "NEXT30ADD",
+    "name": "DSP BSE Sensex Next 30 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF740KA1VE5"
+  },
+  {
+    "symbol": "MANUFGBEES",
+    "name": "Nippon India Nifty India Manufacturing ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF204KC1GH6"
+  },
+  {
+    "symbol": "PSUBANKADD",
+    "name": "DSP Nifty PSU Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF740KA1SY9"
+  },
+  {
+    "symbol": "VAL30IETF",
+    "name": "ICICI Prudential Nifty200 Value 30 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC16X5"
+  },
+  {
+    "symbol": "SILVERIETF",
+    "name": "ICICI Prudential Silver ETF Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF109KC1Y56"
+  },
+  {
+    "symbol": "AXISHCETF",
+    "name": "Axis NIFTY Healthcare ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF846K01Z12"
+  },
+  {
+    "symbol": "MIDSMALL",
+    "name": "Mirae Asset Nifty MidSmallcap400 Momentum Quality 100 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Extended market",
+    "isin": "INF769K01LJ8"
+  },
+  {
+    "symbol": "HDFCNEXT50",
+    "name": "HDFC Nifty Next 50 Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF179KC1HS2"
+  },
+  {
+    "symbol": "BBETF0432",
+    "name": "BHARAT Bond ETF - April 2032 Units Exchange Traded Fund",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF754K01OB1"
+  },
+  {
+    "symbol": "MOQUALITY",
+    "name": "Motilal Oswal S&P BSE Quality ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01BH8"
+  },
+  {
+    "symbol": "EQUAL50ADD",
+    "name": "DSP Nifty 50 Equal Weight ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF740KA1QK2"
+  },
+  {
+    "symbol": "MULTICAP",
+    "name": "Mirae Asset Nifty500 Multicap 502525 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01LX9"
+  },
+  {
+    "symbol": "MAHKTECH",
+    "name": "Mirae Asset Hang Seng TECH ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF769K01HS7"
+  },
+  {
+    "symbol": "BSE500IETF",
+    "name": "ICICI Prudential BSE 500 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC1V59"
+  },
+  {
+    "symbol": "NV20IETF",
+    "name": "ICICI Prudential Nifty50 Value 20 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109KC11V0"
+  },
+  {
+    "symbol": "MIDSELIETF",
+    "name": "ICICI Prudential BSE Midcap Select ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF109KC10W0"
+  },
+  {
+    "symbol": "BANKPSU",
+    "name": "Mirae Asset Nifty PSU Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01LZ4"
+  },
+  {
+    "symbol": "SENSEXADD",
+    "name": "DSP BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF740KA1SZ6"
+  },
+  {
+    "symbol": "MOMENTUM",
+    "name": "Aditya Birla Sun Life Nifty 200 Momentum 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF209KB14K7"
+  },
+  {
+    "symbol": "GOLDBEES",
+    "name": "Nippon India ETF Gold BeES",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF204KB17I5"
+  },
+  {
+    "symbol": "SBINEQWETF",
+    "name": "SBI Nifty50 Equal Weight ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF200KB1282"
+  },
+  {
+    "symbol": "HDFCGOLD",
+    "name": "HDFC Gold Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF179KC1981"
+  },
+  {
+    "symbol": "BSLGOLDETF",
+    "name": "Aditya Birla Sun Life Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF209KB18D3"
+  },
+  {
+    "symbol": "SELECTIPO",
+    "name": "Mirae Asset BSE Select IPO ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01ON4"
+  },
+  {
+    "symbol": "METALIETF",
+    "name": "ICICI Prudential Nifty Metal ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Materials",
+    "isin": "INF109KC19W1"
+  },
+  {
+    "symbol": "HDFCQUAL",
+    "name": "HDFC NIFTY 100 Quality 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Extended market",
+    "isin": "INF179KC1DL6"
+  },
+  {
+    "symbol": "AXISTECETF",
+    "name": "Axis NIFTY IT ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF846K01Y96"
+  },
+  {
+    "symbol": "HDFCNIFIT",
+    "name": "HDFC Nifty IT ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Information technology",
+    "isin": "INF179KC1IA8"
+  },
+  {
+    "symbol": "MOM100",
+    "name": "Motilal Oswal Midcap 100 ETF Units Exchange Traded Fund - Growth",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF247L01023"
+  },
+  {
+    "symbol": "ALPL30IETF",
+    "name": "ICICI Prudential Nifty Alpha Low- Volatility 30 ETF",
+    "asset_class": "Alternatives",
+    "market_cap_category": "Volatility",
+    "isin": "INF109KC17V7"
+  },
+  {
+    "symbol": "SILVERADD",
+    "name": "DSP Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF740KA1RE3"
+  },
+  {
+    "symbol": "NIF100IETF",
+    "name": "ICICI Prudential Nifty 100 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109KC16V9"
+  },
+  {
+    "symbol": "NIFTYIETF",
+    "name": "ICICI Prudential Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109K012R6"
+  },
+  {
+    "symbol": "NIFTYETF",
+    "name": "Mirae Asset Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF769K01EG9"
+  },
+  {
+    "symbol": "SETFNIFBK",
+    "name": "SBI-ETF Nifty Bank",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF200KA1580"
+  },
+  {
+    "symbol": "SML100CASE",
+    "name": "Zerodha Nifty Smallcap 100 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Small cap",
+    "isin": "INF0R8F01141"
+  },
+  {
+    "symbol": "LICMFGOLD",
+    "name": "LIC MF Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF397L01554"
+  },
+  {
+    "symbol": "GOLDETFADD",
+    "name": "DSP Gold ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF740KA1SW3"
+  },
+  {
+    "symbol": "LOWVOLIETF",
+    "name": "ICICI Prudential Nifty 100 Low Volatility 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109KC19U5"
+  },
+  {
+    "symbol": "ICICIB22",
+    "name": "BHARAT 22 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KB15Y7"
+  },
+  {
+    "symbol": "AXISGOLD",
+    "name": "Axis Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF846K01W80"
+  },
+  {
+    "symbol": "SHARIABEES",
+    "name": "Nippon India ETF Nifty 50 Shariah BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF732E01128"
+  },
+  {
+    "symbol": "CONSUMER",
+    "name": "Mirae Asset Nifty India New Age Consumption Etf",
+    "asset_class": "Equity",
+    "market_cap_category": "Consumer discretionary",
+    "isin": "INF769K01NS5"
+  },
+  {
+    "symbol": "HDFCSML250",
+    "name": "HDFC Nifty Smallcap 250 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Small cap",
+    "isin": "INF179KC1FB2"
+  },
+  {
+    "symbol": "HEALTHADD",
+    "name": "DSP Nifty Healthcare ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF740KA1UF4"
+  },
+  {
+    "symbol": "AXSENSEX",
+    "name": "AXIS S&P BSE SENSEX ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF846K010Q0"
+  },
+  {
+    "symbol": "PVTBANKADD",
+    "name": "DSP Nifty Private Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF740KA1TA7"
+  },
+  {
+    "symbol": "SENSEXBEES",
+    "name": "Reliance ETF Sensex",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF204KA1UN7"
+  },
+  {
+    "symbol": "UNIONGOLD",
+    "name": "Union Gold ETF Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF582M01KS4"
+  },
+  {
+    "symbol": "MOM30IETF",
+    "name": "ICICI Prudential Nifty 200 Momentum 30 ETF Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC17C7"
+  },
+  {
+    "symbol": "HDFCSILVER",
+    "name": "Hdfc Silver ETF Units Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF179KC1DI2"
+  },
+  {
+    "symbol": "MAKEINDIA",
+    "name": "Mirae Asset Nifty India Manufacturing ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01IB1"
+  },
+  {
+    "symbol": "MOVALUE",
+    "name": "Motilal Oswal S&P BSE Enhanced Value ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01BE5"
+  },
+  {
+    "symbol": "AUTOIETF",
+    "name": "ICICI Prudential Nifty Auto ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC10V2"
+  },
+  {
+    "symbol": "NEXT50",
+    "name": "Mirae Asset Nifty Next 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF769K01FN2"
+  },
+  {
+    "symbol": "BSLNIFTY",
+    "name": "Aditya Birla Sun Life Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF209KB19D1"
+  },
+  {
+    "symbol": "QNIFTY",
+    "name": "Quantum Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF082J01028"
+  },
+  {
+    "symbol": "MOLOWVOL",
+    "name": "Motilal Oswal S&P BSE Low Volatility ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF247L01BL0"
+  },
+  {
+    "symbol": "TOP100CASE",
+    "name": "Zerodha Nifty 100 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF0R8F01067"
+  },
+  {
+    "symbol": "INFRABEES",
+    "name": "Nippon India ETF Nifty Infrastructure BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Theme",
+    "isin": "INF732E01268"
+  },
+  {
+    "symbol": "GOLD1",
+    "name": "Kotak Gold ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF174KA1HJ8"
+  },
+  {
+    "symbol": "SENSEXIETF",
+    "name": "ICICI Prudential BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF346A01034"
+  },
+  {
+    "symbol": "SNXT50BEES",
+    "name": "Nippon India ETF S&P BSE Sensex Next 50",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF204KB15D0"
+  },
+  {
+    "symbol": "HEALTHIETF",
+    "name": "ICICI Prudential Nifty Healthcare ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF109KC1Q72"
+  },
+  {
+    "symbol": "ABSLBANETF",
+    "name": "Aditya Birla Sun Life Nifty Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF209KB17D5"
+  },
+  {
+    "symbol": "SBISENSEX",
+    "name": "SBI- ETF SENSEX",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF200K01VT2"
+  },
+  {
+    "symbol": "CONSUMIETF",
+    "name": "ICICI Prudential Nifty India Consumption ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC1V42"
+  },
+  {
+    "symbol": "EVIETF",
+    "name": "ICICI Prudential Nifty EV & New Age Automotive ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Consumer discretionary",
+    "isin": "INF109K1A153"
+  },
+  {
+    "symbol": "ESG",
+    "name": "Mirae Asset Nifty 100 ESG Sector Leaders ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01GS9"
+  },
+  {
+    "symbol": "BBNPNBETF",
+    "name": "Baroda BNP Paribas Nifty Bank ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF251K01TL6"
+  },
+  {
+    "symbol": "BSLSENETFG",
+    "name": "Aditya Birla Sun Life BSE Sensex ETF - Growth Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF209KB10E8"
+  },
+  {
+    "symbol": "NIFTYBEES",
+    "name": "Nippon India ETF Nifty 50 BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF204KB14I2"
+  },
+  {
+    "symbol": "BANKETF",
+    "name": "Mirae Asset Nifty Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01KR3"
+  },
+  {
+    "symbol": "NIFTY50ADD",
+    "name": "DSP Nifty 50 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF740KA1CL0"
+  },
+  {
+    "symbol": "BFSI",
+    "name": "Mirae Asset Nifty Financial Services ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF769K01HI8"
+  },
+  {
+    "symbol": "HDFCMID150",
+    "name": "HDFC Nifty Midcap 150 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HT0"
+  },
+  {
+    "symbol": "IVZINGOLD",
+    "name": "Invesco India Gold Exchange Traded Fund",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF205K01361"
+  },
+  {
+    "symbol": "PSUBNKIETF",
+    "name": "ICICI Prudential Nifty PSU Bank ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF109KC10S8"
+  },
+  {
+    "symbol": "METALFUND",
+    "name": "Mirae Asset Nifty Metal ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Materials",
+    "isin": "INF769K01LY7"
+  },
+  {
+    "symbol": "SENSEXETF",
+    "name": "Mirae Asset S&P BSE Sensex ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01KT9"
+  },
+  {
+    "symbol": "HDFCMOMENT",
+    "name": "13 HDFC Nifty 200 Momentum 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HV6"
+  },
+  {
+    "symbol": "HDFCNIFTY",
+    "name": "HDFC Nifty 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF179KC1965"
+  },
+  {
+    "symbol": "NEXT50IETF",
+    "name": "ICICI Prudential Nifty Next 50 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109KC1NS5"
+  },
+  {
+    "symbol": "MOM50",
+    "name": "Motilal Oswal M50 ETF Units Growth - Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF247L01536"
+  },
+  {
+    "symbol": "BANKIETF",
+    "name": "ICICI Prudential Nifty Bank ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF109KC15I8"
+  },
+  {
+    "symbol": "SETFSN50",
+    "name": "SBI-ETF SENSEX Next 50",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF200KA1VQ2"
+  },
+  {
+    "symbol": "BANKBEES",
+    "name": "Nippon India ETF Nifty Bank BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF204KB15I9"
+  },
+  {
+    "symbol": "MAFANG",
+    "name": "Mirae Asset NYSE FANG+ ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Theme",
+    "isin": "INF769K01HF4"
+  },
+  {
+    "symbol": "HEALTHY",
+    "name": "Aditya Birla Sun Life Nifty Healthcare ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Health care",
+    "isin": "INF209KB10C2"
+  },
+  {
+    "symbol": "LOWVOLIETF",
+    "name": "ICICI Prudential Nifty 100 Low Volatility 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF109KC19U5"
+  },
+  {
+    "symbol": "SILVERAG",
+    "name": "Mirae Asset Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF769K01KG6"
+  },
+  {
+    "symbol": "AXISCETF",
+    "name": "Axis NIFTY India Consumption ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF846K016C7"
+  },
+  {
+    "symbol": "GOLDCASE",
+    "name": "Zerodha Gold ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Gold",
+    "isin": "INF0R8F01042"
+  },
+  {
+    "symbol": "PSUBNKBEES",
+    "name": "Nippon India ETF Nifty PSU Bank BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Financials",
+    "isin": "INF204KB16I7"
+  },
+  {
+    "symbol": "LOWVOL",
+    "name": "Mirae Asset Nifty 100 Low Volatility 30 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF769K01JU9"
+  },
+  {
+    "symbol": "SBISILVER",
+    "name": "SBI Silver ETF",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF200KB1217"
+  },
+  {
+    "symbol": "MIDCAPIETF",
+    "name": "ICICI Prudential Nifty Midcap 150 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF109KC11W8"
+  },
+  {
+    "symbol": "LIQUIDBEES",
+    "name": "Nippon India ETF Nifty 1D Rate Liquid BeES",
+    "asset_class": "Fixed income",
+    "market_cap_category": "Investment grade",
+    "isin": "INF732E01037"
+  },
+  {
+    "symbol": "SILVERCASE",
+    "name": "Zerodha Silver ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF0R8F01091"
+  },
+  {
+    "symbol": "ITETF",
+    "name": "Mirae Asset Nifty IT ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF769K01KV5"
+  },
+  {
+    "symbol": "NIFTYQLITY",
+    "name": "Aditya Birla Sun Life Nifty 200 Quality 30 ETF Units Exchange Traded Fund",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF209KB15K4"
+  },
+  {
+    "symbol": "SNXT30BEES",
+    "name": "Nippon India BSE Sensex Next 30 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Large cap",
+    "isin": "INF204KC1EZ3"
+  },
+  {
+    "symbol": "SILVER360",
+    "name": "360 ONE Silver ETF Exchange Traded Fund Units",
+    "asset_class": "Commodities",
+    "market_cap_category": "Silver",
+    "isin": "INF579M01BC3"
+  },
+  {
+    "symbol": "MIDCAPETF",
+    "name": "Mirae Asset Nifty Midcap 150 ETF Exchange Traded Fund Units",
+    "asset_class": "Equity",
+    "market_cap_category": "Mid cap",
+    "isin": "INF769K01IC9"
+  },
+  {
+    "symbol": "HDFCNIF100",
+    "name": "HDFC Nifty 100 ETF",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF179KC1HR4"
+  },
+  {
+    "symbol": "HNGSNGBEES",
+    "name": "Nippon India ETF Hang Seng BeES",
+    "asset_class": "Equity",
+    "market_cap_category": "Total market",
+    "isin": "INF204KB19I1"
+  }
+]

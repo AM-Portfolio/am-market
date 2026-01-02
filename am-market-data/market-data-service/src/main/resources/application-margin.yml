@@ -1,0 +1,36 @@
+# Margin Calculator Configuration
+market:
+  margin:
+    calculator:
+      # Default margin percentages
+      default-exposure-margin-percent: ${MARGIN_DEFAULT_EXPOSURE_PERCENT:5}
+      default-span-margin-percent: ${MARGIN_DEFAULT_SPAN_PERCENT:10}
+      
+      # Whether to use broker API for accurate margin calculation
+      use-broker-api: ${MARGIN_USE_BROKER_API:true}
+      
+      # Thread pool configuration
+      thread:
+        pool:
+          size: ${MARGIN_THREAD_POOL_SIZE:3}
+        queue:
+          capacity: ${MARGIN_THREAD_QUEUE_CAPACITY:10}
+      
+      # Retry configuration
+      max:
+        retries: ${MARGIN_MAX_RETRIES:3}
+      retry:
+        delay:
+          ms: ${MARGIN_RETRY_DELAY_MS:1000}
+      
+      # Cache configuration
+      cache:
+        enabled: ${MARGIN_CACHE_ENABLED:true}
+        ttl-seconds: ${MARGIN_CACHE_TTL_SECONDS:300}
+        max-size: ${MARGIN_CACHE_MAX_SIZE:100}
+
+# Logging configuration
+logging:
+  level:
+    com.marketdata.service.margin: ${MARGIN_LOG_LEVEL:INFO}
+    com.am.marketdata.api.service.MarginCalculatorApiService: ${MARGIN_API_LOG_LEVEL:INFO}

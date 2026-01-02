@@ -1,0 +1,95 @@
+{
+    "info": {
+        "_postman_id": "power-abi-py-coll-id",
+        "name": "Power ABI Analytics",
+        "description": "Python-based analytics service for market data analysis.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Analyze Data",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"symbol\": \"RELIANCE\",\n    \"timeframe\": \"1D\",\n    \"indicators\": [\n        {\n            \"kind\": \"sma\",\n            \"period\": 20\n        }\n    ]\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/analyze",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "analyze"
+                    ]
+                },
+                "description": "Performs technical analysis on the given stock symbol with specified indicators."
+            },
+            "response": []
+        },
+        {
+            "name": "Search Securities",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/securities/search?query=RELIANCE",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "securities",
+                        "search"
+                    ],
+                    "query": [
+                        {
+                            "key": "query",
+                            "value": "RELIANCE"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Advanced Search Securities",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"query\": \"RELIANCE\",\n  \"sector\": \"ENERGY\",\n  \"index\": \"NIFTY 50\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/api/securities/search",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "securities",
+                        "search"
+                    ]
+                }
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "https://am.munish.org/api/market",
+            "type": "string"
+        }
+    ]
+}

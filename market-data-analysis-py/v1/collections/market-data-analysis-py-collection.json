@@ -1,0 +1,139 @@
+{
+    "info": {
+        "name": "Market Data Analysis API - v1",
+        "description": "Python FastAPI service for technical analysis of market data",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "version": "1.0.0"
+    },
+    "item": [
+        {
+            "name": "Health Check",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/health",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "health"
+                    ]
+                },
+                "description": "Check if the service is running"
+            },
+            "response": []
+        },
+        {
+            "name": "Analyze - SMA",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{jwt_token}}",
+                        "disabled": true
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"symbol\": \"RELIANCE\",\n  \"timeframe\": \"1D\",\n  \"indicators\": [\n    {\n      \"kind\": \"SMA\",\n      \"params\": {\n        \"length\": 20\n      }\n    },\n    {\n      \"kind\": \"SMA\",\n      \"params\": {\n        \"length\": 50\n      }\n    }\n  ]\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/v1/analyze",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "analyze"
+                    ]
+                },
+                "description": "Perform Simple Moving Average analysis"
+            },
+            "response": []
+        },
+        {
+            "name": "Analyze - RSI",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{jwt_token}}",
+                        "disabled": true
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"symbol\": \"NIFTY\",\n  \"timeframe\": \"1D\",\n  \"indicators\": [\n    {\n      \"kind\": \"RSI\",\n      \"params\": {\n        \"length\": 14\n      }\n    }\n  ]\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/v1/analyze",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "analyze"
+                    ]
+                },
+                "description": "Perform Relative Strength Index analysis"
+            },
+            "response": []
+        },
+        {
+            "name": "Analyze - Multiple Indicators",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{jwt_token}}",
+                        "disabled": true
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"symbol\": \"INFY\",\n  \"timeframe\": \"1D\",\n  \"indicators\": [\n    {\n      \"kind\": \"SMA\",\n      \"params\": {\n        \"length\": 20\n      }\n    },\n    {\n      \"kind\": \"EMA\",\n      \"params\": {\n        \"length\": 50\n      }\n    },\n    {\n      \"kind\": \"RSI\",\n      \"params\": {\n        \"length\": 14\n      }\n    },\n    {\n      \"kind\": \"MACD\",\n      \"params\": {\n        \"fast\": 12,\n        \"slow\": 26,\n        \"signal\": 9\n      }\n    }\n  ]\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/v1/analyze",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "analyze"
+                    ]
+                },
+                "description": "Perform analysis with multiple technical indicators"
+            },
+            "response": []
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8010",
+            "type": "string"
+        },
+        {
+            "key": "jwt_token",
+            "value": "",
+            "type": "string"
+        }
+    ]
+}

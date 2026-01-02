@@ -1,0 +1,92 @@
+# Compiled class files
+*.class
+
+# Log files
+*.log
+logs/
+
+# BlueJ files
+*.ctxt
+
+# Variables files
+#*.env
+#.env
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# virtual machine crash logs
+hs_err_pid*
+replay_pid*
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+.settings/
+.project
+.classpath
+.factorypath
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Spring Boot
+spring-boot-*.pid
+
+# Test reports
+/test-output/
+*.test
+*.tests
+
+# Code coverage reports
+/coverage/
+.coverage
+coverage.xml
+*.cover
+
+# Temporary files
+*~
+*.swp
+*.swo
+
+# Flutter (market_data_web)
+market_data_web/build/
+market_data_web/.dart_tool/
+market_data_web/.flutter-plugins
+market_data_web/.flutter-plugins-dependencies
+market_data_web/.pub/
+market_data_web/.pub-cache/
+market_data_web/.metadata
+.env.docker

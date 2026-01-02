@@ -1,0 +1,54 @@
+# Base Configuration
+base:
+  resource: api/company
+  base-url: ${TRADEBRAIN_BASE_URL:https://portal.tradebrains.in}
+  indices-path: /api/index/all
+
+# TradeBrain API Configuration
+trade-brain:
+  baseUrl: ${base.base-url}
+  api:
+    indices:
+      all: ${TRADEBRAIN_INDICES_ALL_PATH:${base.indices-path}}
+    company:
+      stock:
+        details: /api/company/stock/{symbol}
+        historical: /api/company/stock/historical/{symbol}
+        technical: /api/company/stock/technicals/{symbol}
+        shareholding: /api/company/stock/shareholding/{symbol}
+        heatmap: /api/company/stock/heatmap/{symbol}
+      profile:
+        short-details: /api/company/short/details/{symbol}
+        key-metrics: /api/company/keymetrics/{symbol}
+        company-profile: /api/company/profile/info/{symbol}
+        insights: /api/company/insights/{symbol}
+        corporate-action: /api/company/corporate/actions/{symbol}
+        shareholding: /api/company/detailed/shareholding/{symbol}
+        score: /api/company/portal/score/{symbol}
+        board-of-directors: /api/company/board/directors/{symbol}
+        top-shareholders: /api/company/top/shareholders/quaters/{symbol}
+      financial:
+        dividends: /api/company/ratios/factsheet/dividends/{symbol}/consolidated
+        profit-loss: /api/company/profit-and-loss/statement/{symbol}/consolidated
+        balance-sheet: /api/company/balance/sheet/{symbol}/consolidated
+        cash-flow: /api/company/cash-flow/results/{symbol}/consolidated
+        quarterly-results: /api/company/quarterly-results/statement/{symbol}/consolidated
+        half-yearly: /api/company/half-yearly/statement/{symbol}/consolidated
+        ratios: /api/company/ratios/{symbol}/standalone
+
+
+        credit-rating: /api/company/credit-rating/{symbol}
+        peers: /api/company/sector/industry/peers/{symbol}
+      documents:
+        annual-reports: /api/company/annual/reports/{symbol}
+      reports:
+        director-report: /api/company/director/report/{symbol}
+        chairman-report: /api/company/chairman/report/{symbol}
+        auditor-report: /api/company/auditor/report/{symbol}
+        annual-reports: /api/company/annual/reports/{symbol}
+      analytics:
+        analytics: /api/company/analytics/{symbol}
+  headers:
+    userAgent: "AM-MarketData/1.0"
+    accept: "application/json"
+    acceptLanguage: "en-US,en;q=0.9"

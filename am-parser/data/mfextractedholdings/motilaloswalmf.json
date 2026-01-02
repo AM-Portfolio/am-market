@@ -1,0 +1,1258 @@
+
+{
+    "mutual_fund_name": "Motilal Oswal Nifty Smallcap 250 Index Fund",
+    "portfolio_date": "March 2025",
+    "total_holdings": 250,
+    "portfolio_holdings": [
+        {
+            "name_of_instrument": "Multi Commodity Exchange of India Limited",
+            "isin_code": "INE745G01035",
+            "percentage_to_nav": "0.0159%"
+        },
+        {
+            "name_of_instrument": "Laurus Labs Limited",
+            "isin_code": "INE947Q01028",
+            "percentage_to_nav": "0.0141%"
+        },
+        {
+            "name_of_instrument": "Crompton Greaves Consumer Electricals Limited",
+            "isin_code": "INE299U01018",
+            "percentage_to_nav": "0.0134%"
+        },
+        {
+            "name_of_instrument": "Central Depository Services (India) Limited",
+            "isin_code": "INE736A01011",
+            "percentage_to_nav": "0.0128%"
+        },
+        {
+            "name_of_instrument": "Radico Khaitan Limited",
+            "isin_code": "INE944F01028",
+            "percentage_to_nav": "0.0112%"
+        },
+        {
+            "name_of_instrument": "Computer Age Management Services Limited",
+            "isin_code": "INE596I01012",
+            "percentage_to_nav": "0.0105%"
+        },
+        {
+            "name_of_instrument": "Cholamandalam Financial Holdings Limited",
+            "isin_code": "INE149A01033",
+            "percentage_to_nav": "0.0102%"
+        },
+        {
+            "name_of_instrument": "Karur Vysya Bank Limited",
+            "isin_code": "INE036D01028",
+            "percentage_to_nav": "0.0097%"
+        },
+        {
+            "name_of_instrument": "Krishna Institute Of Medical Sciences Limited",
+            "isin_code": "INE967H01025",
+            "percentage_to_nav": "0.0092%"
+        },
+        {
+            "name_of_instrument": "Amber Enterprises India Limited",
+            "isin_code": "INE371P01015",
+            "percentage_to_nav": "0.0087%"
+        },
+        {
+            "name_of_instrument": "Navin Fluorine International Limited",
+            "isin_code": "INE048G01026",
+            "percentage_to_nav": "0.0086%"
+        },
+        {
+            "name_of_instrument": "Suven Pharmaceuticals Limited",
+            "isin_code": "INE03QK01018",
+            "percentage_to_nav": "0.0086%"
+        },
+        {
+            "name_of_instrument": "Redington Limited",
+            "isin_code": "INE891D01026",
+            "percentage_to_nav": "0.0085%"
+        },
+        {
+            "name_of_instrument": "PNB Housing Finance Limited",
+            "isin_code": "INE572E01012",
+            "percentage_to_nav": "0.0083%"
+        },
+        {
+            "name_of_instrument": "Piramal Pharma Limited",
+            "isin_code": "INE0DK501011",
+            "percentage_to_nav": "0.0081%"
+        },
+        {
+            "name_of_instrument": "Tata Chemicals Limited",
+            "isin_code": "INE092A01019",
+            "percentage_to_nav": "0.0079%"
+        },
+        {
+            "name_of_instrument": "Brigade Enterprises Limited",
+            "isin_code": "INE791I01019",
+            "percentage_to_nav": "0.0079%"
+        },
+        {
+            "name_of_instrument": "Five Star Business Finance Limited",
+            "isin_code": "INE128S01021",
+            "percentage_to_nav": "0.0079%"
+        },
+        {
+            "name_of_instrument": "Angel One Limited",
+            "isin_code": "INE732I01013",
+            "percentage_to_nav": "0.0079%"
+        },
+        {
+            "name_of_instrument": "Indian Energy Exchange Limited",
+            "isin_code": "INE022Q01020",
+            "percentage_to_nav": "0.0078%"
+        },
+        {
+            "name_of_instrument": "PG Electroplast Limited",
+            "isin_code": "INE457L01029",
+            "percentage_to_nav": "0.0077%"
+        },
+        {
+            "name_of_instrument": "Delhivery Limited",
+            "isin_code": "INE148O01028",
+            "percentage_to_nav": "0.0077%"
+        },
+        {
+            "name_of_instrument": "Kaynes Technology India Limited",
+            "isin_code": "INE918Z01012",
+            "percentage_to_nav": "0.0076%"
+        },
+        {
+            "name_of_instrument": "Manappuram Finance Limited",
+            "isin_code": "INE522D01027",
+            "percentage_to_nav": "0.0075%"
+        },
+        {
+            "name_of_instrument": "Amara Raja Energy & Mobility Ltd",
+            "isin_code": "INE885A01032",
+            "percentage_to_nav": "0.0072%"
+        },
+        {
+            "name_of_instrument": "Reliance Power Limited",
+            "isin_code": "INE614G01033",
+            "percentage_to_nav": "0.007%"
+        },
+        {
+            "name_of_instrument": "Aavas Financiers Limited",
+            "isin_code": "INE216P01012",
+            "percentage_to_nav": "0.007%"
+        },
+        {
+            "name_of_instrument": "KFin Technologies Limited",
+            "isin_code": "INE138Y01010",
+            "percentage_to_nav": "0.007%"
+        },
+        {
+            "name_of_instrument": "Piramal Enterprises Limited",
+            "isin_code": "INE140A01024",
+            "percentage_to_nav": "0.0069%"
+        },
+        {
+            "name_of_instrument": "Wockhardt Limited",
+            "isin_code": "INE049B01025",
+            "percentage_to_nav": "0.0069%"
+        },
+        {
+            "name_of_instrument": "J B Chemicals and Pharma Ltd",
+            "isin_code": "INE572A01036",
+            "percentage_to_nav": "0.0068%"
+        },
+        {
+            "name_of_instrument": "Carborundum Universal Limited",
+            "isin_code": "INE120A01034",
+            "percentage_to_nav": "0.0068%"
+        },
+        {
+            "name_of_instrument": "Narayana Hrudayalaya Limited",
+            "isin_code": "INE410P01011",
+            "percentage_to_nav": "0.0068%"
+        },
+        {
+            "name_of_instrument": "Welspun Corp Limited",
+            "isin_code": "INE191B01025",
+            "percentage_to_nav": "0.0067%"
+        },
+        {
+            "name_of_instrument": "City Union Bank Limited",
+            "isin_code": "INE491A01021",
+            "percentage_to_nav": "0.0067%"
+        },
+        {
+            "name_of_instrument": "The Ramco Cements Limited",
+            "isin_code": "INE331A01037",
+            "percentage_to_nav": "0.0066%"
+        },
+        {
+            "name_of_instrument": "Kalpataru Projects International Limited",
+            "isin_code": "INE220B01022",
+            "percentage_to_nav": "0.0065%"
+        },
+        {
+            "name_of_instrument": "Inox Wind Limited",
+            "isin_code": "INE066P01011",
+            "percentage_to_nav": "0.0064%"
+        },
+        {
+            "name_of_instrument": "Aster DM Healthcare Limited",
+            "isin_code": "INE914M01019",
+            "percentage_to_nav": "0.0064%"
+        },
+        {
+            "name_of_instrument": "Firstsource Solutions Limited",
+            "isin_code": "INE684F01012",
+            "percentage_to_nav": "0.0063%"
+        },
+        {
+            "name_of_instrument": "Cyient Limited",
+            "isin_code": "INE136B01020",
+            "percentage_to_nav": "0.0063%"
+        },
+        {
+            "name_of_instrument": "Elgi Equipments Limited",
+            "isin_code": "INE285A01027",
+            "percentage_to_nav": "0.0061%"
+        },
+        {
+            "name_of_instrument": "Neuland Laboratories Limited",
+            "isin_code": "INE794A01010",
+            "percentage_to_nav": "0.0061%"
+        },
+        {
+            "name_of_instrument": "RBL Bank Limited",
+            "isin_code": "INE976G01028",
+            "percentage_to_nav": "0.006%"
+        },
+        {
+            "name_of_instrument": "Aditya Birla Real Estate Limited",
+            "isin_code": "INE055A01016",
+            "percentage_to_nav": "0.006%"
+        },
+        {
+            "name_of_instrument": "Affle (India) Limited",
+            "isin_code": "INE00WC01027",
+            "percentage_to_nav": "0.006%"
+        },
+        {
+            "name_of_instrument": "KEC International Limited",
+            "isin_code": "INE389H01022",
+            "percentage_to_nav": "0.006%"
+        },
+        {
+            "name_of_instrument": "Aegis Logistics Limited",
+            "isin_code": "INE208C01025",
+            "percentage_to_nav": "0.0059%"
+        },
+        {
+            "name_of_instrument": "Poonawalla Fincorp Limited",
+            "isin_code": "INE511C01022",
+            "percentage_to_nav": "0.0059%"
+        },
+        {
+            "name_of_instrument": "Himadri Speciality Chemical Limited",
+            "isin_code": "INE019C01026",
+            "percentage_to_nav": "0.0058%"
+        },
+        {
+            "name_of_instrument": "Timken India Limited",
+            "isin_code": "INE325A01013",
+            "percentage_to_nav": "0.0058%"
+        },
+        {
+            "name_of_instrument": "Castrol India Limited",
+            "isin_code": "INE172A01027",
+            "percentage_to_nav": "0.0058%"
+        },
+        {
+            "name_of_instrument": "Atul Limited",
+            "isin_code": "INE100A01010",
+            "percentage_to_nav": "0.0057%"
+        },
+        {
+            "name_of_instrument": "Gujarat State Petronet Limited",
+            "isin_code": "INE246F01010",
+            "percentage_to_nav": "0.0057%"
+        },
+        {
+            "name_of_instrument": "CESC Limited",
+            "isin_code": "INE486A01021",
+            "percentage_to_nav": "0.0057%"
+        },
+        {
+            "name_of_instrument": "Chambal Fertilizers & Chemicals Limited",
+            "isin_code": "INE085A01013",
+            "percentage_to_nav": "0.0056%"
+        },
+        {
+            "name_of_instrument": "The Great Eastern Shipping Company Limited",
+            "isin_code": "INE017A01032",
+            "percentage_to_nav": "0.0054%"
+        },
+        {
+            "name_of_instrument": "Dr. Lal Path Labs Limited",
+            "isin_code": "INE600L01024",
+            "percentage_to_nav": "0.0054%"
+        },
+        {
+            "name_of_instrument": "Godfrey Phillips India Limited",
+            "isin_code": "INE260B01028",
+            "percentage_to_nav": "0.0054%"
+        },
+        {
+            "name_of_instrument": "Zee Entertainment Enterprises Limited",
+            "isin_code": "INE256A01028",
+            "percentage_to_nav": "0.0053%"
+        },
+        {
+            "name_of_instrument": "Nuvama Wealth Management Limited",
+            "isin_code": "INE531F01015",
+            "percentage_to_nav": "0.0053%"
+        },
+        {
+            "name_of_instrument": "PTC Industries Ltd",
+            "isin_code": "INE596F01018",
+            "percentage_to_nav": "0.0053%"
+        },
+        {
+            "name_of_instrument": "ZF Commercial Vehicle Control Systems India Limited",
+            "isin_code": "INE342J01019",
+            "percentage_to_nav": "0.0053%"
+        },
+        {
+            "name_of_instrument": "Jyoti CNC Automation Ltd",
+            "isin_code": "INE980O01024",
+            "percentage_to_nav": "0.0053%"
+        },
+        {
+            "name_of_instrument": "SKF India Limited",
+            "isin_code": "INE640A01023",
+            "percentage_to_nav": "0.0053%"
+        },
+        {
+            "name_of_instrument": "JSW Holdings Limited",
+            "isin_code": "INE824G01012",
+            "percentage_to_nav": "0.0051%"
+        },
+        {
+            "name_of_instrument": "NCC Limited",
+            "isin_code": "INE868B01028",
+            "percentage_to_nav": "0.005%"
+        },
+        {
+            "name_of_instrument": "Poly Medicure Limited",
+            "isin_code": "INE205C01021",
+            "percentage_to_nav": "0.005%"
+        },
+        {
+            "name_of_instrument": "NBCC (India) Limited",
+            "isin_code": "INE095N01031",
+            "percentage_to_nav": "0.005%"
+        },
+        {
+            "name_of_instrument": "Sammaan Capital Limited",
+            "isin_code": "INE148I01020",
+            "percentage_to_nav": "0.0049%"
+        },
+        {
+            "name_of_instrument": "EID Parry India Limited",
+            "isin_code": "INE126A01031",
+            "percentage_to_nav": "0.0047%"
+        },
+        {
+            "name_of_instrument": "Zensar Technologies Limited",
+            "isin_code": "INE520A01027",
+            "percentage_to_nav": "0.0047%"
+        },
+        {
+            "name_of_instrument": "Aarti Industries Limited",
+            "isin_code": "INE769A01020",
+            "percentage_to_nav": "0.0047%"
+        },
+        {
+            "name_of_instrument": "Ramkrishna Forgings Limited",
+            "isin_code": "INE399G01023",
+            "percentage_to_nav": "0.0047%"
+        },
+        {
+            "name_of_instrument": "Mahanagar Gas Limited",
+            "isin_code": "INE002S01010",
+            "percentage_to_nav": "0.0046%"
+        },
+        {
+            "name_of_instrument": "Bata India Limited",
+            "isin_code": "INE176A01028",
+            "percentage_to_nav": "0.0046%"
+        },
+        {
+            "name_of_instrument": "Eris LifeSciences Limited",
+            "isin_code": "INE406M01024",
+            "percentage_to_nav": "0.0045%"
+        },
+        {
+            "name_of_instrument": "Nava Limited",
+            "isin_code": "INE725A01030",
+            "percentage_to_nav": "0.0045%"
+        },
+        {
+            "name_of_instrument": "IIFL Finance Limited",
+            "isin_code": "INE530B01024",
+            "percentage_to_nav": "0.0045%"
+        },
+        {
+            "name_of_instrument": "Deepak Fertilizers and Petrochemicals Corporation Limited",
+            "isin_code": "INE501A01019",
+            "percentage_to_nav": "0.0044%"
+        },
+        {
+            "name_of_instrument": "PCBL Chemical Limited",
+            "isin_code": "INE602A01031",
+            "percentage_to_nav": "0.0044%"
+        },
+        {
+            "name_of_instrument": "Authum Investment And Infrastructure Limited",
+            "isin_code": "INE206F01022",
+            "percentage_to_nav": "0.0043%"
+        },
+        {
+            "name_of_instrument": "HFCL Limited",
+            "isin_code": "INE548A01028",
+            "percentage_to_nav": "0.0043%"
+        },
+        {
+            "name_of_instrument": "Hindustan Copper Limited",
+            "isin_code": "INE531E01026",
+            "percentage_to_nav": "0.0043%"
+        },
+        {
+            "name_of_instrument": "Natco Pharma Limited",
+            "isin_code": "INE987B01026",
+            "percentage_to_nav": "0.0042%"
+        },
+        {
+            "name_of_instrument": "Kajaria Ceramics Limited",
+            "isin_code": "INE217B01036",
+            "percentage_to_nav": "0.0042%"
+        },
+        {
+            "name_of_instrument": "Anand Rathi Wealth Limited",
+            "isin_code": "INE463V01026",
+            "percentage_to_nav": "0.0042%"
+        },
+        {
+            "name_of_instrument": "Granules India Limited",
+            "isin_code": "INE101D01020",
+            "percentage_to_nav": "0.0041%"
+        },
+        {
+            "name_of_instrument": "EIH Limited",
+            "isin_code": "INE230A01023",
+            "percentage_to_nav": "0.0041%"
+        },
+        {
+            "name_of_instrument": "Rainbow Childrens Medicare Limited",
+            "isin_code": "INE961O01016",
+            "percentage_to_nav": "0.0041%"
+        },
+        {
+            "name_of_instrument": "Sapphire Foods India Limited",
+            "isin_code": "INE806T01020",
+            "percentage_to_nav": "0.0041%"
+        },
+        {
+            "name_of_instrument": "Finolex Cables Limited",
+            "isin_code": "INE235A01022",
+            "percentage_to_nav": "0.0041%"
+        },
+        {
+            "name_of_instrument": "Sumitomo Chemical India Limited",
+            "isin_code": "INE258G01013",
+            "percentage_to_nav": "0.004%"
+        },
+        {
+            "name_of_instrument": "Praj Industries Limited",
+            "isin_code": "INE074A01025",
+            "percentage_to_nav": "0.004%"
+        },
+        {
+            "name_of_instrument": "Jubilant Pharmova Limited",
+            "isin_code": "INE700A01033",
+            "percentage_to_nav": "0.004%"
+        },
+        {
+            "name_of_instrument": "Jaiprakash Power Ventures Limited",
+            "isin_code": "INE351F01018",
+            "percentage_to_nav": "0.004%"
+        },
+        {
+            "name_of_instrument": "Zen Technologies Limited",
+            "isin_code": "INE251B01027",
+            "percentage_to_nav": "0.004%"
+        },
+        {
+            "name_of_instrument": "Sonata Software Limited",
+            "isin_code": "INE269A01021",
+            "percentage_to_nav": "0.004%"
+        },
+        {
+            "name_of_instrument": "Anant Raj Limited",
+            "isin_code": "INE242C01024",
+            "percentage_to_nav": "0.0039%"
+        },
+        {
+            "name_of_instrument": "Asahi India Glass Limited",
+            "isin_code": "INE439A01020",
+            "percentage_to_nav": "0.0039%"
+        },
+        {
+            "name_of_instrument": "Home First Finance Company India Limited",
+            "isin_code": "INE481N01025",
+            "percentage_to_nav": "0.0039%"
+        },
+        {
+            "name_of_instrument": "Gillette India Limited",
+            "isin_code": "INE322A01010",
+            "percentage_to_nav": "0.0038%"
+        },
+        {
+            "name_of_instrument": "PVR INOX Limited",
+            "isin_code": "INE191H01014",
+            "percentage_to_nav": "0.0038%"
+        },
+        {
+            "name_of_instrument": "V-Guard Industries Limited",
+            "isin_code": "INE951I01027",
+            "percentage_to_nav": "0.0038%"
+        },
+        {
+            "name_of_instrument": "Go Digit General Insurance Ltd",
+            "isin_code": "INE03JT01014",
+            "percentage_to_nav": "0.0038%"
+        },
+        {
+            "name_of_instrument": "Triveni Turbine Limited",
+            "isin_code": "INE152M01016",
+            "percentage_to_nav": "0.0038%"
+        },
+        {
+            "name_of_instrument": "Titagarh Rail Systems Limited",
+            "isin_code": "INE615H01020",
+            "percentage_to_nav": "0.0037%"
+        },
+        {
+            "name_of_instrument": "Birlasoft Limited",
+            "isin_code": "INE836A01035",
+            "percentage_to_nav": "0.0037%"
+        },
+        {
+            "name_of_instrument": "Lemon Tree Hotels Limited",
+            "isin_code": "INE970X01018",
+            "percentage_to_nav": "0.0037%"
+        },
+        {
+            "name_of_instrument": "Indiamart Intermesh Limited",
+            "isin_code": "INE933S01016",
+            "percentage_to_nav": "0.0037%"
+        },
+        {
+            "name_of_instrument": "Newgen Software Technologies Limited",
+            "isin_code": "INE619B01017",
+            "percentage_to_nav": "0.0037%"
+        },
+        {
+            "name_of_instrument": "Balrampur Chini Mills Limited",
+            "isin_code": "INE119A01028",
+            "percentage_to_nav": "0.0037%"
+        },
+        {
+            "name_of_instrument": "Jindal Saw Ltd",
+            "isin_code": "INE324A01032",
+            "percentage_to_nav": "0.0037%"
+        },
+        {
+            "name_of_instrument": "Intellect Design Arena Limited",
+            "isin_code": "INE306R01017",
+            "percentage_to_nav": "0.0037%"
+        },
+        {
+            "name_of_instrument": "Bayer Cropscience Limited",
+            "isin_code": "INE462A01022",
+            "percentage_to_nav": "0.0037%"
+        },
+        {
+            "name_of_instrument": "BEML Limited",
+            "isin_code": "INE258A01016",
+            "percentage_to_nav": "0.0036%"
+        },
+        {
+            "name_of_instrument": "Whirlpool of India Limited",
+            "isin_code": "INE716A01013",
+            "percentage_to_nav": "0.0036%"
+        },
+        {
+            "name_of_instrument": "Aptus Value Housing Finance India Limited",
+            "isin_code": "INE852O01025",
+            "percentage_to_nav": "0.0036%"
+        },
+        {
+            "name_of_instrument": "Pfizer Limited",
+            "isin_code": "INE182A01018",
+            "percentage_to_nav": "0.0036%"
+        },
+        {
+            "name_of_instrument": "Tejas Networks Limited",
+            "isin_code": "INE010J01012",
+            "percentage_to_nav": "0.0036%"
+        },
+        {
+            "name_of_instrument": "CEAT Limited",
+            "isin_code": "INE482A01020",
+            "percentage_to_nav": "0.0036%"
+        },
+        {
+            "name_of_instrument": "Swan Energy Limited",
+            "isin_code": "INE665A01038",
+            "percentage_to_nav": "0.0035%"
+        },
+        {
+            "name_of_instrument": "Devyani International Limited",
+            "isin_code": "INE872J01023",
+            "percentage_to_nav": "0.0035%"
+        },
+        {
+            "name_of_instrument": "Craftsman Automation Limited",
+            "isin_code": "INE00LO01017",
+            "percentage_to_nav": "0.0035%"
+        },
+        {
+            "name_of_instrument": "Kirloskar Oil Engines Limited",
+            "isin_code": "INE146L01010",
+            "percentage_to_nav": "0.0035%"
+        },
+        {
+            "name_of_instrument": "Shyam Metalics and Energy Limited",
+            "isin_code": "INE810G01011",
+            "percentage_to_nav": "0.0035%"
+        },
+        {
+            "name_of_instrument": "eClerx Services Limited",
+            "isin_code": "INE738I01010",
+            "percentage_to_nav": "0.0035%"
+        },
+        {
+            "name_of_instrument": "Usha Martin Limited",
+            "isin_code": "INE228A01035",
+            "percentage_to_nav": "0.0034%"
+        },
+        {
+            "name_of_instrument": "Chalet Hotels Limited",
+            "isin_code": "INE427F01016",
+            "percentage_to_nav": "0.0034%"
+        },
+        {
+            "name_of_instrument": "Transformers And Rectifiers (India) Limited",
+            "isin_code": "INE763I01026",
+            "percentage_to_nav": "0.0034%"
+        },
+        {
+            "name_of_instrument": "Can Fin Homes Limited",
+            "isin_code": "INE477A01020",
+            "percentage_to_nav": "0.0033%"
+        },
+        {
+            "name_of_instrument": "Concord Biotech Limited",
+            "isin_code": "INE338H01029",
+            "percentage_to_nav": "0.0033%"
+        },
+        {
+            "name_of_instrument": "Sobha Limited",
+            "isin_code": "INE671H01015",
+            "percentage_to_nav": "0.0032%"
+        },
+        {
+            "name_of_instrument": "Indegene Limited",
+            "isin_code": "INE065X01017",
+            "percentage_to_nav": "0.0032%"
+        },
+        {
+            "name_of_instrument": "Gravita India Limited",
+            "isin_code": "INE024L01027",
+            "percentage_to_nav": "0.0031%"
+        },
+        {
+            "name_of_instrument": "DCM Shriram Limited",
+            "isin_code": "INE499A01024",
+            "percentage_to_nav": "0.0031%"
+        },
+        {
+            "name_of_instrument": "HBL Engineering Limited",
+            "isin_code": "INE292B01021",
+            "percentage_to_nav": "0.0031%"
+        },
+        {
+            "name_of_instrument": "AstraZeneca Pharma India Limited",
+            "isin_code": "INE203A01020",
+            "percentage_to_nav": "0.0031%"
+        },
+        {
+            "name_of_instrument": "Brainbees Solutions Ltd",
+            "isin_code": "INE02RE01045",
+            "percentage_to_nav": "0.0031%"
+        },
+        {
+            "name_of_instrument": "LT Foods Limited",
+            "isin_code": "INE818H01020",
+            "percentage_to_nav": "0.0031%"
+        },
+        {
+            "name_of_instrument": "Alembic Pharmaceuticals Limited",
+            "isin_code": "INE901L01018",
+            "percentage_to_nav": "0.0031%"
+        },
+        {
+            "name_of_instrument": "Doms Industries Limited",
+            "isin_code": "INE321T01012",
+            "percentage_to_nav": "0.003%"
+        },
+        {
+            "name_of_instrument": "Action Construction Equipment Limited",
+            "isin_code": "INE731H01025",
+            "percentage_to_nav": "0.003%"
+        },
+        {
+            "name_of_instrument": "Finolex Industries Limited",
+            "isin_code": "INE183A01024",
+            "percentage_to_nav": "0.003%"
+        },
+        {
+            "name_of_instrument": "IRCON International Limited",
+            "isin_code": "INE962Y01021",
+            "percentage_to_nav": "0.003%"
+        },
+        {
+            "name_of_instrument": "CreditAccess Grameen Limited",
+            "isin_code": "INE741K01010",
+            "percentage_to_nav": "0.003%"
+        },
+        {
+            "name_of_instrument": "BASF India Limited",
+            "isin_code": "INE373A01013",
+            "percentage_to_nav": "0.003%"
+        },
+        {
+            "name_of_instrument": "Techno Electric & Engineering Company Limited",
+            "isin_code": "INE285K01026",
+            "percentage_to_nav": "0.003%"
+        },
+        {
+            "name_of_instrument": "Jupiter Wagons Limited",
+            "isin_code": "INE209L01016",
+            "percentage_to_nav": "0.0029%"
+        },
+        {
+            "name_of_instrument": "Data Patterns (India) Limited",
+            "isin_code": "INE0IX101010",
+            "percentage_to_nav": "0.0029%"
+        },
+        {
+            "name_of_instrument": "Garden Reach Shipbuilders & Engineers Limited",
+            "isin_code": "INE382Z01011",
+            "percentage_to_nav": "0.0029%"
+        },
+        {
+            "name_of_instrument": "Afcons Infrastructure Limited",
+            "isin_code": "INE101I01011",
+            "percentage_to_nav": "0.0029%"
+        },
+        {
+            "name_of_instrument": "Happiest Minds Technologies Limited",
+            "isin_code": "INE419U01012",
+            "percentage_to_nav": "0.0029%"
+        },
+        {
+            "name_of_instrument": "Jubilant Ingrevia Limited",
+            "isin_code": "INE0BY001018",
+            "percentage_to_nav": "0.0028%"
+        },
+        {
+            "name_of_instrument": "BLS International Services Limited",
+            "isin_code": "INE153T01027",
+            "percentage_to_nav": "0.0028%"
+        },
+        {
+            "name_of_instrument": "Vijaya Diagnostic Centre Limited",
+            "isin_code": "INE043W01024",
+            "percentage_to_nav": "0.0028%"
+        },
+        {
+            "name_of_instrument": "Olectra Greentech Limited",
+            "isin_code": "INE260D01016",
+            "percentage_to_nav": "0.0028%"
+        },
+        {
+            "name_of_instrument": "Westlife Foodworld Limited",
+            "isin_code": "INE274F01020",
+            "percentage_to_nav": "0.0028%"
+        },
+        {
+            "name_of_instrument": "Vedant Fashions Limited",
+            "isin_code": "INE825V01034",
+            "percentage_to_nav": "0.0028%"
+        },
+        {
+            "name_of_instrument": "Sarda Energy and Minerals Limited",
+            "isin_code": "INE385C01021",
+            "percentage_to_nav": "0.0028%"
+        },
+        {
+            "name_of_instrument": "Kansai Nerolac Paints Limited",
+            "isin_code": "INE531A01024",
+            "percentage_to_nav": "0.0028%"
+        },
+        {
+            "name_of_instrument": "Raymond Limited",
+            "isin_code": "INE301A01014",
+            "percentage_to_nav": "0.0028%"
+        },
+        {
+            "name_of_instrument": "Aditya Birla Sun Life AMC Limited",
+            "isin_code": "INE404A01024",
+            "percentage_to_nav": "0.0027%"
+        },
+        {
+            "name_of_instrument": "Jyothy Labs Limited",
+            "isin_code": "INE668F01031",
+            "percentage_to_nav": "0.0026%"
+        },
+        {
+            "name_of_instrument": "Aadhar Housing Finance Limited",
+            "isin_code": "INE883F01010",
+            "percentage_to_nav": "0.0026%"
+        },
+        {
+            "name_of_instrument": "Godawari Power and Ispat Ltd",
+            "isin_code": "INE177H01039",
+            "percentage_to_nav": "0.0026%"
+        },
+        {
+            "name_of_instrument": "Engineers India Limited",
+            "isin_code": "INE510A01028",
+            "percentage_to_nav": "0.0026%"
+        },
+        {
+            "name_of_instrument": "UTI Asset Management Company Limited",
+            "isin_code": "INE094J01016",
+            "percentage_to_nav": "0.0026%"
+        },
+        {
+            "name_of_instrument": "IDBI Bank Limited",
+            "isin_code": "INE008A01015",
+            "percentage_to_nav": "0.0026%"
+        },
+        {
+            "name_of_instrument": "Kirloskar Brothers Limited",
+            "isin_code": "INE732A01036",
+            "percentage_to_nav": "0.0025%"
+        },
+        {
+            "name_of_instrument": "Minda Corporation Limited",
+            "isin_code": "INE842C01021",
+            "percentage_to_nav": "0.0025%"
+        },
+        {
+            "name_of_instrument": "Century Plyboards (India) Limited",
+            "isin_code": "INE348B01021",
+            "percentage_to_nav": "0.0025%"
+        },
+        {
+            "name_of_instrument": "Signatureglobal (India) Limited",
+            "isin_code": "INE903U01023",
+            "percentage_to_nav": "0.0025%"
+        },
+        {
+            "name_of_instrument": "Capri Global Capital Limited",
+            "isin_code": "INE180C01042",
+            "percentage_to_nav": "0.0025%"
+        },
+        {
+            "name_of_instrument": "Welspun Living Limited",
+            "isin_code": "INE192B01031",
+            "percentage_to_nav": "0.0025%"
+        },
+        {
+            "name_of_instrument": "Quess Corp Limited",
+            "isin_code": "INE615P01015",
+            "percentage_to_nav": "0.0025%"
+        },
+        {
+            "name_of_instrument": "Bikaji Foods International Limited",
+            "isin_code": "INE00E101023",
+            "percentage_to_nav": "0.0024%"
+        },
+        {
+            "name_of_instrument": "Gujarat Narmada Valley Fertilizers and Chemicals Limited",
+            "isin_code": "INE113A01013",
+            "percentage_to_nav": "0.0024%"
+        },
+        {
+            "name_of_instrument": "The Jammu & Kashmir Bank Limited",
+            "isin_code": "INE168A01041",
+            "percentage_to_nav": "0.0024%"
+        },
+        {
+            "name_of_instrument": "HEG Limited",
+            "isin_code": "INE545A01024",
+            "percentage_to_nav": "0.0024%"
+        },
+        {
+            "name_of_instrument": "Metropolis Healthcare Limited",
+            "isin_code": "INE112L01020",
+            "percentage_to_nav": "0.0024%"
+        },
+        {
+            "name_of_instrument": "Vardhman Textiles Limited",
+            "isin_code": "INE825A01020",
+            "percentage_to_nav": "0.0024%"
+        },
+        {
+            "name_of_instrument": "Caplin Point Laboratories Limited",
+            "isin_code": "INE475E01026",
+            "percentage_to_nav": "0.0024%"
+        },
+        {
+            "name_of_instrument": "Fertilizers and Chemicals Travancore Limited",
+            "isin_code": "INE188A01015",
+            "percentage_to_nav": "0.0023%"
+        },
+        {
+            "name_of_instrument": "Elecon Engineering Company Limited",
+            "isin_code": "INE205B01031",
+            "percentage_to_nav": "0.0023%"
+        },
+        {
+            "name_of_instrument": "CCL Products (India) Limited",
+            "isin_code": "INE421D01022",
+            "percentage_to_nav": "0.0023%"
+        },
+        {
+            "name_of_instrument": "Schneider Electric Infrastructure Limited",
+            "isin_code": "INE839M01018",
+            "percentage_to_nav": "0.0023%"
+        },
+        {
+            "name_of_instrument": "Saregama India Limited",
+            "isin_code": "INE979A01025",
+            "percentage_to_nav": "0.0023%"
+        },
+        {
+            "name_of_instrument": "JM Financial Limited",
+            "isin_code": "INE780C01023",
+            "percentage_to_nav": "0.0023%"
+        },
+        {
+            "name_of_instrument": "NMDC Steel Limited",
+            "isin_code": "INE0NNS01018",
+            "percentage_to_nav": "0.0023%"
+        },
+        {
+            "name_of_instrument": "Gujarat Pipavav Port Limited",
+            "isin_code": "INE517F01014",
+            "percentage_to_nav": "0.0022%"
+        },
+        {
+            "name_of_instrument": "JK Tyre & Industries Limited",
+            "isin_code": "INE573A01042",
+            "percentage_to_nav": "0.0022%"
+        },
+        {
+            "name_of_instrument": "Valor Estate Limited",
+            "isin_code": "INE879I01012",
+            "percentage_to_nav": "0.0022%"
+        },
+        {
+            "name_of_instrument": "Mastek Limited",
+            "isin_code": "INE759A01021",
+            "percentage_to_nav": "0.0021%"
+        },
+        {
+            "name_of_instrument": "Blue Dart Express Limited",
+            "isin_code": "INE233B01017",
+            "percentage_to_nav": "0.0021%"
+        },
+        {
+            "name_of_instrument": "Sai Life Sciences Limited",
+            "isin_code": "INE570L01029",
+            "percentage_to_nav": "0.0021%"
+        },
+        {
+            "name_of_instrument": "The India Cements Limited",
+            "isin_code": "INE383A01012",
+            "percentage_to_nav": "0.0021%"
+        },
+        {
+            "name_of_instrument": "Tanla Platforms Limited",
+            "isin_code": "INE483C01032",
+            "percentage_to_nav": "0.002%"
+        },
+        {
+            "name_of_instrument": "Alivus Life Sciences Limited",
+            "isin_code": "INE03Q201024",
+            "percentage_to_nav": "0.002%"
+        },
+        {
+            "name_of_instrument": "KNR Constructions Limited",
+            "isin_code": "INE634I01029",
+            "percentage_to_nav": "0.0019%"
+        },
+        {
+            "name_of_instrument": "Trveni Engineering & Industries Limited",
+            "isin_code": "INE256C01024",
+            "percentage_to_nav": "0.0019%"
+        },
+        {
+            "name_of_instrument": "Cera Sanitaryware Limited",
+            "isin_code": "INE739E01017",
+            "percentage_to_nav": "0.0019%"
+        },
+        {
+            "name_of_instrument": "Godrej Agrovet Limited",
+            "isin_code": "INE850D01014",
+            "percentage_to_nav": "0.0019%"
+        },
+        {
+            "name_of_instrument": "Graphite India Limited",
+            "isin_code": "INE371A01025",
+            "percentage_to_nav": "0.0019%"
+        },
+        {
+            "name_of_instrument": "Honasa Consumer Limited",
+            "isin_code": "INE0J5401028",
+            "percentage_to_nav": "0.0019%"
+        },
+        {
+            "name_of_instrument": "Sterling And Wilson Renewable Energy Limited",
+            "isin_code": "INE00M201021",
+            "percentage_to_nav": "0.0019%"
+        },
+        {
+            "name_of_instrument": "R R Kabel Limited",
+            "isin_code": "INE777K01022",
+            "percentage_to_nav": "0.0018%"
+        },
+        {
+            "name_of_instrument": "TBO Tek Limited",
+            "isin_code": "INE673O01025",
+            "percentage_to_nav": "0.0018%"
+        },
+        {
+            "name_of_instrument": "RHI Magnesita India Limited",
+            "isin_code": "INE743M01012",
+            "percentage_to_nav": "0.0018%"
+        },
+        {
+            "name_of_instrument": "Bombay Burmah Trading Corporation Limited",
+            "isin_code": "INE050A01025",
+            "percentage_to_nav": "0.0018%"
+        },
+        {
+            "name_of_instrument": "SBFC Finance Limited",
+            "isin_code": "INE423Y01016",
+            "percentage_to_nav": "0.0018%"
+        },
+        {
+            "name_of_instrument": "RITES Limited",
+            "isin_code": "INE320J01015",
+            "percentage_to_nav": "0.0018%"
+        },
+        {
+            "name_of_instrument": "Chennai Petroleum Corporation Limited",
+            "isin_code": "INE178A01016",
+            "percentage_to_nav": "0.0017%"
+        },
+        {
+            "name_of_instrument": "Trident Limited",
+            "isin_code": "INE064C01022",
+            "percentage_to_nav": "0.0017%"
+        },
+        {
+            "name_of_instrument": "PNC Infratech Limited",
+            "isin_code": "INE195J01029",
+            "percentage_to_nav": "0.0017%"
+        },
+        {
+            "name_of_instrument": "Maharashtra Seamless Limited",
+            "isin_code": "INE271B01025",
+            "percentage_to_nav": "0.0017%"
+        },
+        {
+            "name_of_instrument": "Network18 Media & Investments Limited",
+            "isin_code": "INE870H01013",
+            "percentage_to_nav": "0.0017%"
+        },
+        {
+            "name_of_instrument": "Raymond Lifestyle Limited",
+            "isin_code": "INE02ID01020",
+            "percentage_to_nav": "0.0017%"
+        },
+        {
+            "name_of_instrument": "Tata Teleservices (Maharashtra) Limited",
+            "isin_code": "INE517B01013",
+            "percentage_to_nav": "0.0017%"
+        },
+        {
+            "name_of_instrument": "Syrma SGS Technology Ltd",
+            "isin_code": "INE0DYJ01015",
+            "percentage_to_nav": "0.0016%"
+        },
+        {
+            "name_of_instrument": "Shipping Corporation Of India Limited",
+            "isin_code": "INE109A01011",
+            "percentage_to_nav": "0.0016%"
+        },
+        {
+            "name_of_instrument": "IFCI Limited",
+            "isin_code": "INE039A01010",
+            "percentage_to_nav": "0.0016%"
+        },
+        {
+            "name_of_instrument": "Indian Overseas Bank",
+            "isin_code": "INE565A01014",
+            "percentage_to_nav": "0.0016%"
+        },
+        {
+            "name_of_instrument": "RailTel Corporation of India Limited",
+            "isin_code": "INE0DD101019",
+            "percentage_to_nav": "0.0016%"
+        },
+        {
+            "name_of_instrument": "Latent View Analytics Limited",
+            "isin_code": "INE0I7C01011",
+            "percentage_to_nav": "0.0015%"
+        },
+        {
+            "name_of_instrument": "Clean Science and Technology Limited",
+            "isin_code": "INE227W01023",
+            "percentage_to_nav": "0.0015%"
+        },
+        {
+            "name_of_instrument": "Inventurus Knowledge Solutions Limited",
+            "isin_code": "INE115Q01022",
+            "percentage_to_nav": "0.0015%"
+        },
+        {
+            "name_of_instrument": "Central Bank of India",
+            "isin_code": "INE483A01010",
+            "percentage_to_nav": "0.0015%"
+        },
+        {
+            "name_of_instrument": "Niva Bupa Health Insurance Company Limited",
+            "isin_code": "INE995S01015",
+            "percentage_to_nav": "0.0015%"
+        },
+        {
+            "name_of_instrument": "Net web Technologies India Limited",
+            "isin_code": "INE0NT901020",
+            "percentage_to_nav": "0.0014%"
+        },
+        {
+            "name_of_instrument": "ITI Limited",
+            "isin_code": "INE248A01017",
+            "percentage_to_nav": "0.0014%"
+        },
+        {
+            "name_of_instrument": "C.E. Info Systems Limited",
+            "isin_code": "INE0BV301023",
+            "percentage_to_nav": "0.0014%"
+        },
+        {
+            "name_of_instrument": "JBM Auto Limited",
+            "isin_code": "INE927D01051",
+            "percentage_to_nav": "0.0014%"
+        },
+        {
+            "name_of_instrument": "Sagility India Limited",
+            "isin_code": "INE0W2G01015",
+            "percentage_to_nav": "0.0014%"
+        },
+        {
+            "name_of_instrument": "Inox India Limited",
+            "isin_code": "INE616N01034",
+            "percentage_to_nav": "0.0013%"
+        },
+        {
+            "name_of_instrument": "Alkyl Amines Chemicals Limited",
+            "isin_code": "INE150B01039",
+            "percentage_to_nav": "0.0013%"
+        },
+        {
+            "name_of_instrument": "Shree Renuka Sugars Limited",
+            "isin_code": "INE087H01022",
+            "percentage_to_nav": "0.0013%"
+        },
+        {
+            "name_of_instrument": "Gujarat Mineral Development Corporation Limited",
+            "isin_code": "INE131A01031",
+            "percentage_to_nav": "0.0013%"
+        },
+        {
+            "name_of_instrument": "International Gemmological Institute India Ltd",
+            "isin_code": "INE0Q9301021",
+            "percentage_to_nav": "0.0013%"
+        },
+        {
+            "name_of_instrument": "Emcure Pharmaceuticals Ltd",
+            "isin_code": "INE168P01015",
+            "percentage_to_nav": "0.0012%"
+        },
+        {
+            "name_of_instrument": "UCO Bank",
+            "isin_code": "INE691A01018",
+            "percentage_to_nav": "0.0012%"
+        },
+        {
+            "name_of_instrument": "Alok Industries Limited",
+            "isin_code": "INE270A01029",
+            "percentage_to_nav": "0.0011%"
+        },
+        {
+            "name_of_instrument": "Campus Activewear Limited",
+            "isin_code": "INE278Y01022",
+            "percentage_to_nav": "0.0011%"
+        },
+        {
+            "name_of_instrument": "Just Dial Limited",
+            "isin_code": "INE599M01018",
+            "percentage_to_nav": "0.0011%"
+        },
+        {
+            "name_of_instrument": "Rashtriya Chemicals and Fertilizers Limited",
+            "isin_code": "INE027A01015",
+            "percentage_to_nav": "0.001%"
+        },
+        {
+            "name_of_instrument": "Acme Solar Holdings Ltd",
+            "isin_code": "INE622W01025",
+            "percentage_to_nav": "0.0009%"
+        },
+        {
+            "name_of_instrument": "Route Mobile Limited",
+            "isin_code": "INE450U01017",
+            "percentage_to_nav": "0.0009%"
+        },
+        {
+            "name_of_instrument": "RattanIndia Enterprises Limited",
+            "isin_code": "INE834M01019",
+            "percentage_to_nav": "0.0008%"
+        },
+        {
+            "name_of_instrument": "Akums Drugs and Pharmaceuticals Limited",
+            "isin_code": "INE09XN01023",
+            "percentage_to_nav": "0.0008%"
+        },
+        {
+            "name_of_instrument": "MMTC Limited",
+            "isin_code": "INE123F01029",
+            "percentage_to_nav": "0.0005%"
+        }
+    ]
+}

@@ -1,0 +1,225 @@
+# PostgreSQL Configuration
+# POSTGRES_PASSWORD: password
+# POSTGRES_USERNAME: postgres
+# POSTGRES_URL: jdbc:postgresql://localhost:5456
+# POSTGRES_DATABASE: portfolio
+
+#mongoDB Configuration
+MONGODB_DATABASE: market_data
+MONGODB_USERNAME: admin
+MONGODB_PASSWORD: password123
+
+# InfluxDB Configuration
+INFLUXDB_TOKEN: my-super-secret-auth-token
+INFLUXDB_ORG: am-portfolio
+INFLUXDB_BUCKET: market-data
+INFLUXDB_URL: http://localhost:8086
+
+
+# Redis Configuration
+REDIS_HOSTNAME: localhost
+REDIS_PASSWORD: password123
+REDIS_PORT: 6379
+
+# Grafana Configuration
+GRAFANA_ADMIN_USER: 1109403
+GRAFANA_ADMIN_PASSWORD: XXXXXXXXXX
+
+
+# Application Configuration
+STOKUPATE_TOPIC_NAME: am-stock-price-update
+NSE_INDICES_TOPIC_NAME: nse-indices-update
+NSE_STOCK_INDICES_TOPIC_NAME: nse-stock-indices-update
+BOARD_OF_DIRECTORS_TOPIC_NAME: stock-board-of-directors
+QUATERLY_FINANCIALS_TOPIC_NAME: stock-quaterly-financials
+STOCK_RESULTS_FINANCIALS_TOPIC_NAME: stock-results-financials
+STOCK_PROFIT_AND_LOSS_FINANCIALS_TOPIC_NAME: stock-profit-and-loss-financials
+STOCK_BALANCE_SHEET_FINANCIALS_TOPIC_NAME: stock-balance-sheet-financials
+STOCK_CASH_FLOW_FINANCIALS_TOPIC_NAME: stock-cash-flow-financials
+STOCK_FACT_SHEET_DIVIDEND_FINANCIALS_TOPIC_NAME: stock-fact-sheet-dividend-financials
+
+MARKET_DATA_MAX_RETRIES: 3
+MARKET_DATA_RETRY_DELAY_MS: 1000
+MARKET_DATA_THREAD_POOL_SIZE: 5
+MARKET_DATA_THREAD_QUEUE_CAPACITY: 10
+MARKET_DATA_MAX_AGE_MINUTES: 15
+
+# Upstox Configuration
+UPSTOX_ACCESS_TOKEN: eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiIyWENSTjgiLCJqdGkiOiI2OTU2YzE2NzUyNzRkNTAwNzViOTU3Y2YiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc2NzI5MzI4NywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzY3MzA0ODAwfQ.SpNC84JE4g8obIPgZ4ocFILS__qT8eGya2ND2QdZoec
+UPSTOX_API_KEY: 48d1e335-09ad-4dc0-b955-4505c350d10b
+UPSTOX_SECRET_KEY: jqre481zf0
+UPSTOX_CODE: rNLu2Q 
+
+
+app:
+  kafka:
+    enabled: false
+
+spring:
+  application:
+    name: market-data-service
+  data:
+    redis:
+      host: ${REDIS_HOSTNAME}
+      password: ${REDIS_PASSWORD}
+      port: ${REDIS_PORT:6379}
+    mongodb:
+      uri: ${MONGODB_URL:mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@localhost:27017/market_data?authSource=admin}
+      database: ${MONGODB_DATABASE}
+      username: ${MONGODB_USERNAME}
+      password: ${MONGODB_PASSWORD}
+
+      
+      authentication-database: admin
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID}
+      auto-offset-reset: ${KAFKA_CONSUMER_AUTO_OFFSET_RESET}
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  
+  # InfluxDB Configuration
+  influx:
+    url: ${INFLUXDB_URL}
+    token: ${INFLUXDB_TOKEN}
+    org: ${INFLUXDB_ORG}
+    bucket: ${INFLUXDB_BUCKET}
+
+# Management and Metrics Configuration
+
+  config:
+    import:
+      - classpath:isin.yml
+      - classpath:nseindices.yml
+      #- classpath:application-external-api.yml
+      #- classpath:application-endpoints.yml
+      - classpath:application-kafka.yml
+      - classpath:application-zerodha.yml
+
+market-data:
+  provider: upstox
+  stream:
+    poll-interval-seconds: 10
+  cache:
+    enabled: true
+    price-ttl-minutes: ${MARKET_DATA_CACHE_PRICE_TTL_MINUTES:15}
+    history-ttl-minutes: ${MARKET_HISTORY_DATA_CACHE_HISTORY_TTL_MINUTES:15}
+# Logging Configuration
+logging:
+  file:
+    name: ./logs/market-data-app.log  # Log file in current directory
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 30
+      total-size-cap: 1GB
+      clean-history-on-start: false
+  pattern:
+    file: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n'
+    console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n'
+  level:
+    root: WARN
+    '[com.am.marketdata]': INFO
+    '[com.am.marketdata.scheduler]': INFO
+    '[com.am.marketdata.service]': INFO
+    '[com.am.marketdata.redis]': INFO
+    '[com.am.marketdata.external.api]': WARN
+    '[com.am.common.investment.service]': INFO
+    '[org.springframework]': WARN
+    '[org.apache.kafka]': WARN
+    '[org.springframework.data.redis]': WARN  # Reduce Redis connection logging
+
+upstox:
+  interval: I1
+  auth:
+    base-url: https://api.upstox.com/v2
+    code: ${UPSTOX_CODE}
+    api-key: ${UPSTOX_API_KEY}
+    secret-key: ${UPSTOX_SECRET_KEY}
+    access-token: ${UPSTOX_ACCESS_TOKEN}
+    redirect-uri: http://localhost:8092/v1/market-data/auth/session
+    authorization-url: https://api-v2.upstox.com/login/authorization/dialog
+    token-url: https://api-v2.upstox.com/login/authorization/token
+    token-refresh-interval: 3600000
+    scope: orders feed portfolio
+
+scraper:
+  urls:
+    - https://www.nseindia.com/
+
+# Server Configuration
+server:
+  port: 8092
+
+scheduler:
+  cookie:
+    enabled: false
+  stock-indices:
+    enabled: false
+  ingestion:
+    enabled: true
+    symbols: "NIFTY 50,NIFTY BANK"
+    provider: ZERODHA
+    force: true
+    start-cron: "0 15 9 * * MON-FRI"  # 9:15 AM weekdays
+    stop-cron: "0 30 15 * * MON-FRI"   # 3:30 PM weekdays
+  historical:
+    sync-cron: "0 15 7 * * *"          # 7:15 AM daily
+  redis:
+    cleanup:
+      enabled: true
+      cron: "0 0 2 * * *"              # 2:00 AM daily
+
+redis:
+  cleanup:
+    retention:
+      days: 7       # Keep last 7 days in Redis
+    batch:
+      size: 1000    # Process 1000 keys at a time
+  cache:
+    ttl:
+      historical: 86400    # 24 hours
+      intraday:
+        past: 14400        # 4 hours for past dates
+        future: 86400      # 24 hours for future dates
+        buffer: 14400      # 4 hour buffer after EOD
+
+# Management/Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+      validate-group-membership: false
+      group:
+        readiness:
+          include: diskSpace,mongodb,redis,kafka,influx
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+    mongodb:
+      enabled: true
+    redis:
+      enabled: true
+
+    influxdb:
+      enabled: true
+
+jwt:
+  secret: ${JWT_SECRET:internal-service-super-secret-key-32chars-minimum-change-in-prod}
+
+
+  # Security Configuration
+security:
+  enabled: ${SECURITY_ENABLED:false}  # Disabled by default for development. Set SECURITY_ENABLED=true in production.

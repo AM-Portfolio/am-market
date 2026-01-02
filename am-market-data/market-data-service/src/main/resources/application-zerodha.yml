@@ -1,0 +1,54 @@
+# Zerodha API Configuration
+market-data:
+  zerodha:
+    # API Configuration
+    api:
+      key: ${ZERODHA_API_KEY:u3bfkf1ttzvr00v3}
+      secret: ${ZERODHA_API_SECRET:r9f4csp93f0p8xokkr856uhu5oihvvn5}
+      max:
+        retries: ${ZERODHA_API_MAX_RETRIES:3}
+      retry:
+        delay:
+          ms: ${ZERODHA_API_RETRY_DELAY_MS:1000}
+        max:
+          duration:
+            ms: ${ZERODHA_API_RETRY_MAX_DURATION_MS:10000}
+      thread:
+        pool:
+          size: ${ZERODHA_API_THREAD_POOL_SIZE:5}
+        queue:
+          capacity: ${ZERODHA_API_THREAD_QUEUE_CAPACITY:10}
+      access:
+        token: ${ZERODHA_API_ACCESS_TOKEN:fT9jp5AjqqLMJ8Y7GgueT9Wd0MEJN2OA}
+      refresh:
+        token: ${ZERODHA_API_REFRESH_TOKEN:fT9jp5AjqqLMJ8Y7GgueT9Wd0MEJN2OA}
+  
+    # Ticker Configuration
+    ticker:
+      enabled: ${ZERODHA_TICKER_ENABLED:false}
+      reconnect:
+        max:
+          retries: ${ZERODHA_TICKER_RECONNECT_MAX_RETRIES:10}
+        interval: ${ZERODHA_TICKER_RECONNECT_INTERVAL:30}
+  
+    # Market Data Configuration
+    market:
+      data:
+        enabled: ${ZERODHA_MARKET_DATA_ENABLED:true}
+      hours:
+        start: ${ZERODHA_MARKET_HOURS_START:00:00}
+        end: ${ZERODHA_MARKET_HOURS_END:23:59}
+      timezone: ${ZERODHA_MARKET_TIMEZONE:Asia/Kolkata}
+      instruments:
+        nse: ${ZERODHA_NSE_INSTRUMENTS:NSE:NIFTY 50,NSE:BANKNIFTY,NSE:FINNIFTY}
+        bse: ${ZERODHA_BSE_INSTRUMENTS:BSE:SENSEX,BSE:BANKEX}
+        indices: ${ZERODHA_INDEX_INSTRUMENTS:NSE:NIFTY 50,NSE:BANKNIFTY,NSE:FINNIFTY,BSE:SENSEX}
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    com.marketdata.service.zerodha: DEBUG
+    com.marketdata.config: DEBUG
+    com.marketdata.common: DEBUG
+    org.springframework.web: INFO

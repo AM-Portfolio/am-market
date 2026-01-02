@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Data Admin</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        .btn-green {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-red {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .btn-blue {
+            background-color: #007bff;
+            color: white;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f8f9fa;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        .status-success {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .status-failed {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .status-partial {
+            color: #ffc107;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Market Data Admin Dashboard</h1>
+
+        <div class="card">
+            <h2>Controls</h2>
+            <div class="controls">
+                <button class="btn-blue" onclick="triggerHistoricalSync()">Trigger Historical Sync</button>
+                <button class="btn-green" onclick="startIngestion()">Start Live Ingestion</button>
+                <button class="btn-red" onclick="stopIngestion()">Stop Live Ingestion</button>
+                <button class="btn-blue" onclick="fetchLogs()">Refresh Logs</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Ingestion Job Logs</h2>
+            <table id="logsTable">
+                <thead>
+                    <tr>
+                        <th>Job ID</th>
+                        <th>Start Time</th>
+                        <th>Status</th>
+                        <th>Duration (ms)</th>
+                        <th>Success</th>
+                        <th>Failed</th>
+                        <th>Failed Symbols</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Logs will be populated here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/admin';
+
+        async function fetchLogs() {
+            try {
+                const response = await fetch(`${API_BASE}/logs?size=20`);
+                const logs = await response.json();
+                const tbody = document.querySelector('#logsTable tbody');
+                tbody.innerHTML = '';
+
+                logs.forEach(log => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${log.jobId.substring(0, 8)}...</td>
+                        <td>${new Date(log.startTime).toLocaleString()}</td>
+                        <td class="${getStatusClass(log.status)}">${log.status}</td>
+                        <td>${log.durationMs}</td>
+                        <td>${log.successCount}</td>
+                        <td>${log.failureCount}</td>
+                        <td>${log.failedSymbols ? log.failedSymbols.slice(0, 3).join(', ') + (log.failedSymbols.length > 3 ? '...' : '') : ''}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error('Error fetching logs:', error);
+            }
+        }
+
+        function getStatusClass(status) {
+            if (status === 'SUCCESS') return 'status-success';
+            if (status === 'FAILED') return 'status-failed';
+            return 'status-partial';
+        }
+
+        async function triggerHistoricalSync() {
+            if (!confirm("Start Historical Sync?")) return;
+            await post(`${API_BASE}/sync/historical`);
+            alert('Historical Sync Triggered');
+            setTimeout(fetchLogs, 1000);
+        }
+
+        async function startIngestion() {
+            const provider = prompt("Enter Provider:", "ZERODHA");
+            if (!provider) return;
+            await post(`${API_BASE}/ingestion/start?provider=${provider}&symbols=NIFTY 50,NIFTY BANK`);
+            alert('Ingestion Started');
+        }
+
+        async function stopIngestion() {
+            const provider = prompt("Enter Provider:", "ZERODHA");
+            if (!provider) return;
+            await post(`${API_BASE}/ingestion/stop?provider=${provider}`);
+            alert('Ingestion Stopped');
+        }
+
+        async function post(url) {
+            try {
+                const res = await fetch(url, { method: 'POST' });
+                if (!res.ok) throw new Error(await res.text());
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        // Initial Load
+        fetchLogs();
+        setInterval(fetchLogs, 10000); // Auto-refresh every 10s
+    </script>
+</body>
+
+</html>

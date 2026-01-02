@@ -1,0 +1,15 @@
+spring:
+  influx:
+    url: http://localhost:8086
+    token: my-super-secret-auth-token
+    org: org
+    bucket: investment_data
+
+logging:
+  level:
+    root: INFO
+    com.am.common.investment: INFO
+
+equityprice-range:
+  default-range: "-24h"
+  history-range: "-30d"

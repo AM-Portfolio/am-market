@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "am-market-data.fullname" . }}-config
+  labels:
+    {{- include "am-market-data.labels" . | nindent 4 }}
+data:
+  # Spring Profile
+  SPRING_PROFILES_ACTIVE: "{{ .Values.environment }}"
+  TZ: "Asia/Kolkata"
+
+  # Database Configuration
+  POSTGRES_URL: "jdbc:postgresql://{{ .Values.postgresql.fullname }}:{{ .Values.postgresql.primary.service.port }}"
+  POSTGRES_DATABASE: "{{ .Values.postgresql.auth.database }}"
+  # Vault Secret Paths for PostgreSQL
+  POSTGRES_SECRET_PATH: "{{ .Values.vault.secretPaths.postgres }}"
+
+
+  # Note: The following environment variables are injected by Vault Agent and don't need to be defined here:
+  # - MongoDB: MONGODB_URL, MONGODB_DATABASE, MONGODB_USERNAME, MONGODB_PASSWORD
+  # - InfluxDB: INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET
+  # - Kafka: KAFKA_* variables
+  # - Upstock: UPSTOCK_* variables
+
+  # Market Data Configuration
+  MARKET_DATA_MAX_RETRIES: "{{ .Values.config.marketData.maxRetries }}"
+  MARKET_DATA_RETRY_DELAY_MS: "{{ .Values.config.marketData.retryDelayMs }}"
+  MARKET_DATA_THREAD_POOL_SIZE: "{{ .Values.config.marketData.threadPoolSize }}"
+  MARKET_DATA_THREAD_QUEUE_CAPACITY: "{{ .Values.config.marketData.threadQueueCapacity }}"
+  MARKET_DATA_MAX_AGE_MINUTES: "{{ .Values.config.marketData.maxAgeMinutes }}"
+
+  # Note: Upstock configuration is injected by Vault Agent
+
+  # Metrics Configuration
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,metrics,prometheus"
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+  MANAGEMENT_METRICS_TAGS_APPLICATION: "market-data-{{ .Values.environment }}"
+  MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED: "{{ .Values.monitoring.prometheus.scrape }}"

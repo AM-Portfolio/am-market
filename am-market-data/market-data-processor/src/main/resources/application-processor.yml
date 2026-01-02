@@ -1,0 +1,27 @@
+processor:
+  # Thread pool configuration
+  thread:
+    pool:
+      size: 5
+      queue:
+        capacity: 25
+  
+  # Retry configuration
+  retry:
+    max-attempts: 3
+    initial-delay-ms: 1000
+    multiplier: 2.0
+  
+  # Data validation
+  validation:
+    max-age-minutes: 15
+
+# Metrics and monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  metrics:
+    tags:
+      application: market-data-processor

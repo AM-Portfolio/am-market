@@ -1,0 +1,46 @@
+{
+  "symbol": "INFY",
+  "directors": [
+    {
+      "dirName": "Nandan Nilekani",
+      "reportedDsg": "Non-Executive Chairman",
+      "directorType": "CHAIRMAN",
+      "companyId": "INFY",
+      "appointmentDate": "2017-08-24",
+      "profile": "Nandan Nilekani is a co-founder of Infosys and has served as its CEO from 2002 to 2007."
+    },
+    {
+      "dirName": "Salil Parekh",
+      "reportedDsg": "Chief Executive Officer and Managing Director",
+      "directorType": "MANAGING_DIRECTOR",
+      "companyId": "INFY",
+      "appointmentDate": "2018-01-02",
+      "profile": "Salil Parekh has over 30 years of global experience in the IT services industry."
+    },
+    {
+      "dirName": "Kiran Mazumdar-Shaw",
+      "reportedDsg": "Independent Director",
+      "directorType": "INDEPENDENT",
+      "companyId": "INFY",
+      "appointmentDate": "2014-01-10",
+      "profile": "Kiran Mazumdar-Shaw is the Chairperson and Managing Director of Biocon Limited."
+    },
+    {
+      "dirName": "D. Sundaram",
+      "reportedDsg": "Independent Director",
+      "directorType": "INDEPENDENT",
+      "companyId": "INFY",
+      "appointmentDate": "2017-07-14",
+      "profile": "D. Sundaram is a Chartered Accountant and has served as the Vice Chairman of Hindustan Unilever Limited."
+    },
+    {
+      "dirName": "Michael Gibbs",
+      "reportedDsg": "Independent Director",
+      "directorType": "INDEPENDENT",
+      "companyId": "INFY",
+      "appointmentDate": "2018-07-13",
+      "profile": "Michael Gibbs is the former Group CIO for BP PLC and has over 30 years of experience in the oil and gas industry."
+    }
+  ],
+  "source": "Company Website"
+}

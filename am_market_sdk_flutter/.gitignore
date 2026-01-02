@@ -1,0 +1,25 @@
+# See https://dart.dev/guides/libraries/private-files
+
+.dart_tool/
+.packages
+build/
+
+# Except for application packages
+pubspec.lock
+
+doc/api/
+
+# IntelliJ
+*.iml
+*.ipr
+*.iws
+.idea/
+
+
+# Open API generator
+.openapi-generator/
+.openapi-generator-ignore
+flutter_*.log
+
+# Mac
+.DS_Store

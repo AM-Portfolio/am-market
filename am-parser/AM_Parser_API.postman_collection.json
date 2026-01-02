@@ -1,0 +1,702 @@
+{
+  "info": {
+    "name": "AM Parser - Mutual Fund Portfolio API (Docker)",
+    "description": "Complete API collection for testing the AM Parser API running on http://localhost:9000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "am-parser-api-collection",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "Health & Info",
+      "item": [
+        {
+          "name": "Root - API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "Get API information and available endpoints"
+          }
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/health",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Check API and database health status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Portfolio Management",
+      "item": [
+        {
+          "name": "Save Portfolio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.id) {",
+                  "        pm.environment.set('portfolio_id', jsonData.data.id);",
+                  "        console.log('Saved portfolio_id: ' + jsonData.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mutual_fund_name\": \"Motilal Oswal Nifty Smallcap 250 Index Fund\",\n  \"portfolio_date\": \"March 2025\",\n  \"total_holdings\": 3,\n  \"portfolio_holdings\": [\n    {\n      \"name_of_instrument\": \"Multi Commodity Exchange of India Limited\",\n      \"isin_code\": \"INE745G01035\",\n      \"percentage_to_nav\": \"0.0159%\"\n    },\n    {\n      \"name_of_instrument\": \"Laurus Labs Limited\",\n      \"isin_code\": \"INE947Q01028\",\n      \"percentage_to_nav\": \"0.0141%\"\n    },\n    {\n      \"name_of_instrument\": \"Crompton Greaves Consumer Electricals Limited\",\n      \"isin_code\": \"INE299U01018\",\n      \"percentage_to_nav\": \"0.0134%\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "http://localhost:9000/portfolios",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "portfolios"
+              ]
+            },
+            "description": "Save a new mutual fund portfolio to the database"
+          }
+        },
+        {
+          "name": "List All Portfolios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/portfolios?limit=50",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "portfolios"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Maximum number of results to return"
+                },
+                {
+                  "key": "fund_name",
+                  "value": "Motilal Oswal",
+                  "description": "Optional: Filter by fund name",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all portfolios or filter by fund name"
+          }
+        },
+        {
+          "name": "Get Portfolio by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/portfolios/{{portfolio_id}}",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "portfolios",
+                "{{portfolio_id}}"
+              ]
+            },
+            "description": "Get a specific portfolio by its MongoDB ObjectId"
+          }
+        },
+        {
+          "name": "Search Portfolios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/portfolios/search?fund_name=Motilal",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "portfolios",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "fund_name",
+                  "value": "Motilal",
+                  "description": "Fund name to search for"
+                }
+              ]
+            },
+            "description": "Search portfolios by fund name (partial match supported)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Holdings & Funds",
+      "item": [
+        {
+          "name": "Get Holdings by ISIN",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/holdings/INE745G01035",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "holdings",
+                "INE745G01035"
+              ]
+            },
+            "description": "Get all holdings with a specific ISIN code across all portfolios"
+          }
+        },
+        {
+          "name": "Get Fund Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/funds/Motilal Oswal Nifty Smallcap 250 Index Fund/statistics",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "funds",
+                "Motilal Oswal Nifty Smallcap 250 Index Fund",
+                "statistics"
+              ]
+            },
+            "description": "Get statistics for a specific mutual fund"
+          }
+        }
+      ]
+    },
+    {
+      "name": "File Upload & Processing",
+      "item": [
+        {
+          "name": "Upload Excel File (Complete Workflow)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.summary && jsonData.summary.main_file_id) {",
+                  "        pm.environment.set('file_id', jsonData.summary.main_file_id);",
+                  "        console.log('Saved file_id: ' + jsonData.summary.main_file_id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Excel file (.xlsx or .xls) to upload"
+                },
+                {
+                  "key": "parse_method",
+                  "value": "together",
+                  "type": "text",
+                  "description": "Parsing method: 'together' (LLM) or 'manual'"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:9000/upload/excel",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "upload",
+                "excel"
+              ]
+            },
+            "description": "Complete Excel upload workflow:\n1. Upload Excel file\n2. Split into individual sheet files\n3. Parse each sheet\n4. Save all portfolios to database"
+          }
+        },
+        {
+          "name": "Upload File (Simple)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Excel file to upload"
+                },
+                {
+                  "key": "parse_method",
+                  "value": "together",
+                  "type": "text",
+                  "description": "Parsing method: together or manual"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:9000/upload",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "upload"
+              ]
+            },
+            "description": "Upload and process Excel file with all steps in one request"
+          }
+        },
+        {
+          "name": "Process Uploaded File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/process/{{file_id}}",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "process",
+                "{{file_id}}"
+              ]
+            },
+            "description": "Process an uploaded Excel file by splitting it into sheets"
+          }
+        },
+        {
+          "name": "Parse Sheet File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "method",
+                  "value": "together",
+                  "type": "text",
+                  "description": "Parsing method: manual, llm, or together"
+                },
+                {
+                  "key": "api_key",
+                  "value": "",
+                  "type": "text",
+                  "description": "API key for LLM parsing (only for 'together' method)",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:9000/parse/{{sheet_id}}",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "parse",
+                "{{sheet_id}}"
+              ]
+            },
+            "description": "Parse an individual sheet file to extract portfolio data"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ETF Holdings",
+      "item": [
+        {
+          "name": "Load ETFs from JSON",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "ETF details JSON file (etf_details.json)"
+                },
+                {
+                  "key": "dry_run",
+                  "value": "false",
+                  "type": "text",
+                  "description": "Set to true to validate without saving"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:9000/etf/load-from-json?dry_run=false",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "etf",
+                "load-from-json"
+              ],
+              "query": [
+                {
+                  "key": "dry_run",
+                  "value": "false",
+                  "description": "Validate only, don't persist"
+                }
+              ]
+            },
+            "description": "Upload and load ETF data from JSON file (replaces CLI loader)"
+          }
+        },
+        {
+          "name": "ETF Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/etf/stats",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "etf",
+                "stats"
+              ]
+            },
+            "description": "Get ETF database statistics (total ETFs, ISIN coverage, holdings coverage)"
+          }
+        },
+        {
+          "name": "Search ETFs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/etf/search?query=NIFTY&limit=10",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "etf",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "NIFTY",
+                  "description": "Search by symbol, name, or ISIN"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Maximum results to return"
+                }
+              ]
+            },
+            "description": "Search ETFs by symbol, name, or ISIN"
+          }
+        },
+        {
+          "name": "Fetch All Holdings (Background)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 10,\n  \"force_refresh\": false\n}"
+            },
+            "url": {
+              "raw": "http://localhost:9000/etf/fetch-all-holdings",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "etf",
+                "fetch-all-holdings"
+              ]
+            },
+            "description": "Fetch holdings for all ETFs (or limited set) from MoneyControl API. Returns job_id for tracking."
+          }
+        },
+        {
+          "name": "Fetch Holdings for One ETF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/etf/fetch-holdings/NIFTYBEES",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "etf",
+                "fetch-holdings",
+                "NIFTYBEES"
+              ]
+            },
+            "description": "Fetch holdings for a specific ETF symbol from MoneyControl API"
+          }
+        },
+        {
+          "name": "Get ETF Holdings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/etf/holdings/NIFTYBEES",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "etf",
+                "holdings",
+                "NIFTYBEES"
+              ]
+            },
+            "description": "Get cached holdings for a specific ETF (shows all stocks in the ETF)"
+          }
+        },
+        {
+          "name": "Cache Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/etf/cache-stats",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "etf",
+                "cache-stats"
+              ]
+            },
+            "description": "Get ETF holdings cache statistics (fresh vs stale data)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Background Jobs",
+      "item": [
+        {
+          "name": "Upload Excel (Async)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Excel file to process"
+                },
+                {
+                  "key": "parse_method",
+                  "value": "together",
+                  "type": "text",
+                  "description": "Parse method (together/manual)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:9000/jobs/upload-excel-async",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "jobs",
+                "upload-excel-async"
+              ]
+            },
+            "description": "Upload Excel file for background processing. Returns job_id immediately."
+          }
+        },
+        {
+          "name": "List All Jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/jobs?limit=20",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Max jobs to return"
+                }
+              ]
+            },
+            "description": "List all background jobs and their status"
+          }
+        },
+        {
+          "name": "Get Job Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/jobs/{{job_id}}/status",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}",
+                "status"
+              ]
+            },
+            "description": "Get current status and progress of a background job"
+          }
+        },
+        {
+          "name": "Get Job Result",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/jobs/{{job_id}}/result",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}",
+                "result"
+              ]
+            },
+            "description": "Get final result of a completed job"
+          }
+        },
+        {
+          "name": "Cancel Job",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/jobs/{{job_id}}",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}"
+              ]
+            },
+            "description": "Cancel a pending or running job"
+          }
+        },
+        {
+          "name": "Admin - Fix Stuck Job",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/jobs/admin/fix-stuck-job/{{job_id}}?mark_as_failed=true",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "jobs",
+                "admin",
+                "fix-stuck-job",
+                "{{job_id}}"
+              ],
+              "query": [
+                {
+                  "key": "mark_as_failed",
+                  "value": "true",
+                  "description": "true=fail, false=retry"
+                }
+              ]
+            },
+            "description": "Manually fix a stuck job (e.g. after server restart)"
+          }
+        },
+        {
+          "name": "Admin - Recover All Stuck",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/jobs/admin/recover-stuck-jobs",
+              "host": [
+                "http://localhost:9000"
+              ],
+              "path": [
+                "jobs",
+                "admin",
+                "recover-stuck-jobs"
+              ]
+            },
+            "description": "Trigger recovery process for all stuck jobs"
+          }
+        }
+      ]
+    }
+  ]
+}

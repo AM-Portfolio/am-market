@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Dashboard</title>
+    <link rel="stylesheet" href="css/index.css"> <!-- Assuming existing CSS -->
+    <style>
+        /* Minimal additional styles for dashboard layout */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 250px;
+            background-color: #333;
+            color: white;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #sidebar h3 {
+            padding: 15px;
+            margin: 0;
+            background-color: #222;
+        }
+
+        .index-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #444;
+        }
+
+        .index-item:hover {
+            background-color: #444;
+        }
+
+        .index-item.active {
+            background-color: #007bff;
+        }
+
+        #main-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #header-section {
+            margin-bottom: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        #index-name {
+            margin: 0;
+            font-size: 2em;
+        }
+
+        #index-value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .positive {
+            color: #28a745;
+        }
+
+        .negative {
+            color: #dc3545;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+            cursor: pointer;
+        }
+
+        /* Modal Styles */
+        #modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        #modal-content {
+            background: white;
+            width: 80%;
+            height: 80%;
+            padding: 20px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        #chart-container {
+            flex: 1;
+            width: 100%;
+        }
+
+        .tab-btn {
+            padding: 8px 16px;
+            cursor: pointer;
+            background: #ddd;
+            border: none;
+            border-radius: 4px;
+            margin-right: 5px;
+        }
+
+        .tab-btn.active {
+            background: #007bff;
+            color: white;
+        }
+    </style>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+
+<body>
+
+    <div id="sidebar">
+        <h3>Indices</h3>
+        <div id="indices-list">Loading...</div>
+
+        <div id="debug-section" style="margin-top: auto; padding: 15px; border-top: 1px solid #333;">
+            <h3 style="font-size: 1rem; color: #888; padding: 0; background: none;">System Tools</h3>
+            <button id="refresh-cookies-btn" onclick="refreshCookies()"
+                style="width: 100%; padding: 8px; font-size: 0.9em; background: #333; color: #fff; border: 1px solid #555; cursor: pointer; margin-top: 10px;">
+                Refresh Cookies
+            </button>
+            <div id="cookie-status" style="margin-top: 5px; font-size: 0.8rem; color: #aaa;"></div>
+        </div>
+    </div>
+
+    <div id="main-content">
+        <div id="header-section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h1 id="index-name" style="margin: 0;">Select an Index</h1>
+                <div>
+                    <input type="checkbox" id="force-refresh">
+                    <label for="force-refresh">Force Refresh</label>
+                </div>
+            </div>
+            <div id="index-details">
+                <span id="index-value">--</span>
+                <span id="index-change">--</span>
+            </div>
+        </div>
+
+        <table id="constituents-table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Price</th>
+                    <th>Change %</th>
+                    <th>Open</th>
+                    <th>High</th>
+                    <th>Low</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Rows will be injected here -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Modal for Charts -->
+    <div id="modal">
+        <div id="modal-content">
+            <div id="modal-header">
+                <h2 id="modal-symbol">Symbol</h2>
+                <div>
+                    <button class="tab-btn active" onclick="loadChart('1Y')">1 Year (Daily)</button>
+                    <button class="tab-btn" onclick="loadChart('5Y')">5 Years (Monthly)</button>
+                    <button onclick="closeModal()" style="margin-left: 10px;">Close</button>
+                </div>
+            </div>
+            <div id="chart-container"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentSymbol = '';
+        let chart = null;
+        let candleSeries = null;
+        let availableIndices = { broad: [], sector: [] };
+
+        async function refreshCookies() {
+            const btn = document.getElementById('refresh-cookies-btn');
+            const status = document.getElementById('cookie-status');
+
+            btn.disabled = true;
+            btn.innerText = 'Refreshing...';
+            status.innerText = '';
+            status.style.color = '#aaa';
+
+            try {
+                const response = await fetch('/api/scraper/cookies');
+                if (response.ok) {
+                    const data = await response.json();
+                    status.innerText = `Success! Cookies refreshed.`;
+                    status.style.color = '#4caf50';
+                } else {
+                    throw new Error('Failed to refresh');
+                }
+            } catch (error) {
+                console.error('Cookie refresh failed:', error);
+                status.innerText = 'Failed to refresh cookies';
+                status.style.color = '#f44336';
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Refresh Cookies';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchIndices();
+        });
+
+        async function fetchIndices() {
+            try {
+                // Correct endpoint: /api/v1/indices/available (MarketIndexController)
+                const response = await fetch('/api/v1/indices/available');
+                const data = await response.json();
+
+                const listContainer = document.getElementById('indices-list');
+                listContainer.innerHTML = '';
+
+                const createSection = (title, items) => {
+                    const header = document.createElement('div');
+                    header.style.padding = '10px 15px';
+                    header.style.color = '#aaa';
+                    header.style.fontSize = '0.9em';
+                    header.innerText = title.toUpperCase();
+                    listContainer.appendChild(header);
+
+                    items.forEach(idx => {
+                        const div = document.createElement('div');
+                        div.className = 'index-item';
+                        div.innerText = idx;
+                        div.onclick = () => loadIndex(idx);
+                        listContainer.appendChild(div);
+                    });
+                };
+
+                if (data.broad) createSection('Broad Market', data.broad);
+                if (data.sector) createSection('Sectoral', data.sector);
+
+                // Load first index by default if available
+                if (data.broad && data.broad.length > 0) loadIndex(data.broad[0]);
+
+            } catch (error) {
+                console.error('Error fetching indices:', error);
+                document.getElementById('indices-list').innerText = 'Failed to load indices.';
+            }
+        }
+
+        async function refreshCookies() {
+            const btn = document.getElementById('refresh-cookies-btn');
+            const status = document.getElementById('cookie-status');
+
+            btn.disabled = true;
+            btn.innerText = 'Refreshing...';
+            status.innerText = '';
+            status.style.color = '#aaa';
+
+            try {
+                const response = await fetch('/api/scraper/cookies');
+                if (response.ok) {
+                    const data = await response.json();
+                    // data is a List<WebsiteCookies>
+                    status.innerText = `Success! Cookies refreshed.`;
+                    status.style.color = '#4caf50';
+                } else {
+                    throw new Error('Failed to refresh');
+                }
+            } catch (error) {
+                console.error('Cookie refresh failed:', error);
+                status.innerText = 'Failed to refresh cookies';
+                status.style.color = '#f44336';
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Refresh Cookies';
+            }
+        }
+
+
+
+        async function loadIndex(indexName) {
+            // Highlight compatible sidebar item
+            document.querySelectorAll('.index-item').forEach(el => el.classList.remove('active'));
+            // Simple text match
+            const items = Array.from(document.querySelectorAll('.index-item'));
+            const activeItem = items.find(i => i.innerText === indexName);
+            if (activeItem) activeItem.classList.add('active');
+
+            document.getElementById('index-name').innerText = indexName;
+            document.querySelector('#constituents-table tbody').innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+
+            const forceRefresh = document.getElementById('force-refresh') ? document.getElementById('force-refresh').checked : false;
+
+            try {
+                // Use POST /api/v1/indices/batch to get index details
+                const response = await fetch(`/api/v1/indices/batch?forceRefresh=${forceRefresh}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify([indexName])
+                });
+                const dataList = await response.json();
+
+                if (dataList && dataList.length > 0) {
+                    const indexData = dataList[0];
+                    updateHeader(indexData);
+
+                    if (indexData.data && indexData.data.length > 0) {
+                        renderTable(indexData.data);
+                    } else if (indexData.stocks && indexData.stocks.length > 0) {
+                        // Fallback property name check
+                        renderTable(indexData.stocks);
+                    } else {
+                        document.querySelector('#constituents-table tbody').innerHTML = '<tr><td colspan="6">No constituents data found.</td></tr>';
+                    }
+                } else {
+                    document.querySelector('#constituents-table tbody').innerHTML = '<tr><td colspan="6">No data returned for index.</td></tr>';
+                }
+
+            } catch (error) {
+                console.error('Error loading index:', error);
+                document.querySelector('#constituents-table tbody').innerHTML = '<tr><td colspan="6">Error loading data.</td></tr>';
+            }
+        }
+
+
+
+        function updateHeader(data) {
+            // Data likely has lastPrice, change, pChange
+            const value = data.lastPrice || data.last || 0;
+            const change = data.change || 0;
+            const pChange = data.pChange || data.percentChange || 0;
+
+            const valEl = document.getElementById('index-value');
+            const changeEl = document.getElementById('index-change');
+
+            valEl.innerText = value.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
+            changeEl.innerText = `${change > 0 ? '+' : ''}${change.toFixed(2)} (${pChange.toFixed(2)}%)`;
+
+            const colorClass = change >= 0 ? 'positive' : 'negative';
+            valEl.className = colorClass;
+            changeEl.className = colorClass;
+        }
+
+        function renderTable(stocks) {
+            const tbody = document.querySelector('#constituents-table tbody');
+            tbody.innerHTML = '';
+
+            stocks.forEach(stock => {
+                const tr = document.createElement('tr');
+                const change = stock.change || 0;
+                const pChange = stock.pChange || 0;
+                const colorClass = change >= 0 ? 'positive' : 'negative';
+
+                tr.innerHTML = `
+                <td><strong>${stock.symbol}</strong></td>
+                <td>${(stock.lastPrice || 0).toFixed(2)}</td>
+                <td class="${colorClass}">${pChange.toFixed(2)}%</td>
+                <td>${(stock.open || 0).toFixed(2)}</td>
+                <td>${(stock.dayHigh || 0).toFixed(2)}</td>
+                <td>${(stock.dayLow || 0).toFixed(2)}</td>
+            `;
+                tr.onclick = () => openChart(stock.symbol);
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openChart(symbol) {
+            currentSymbol = symbol;
+            document.getElementById('modal-symbol').innerText = symbol;
+            document.getElementById('modal').style.display = 'flex';
+
+            // Initialize chart if not already
+            if (!chart) {
+                const chartContainer = document.getElementById('chart-container');
+                chart = LightweightCharts.createChart(chartContainer, {
+                    width: chartContainer.clientWidth,
+                    height: chartContainer.clientHeight,
+                    layout: {
+                        backgroundColor: '#ffffff',
+                        textColor: 'rgba(33, 56, 77, 1)',
+                    },
+                    grid: {
+                        vertLines: { color: 'rgba(197, 203, 206, 0.5)' },
+                        horzLines: { color: 'rgba(197, 203, 206, 0.5)' },
+                    },
+                    timeScale: {
+                        timeVisible: true,
+                        secondsVisible: false,
+                    },
+                });
+                candleSeries = chart.addCandlestickSeries();
+
+                new ResizeObserver(entries => {
+                    if (entries.length === 0 || entries[0].target !== chartContainer) { return; }
+                    const newRect = entries[0].contentRect;
+                    chart.applyOptions({ height: newRect.height, width: newRect.width });
+                }).observe(chartContainer);
+            }
+
+            loadChart('1Y');
+        }
+
+        async function loadChart(range) {
+            // Update tabs
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            const btnText = range === '1Y' ? '1 Year' : '5 Years';
+            Array.from(document.querySelectorAll('.tab-btn')).find(b => b.innerText.includes(btnText))?.classList.add('active');
+
+            if (candleSeries) candleSeries.setData([]); // Clear previous
+
+            try {
+                const response = await fetch(`/api/v1/market-data/historical-charts/${currentSymbol}?range=${range}`);
+                const result = await response.json(); // { data: { dataPoints: [...] }, status: "success" } or flattened { status: "success", dataPoints: [...] }
+
+                // Our flattened structure: { "RELIANCE": { status: "success", dataPoints: [...] } } ?? 
+                // Wait, we used getHistoricalData(request) which returns map <String, Object>.
+                // Since we passed single symbol in list, response will likely be:
+                // { "RELIANCE": { status: "success", dataPoints: [...] } }
+
+                // Check flattening logic in MarketDataFetchService... it returns a map where key is symbol.
+
+                const symbolData = result[currentSymbol];
+                if (symbolData && symbolData.status === 'success' && symbolData.dataPoints) {
+                    const chartData = symbolData.dataPoints.map(dp => ({
+                        time: dp.date, // Format yyyy-MM-dd
+                        open: dp.open,
+                        high: dp.high,
+                        low: dp.low,
+                        close: dp.close
+                    })).sort((a, b) => (a.time > b.time ? 1 : -1));
+
+                    candleSeries.setData(chartData);
+                    chart.timeScale().fitContent();
+                } else {
+                    console.warn('No data found or error', result);
+                }
+            } catch (error) {
+                console.error('Error fetching chart data:', error);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        // Close modal on outside click
+        window.onclick = function (event) {
+            if (event.target == document.getElementById('modal')) {
+                closeModal();
+            }
+        }
+    </script>
+
+</body>
+
+</html>

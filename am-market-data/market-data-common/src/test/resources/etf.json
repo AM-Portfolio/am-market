@@ -1,0 +1,77 @@
+{
+  "data": [
+    {
+      "symbol": "MAHKTECH",
+      "assets": "Hang Seng TECH Total Return Index",
+      "open": "26.33",
+      "high": "26.74",
+      "low": "25",
+      "ltP": "26.15",
+      "chn": "0.39",
+      "per": "1.51",
+      "qty": "2853791",
+      "trdVal": "73884648.99",
+      "nav": "22.4962",
+      "wkhi": "26.74",
+      "wklo": "12.05",
+      "xDt": "-",
+      "cAct": "-",
+      "yPC": 106.55608214849919,
+      "mPC": 23.523854511100595,
+      "prevClose": "25.76",
+      "stockIndClosePrice": "0",
+      "nearWKH": 2.2064323111443525,
+      "nearWKL": -117.01244813278005,
+      "chartTodayPath": "https://nsearchives.nseindia.com/today/MAHKTECHEQN.svg",
+      "perChange365d": 103.48,
+      "date365dAgo": "07-Mar-2024",
+      "chart365dPath": "https://nsearchives.nseindia.com/365d/MAHKTECH-EQ.svg",
+      "date30dAgo": "07-Feb-2025",
+      "perChange30d": 16.46,
+      "chart30dPath": "https://nsearchives.nseindia.com/30d/MAHKTECH-EQ.svg",
+      "meta": {
+          "symbol": "MAHKTECH",
+          "companyName": "Mirae Asset Mutual Fund - Mirae Asset Hang Seng TECH ETF",
+          "industry": "Mutual Fund Scheme",
+          "activeSeries": [
+              "EQ"
+          ],
+          "debtSeries": [],
+          "isFNOSec": false,
+          "isCASec": false,
+          "isSLBSec": true,
+          "isDebtSec": false,
+          "isSuspended": false,
+          "tempSuspendedSeries": [],
+          "isETFSec": true,
+          "isDelisted": false,
+          "isin": "INF769K01HS7",
+          "slb_isin": "INF769K01HS7",
+          "listingDate": "2021-12-10",
+          "isMunicipalBond": false,
+          "isHybridSymbol": false,
+          "quotepreopenstatus": {
+              "equityTime": "10-Mar-2025 14:20:22",
+              "preOpenTime": "10-Mar-2025 09:07:24",
+              "QuotePreOpenFlag": false
+          }
+      }
+  }
+  ],
+  "advances": 48,
+  "declines": 177,
+  "unchanged": 9,
+  "navDate": "09-Mar-2025",
+  "totalTradedValue": 9162694697.04,
+  "totalTradedVolume": 82587192,
+  "marketStatus": {
+      "market": "Capital Market",
+      "marketStatus": "Open",
+      "tradeDate": "10-Mar-2025 14:20",
+      "index": "NIFTY 50",
+      "last": 22506.4,
+      "variation": -46.099999999998545,
+      "percentChange": -0.2,
+      "marketStatusMessage": "Normal Market is Open"
+  }
+}

@@ -1,0 +1,20 @@
+default:
+  security name: name
+  company: name
+  holding: name
+  symbol: ticker
+  isin code: isin
+  quantity: qty
+  units: qty
+  market value: mkt_value
+  mkt value: mkt_value
+  amount: mkt_value
+  allocation: weight
+  portfolio %: weight
+  "%": weight
+
+sample-format-a:
+  scrip name: name
+  no. of shares: qty
+  current value: mkt_value
+  percentage to nav: weight

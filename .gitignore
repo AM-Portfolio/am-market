@@ -1,3 +1,11 @@
+# Git directories in submodules (keep for easy module copying, but ignore in main repo)
+am-common-investment-data/.git/
+am-market-data/.git/
+am-market-web/.git/
+am-parser/.git/
+am_market_sdk_flutter/.git/
+market-data-analysis-py/.git/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -27,3 +35,22 @@ wheels/
 .flutter-plugins-dependencies
 .packages
 build/
+
+# Java/Maven
+target/
+*.class
+*.jar
+*.war
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local

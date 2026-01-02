@@ -1,0 +1,40 @@
+# Scheduler Module Configuration
+
+# General scheduler settings
+scheduler:
+  module:
+    enabled: true
+  # Board of directors scheduler
+  board-of-directors:
+    enabled: true
+    timezone: Asia/Kolkata
+    trading:
+      start-time: "00:01"
+      end-time: "23:59"
+    cron: "*/2 * * * * MON-SUN" # Run every 2 minutes on weekdays
+  # Stock price scheduler
+  stock-price:
+    enabled: true
+    timezone: Asia/Kolkata
+    trading:
+      start-time: "00:01"
+      end-time: "23:59"
+    cron: "*/2 * * * * MON-SUN" # Run every 2 minutes on weekdays
+# Metrics configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      application: market-data-scheduler
+    export:
+      prometheus:
+        enabled: true
+
+# Logging configuration
+logging:
+  level:
+    com.am.marketdata.scheduler: INFO
+    org.springframework.scheduling: INFO

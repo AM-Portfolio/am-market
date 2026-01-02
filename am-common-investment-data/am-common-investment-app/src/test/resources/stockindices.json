@@ -1,0 +1,71 @@
+{
+  "name": "NIFTY 50",
+  "advance": {
+      "declines": 123,
+      "advances": 456,
+      "unchanged": 78
+  },
+  "timestamp": "24-Mar-2025 21:00:30",
+  "data": [
+      {
+          "priority": 1,
+          "symbol": "INDUSINDBK",
+          "identifier": "INE095A01012",
+          "series": "EQ",
+          "open": 1000.0,
+          "dayHigh": 1010.0,
+          "dayLow": 990.0,
+          "lastPrice": 1005.0,
+          "previousClose": 995.0,
+          "change": 10.0,
+          "pChange": 1.01,
+          "totalTradedVolume": 1000000,
+          "stockIndClosePrice": 1005.0,
+          "totalTradedValue": 1005000000.0,
+          "yearHigh": 1200.0,
+          "ffmc": 100000000.0,
+          "yearLow": 800.0,
+          "nearWKH": 1150.0,
+          "nearWKL": 850.0,
+          "perChange365d": "25.00",
+          "date365dAgo": "22-Mar-2024",
+          "date30dAgo": "21-Feb-2025",
+          "perChange30d": "5.00",
+          "metadata": {
+              "companyName": "IndusInd Bank Limited",
+              "industry": "Private Sector Bank",
+              "activeSeries": ["EQ"],
+              "isin": "INE095A01012"
+          }
+      }
+  ],
+  "metadata": {
+      "indexName": "NIFTY 50",
+      "open": 23515.4,
+      "high": 23708.75,
+      "low": 23433.5,
+      "previousClose": 23350.4,
+      "last": 23658.35,
+      "percChange": 1.32,
+      "change": 307.9499999999971,
+      "timeVal": "24-Mar-2025 21:00:30",
+      "yearHigh": 26277.35,
+      "yearLow": 21281.45,
+      "indicativeClose": 0,
+      "totalTradedVolume": 311900413,
+      "totalTradedValue": 288711667318.87,
+      "ffmc_sum": 1060663795.92
+  },
+  "marketStatus": {
+      "market": "Capital Market",
+      "marketStatus": "Closed",
+      "tradeDate": "24-Mar-2025 15:30",
+      "index": "NIFTY 50",
+      "last": 23658.35,
+      "variation": 307.9499999999971,
+      "percentChange": 1.32,
+      "marketStatusMessage": "Normal Market is Closed"
+  },
+  "date30dAgo": "21-Feb-2025",
+  "date365dAgo": "22-Mar-2024"
+}

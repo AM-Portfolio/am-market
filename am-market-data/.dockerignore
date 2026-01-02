@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+
+# Maven
+target/
+!market-data-app/target/*.jar
+.mvn/
+mvnw
+mvnw.cmd
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Logs
+*.log
+
+# Docker
+.env
+docker-compose*.yml
+Dockerfile*
+
+# Others
+README.md
+LICENSE
+*.md
+*.txt
+
+# Test files
+**/test/
+**/tests/
+**/testdata/

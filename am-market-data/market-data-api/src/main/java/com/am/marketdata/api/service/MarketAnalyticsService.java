@@ -1,0 +1,152 @@
+package com.am.marketdata.api.service;
+
+import com.am.common.investment.model.stockindice.StockIndicesMarketData;
+import com.am.common.investment.model.stockindice.StockData;
+import com.am.marketdata.api.util.StockDataEnricher;
+import com.am.marketdata.api.util.StockDataEnricher.EnrichedStockData;
+import com.am.marketdata.common.log.AppLogger;
+import com.am.marketdata.service.SecurityService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class MarketAnalyticsService {
+
+    private final AppLogger log = AppLogger.getLogger();
+    private final StockIndicesService stockIndicesService;
+    private final SecurityService securityService;
+    private final StockDataEnricher stockDataEnricher;
+
+    // Default broad index for "entire market" analytics
+    private static final String DEFAULT_MARKET_INDEX = "NIFTY 50";
+
+    /**
+     * Get Top Gainers or Losers
+     * 
+     * @param limit         Number of records
+     * @param type          "gainers" or "losers"
+     * @param indexSymbol   Index to use for filtering (e.g., "NIFTY 50", "NIFTY
+     *                      500")
+     * @param timeFrame     Time frame for price data (e.g., 1D, 1W, 1M)
+     * @param expandIndices Whether to expand index symbols to constituent stocks
+     * @return List of enriched stock data sorted by percentage change
+     */
+    public List<Map<String, Object>> getMovers(int limit, String type, String indexSymbol,
+            com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
+        // Use provided index or default
+        String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
+
+        // Fetch index constituent data
+        StockIndicesMarketData indexData = stockIndicesService.getLatestIndexData(targetIndex);
+
+        if (indexData == null || indexData.getData() == null) {
+            log.warn("getMovers", "Market index data not found: " + targetIndex);
+            return Collections.emptyList();
+        }
+
+        // Enrich stock data with live prices, passing expandIndices parameter
+        List<EnrichedStockData> enrichedData = stockDataEnricher.enrichWithPrices(
+                indexData.getData(),
+                timeFrame != null ? timeFrame : com.am.marketdata.common.model.TimeFrame.DAY,
+                expandIndices);
+
+        if (enrichedData.isEmpty()) {
+            log.warn("getMovers", "No price data available for index: " + targetIndex);
+            return Collections.emptyList();
+        }
+
+        // Sort by percentage change
+        boolean descending = "gainers".equalsIgnoreCase(type);
+        List<EnrichedStockData> sortedData = stockDataEnricher.sortByPercentChange(enrichedData, descending);
+
+        // Convert to response format and limit results
+        return sortedData.stream()
+                .limit(limit)
+                .map(this::enrichedDataToMap)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get Sector Performance
+     * Aggregates performance of stocks grouped by their Industry (Sector)
+     * 
+     * @param indexSymbol   Index to use for filtering (e.g., "NIFTY 50", "NIFTY
+     *                      500")
+     * @param timeFrame     Time frame for price data (e.g., 1D, 1W, 1M)
+     * @param expandIndices Whether to expand index symbols to constituent stocks
+     * @return List of sector performance data
+     */
+    public List<Map<String, Object>> getSectorPerformance(String indexSymbol,
+            com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
+        // Use provided index or default
+        String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
+
+        // Fetch index constituent data
+        StockIndicesMarketData indexData = stockIndicesService.getLatestIndexData(targetIndex);
+
+        if (indexData == null || indexData.getData() == null) {
+            log.warn("getSectorPerformance", "Market index data not found: " + targetIndex);
+            return Collections.emptyList();
+        }
+
+        // Enrich stock data with live prices, passing expandIndices parameter
+        List<EnrichedStockData> enrichedData = stockDataEnricher.enrichWithPrices(
+                indexData.getData(),
+                timeFrame != null ? timeFrame : com.am.marketdata.common.model.TimeFrame.DAY,
+                expandIndices);
+
+        if (enrichedData.isEmpty()) {
+            log.warn("getSectorPerformance", "No price data available for index: " + targetIndex);
+            return Collections.emptyList();
+        }
+
+        // Fetch security details (sectors) for all symbols
+        List<String> symbols = enrichedData.stream()
+                .map(EnrichedStockData::getSymbol)
+                .collect(Collectors.toList());
+
+        Map<String, String> symbolToSector = securityService.getSymbolToSectorMap(symbols);
+
+        // Group by sector
+        Map<String, List<EnrichedStockData>> bySector = stockDataEnricher.groupBy(
+                enrichedData,
+                esd -> symbolToSector.getOrDefault(esd.getSymbol(), "Unknown"));
+
+        // Calculate sector performance
+        List<Map<String, Object>> sectorPerformance = new ArrayList<>();
+
+        bySector.forEach((sector, stocks) -> {
+            double avgChange = stockDataEnricher.calculateAveragePercentChange(stocks);
+
+            Map<String, Object> sectorData = new HashMap<>();
+            sectorData.put("sector", sector);
+            sectorData.put("change", avgChange);
+            sectorData.put("stockCount", stocks.size());
+            sectorData.put("status", avgChange >= 0 ? "Positive" : "Negative");
+
+            sectorPerformance.add(sectorData);
+        });
+
+        // Sort by Performance Descending and limit to top 15
+        sectorPerformance.sort((a, b) -> Double.compare((Double) b.get("change"), (Double) a.get("change")));
+
+        return sectorPerformance.stream().limit(15).collect(Collectors.toList());
+    }
+
+    /**
+     * Convert EnrichedStockData to Map for API response
+     */
+    private Map<String, Object> enrichedDataToMap(EnrichedStockData data) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("symbol", data.getSymbol());
+        map.put("lastPrice", data.getLastPrice());
+        map.put("change", data.getChange());
+        map.put("pChange", data.getPercentChange());
+        map.put("previousClose", data.getPreviousClose());
+        return map;
+    }
+}

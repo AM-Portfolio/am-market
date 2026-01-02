@@ -1,0 +1,111 @@
+## Default values for market-data service
+## This is a YAML-formatted file.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/am-portfolio/am-market-data/market-data-service
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "vault-auth"
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  hosts:
+    - host: market-data.INGRESS_IP.nip.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Environment configuration
+environment: "preprod"
+
+# PostgreSQL configuration
+postgresql:
+  enabled: false
+  fullname: "postgresql"
+  primary:
+    service:
+      port: 5432
+  auth:
+    database: "marketdata"
+
+# Vault configuration
+vault:
+  enabled: true
+  secretPaths:
+    postgres: "kv/preprod/database/postgres"
+    mongodb: "kv/preprod/database/mongo"
+    redis: "kv/preprod/database/redis"
+    influxdb: "kv/preprod/database/influxdb"
+    kafka: "kv/preprod/kafka"
+    upstock: "kv/preprod/api/upstock"
+
+# Application specific configuration
+config:
+  marketData:
+    maxRetries: 3
+    retryDelayMs: 1000
+    threadPoolSize: 10
+    threadQueueCapacity: 100
+    maxAgeMinutes: 60
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
