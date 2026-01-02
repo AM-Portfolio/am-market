@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # --- Market Data Backend (Spring Boot) ---
+  market-data-service:
+    container_name: market-data-service
+    build:
+      context: ./am-market-data
+      dockerfile: Dockerfile
+      args:
+        - GITHUB_PACKAGES_USERNAME=${GITHUB_PACKAGES_USERNAME}
+        - GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN}
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+      # Database Configuration
+      - SPRING_DATASOURCE_URL=${POSTGRES_URL}
+      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+
+      # MongoDB Configuration
+      - MONGODB_URL=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@am_mongodb:27017/market_data?authSource=admin
+      - MONGODB_DATABASE=${MONGODB_DATABASE}
+      - MONGODB_USERNAME=${MONGODB_USERNAME}
+      - MONGODB_PASSWORD=${MONGODB_PASSWORD}
+      - MONGODB_AUTHENTICATION_DATABASE=admin
+
+      # InfluxDB Configuration
+      - INFLUXDB_URL=${INFLUXDB_URL}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+
+      # Kafka Configuration
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - SPRING_KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID}
+      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
+
+      # Redis Configuration
+      - REDIS_HOSTNAME=am_redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=${REDIS_PORT}
+
+      # Application Topics
+      - APP_KAFKA_STOCK_PRICE_TOPIC=${STOKUPATE_TOPIC_NAME}
+      - APP_KAFKA_NSE_INDICES_TOPIC=${NSE_INDICES_TOPIC_NAME}
+      - APP_KAFKA_NSE_ETF_TOPIC=${NSE_ETF_TOPIC_NAME}
+
+      # JWT Configuration
+      - JWT_SECRET=${JWT_SECRET}
+      - INTERNAL_JWT_SECRET=${INTERNAL_JWT_SECRET}
+
+      # API Keys
+      - UPSTOX_API_KEY=${UPSTOX_API_KEY}
+      - UPSTOX_SECRET_KEY=${UPSTOX_SECRET_KEY}
+      - UPSTOX_CODE=${UPSTOX_CODE}
+      - UPSTOX_ACCESS_TOKEN=${UPSTOX_ACCESS_TOKEN}
+      - ZERODHA_API_KEY=${ZERODHA_API_KEY}
+      - ZERODHA_API_SECRET=${ZERODHA_API_SECRET}
+
+    ports:
+      - "8092:8092"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - am-network
+      - am-infra_am-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.market-data.rule=Host(`am.munish.org`) && PathPrefix(`/api/market`)"
+      - "traefik.http.routers.market-data.entrypoints=web"
+      - "traefik.http.services.market-data.loadbalancer.server.port=8092"
+      - "traefik.http.middlewares.market-data-strip.stripprefix.prefixes=/api/market"
+      - "traefik.http.routers.market-data.middlewares=market-data-strip"
+    restart: unless-stopped
+
+  # --- Market Data Parser (Python/FastAPI) ---
+  am-parser-service:
+    container_name: am-parser-service
+    build:
+      context: ./am-parser
+      dockerfile: Dockerfile
+    environment:
+      - MONGO_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@am_mongodb:27017/admin?authSource=admin&uuidRepresentation=standard
+      - MONGO_DB=${PARSER_MONGO_DB:-mutual_funds}
+      - PORT=${PARSER_PORT:-8000}
+    ports:
+      - "8022:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - am-network
+      - am-infra_am-net
+    restart: unless-stopped
+
+  # --- Market Data Analysis (Python/FastAPI) ---
+  market-data-analysis-service:
+    container_name: market-data-analysis-service
+    build:
+      context: ./market-data-analysis-py
+      dockerfile: Dockerfile
+    environment:
+      - MARKET_DATA_SERVICE_URL=http://market-data-service:8092/api/v1/market-data
+      - AUTH_SERVICE_URL=http://auth-tokens:8001/auth/token/v1/internal
+      - PORT=8010
+      - INTERNAL_JWT_SECRET=${INTERNAL_JWT_SECRET}
+    ports:
+      - "8010:8010"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.market-analysis.rule=PathPrefix(`/market-analysis-api`)"
+      - "traefik.http.routers.market-analysis.entrypoints=web"
+      - "traefik.http.services.market-analysis.loadbalancer.server.port=8010"
+      - "traefik.http.middlewares.analysis-strip.stripprefix.prefixes=/market-analysis-api"
+      - "traefik.http.routers.market-analysis.middlewares=analysis-strip"
+    networks:
+      - am-network
+      - am-infra_am-net
+    restart: unless-stopped
+
+  # --- Market Data Web (Flutter) ---
+  market-data-web:
+    container_name: market-data-web
+    build:
+      context: ../
+      dockerfile: am-market/am-market-web/Dockerfile
+    ports:
+      - "9002:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.market-ui.rule=PathPrefix(`/market-ui`)"
+      - "traefik.http.routers.market-ui.entrypoints=web"
+      - "traefik.http.services.market-ui.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.market-strip.stripprefix.prefixes=/market-ui"
+      - "traefik.http.routers.market-ui.middlewares=market-strip"
+    networks:
+      - am-network
+    restart: unless-stopped
+
+networks:
+  am-network:
+    external: true
+  am-infra_am-net:
+    external: true
