@@ -83,7 +83,7 @@
         <dependency>
             <groupId>com.upstox.api</groupId>
             <artifactId>upstox-java-sdk</artifactId>
-            <version>LATEST</version>
+            <version>1.19</version>
             <scope>compile</scope>
         </dependency>
 
