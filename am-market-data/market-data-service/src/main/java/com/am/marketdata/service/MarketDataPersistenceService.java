@@ -4,7 +4,7 @@ import com.am.common.investment.model.equity.EquityPrice;
 import com.am.common.investment.model.historical.HistoricalData;
 import com.am.common.investment.service.EquityService;
 import com.am.common.investment.service.historical.HistoricalDataService;
-import com.am.marketdata.mapper.OHLCMapper;
+import com.am.marketdata.common.mapper.OHLCMapper;
 import com.am.marketdata.service.MarketDataPersistenceService;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;

@@ -14,7 +14,7 @@
     <name>Market Data Service Implementation</name>
     <description>Main service module implementing market data business logic</description>
 
- <properties>
+    <properties>
         <influxdb.version>6.12.0</influxdb.version>
         <micrometer.version>1.11.0</micrometer.version>
         <kiteconnect.version>3.2.1</kiteconnect.version>

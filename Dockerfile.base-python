@@ -1,0 +1,38 @@
+# Base Image for Python Projects
+# Pre-installs common FastAPI/pandas dependencies to speed up builds
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pre-install common Python packages
+RUN pip install --no-cache-dir \
+    fastapi>=0.104.0 \
+    uvicorn[standard]>=0.24.0 \
+    pydantic>=2.0.0 \
+    pandas>=2.0.0 \
+    httpx>=0.25.0 \
+    requests>=2.31.0 \
+    python-multipart>=0.0.7 \
+    motor>=3.3.0 \
+    openpyxl>=3.1 \
+    click>=8.1 \
+    pyyaml>=6.0 \
+    python-dotenv>=1.0
+
+# Set working directory
+WORKDIR /app
+
+# Default command (will be overridden)
+CMD ["python", "--version"]

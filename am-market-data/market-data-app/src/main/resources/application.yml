@@ -3,7 +3,7 @@
 # POSTGRES_USERNAME: postgres
 # POSTGRES_URL: jdbc:postgresql://localhost:5456
 # POSTGRES_DATABASE: portfolio
-
+INFRA_HOST: 100.72.208.15
 #mongoDB Configuration
 MONGODB_DATABASE: market_data
 MONGODB_USERNAME: admin
@@ -13,11 +13,11 @@ MONGODB_PASSWORD: password123
 INFLUXDB_TOKEN: my-super-secret-auth-token
 INFLUXDB_ORG: am-portfolio
 INFLUXDB_BUCKET: market-data
-INFLUXDB_URL: http://localhost:8086
+INFLUXDB_URL: http://${INFRA_HOST}:8086
 
 
 # Redis Configuration
-REDIS_HOSTNAME: localhost
+REDIS_HOSTNAME: ${INFRA_HOST}
 REDIS_PASSWORD: password123
 REDIS_PORT: 6379
 
@@ -45,7 +45,7 @@ MARKET_DATA_THREAD_QUEUE_CAPACITY: 10
 MARKET_DATA_MAX_AGE_MINUTES: 15
 
 # Upstox Configuration
-UPSTOX_ACCESS_TOKEN: eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiIyWENSTjgiLCJqdGkiOiI2OTU2YzE2NzUyNzRkNTAwNzViOTU3Y2YiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc2NzI5MzI4NywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzY3MzA0ODAwfQ.SpNC84JE4g8obIPgZ4ocFILS__qT8eGya2ND2QdZoec
+UPSTOX_ACCESS_TOKEN: eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiIyWENSTjgiLCJqdGkiOiI2OTVlYzFjODg0MjYwYTYzNDdkYmJkMzQiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc2NzgxNzY3MiwiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzY3ODIzMjAwfQ.ANWeE3CwdIGvdT19LfVbe7oT44zynOkcTo3jOP043Pc
 UPSTOX_API_KEY: 48d1e335-09ad-4dc0-b955-4505c350d10b
 UPSTOX_SECRET_KEY: jqre481zf0
 UPSTOX_CODE: rNLu2Q 
@@ -64,7 +64,7 @@ spring:
       password: ${REDIS_PASSWORD}
       port: ${REDIS_PORT:6379}
     mongodb:
-      uri: ${MONGODB_URL:mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@localhost:27017/market_data?authSource=admin}
+      uri: ${MONGODB_URL:mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@${INFRA_HOST}:27017/market_data?authSource=admin}
       database: ${MONGODB_DATABASE}
       username: ${MONGODB_USERNAME}
       password: ${MONGODB_PASSWORD}

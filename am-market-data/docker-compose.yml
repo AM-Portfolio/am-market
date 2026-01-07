@@ -1,6 +1,5 @@
 version: '3.8'
 
-
 services:
   market-data-service:
     container_name: market-data-service
@@ -12,34 +11,33 @@ services:
         - GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN}
     env_file:
       - .env
-      - .env.docker
     environment:
       # Spring Profile
       - SPRING_PROFILES_ACTIVE=docker
-      
+
       # Database Configuration
       - SPRING_DATASOURCE_URL=${POSTGRES_URL}/${POSTGRES_DATABASE}
       - SPRING_DATASOURCE_USERNAME=${POSTGRES_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
-      
+
       # MongoDB Configuration
       - MONGODB_URL=${MONGODB_URL}
       - MONGODB_DATABASE=${MONGODB_DATABASE}
       - MONGODB_USERNAME=${MONGODB_USERNAME}
       - MONGODB_PASSWORD=${MONGODB_PASSWORD}
       - MONGODB_AUTHENTICATION_DATABASE=admin
-      
+
       # InfluxDB Configuration
       - INFLUXDB_URL=${INFLUXDB_URL}
       - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
       - INFLUXDB_ORG=${INFLUXDB_ORG}
       - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
-      
+
       # Kafka Configuration
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
       - SPRING_KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID}
       - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=${KAFKA_CONSUMER_AUTO_OFFSET_RESET}
-      
+
       # Application Topics
       - APP_KAFKA_STOCK_PRICE_TOPIC=${STOKUPATE_TOPIC_NAME}
       - APP_KAFKA_NSE_INDICES_TOPIC=${NSE_INDICES_TOPIC_NAME}
@@ -49,15 +47,15 @@ services:
       - REDIS_HOSTNAME=${REDIS_HOSTNAME}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_PORT=${REDIS_PORT}
-      
+
       # Retry Configuration
       - APP_RETRY_MAX_ATTEMPTS=${MARKET_DATA_MAX_RETRIES}
       - APP_RETRY_BASE_DELAY_MS=${MARKET_DATA_RETRY_DELAY_MS}
-      
+
       # Thread Pool Configuration
       - APP_THREAD_POOL_SIZE=${MARKET_DATA_THREAD_POOL_SIZE}
       - APP_THREAD_POOL_QUEUE_CAPACITY=${MARKET_DATA_THREAD_QUEUE_CAPACITY}
-      
+
       # Validation Configuration
       - APP_VALIDATION_MAX_AGE_MINUTES=${MARKET_DATA_MAX_AGE_MINUTES}
 
@@ -65,7 +63,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - JWT_ALGORITHM=HS256
       - INTERNAL_JWT_SECRET=${INTERNAL_JWT_SECRET}
-      
+
       # Upstox Configuration
       - UPSTOX_AUTH_CODE=${UPSTOX_CODE}
       - UPSTOX_AUTH_API_KEY=${UPSTOX_API_KEY}
@@ -75,8 +73,8 @@ services:
       - UPSTOX_AUTH_REDIRECT_URI=http://localhost:8081
       - UPSTOX_AUTH_TOKEN_REFRESH_INTERVAL=3600000
       - UPSTOX_INTERVAL=I1
-    entrypoint: ["/bin/sh", "-c"]
-    command: 
+    entrypoint: [ "/bin/sh", "-c" ]
+    command:
       - |
         echo "=== Market Data Service Environment Variables ==="
         echo "Database URL: $${SPRING_DATASOURCE_URL}"
@@ -94,7 +92,7 @@ services:
     networks:
       - am-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8092/actuator/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8092/actuator/health" ]
       interval: 30s
       timeout: 3s
       retries: ${MARKET_DATA_MAX_RETRIES}
@@ -104,6 +102,7 @@ volumes:
   postgres_data:
   influxdb_data:
   grafana_data:
+
 
 networks:
   am-network:

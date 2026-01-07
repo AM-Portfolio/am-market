@@ -1,7 +1,7 @@
 package com.am.marketdata.api.controller;
 
-import com.am.marketdata.service.dto.InstrumentSearchCriteria;
-import com.am.marketdata.service.provider.InstrumentDataProvider;
+import com.am.marketdata.common.dto.InstrumentSearchCriteria;
+import com.am.marketdata.common.provider.InstrumentDataProvider;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;

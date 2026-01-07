@@ -1,66 +1,68 @@
-2026-01-01 15:34:18.987 [main] INFO  c.a.marketdata.MarketDataApplication - Starting MarketDataApplication using Java 17.0.16 with PID 62295 (/Users/munishm/Documents/AM-Repos/am-market/am-market-data/market-data-app/target/classes started by munishm in /Users/munishm/Documents/AM-Repos/am-market)
-2026-01-01 15:34:18.989 [main] INFO  c.a.marketdata.MarketDataApplication - No active profile set, falling back to 1 default profile: "default"
-2026-01-01 15:34:21.280 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8092"]
-2026-01-01 15:34:21.288 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
-2026-01-01 15:34:21.288 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.41]
-2026-01-01 15:34:21.469 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
-2026-01-01 15:34:22.484 [main] INFO  org.mongodb.driver.client - MongoClient with metadata {"driver": {"name": "mongo-java-driver|sync|spring-boot", "version": "5.4.0"}, "os": {"type": "Darwin", "name": "Mac OS X", "architecture": "aarch64", "version": "26.2"}, "platform": "Java/Homebrew/17.0.16+0"} created with settings MongoClientSettings{readPreference=primary, writeConcern=WriteConcern{w=null, wTimeout=null ms, journal=null}, retryWrites=true, retryReads=true, readConcern=ReadConcern{level=null}, credential=MongoCredential{mechanism=null, userName='admin', source='admin', password=<hidden>, mechanismProperties=<hidden>}, transportSettings=null, commandListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsCommandListener@8dc3019], codecRegistry=ProvidersCodecRegistry{codecProviders=[ValueCodecProvider{}, BsonValueCodecProvider{}, DBRefCodecProvider{}, DBObjectCodecProvider{}, DocumentCodecProvider{}, CollectionCodecProvider{}, IterableCodecProvider{}, MapCodecProvider{}, GeoJsonCodecProvider{}, GridFSFileCodecProvider{}, Jsr310CodecProvider{}, JsonObjectCodecProvider{}, BsonCodecProvider{}, EnumCodecProvider{}, com.mongodb.client.model.mql.ExpressionCodecProvider@69fe8c75, com.mongodb.Jep395RecordCodecProvider@633cad4d, com.mongodb.KotlinCodecProvider@15c3585]}, loggerSettings=LoggerSettings{maxDocumentLength=1000}, clusterSettings={hosts=[localhost:27017], srvServiceName=mongodb, mode=SINGLE, requiredClusterType=UNKNOWN, requiredReplicaSetName='null', serverSelector='null', clusterListeners='[]', serverSelectionTimeout='30000 ms', localThreshold='15 ms'}, socketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=0, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, heartbeatSocketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=10000, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, connectionPoolSettings=ConnectionPoolSettings{maxSize=100, minSize=0, maxWaitTimeMS=120000, maxConnectionLifeTimeMS=0, maxConnectionIdleTimeMS=0, maintenanceInitialDelayMS=0, maintenanceFrequencyMS=60000, connectionPoolListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsConnectionPoolListener@443b6765], maxConnecting=2}, serverSettings=ServerSettings{heartbeatFrequencyMS=10000, minHeartbeatFrequencyMS=500, serverMonitoringMode=AUTO, serverListeners='[]', serverMonitorListeners='[]'}, sslSettings=SslSettings{enabled=false, invalidHostNameAllowed=false, context=null}, applicationName='null', compressorList=[], uuidRepresentation=JAVA_LEGACY, serverApi=null, autoEncryptionSettings=null, dnsClient=null, inetAddressResolver=null, contextProvider=null, timeoutMS=null}
-2026-01-01 15:34:22.515 [cluster-ClusterId{value='695646a603624f4a6d5e14d7', description='null'}-localhost:27017] INFO  org.mongodb.driver.cluster - Monitor thread successfully connected to server with description ServerDescription{address=localhost:27017, type=STANDALONE, cryptd=false, state=CONNECTED, ok=true, minWireVersion=0, maxWireVersion=17, maxDocumentSize=16777216, logicalSessionTimeoutMinutes=30, roundTripTimeNanos=22777541, minRoundTripTimeNanos=0}
-2026-01-01 15:34:22.604 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
-2026-01-01 15:34:22.716 [main] WARN  o.s.d.m.c.m.BasicMongoPersistentProperty - Customizing field name for id property 'com.am.marketdata.service.model.ZerodhaInstrument.instrumentToken' is not allowed; Custom name ('instrument_token') will not be considered
-2026-01-01 15:34:22.749 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
-2026-01-01 15:34:22.934 [main] INFO  c.marketdata.config.ZerodhaApiConfig - Creating market data provider factory
-2026-01-01 15:34:23.272 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis connection details - Host: localhost, Port: 6379
-2026-01-01 15:34:23.273 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis password is provided
-2026-01-01 15:34:23.273 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Setting Redis password for authentication
-2026-01-01 15:34:23.561 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
-2026-01-01 15:34:23.563 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] SECURITY CONFIGURATION INITIALIZED
-2026-01-01 15:34:23.563 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
-2026-01-01 15:34:23.563 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] Mode: DEVELOPMENT (Security DISABLED)
-2026-01-01 15:34:23.563 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ⚠️  WARNING: All endpoints are PUBLIC
-2026-01-01 15:34:23.563 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
-2026-01-01 15:34:23.600 [main] INFO  c.marketdata.config.ZerodhaApiConfig - Creating Zerodha thread pool executor with size: 5, queue capacity: 10
-2026-01-01 15:34:23.615 [main] INFO  c.m.s.m.BrokerageCalculatorService - Loaded broker fees: hdfcsec=0.5, motilaloswal=0.5, angelone=20.0, upstox=20.0, mstock=20.0, flattrade=0.0, groww=20.0, fyers=20.0, vested=0.0, kotaksecurities=0.5, aliceblue=15.0, finvasia=0.0, icicidirect=20.0, sharekhan=0.5, zerodha=20.0, 5paisa=10.0, dhan=20.0
-2026-01-01 15:34:23.616 [main] INFO  c.m.s.m.BrokerageCalculatorService - Initializing Brokerage Calculator Service with 17 broker configurations
-2026-01-01 15:34:23.630 [main] INFO  c.a.m.a.s.BrokerageCalculatorApiService - [BrokerageCalculatorApiService.BrokerageCalculatorApiService] Initializing Brokerage Calculator API Service
-2026-01-01 15:34:23.633 [main] INFO  c.a.m.a.c.BrokerageCalculatorController - [BrokerageCalculatorController.BrokerageCalculatorController] Initializing Brokerage Calculator Controller
-2026-01-01 15:34:23.716 [main] INFO  c.m.s.margin.MarginCalculatorService - Initializing Margin Calculator Service
-2026-01-01 15:34:23.725 [main] INFO  c.a.m.a.s.MarginCalculatorApiService - [MarginCalculatorApiService.MarginCalculatorApiService] Initializing Margin Calculator API Service
-2026-01-01 15:34:24.074 [main] INFO  c.a.m.s.s.MarketDataProcessingService - Initialized market data thread pool with size: 5, queue capacity: 10, max retries: 3, retry delay: 1000ms
-2026-01-01 15:34:24.124 [main] INFO  c.a.m.s.registry.SchedulerRegistry - Initializing SchedulerRegistry
-2026-01-01 15:34:24.124 [main] INFO  c.a.m.s.registry.SchedulerRegistry - Registered 0 schedulers
-2026-01-01 15:34:24.159 [main] INFO  c.m.s.upstox.UpstoxIndexIdentifier - Loading Upstox Index Identifiers...
-2026-01-01 15:34:24.184 [main] INFO  c.m.s.upstox.UpstoxIndexIdentifier - Loaded 139 Upstox Index Identifiers
-2026-01-01 15:34:24.991 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.filterChain] Configuring Security Filter Chain...
-2026-01-01 15:34:24.992 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.filterChain] Applying DEVELOPMENT security configuration (ALL ENDPOINTS PUBLIC)
-2026-01-01 15:34:25.108 [main] INFO  c.a.m.s.c.MarketDataExecutorConfig - Initialized market data thread pool with size: 5, queue capacity: 10
-2026-01-01 15:34:25.110 [main] INFO  c.marketdata.config.UpstoxApiConfig - Creating Upstox API service
-2026-01-01 15:34:25.111 [main] INFO  c.m.service.upstox.UpstoxApiService - Initializing Upstox API service
-2026-01-01 15:34:25.299 [main] INFO  c.m.service.upstox.UpstoxApiService - Found cached Access Token in Redis, applying to configuration
-2026-01-01 15:34:25.301 [main] INFO  c.marketdata.config.UpstoxApiConfig - Creating Upstox SDK service
-2026-01-01 15:34:25.303 [main] INFO  c.m.service.upstox.UpstoxSdkService - Initializing Upstox SDK Service
-2026-01-01 15:34:25.305 [main] INFO  c.m.service.upstox.UpstoxSdkService - Found cached Access Token in Redis for SDK Service
-2026-01-01 15:34:25.307 [main] INFO  c.marketdata.config.UpstoxApiConfig - Creating Upstox market data provider
-2026-01-01 15:34:25.311 [main] INFO  c.marketdata.config.UpstoxApiConfig - Creating Upstox retry registry with max retries: 3, base delay: 1000ms
-2026-01-01 15:34:25.321 [main] INFO  c.marketdata.config.ZerodhaApiConfig - Creating Zerodha retry registry with max retries: 3, base delay: 1000ms
-2026-01-01 15:34:25.323 [main] INFO  c.marketdata.config.ZerodhaApiConfig - Creating Zerodha API service
-2026-01-01 15:34:25.324 [main] INFO  c.m.s.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: null
-2026-01-01 15:34:25.338 [main] INFO  c.m.s.zerodha.ZerodhaApiService - [ZerodhaApiService.ZerodhaApiService] Initializing Zerodha API service
-2026-01-01 15:34:25.344 [main] INFO  c.m.s.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: u3bfkf1ttzvr00v3
-2026-01-01 15:34:25.347 [main] INFO  c.m.s.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Setting access token: fT9jp...
-2026-01-01 15:34:25.399 [main] INFO  c.marketdata.config.ZerodhaApiConfig - Creating Zerodha market data provider
-2026-01-01 15:34:25.399 [main] INFO  c.m.s.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.ZerodhaMarketDataProvider] Initialized Zerodha market data provider
-2026-01-01 15:34:25.399 [main] INFO  c.m.s.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.initialize] Initializing Zerodha market data provider
-2026-01-01 15:34:25.399 [main] INFO  c.m.s.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: u3bfkf1ttzvr00v3
-2026-01-01 15:34:25.400 [main] INFO  c.m.s.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Setting access token: fT9jp...
-2026-01-01 15:34:26.199 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8092"]
-2026-01-01 15:34:26.330 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
-2026-01-01 15:34:26.350 [main] INFO  c.m.s.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.cleanup] Cleaning up Zerodha market data provider
-2026-01-01 15:34:26.350 [main] INFO  c.m.s.zerodha.ZerodhaApiService - [ZerodhaApiService.cleanup] Cleaned up Zerodha API service resources
-2026-01-01 15:34:26.350 [main] INFO  c.m.s.zerodha.ZerodhaApiService - [ZerodhaApiService.cleanup] Cleaned up Zerodha API service resources
-2026-01-01 15:34:26.354 [main] INFO  c.a.m.s.c.MarketDataExecutorConfig - Shutting down market data thread pool executor
-2026-01-01 15:34:26.355 [main] INFO  c.a.m.s.s.MarketDataProcessingService - Shutting down market data thread pool
-2026-01-01 15:34:26.392 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+2026-01-08 01:27:18.694 [main] INFO  c.a.marketdata.MarketDataApplication - Starting MarketDataApplication using Java 17.0.12 with PID 24476 (A:\InfraCode\AM-Portfolio\am-market\am-market-data\market-data-app\target\classes started by ssd26 in A:\InfraCode\AM-Portfolio\am-market)
+2026-01-08 01:27:18.740 [main] INFO  c.a.marketdata.MarketDataApplication - No active profile set, falling back to 1 default profile: "default"
+2026-01-08 01:27:58.714 [main] INFO  c.a.marketdata.MarketDataApplication - Starting MarketDataApplication using Java 17.0.12 with PID 22724 (A:\InfraCode\AM-Portfolio\am-market\am-market-data\market-data-app\target\classes started by ssd26 in A:\InfraCode\AM-Portfolio\am-market)
+2026-01-08 01:27:58.807 [main] INFO  c.a.marketdata.MarketDataApplication - No active profile set, falling back to 1 default profile: "default"
+2026-01-08 01:29:01.654 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8092"]
+2026-01-08 01:29:01.668 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-01-08 01:29:01.669 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.41]
+2026-01-08 01:29:02.241 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-01-08 01:29:12.133 [main] INFO  org.mongodb.driver.client - MongoClient with metadata {"driver": {"name": "mongo-java-driver|sync|spring-boot", "version": "5.4.0"}, "os": {"type": "Windows", "name": "Windows 11", "architecture": "amd64", "version": "10.0"}, "platform": "Java/Oracle Corporation/17.0.12+8-LTS-286"} created with settings MongoClientSettings{readPreference=primary, writeConcern=WriteConcern{w=null, wTimeout=null ms, journal=null}, retryWrites=true, retryReads=true, readConcern=ReadConcern{level=null}, credential=MongoCredential{mechanism=null, userName='admin', source='admin', password=<hidden>, mechanismProperties=<hidden>}, transportSettings=null, commandListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsCommandListener@359a2c96], codecRegistry=ProvidersCodecRegistry{codecProviders=[ValueCodecProvider{}, BsonValueCodecProvider{}, DBRefCodecProvider{}, DBObjectCodecProvider{}, DocumentCodecProvider{}, CollectionCodecProvider{}, IterableCodecProvider{}, MapCodecProvider{}, GeoJsonCodecProvider{}, GridFSFileCodecProvider{}, Jsr310CodecProvider{}, JsonObjectCodecProvider{}, BsonCodecProvider{}, EnumCodecProvider{}, com.mongodb.client.model.mql.ExpressionCodecProvider@7fb02606, com.mongodb.Jep395RecordCodecProvider@49ee3b8d, com.mongodb.KotlinCodecProvider@79486f38]}, loggerSettings=LoggerSettings{maxDocumentLength=1000}, clusterSettings={hosts=[100.72.208.15:27017], srvServiceName=mongodb, mode=SINGLE, requiredClusterType=UNKNOWN, requiredReplicaSetName='null', serverSelector='null', clusterListeners='[]', serverSelectionTimeout='30000 ms', localThreshold='15 ms'}, socketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=0, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, heartbeatSocketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=10000, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, connectionPoolSettings=ConnectionPoolSettings{maxSize=100, minSize=0, maxWaitTimeMS=120000, maxConnectionLifeTimeMS=0, maxConnectionIdleTimeMS=0, maintenanceInitialDelayMS=0, maintenanceFrequencyMS=60000, connectionPoolListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsConnectionPoolListener@36e98434], maxConnecting=2}, serverSettings=ServerSettings{heartbeatFrequencyMS=10000, minHeartbeatFrequencyMS=500, serverMonitoringMode=AUTO, serverListeners='[]', serverMonitorListeners='[]'}, sslSettings=SslSettings{enabled=false, invalidHostNameAllowed=false, context=null}, applicationName='null', compressorList=[], uuidRepresentation=JAVA_LEGACY, serverApi=null, autoEncryptionSettings=null, dnsClient=null, inetAddressResolver=null, contextProvider=null, timeoutMS=null}
+2026-01-08 01:29:12.249 [cluster-ClusterId{value='695ebb0ff3e1a358a7fae5b6', description='null'}-100.72.208.15:27017] INFO  org.mongodb.driver.cluster - Monitor thread successfully connected to server with description ServerDescription{address=100.72.208.15:27017, type=STANDALONE, cryptd=false, state=CONNECTED, ok=true, minWireVersion=0, maxWireVersion=17, maxDocumentSize=16777216, logicalSessionTimeoutMinutes=30, roundTripTimeNanos=107755700, minRoundTripTimeNanos=0}
+2026-01-08 01:29:13.431 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
+2026-01-08 01:29:15.348 [main] WARN  o.s.d.m.c.m.BasicMongoPersistentProperty - Customizing field name for id property 'com.am.marketdata.service.model.ZerodhaInstrument.instrumentToken' is not allowed; Custom name ('instrument_token') will not be considered
+2026-01-08 01:29:16.345 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
+2026-01-08 01:29:19.504 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating market data provider factory
+2026-01-08 01:29:25.391 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis connection details - Host: localhost, Port: 6379
+2026-01-08 01:29:25.395 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis password is provided
+2026-01-08 01:29:25.396 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Setting Redis password for authentication
+2026-01-08 01:29:33.923 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 01:29:33.925 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] SECURITY CONFIGURATION INITIALIZED
+2026-01-08 01:29:33.925 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 01:29:33.926 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] Mode: DEVELOPMENT (Security DISABLED)
+2026-01-08 01:29:33.927 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ??  WARNING: All endpoints are PUBLIC
+2026-01-08 01:29:33.928 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 01:29:35.238 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha thread pool executor with size: 5, queue capacity: 10
+2026-01-08 01:29:35.505 [main] INFO  c.m.s.m.BrokerageCalculatorService - Loaded broker fees: hdfcsec=0.5, motilaloswal=0.5, angelone=20.0, upstox=20.0, mstock=20.0, flattrade=0.0, groww=20.0, fyers=20.0, vested=0.0, kotaksecurities=0.5, aliceblue=15.0, finvasia=0.0, icicidirect=20.0, sharekhan=0.5, zerodha=20.0, 5paisa=10.0, dhan=20.0
+2026-01-08 01:29:35.514 [main] INFO  c.m.s.m.BrokerageCalculatorService - Initializing Brokerage Calculator Service with 17 broker configurations
+2026-01-08 01:29:35.770 [main] INFO  c.a.m.a.s.BrokerageCalculatorApiService - [BrokerageCalculatorApiService.BrokerageCalculatorApiService] Initializing Brokerage Calculator API Service
+2026-01-08 01:29:36.263 [main] INFO  c.a.m.a.c.BrokerageCalculatorController - [BrokerageCalculatorController.BrokerageCalculatorController] Initializing Brokerage Calculator Controller
+2026-01-08 01:29:37.650 [main] INFO  c.m.s.margin.MarginCalculatorService - Initializing Margin Calculator Service
+2026-01-08 01:29:38.441 [main] INFO  c.a.m.a.s.MarginCalculatorApiService - [MarginCalculatorApiService.MarginCalculatorApiService] Initializing Margin Calculator API Service
+2026-01-08 01:29:41.584 [main] INFO  c.a.m.s.s.MarketDataProcessingService - Initialized market data thread pool with size: 5, queue capacity: 10, max retries: 3, retry delay: 1000ms
+2026-01-08 01:29:42.624 [main] INFO  c.a.m.p.upstox.UpstoxIndexIdentifier - Loading Upstox Index Identifiers...
+2026-01-08 01:29:42.923 [main] INFO  c.a.m.p.upstox.UpstoxIndexIdentifier - Loaded 139 Upstox Index Identifiers
+2026-01-08 01:29:42.974 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox API service
+2026-01-08 01:29:42.980 [main] INFO  c.a.m.p.upstox.UpstoxApiService - Initializing Upstox API service
+2026-01-08 01:29:45.078 [main] WARN  c.a.m.p.upstox.UpstoxApiService - Failed to load cached token from Redis (Redis might be down): Unable to connect to Redis
+2026-01-08 01:29:45.080 [main] INFO  c.a.m.p.upstox.UpstoxApiService - Found Access Token in configuration (fallback)
+2026-01-08 01:29:45.094 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox SDK service
+2026-01-08 01:29:45.107 [main] INFO  c.a.m.p.upstox.UpstoxSdkService - Initializing Upstox SDK Service
+2026-01-08 01:29:45.120 [main] WARN  c.a.m.p.upstox.UpstoxSdkService - Failed to initialize SDK Service token from Redis: Unable to connect to Redis
+2026-01-08 01:29:45.231 [main] INFO  c.a.m.s.registry.SchedulerRegistry - Initializing SchedulerRegistry
+2026-01-08 01:29:45.235 [main] INFO  c.a.m.s.registry.SchedulerRegistry - Registered 0 schedulers
+2026-01-08 01:29:51.494 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.filterChain] Configuring Security Filter Chain...
+2026-01-08 01:29:51.504 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.filterChain] Applying DEVELOPMENT security configuration (ALL ENDPOINTS PUBLIC)
+2026-01-08 01:29:52.260 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox retry registry with max retries: 3, base delay: 1000ms
+2026-01-08 01:29:52.324 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha retry registry with max retries: 3, base delay: 1000ms
+2026-01-08 01:29:52.331 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha API service
+2026-01-08 01:29:52.349 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: null
+2026-01-08 01:29:52.406 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.ZerodhaApiService] Initializing Zerodha API service
+2026-01-08 01:29:52.507 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: u3bfkf1ttzvr00v3
+2026-01-08 01:29:52.512 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Setting access token: fT9jp...
+2026-01-08 01:29:52.861 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha market data provider with mappers
+2026-01-08 01:29:52.863 [main] INFO  c.a.m.p.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.ZerodhaMarketDataProvider] Initialized Zerodha market data provider
+2026-01-08 01:29:52.865 [main] INFO  c.a.m.p.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.initialize] Initializing Zerodha market data provider
+2026-01-08 01:29:52.869 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: u3bfkf1ttzvr00v3
+2026-01-08 01:29:52.873 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Setting access token: fT9jp...
+2026-01-08 01:29:53.247 [main] INFO  c.a.m.s.c.MarketDataExecutorConfig - Initialized market data thread pool with size: 5, queue capacity: 10
+2026-01-08 01:29:57.922 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8092"]
+2026-01-08 01:29:58.073 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
+2026-01-08 01:29:58.091 [main] INFO  c.a.m.p.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.cleanup] Cleaning up Zerodha market data provider
+2026-01-08 01:29:58.095 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.cleanup] Cleaned up Zerodha API service resources
+2026-01-08 01:29:58.096 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.cleanup] Cleaned up Zerodha API service resources
+2026-01-08 01:29:58.104 [main] INFO  c.a.m.s.c.MarketDataExecutorConfig - Shutting down market data thread pool executor
+2026-01-08 01:29:58.109 [main] INFO  c.a.m.s.s.MarketDataProcessingService - Shutting down market data thread pool
+2026-01-08 01:29:58.316 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
 
 ***************************
 APPLICATION FAILED TO START
@@ -74,3 +76,444 @@ Action:
 
 Identify and stop the process that's listening on port 8092 or configure this application to listen on another port.
 
+2026-01-08 01:51:58.643 [main] INFO  c.a.marketdata.MarketDataApplication - Starting MarketDataApplication using Java 17.0.12 with PID 18912 (A:\InfraCode\AM-Portfolio\am-market\am-market-data\market-data-app\target\classes started by ssd26 in A:\InfraCode\AM-Portfolio\am-market)
+2026-01-08 01:51:58.649 [main] INFO  c.a.marketdata.MarketDataApplication - No active profile set, falling back to 1 default profile: "default"
+2026-01-08 01:52:04.709 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8092"]
+2026-01-08 01:52:04.712 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-01-08 01:52:04.714 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.41]
+2026-01-08 01:52:04.835 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-01-08 01:52:05.856 [main] INFO  org.mongodb.driver.client - MongoClient with metadata {"driver": {"name": "mongo-java-driver|sync|spring-boot", "version": "5.4.0"}, "os": {"type": "Windows", "name": "Windows 11", "architecture": "amd64", "version": "10.0"}, "platform": "Java/Oracle Corporation/17.0.12+8-LTS-286"} created with settings MongoClientSettings{readPreference=primary, writeConcern=WriteConcern{w=null, wTimeout=null ms, journal=null}, retryWrites=true, retryReads=true, readConcern=ReadConcern{level=null}, credential=MongoCredential{mechanism=null, userName='admin', source='admin', password=<hidden>, mechanismProperties=<hidden>}, transportSettings=null, commandListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsCommandListener@4cd9ee2c], codecRegistry=ProvidersCodecRegistry{codecProviders=[ValueCodecProvider{}, BsonValueCodecProvider{}, DBRefCodecProvider{}, DBObjectCodecProvider{}, DocumentCodecProvider{}, CollectionCodecProvider{}, IterableCodecProvider{}, MapCodecProvider{}, GeoJsonCodecProvider{}, GridFSFileCodecProvider{}, Jsr310CodecProvider{}, JsonObjectCodecProvider{}, BsonCodecProvider{}, EnumCodecProvider{}, com.mongodb.client.model.mql.ExpressionCodecProvider@509e4902, com.mongodb.Jep395RecordCodecProvider@7f958d4a, com.mongodb.KotlinCodecProvider@6af29394]}, loggerSettings=LoggerSettings{maxDocumentLength=1000}, clusterSettings={hosts=[100.72.208.15:27017], srvServiceName=mongodb, mode=SINGLE, requiredClusterType=UNKNOWN, requiredReplicaSetName='null', serverSelector='null', clusterListeners='[]', serverSelectionTimeout='30000 ms', localThreshold='15 ms'}, socketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=0, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, heartbeatSocketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=10000, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, connectionPoolSettings=ConnectionPoolSettings{maxSize=100, minSize=0, maxWaitTimeMS=120000, maxConnectionLifeTimeMS=0, maxConnectionIdleTimeMS=0, maintenanceInitialDelayMS=0, maintenanceFrequencyMS=60000, connectionPoolListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsConnectionPoolListener@2a666c8e], maxConnecting=2}, serverSettings=ServerSettings{heartbeatFrequencyMS=10000, minHeartbeatFrequencyMS=500, serverMonitoringMode=AUTO, serverListeners='[]', serverMonitorListeners='[]'}, sslSettings=SslSettings{enabled=false, invalidHostNameAllowed=false, context=null}, applicationName='null', compressorList=[], uuidRepresentation=JAVA_LEGACY, serverApi=null, autoEncryptionSettings=null, dnsClient=null, inetAddressResolver=null, contextProvider=null, timeoutMS=null}
+2026-01-08 01:52:06.000 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
+2026-01-08 01:52:06.159 [main] WARN  o.s.d.m.c.m.BasicMongoPersistentProperty - Customizing field name for id property 'com.am.marketdata.service.model.ZerodhaInstrument.instrumentToken' is not allowed; Custom name ('instrument_token') will not be considered
+2026-01-08 01:52:06.206 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
+2026-01-08 01:52:06.540 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating market data provider factory
+2026-01-08 01:52:07.033 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis connection details - Host: 100.72.208.15, Port: 6379
+2026-01-08 01:52:07.033 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis password is provided
+2026-01-08 01:52:07.033 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Setting Redis password for authentication
+2026-01-08 01:52:07.812 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 01:52:07.812 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] SECURITY CONFIGURATION INITIALIZED
+2026-01-08 01:52:07.812 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 01:52:07.813 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] Mode: DEVELOPMENT (Security DISABLED)
+2026-01-08 01:52:07.813 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ??  WARNING: All endpoints are PUBLIC
+2026-01-08 01:52:07.814 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 01:52:07.864 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha thread pool executor with size: 5, queue capacity: 10
+2026-01-08 01:52:07.877 [main] INFO  c.m.s.m.BrokerageCalculatorService - Loaded broker fees: hdfcsec=0.5, motilaloswal=0.5, angelone=20.0, upstox=20.0, mstock=20.0, flattrade=0.0, groww=20.0, fyers=20.0, vested=0.0, kotaksecurities=0.5, aliceblue=15.0, finvasia=0.0, icicidirect=20.0, sharekhan=0.5, zerodha=20.0, 5paisa=10.0, dhan=20.0
+2026-01-08 01:52:07.877 [main] INFO  c.m.s.m.BrokerageCalculatorService - Initializing Brokerage Calculator Service with 17 broker configurations
+2026-01-08 01:52:07.892 [main] INFO  c.a.m.a.s.BrokerageCalculatorApiService - [BrokerageCalculatorApiService.BrokerageCalculatorApiService] Initializing Brokerage Calculator API Service
+2026-01-08 01:52:07.899 [main] INFO  c.a.m.a.c.BrokerageCalculatorController - [BrokerageCalculatorController.BrokerageCalculatorController] Initializing Brokerage Calculator Controller
+2026-01-08 01:52:08.006 [main] INFO  c.m.s.margin.MarginCalculatorService - Initializing Margin Calculator Service
+2026-01-08 01:52:08.014 [main] INFO  c.a.m.a.s.MarginCalculatorApiService - [MarginCalculatorApiService.MarginCalculatorApiService] Initializing Margin Calculator API Service
+2026-01-08 01:52:08.576 [main] INFO  c.a.m.s.s.MarketDataProcessingService - Initialized market data thread pool with size: 5, queue capacity: 10, max retries: 3, retry delay: 1000ms
+2026-01-08 01:52:08.750 [main] INFO  c.a.m.p.upstox.UpstoxIndexIdentifier - Loading Upstox Index Identifiers...
+2026-01-08 01:52:08.842 [main] INFO  c.a.m.p.upstox.UpstoxIndexIdentifier - Loaded 139 Upstox Index Identifiers
+2026-01-08 01:52:08.856 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox API service
+2026-01-08 01:52:08.860 [main] INFO  c.a.m.p.upstox.UpstoxApiService - Initializing Upstox API service
+2026-01-08 01:52:15.847 [cluster-ClusterId{value='695ec06d554f1d2fba68428f', description='null'}-100.72.208.15:27017] INFO  org.mongodb.driver.cluster - Exception in monitor thread while connecting to server 100.72.208.15:27017
+com.mongodb.MongoSocketOpenException: Exception opening socket
+	at com.mongodb.internal.connection.SocketStream.lambda$open$0(SocketStream.java:85)
+	at java.base/java.util.Optional.orElseThrow(Optional.java:403)
+	at com.mongodb.internal.connection.SocketStream.open(SocketStream.java:85)
+	at com.mongodb.internal.connection.InternalStreamConnection.open(InternalStreamConnection.java:233)
+	at com.mongodb.internal.connection.DefaultServerMonitor$ServerMonitor.lookupServerDescription(DefaultServerMonitor.java:219)
+	at com.mongodb.internal.connection.DefaultServerMonitor$ServerMonitor.run(DefaultServerMonitor.java:176)
+Caused by: java.net.SocketTimeoutException: Connect timed out
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:551)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:602)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327)
+	at java.base/java.net.Socket.connect(Socket.java:633)
+	at com.mongodb.internal.connection.SocketStreamHelper.initialize(SocketStreamHelper.java:76)
+	at com.mongodb.internal.connection.SocketStream.initializeSocket(SocketStream.java:104)
+	at com.mongodb.internal.connection.SocketStream.open(SocketStream.java:79)
+	... 3 common frames omitted
+2026-01-08 01:52:19.312 [main] WARN  c.a.m.p.upstox.UpstoxApiService - Failed to load cached token from Redis (Redis might be down): Unable to connect to Redis
+2026-01-08 01:52:19.312 [main] INFO  c.a.m.p.upstox.UpstoxApiService - Found Access Token in configuration (fallback)
+2026-01-08 01:52:19.319 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox SDK service
+2026-01-08 01:52:19.322 [main] INFO  c.a.m.p.upstox.UpstoxSdkService - Initializing Upstox SDK Service
+2026-01-08 01:52:29.340 [main] WARN  c.a.m.p.upstox.UpstoxSdkService - Failed to initialize SDK Service token from Redis: Unable to connect to Redis
+2026-01-08 01:52:29.400 [main] INFO  c.a.m.s.registry.SchedulerRegistry - Initializing SchedulerRegistry
+2026-01-08 01:52:29.404 [main] INFO  c.a.m.s.registry.SchedulerRegistry - Registered 0 schedulers
+2026-01-08 01:52:32.101 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.filterChain] Configuring Security Filter Chain...
+2026-01-08 01:52:32.106 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.filterChain] Applying DEVELOPMENT security configuration (ALL ENDPOINTS PUBLIC)
+2026-01-08 01:52:32.327 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox retry registry with max retries: 3, base delay: 1000ms
+2026-01-08 01:52:32.353 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha retry registry with max retries: 3, base delay: 1000ms
+2026-01-08 01:52:32.354 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha API service
+2026-01-08 01:52:32.365 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: null
+2026-01-08 01:52:32.380 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.ZerodhaApiService] Initializing Zerodha API service
+2026-01-08 01:52:32.390 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: u3bfkf1ttzvr00v3
+2026-01-08 01:52:32.393 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Setting access token: fT9jp...
+2026-01-08 01:52:32.529 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha market data provider with mappers
+2026-01-08 01:52:32.529 [main] INFO  c.a.m.p.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.ZerodhaMarketDataProvider] Initialized Zerodha market data provider
+2026-01-08 01:52:32.531 [main] INFO  c.a.m.p.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.initialize] Initializing Zerodha market data provider
+2026-01-08 01:52:32.532 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: u3bfkf1ttzvr00v3
+2026-01-08 01:52:32.536 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Setting access token: fT9jp...
+2026-01-08 01:52:32.637 [main] INFO  c.a.m.s.c.MarketDataExecutorConfig - Initialized market data thread pool with size: 5, queue capacity: 10
+2026-01-08 01:52:35.012 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8092"]
+2026-01-08 01:52:35.101 [main] INFO  c.a.marketdata.MarketDataApplication - Started MarketDataApplication in 38.444 seconds (process running for 39.697)
+2026-01-08 01:52:46.528 [cluster-ClusterId{value='695ec06d554f1d2fba68428f', description='null'}-100.72.208.15:27017] INFO  org.mongodb.driver.cluster - Monitor thread successfully connected to server with description ServerDescription{address=100.72.208.15:27017, type=STANDALONE, cryptd=false, state=CONNECTED, ok=true, minWireVersion=0, maxWireVersion=17, maxDocumentSize=16777216, logicalSessionTimeoutMinutes=30, roundTripTimeNanos=157949900, minRoundTripTimeNanos=0}
+2026-01-08 01:53:40.678 [main] INFO  c.a.marketdata.MarketDataApplication - Starting MarketDataApplication using Java 17.0.12 with PID 25480 (A:\InfraCode\AM-Portfolio\am-market\am-market-data\market-data-app\target\classes started by ssd26 in A:\InfraCode\AM-Portfolio\am-market)
+2026-01-08 01:53:40.685 [main] INFO  c.a.marketdata.MarketDataApplication - No active profile set, falling back to 1 default profile: "default"
+2026-01-08 01:53:48.937 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8092"]
+2026-01-08 01:53:48.942 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-01-08 01:53:48.943 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.41]
+2026-01-08 01:53:49.058 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-01-08 01:53:50.625 [main] INFO  org.mongodb.driver.client - MongoClient with metadata {"driver": {"name": "mongo-java-driver|sync|spring-boot", "version": "5.4.0"}, "os": {"type": "Windows", "name": "Windows 11", "architecture": "amd64", "version": "10.0"}, "platform": "Java/Oracle Corporation/17.0.12+8-LTS-286"} created with settings MongoClientSettings{readPreference=primary, writeConcern=WriteConcern{w=null, wTimeout=null ms, journal=null}, retryWrites=true, retryReads=true, readConcern=ReadConcern{level=null}, credential=MongoCredential{mechanism=null, userName='admin', source='admin', password=<hidden>, mechanismProperties=<hidden>}, transportSettings=null, commandListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsCommandListener@15a41088], codecRegistry=ProvidersCodecRegistry{codecProviders=[ValueCodecProvider{}, BsonValueCodecProvider{}, DBRefCodecProvider{}, DBObjectCodecProvider{}, DocumentCodecProvider{}, CollectionCodecProvider{}, IterableCodecProvider{}, MapCodecProvider{}, GeoJsonCodecProvider{}, GridFSFileCodecProvider{}, Jsr310CodecProvider{}, JsonObjectCodecProvider{}, BsonCodecProvider{}, EnumCodecProvider{}, com.mongodb.client.model.mql.ExpressionCodecProvider@31aa9b01, com.mongodb.Jep395RecordCodecProvider@2148b47e, com.mongodb.KotlinCodecProvider@410f1452]}, loggerSettings=LoggerSettings{maxDocumentLength=1000}, clusterSettings={hosts=[100.72.208.15:27017], srvServiceName=mongodb, mode=SINGLE, requiredClusterType=UNKNOWN, requiredReplicaSetName='null', serverSelector='null', clusterListeners='[]', serverSelectionTimeout='30000 ms', localThreshold='15 ms'}, socketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=0, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, heartbeatSocketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=10000, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, connectionPoolSettings=ConnectionPoolSettings{maxSize=100, minSize=0, maxWaitTimeMS=120000, maxConnectionLifeTimeMS=0, maxConnectionIdleTimeMS=0, maintenanceInitialDelayMS=0, maintenanceFrequencyMS=60000, connectionPoolListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsConnectionPoolListener@12aa2cca], maxConnecting=2}, serverSettings=ServerSettings{heartbeatFrequencyMS=10000, minHeartbeatFrequencyMS=500, serverMonitoringMode=AUTO, serverListeners='[]', serverMonitorListeners='[]'}, sslSettings=SslSettings{enabled=false, invalidHostNameAllowed=false, context=null}, applicationName='null', compressorList=[], uuidRepresentation=JAVA_LEGACY, serverApi=null, autoEncryptionSettings=null, dnsClient=null, inetAddressResolver=null, contextProvider=null, timeoutMS=null}
+2026-01-08 01:53:50.672 [cluster-ClusterId{value='695ec0d60b13151c4e7346f6', description='null'}-100.72.208.15:27017] INFO  org.mongodb.driver.cluster - Monitor thread successfully connected to server with description ServerDescription{address=100.72.208.15:27017, type=STANDALONE, cryptd=false, state=CONNECTED, ok=true, minWireVersion=0, maxWireVersion=17, maxDocumentSize=16777216, logicalSessionTimeoutMinutes=30, roundTripTimeNanos=46802300, minRoundTripTimeNanos=0}
+2026-01-08 01:53:50.900 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
+2026-01-08 01:53:51.162 [main] WARN  o.s.d.m.c.m.BasicMongoPersistentProperty - Customizing field name for id property 'com.am.marketdata.service.model.ZerodhaInstrument.instrumentToken' is not allowed; Custom name ('instrument_token') will not be considered
+2026-01-08 01:53:51.279 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
+2026-01-08 01:53:51.868 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating market data provider factory
+2026-01-08 01:53:53.129 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis connection details - Host: 100.72.208.15, Port: 6379
+2026-01-08 01:53:53.131 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis password is provided
+2026-01-08 01:53:53.131 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Setting Redis password for authentication
+2026-01-08 01:53:54.104 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 01:53:54.104 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] SECURITY CONFIGURATION INITIALIZED
+2026-01-08 01:53:54.105 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 01:53:54.105 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] Mode: DEVELOPMENT (Security DISABLED)
+2026-01-08 01:53:54.105 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ??  WARNING: All endpoints are PUBLIC
+2026-01-08 01:53:54.105 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 01:53:54.172 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha thread pool executor with size: 5, queue capacity: 10
+2026-01-08 01:53:54.193 [main] INFO  c.m.s.m.BrokerageCalculatorService - Loaded broker fees: hdfcsec=0.5, motilaloswal=0.5, angelone=20.0, upstox=20.0, mstock=20.0, flattrade=0.0, groww=20.0, fyers=20.0, vested=0.0, kotaksecurities=0.5, aliceblue=15.0, finvasia=0.0, icicidirect=20.0, sharekhan=0.5, zerodha=20.0, 5paisa=10.0, dhan=20.0
+2026-01-08 01:53:54.194 [main] INFO  c.m.s.m.BrokerageCalculatorService - Initializing Brokerage Calculator Service with 17 broker configurations
+2026-01-08 01:53:54.222 [main] INFO  c.a.m.a.s.BrokerageCalculatorApiService - [BrokerageCalculatorApiService.BrokerageCalculatorApiService] Initializing Brokerage Calculator API Service
+2026-01-08 01:53:54.243 [main] INFO  c.a.m.a.c.BrokerageCalculatorController - [BrokerageCalculatorController.BrokerageCalculatorController] Initializing Brokerage Calculator Controller
+2026-01-08 01:53:54.534 [main] INFO  c.m.s.margin.MarginCalculatorService - Initializing Margin Calculator Service
+2026-01-08 01:53:54.550 [main] INFO  c.a.m.a.s.MarginCalculatorApiService - [MarginCalculatorApiService.MarginCalculatorApiService] Initializing Margin Calculator API Service
+2026-01-08 01:53:55.657 [main] INFO  c.a.m.s.s.MarketDataProcessingService - Initialized market data thread pool with size: 5, queue capacity: 10, max retries: 3, retry delay: 1000ms
+2026-01-08 01:53:55.978 [main] INFO  c.a.m.p.upstox.UpstoxIndexIdentifier - Loading Upstox Index Identifiers...
+2026-01-08 01:53:56.042 [main] INFO  c.a.m.p.upstox.UpstoxIndexIdentifier - Loaded 139 Upstox Index Identifiers
+2026-01-08 01:53:56.051 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox API service
+2026-01-08 01:53:56.053 [main] INFO  c.a.m.p.upstox.UpstoxApiService - Initializing Upstox API service
+2026-01-08 01:53:56.549 [main] INFO  c.a.m.p.upstox.UpstoxApiService - No cached Access Token found in Redis, checking configuration
+2026-01-08 01:53:56.549 [main] INFO  c.a.m.p.upstox.UpstoxApiService - Found Access Token in configuration
+2026-01-08 01:53:56.556 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox SDK service
+2026-01-08 01:53:56.563 [main] INFO  c.a.m.p.upstox.UpstoxSdkService - Initializing Upstox SDK Service
+2026-01-08 01:53:56.583 [main] INFO  c.a.m.p.upstox.UpstoxSdkService - No cached Access Token found in Redis for SDK Service, checking configuration
+2026-01-08 01:53:56.584 [main] INFO  c.a.m.p.upstox.UpstoxSdkService - Found Access Token in configuration for SDK Service
+2026-01-08 01:53:56.662 [main] INFO  c.a.m.s.registry.SchedulerRegistry - Initializing SchedulerRegistry
+2026-01-08 01:53:56.665 [main] INFO  c.a.m.s.registry.SchedulerRegistry - Registered 0 schedulers
+2026-01-08 01:53:58.709 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.filterChain] Configuring Security Filter Chain...
+2026-01-08 01:53:58.711 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.filterChain] Applying DEVELOPMENT security configuration (ALL ENDPOINTS PUBLIC)
+2026-01-08 01:53:58.888 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox retry registry with max retries: 3, base delay: 1000ms
+2026-01-08 01:53:58.901 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha retry registry with max retries: 3, base delay: 1000ms
+2026-01-08 01:53:58.903 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha API service
+2026-01-08 01:53:58.906 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: null
+2026-01-08 01:53:58.924 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.ZerodhaApiService] Initializing Zerodha API service
+2026-01-08 01:53:58.937 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: u3bfkf1ttzvr00v3
+2026-01-08 01:53:58.942 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Setting access token: fT9jp...
+2026-01-08 01:53:59.069 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha market data provider with mappers
+2026-01-08 01:53:59.070 [main] INFO  c.a.m.p.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.ZerodhaMarketDataProvider] Initialized Zerodha market data provider
+2026-01-08 01:53:59.072 [main] INFO  c.a.m.p.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.initialize] Initializing Zerodha market data provider
+2026-01-08 01:53:59.074 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: u3bfkf1ttzvr00v3
+2026-01-08 01:53:59.077 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Setting access token: fT9jp...
+2026-01-08 01:53:59.207 [main] INFO  c.a.m.s.c.MarketDataExecutorConfig - Initialized market data thread pool with size: 5, queue capacity: 10
+2026-01-08 01:54:01.752 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8092"]
+2026-01-08 01:54:01.818 [main] INFO  c.a.marketdata.MarketDataApplication - Started MarketDataApplication in 22.59 seconds (process running for 23.367)
+2026-01-08 01:56:56.539 [http-nio-8092-exec-1] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-01-08 01:56:56.540 [http-nio-8092-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-01-08 01:56:56.546 [http-nio-8092-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 5 ms
+2026-01-08 01:56:56.810 [http-nio-8092-exec-1] INFO  c.a.m.a.c.MarketIndexController - [MarketIndexController.getAvailableIndices] Fetching available indices
+2026-01-08 01:56:57.012 [http-nio-8092-exec-3] INFO  c.a.m.a.c.MarketIndexController - [MarketIndexController.getLatestIndicesData] Fetching latest data for indices: [INDIA VIX, NIFTY 50, NIFTY NEXT 50, NIFTY 100, NIFTY 200, NIFTY 500, NIFTY MIDCAP 50, NIFTY MIDCAP 100, NIFTY SMLCAP 100, NIFTY MIDCAP 150, NIFTY SMLCAP 50, NIFTY SMLCAP 250, NIFTY SMLCAP 500, NIFTY BANK, NIFTY AUTO, NIFTY FMCG, NIFTY MEDIA, NIFTY METAL, NIFTY PHARMA, NIFTY PSU BANK, NIFTY PVT BANK, NIFTY REALTY, NIFTY HEALTHCARE, NIFTY CONSR DURABLE, NIFTY OIL AND GAS, NIFTY MIDSML HLTH, NIFTY IT, NIFTY FIN SERVICES, NIFTY ENERGY, NIFTY PHARMACEUTICALS], forceRefresh: false
+2026-01-08 01:56:58.128 [http-nio-8092-exec-3] INFO  c.a.m.a.service.StockIndicesService - [StockIndicesService.getLatestIndicesData] Retrieved 21 indices from cache (cached=true)
+2026-01-08 01:57:51.950 [http-nio-8092-exec-7] INFO  c.a.m.a.c.MarketDataController - [MarketDataController.generateSession] Generating session with token: jooUoy
+2026-01-08 01:57:51.959 [http-nio-8092-exec-7] INFO  c.a.m.p.upstox.UpstoxApiService - Generating Upstox session for code: jooUoy
+2026-01-08 01:57:52.540 [http-nio-8092-exec-7] INFO  c.a.m.p.upstox.UpstoxApiService - Successfully generated Upstox session
+2026-01-08 01:57:52.549 [http-nio-8092-exec-7] INFO  c.a.m.p.upstox.UpstoxApiService - Extracted Access Token, saving to Redis
+2026-01-08 01:57:52.578 [http-nio-8092-exec-7] INFO  c.a.m.redis.cache.StockRedisCache - [StockRedisCache.setActiveProvider] Set active provider to: upstox
+2026-01-08 01:58:33.020 [http-nio-8092-exec-2] INFO  c.a.m.a.c.MarketDataController - [MarketDataController.getQuotes] Controller received request for quotes for symbols: RELIANCE, timeFrame: 5m, forceRefresh: false
+2026-01-08 01:58:33.024 [http-nio-8092-exec-2] INFO  c.a.m.a.s.i.MarketDataFetchServiceImpl - [MarketDataFetchServiceImpl.getQuotes] Getting quotes for 1 symbols with timeFrame: 5m, isIndexSymbol: false, forceRefresh: false
+2026-01-08 01:58:33.050 [http-nio-8092-exec-2] INFO  c.a.m.service.MarketDataService - [INTERVAL_TRACE] MarketDataService.getOHLC: Getting OHLC for 1 symbols with timeFrame: FIVE_MINUTE (enum: FIVE_MINUTE, apiValue: 5m), forceRefresh: false
+2026-01-08 01:58:33.059 [http-nio-8092-exec-2] INFO  c.a.m.service.MarketDataService - [INTERVAL_TRACE] MarketDataService.getOHLC ? OHLCDataRetriever: Creating retriever with timeFrame: FIVE_MINUTE (apiValue: 5m)
+2026-01-08 01:58:33.066 [http-nio-8092-exec-2] INFO  c.a.m.service.util.OHLCDataRetriever - [CACHE] Attempting to fetch OHLC data from cache for 1 symbols with timeFrame 5m
+2026-01-08 01:58:33.068 [http-nio-8092-exec-2] INFO  c.a.m.service.MarketDataCacheService - [MarketDataCacheService.[INTERVAL_TRACE]] MarketDataCacheService.getOHLCFromCache: Attempting to retrieve OHLC data from cache for 1 symbols with timeFrame: FIVE_MINUTE (enum: FIVE_MINUTE, apiValue: 5m) on date: 2026-01-08
+2026-01-08 01:58:33.112 [http-nio-8092-exec-2] INFO  c.a.m.service.MarketDataCacheService - [MarketDataCacheService.getOHLCFromCache] [CACHE_RESULT] Redis returned 0 stocks out of 1 requested
+2026-01-08 01:58:33.361 [http-nio-8092-exec-2] WARN  c.a.c.i.s.impl.EquityServiceImpl - No prices found for any of the requested trading symbols
+2026-01-08 01:58:33.362 [http-nio-8092-exec-2] INFO  c.a.m.service.util.OHLCDataRetriever - [CACHE] No OHLC data found in cache for timeFrame 5m
+2026-01-08 01:58:33.362 [http-nio-8092-exec-2] INFO  c.a.m.service.util.OHLCDataRetriever - [DATABASE] Attempting to fetch OHLC data from database for 1 symbols with timeFrame 5m
+2026-01-08 01:58:33.379 [http-nio-8092-exec-2] WARN  c.a.c.i.s.impl.EquityServiceImpl - No prices found for any of the requested trading symbols
+2026-01-08 01:58:33.380 [http-nio-8092-exec-2] INFO  c.a.m.service.util.OHLCDataRetriever - [DATABASE] No OHLC data found in database for timeFrame 5m
+2026-01-08 01:58:33.381 [http-nio-8092-exec-2] INFO  c.a.m.service.util.OHLCDataRetriever - upstox Fetching OHLC data from provider for 1 symbols with timeFrame 1D
+2026-01-08 01:58:33.383 [http-nio-8092-exec-2] INFO  c.a.m.p.u.UpstoxMarketDataProvider - [UpstoxMarketDataProvider.resolveContext] Symbols not resolved as indices (will lookup in DB): [RELIANCE]
+2026-01-08 01:58:33.462 [http-nio-8092-exec-2] ERROR c.a.m.p.u.UpstoxMarketDataProvider - [UpstoxMarketDataProvider.getOHLC] Error fetching Upstox OHLC
+java.lang.ClassCastException: class com.am.marketdata.service.model.UpstoxInstrument cannot be cast to class com.am.marketdata.common.model.UpstoxInstrument (com.am.marketdata.service.model.UpstoxInstrument and com.am.marketdata.common.model.UpstoxInstrument are in unnamed module of loader 'app')
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
+	at java.base/java.util.ArrayList$ArrayListSpliterator.forEachRemaining(ArrayList.java:1625)
+	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:509)
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:499)
+	at java.base/java.util.stream.ReduceOps$ReduceOp.evaluateSequential(ReduceOps.java:921)
+	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:234)
+	at java.base/java.util.stream.ReferencePipeline.collect(ReferencePipeline.java:682)
+	at com.am.marketdata.provider.upstox.UpstoxMarketDataProvider$InstrumentContext.<init>(UpstoxMarketDataProvider.java:117)
+	at com.am.marketdata.provider.upstox.UpstoxMarketDataProvider.resolveContext(UpstoxMarketDataProvider.java:160)
+	at com.am.marketdata.provider.upstox.UpstoxMarketDataProvider.getOHLC(UpstoxMarketDataProvider.java:166)
+	at com.am.marketdata.service.util.OHLCDataRetriever.retrieveFromProvider(OHLCDataRetriever.java:126)
+	at com.am.marketdata.service.util.AbstractMarketDataRetriever.retrieveFromProviderWithSave(AbstractMarketDataRetriever.java:173)
+	at com.am.marketdata.service.util.AbstractMarketDataRetriever.retrieveData(AbstractMarketDataRetriever.java:126)
+	at com.am.marketdata.service.MarketDataService.getOHLC(MarketDataService.java:177)
+	at com.am.marketdata.api.service.impl.MarketDataFetchServiceImpl.getQuotes(MarketDataFetchServiceImpl.java:82)
+	at com.am.marketdata.api.controller.MarketDataController.getQuotes(MarketDataController.java:164)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:255)
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:188)
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:118)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:925)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:830)
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1089)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doGet(FrameworkServlet.java:903)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:564)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:195)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:108)
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:108)
+	at org.springframework.security.web.FilterChainProxy.lambda$doFilterInternal$3(FilterChainProxy.java:231)
+	at org.springframework.security.web.ObservationFilterChainDecorator$FilterObservation$SimpleFilterObservation.lambda$wrap$1(ObservationFilterChainDecorator.java:479)
+	at org.springframework.security.web.ObservationFilterChainDecorator$AroundFilterObservation$SimpleAroundFilterObservation.lambda$wrap$1(ObservationFilterChainDecorator.java:340)
+	at org.springframework.security.web.ObservationFilterChainDecorator.lambda$wrapSecured$0(ObservationFilterChainDecorator.java:82)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:128)
+	at org.springframework.security.web.access.intercept.AuthorizationFilter.doFilter(AuthorizationFilter.java:101)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:125)
+	at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:119)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.session.SessionManagementFilter.doFilter(SessionManagementFilter.java:131)
+	at org.springframework.security.web.session.SessionManagementFilter.doFilter(SessionManagementFilter.java:85)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.authentication.AnonymousAuthenticationFilter.doFilter(AnonymousAuthenticationFilter.java:100)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter.doFilter(SecurityContextHolderAwareRequestFilter.java:179)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.savedrequest.RequestCacheAwareFilter.doFilter(RequestCacheAwareFilter.java:63)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.authentication.logout.LogoutFilter.doFilter(LogoutFilter.java:107)
+	at org.springframework.security.web.authentication.logout.LogoutFilter.doFilter(LogoutFilter.java:93)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:110)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.web.filter.CorsFilter.doFilterInternal(CorsFilter.java:91)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.header.HeaderWriterFilter.doHeadersAfter(HeaderWriterFilter.java:90)
+	at org.springframework.security.web.header.HeaderWriterFilter.doFilterInternal(HeaderWriterFilter.java:75)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.context.SecurityContextHolderFilter.doFilter(SecurityContextHolderFilter.java:82)
+	at org.springframework.security.web.context.SecurityContextHolderFilter.doFilter(SecurityContextHolderFilter.java:69)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter.doFilterInternal(WebAsyncManagerIntegrationFilter.java:62)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.session.DisableEncodeUrlFilter.doFilterInternal(DisableEncodeUrlFilter.java:42)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240)
+	at org.springframework.security.web.ObservationFilterChainDecorator$AroundFilterObservation$SimpleAroundFilterObservation.lambda$wrap$0(ObservationFilterChainDecorator.java:323)
+	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:224)
+	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137)
+	at org.springframework.security.web.FilterChainProxy.doFilterInternal(FilterChainProxy.java:233)
+	at org.springframework.security.web.FilterChainProxy.doFilter(FilterChainProxy.java:191)
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113)
+	at org.springframework.web.filter.ServletRequestPathFilter.doFilter(ServletRequestPathFilter.java:52)
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113)
+	at org.springframework.web.filter.CompositeFilter.doFilter(CompositeFilter.java:74)
+	at org.springframework.security.config.annotation.web.configuration.WebSecurityConfiguration$CompositeFilterChainProxy.doFilter(WebSecurityConfiguration.java:319)
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113)
+	at org.springframework.web.servlet.handler.HandlerMappingIntrospector.lambda$createCacheFilter$3(HandlerMappingIntrospector.java:195)
+	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113)
+	at org.springframework.web.filter.CompositeFilter.doFilter(CompositeFilter.java:74)
+	at org.springframework.security.config.annotation.web.configuration.WebMvcSecurityConfiguration$CompositeFilterChainProxy.doFilter(WebMvcSecurityConfiguration.java:240)
+	at org.springframework.web.filter.DelegatingFilterProxy.invokeDelegate(DelegatingFilterProxy.java:352)
+	at org.springframework.web.filter.DelegatingFilterProxy.doFilter(DelegatingFilterProxy.java:268)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:109)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:483)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:116)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:344)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:398)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:903)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1740)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1189)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:658)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:63)
+	at java.base/java.lang.Thread.run(Thread.java:842)
+2026-01-08 01:58:33.470 [http-nio-8092-exec-2] INFO  c.a.m.service.util.OHLCDataRetriever - upstox No OHLC data returned from provider for timeFrame 1D
+2026-01-08 01:58:33.470 [http-nio-8092-exec-2] INFO  c.a.m.service.MarketDataService - [INTERVAL_TRACE] MarketDataService.getOHLC: Retrieved 0 OHLC quotes for timeFrame: 5m
+2026-01-08 01:58:33.472 [http-nio-8092-exec-2] WARN  i.m.p.PrometheusMeterRegistry - The meter (MeterId{name='market.data.operation.time', tags=[tag(application=market-data-scraper),tag(operation=getOHLC),tag(timeFrame=5m)]}) registration has failed: Prometheus requires that all meters with the same name have the same set of tag keys. There is already an existing meter named 'market_data_operation_time_seconds' containing tag keys [application, operation]. The meter you are attempting to register has keys [application, operation, timeFrame]. Note that subsequent logs will be logged at debug level.
+2026-01-08 02:00:00.014 [market-data-scheduler-1] INFO  c.a.m.s.s.RedisCacheCleanupScheduler - [RedisCacheCleanupScheduler.scheduledCleanup] Starting scheduled Redis cache cleanup (retention: 7 days)
+2026-01-08 02:00:00.016 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.getCacheStats] Getting cache statistics for pattern: stock:intraday:*
+2026-01-08 02:00:00.045 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.getCacheStats] Getting cache statistics for pattern: stock:historical:*
+2026-01-08 02:00:00.428 [market-data-scheduler-1] INFO  c.a.m.s.s.RedisCacheCleanupScheduler - [RedisCacheCleanupScheduler.scheduledCleanup] Before cleanup - Intraday: CacheStats{total=0, old=0, recent=0, retention=7 days}
+2026-01-08 02:00:00.429 [market-data-scheduler-1] INFO  c.a.m.s.s.RedisCacheCleanupScheduler - [RedisCacheCleanupScheduler.scheduledCleanup] Before cleanup - Historical: CacheStats{total=28242, old=28154, recent=88, retention=7 days}
+2026-01-08 02:00:00.429 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.cleanupOldKeys] Starting cleanup for pattern: stock:intraday:* (retention: 7 days)
+2026-01-08 02:00:00.429 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.identifyOldKeys] Scanning Redis for old keys with pattern: stock:intraday:* (retention: 7 days)
+2026-01-08 02:00:00.448 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.identifyOldKeys] Scan complete. Total scanned: 0, Old keys found: 0
+2026-01-08 02:00:00.448 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.cleanupOldKeys] No old keys found to cleanup
+2026-01-08 02:00:00.448 [market-data-scheduler-1] INFO  c.a.m.s.s.RedisCacheCleanupScheduler - [RedisCacheCleanupScheduler.scheduledCleanup] Cleanup intraday complete: 0 keys deleted
+2026-01-08 02:00:00.448 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.cleanupOldKeys] Starting cleanup for pattern: stock:historical:* (retention: 7 days)
+2026-01-08 02:00:00.448 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.identifyOldKeys] Scanning Redis for old keys with pattern: stock:historical:* (retention: 7 days)
+2026-01-08 02:00:00.460 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.identifyOldKeys] Scan complete. Total scanned: 88, Old keys found: 0
+2026-01-08 02:00:00.461 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.cleanupOldKeys] No old keys found to cleanup
+2026-01-08 02:00:00.461 [market-data-scheduler-1] INFO  c.a.m.s.s.RedisCacheCleanupScheduler - [RedisCacheCleanupScheduler.scheduledCleanup] Cleanup historical complete: 0 keys deleted
+2026-01-08 02:00:00.461 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.getCacheStats] Getting cache statistics for pattern: stock:intraday:*
+2026-01-08 02:00:00.468 [market-data-scheduler-1] INFO  c.a.m.r.s.RedisCacheCleanupService - [RedisCacheCleanupService.getCacheStats] Getting cache statistics for pattern: stock:historical:*
+2026-01-08 02:00:00.477 [market-data-scheduler-1] INFO  c.a.m.s.s.RedisCacheCleanupScheduler - [RedisCacheCleanupScheduler.scheduledCleanup] After cleanup - Intraday: CacheStats{total=0, old=0, recent=0, retention=7 days}
+2026-01-08 02:00:00.478 [market-data-scheduler-1] INFO  c.a.m.s.s.RedisCacheCleanupScheduler - [RedisCacheCleanupScheduler.scheduledCleanup] After cleanup - Historical: CacheStats{total=88, old=0, recent=88, retention=7 days}
+2026-01-08 02:00:00.478 [market-data-scheduler-1] INFO  c.a.m.s.s.RedisCacheCleanupScheduler - [RedisCacheCleanupScheduler.scheduledCleanup] Scheduled Redis cache cleanup completed successfully. Total deleted: 0
+2026-01-08 02:00:33.521 [main] INFO  c.a.marketdata.MarketDataApplication - Starting MarketDataApplication using Java 17.0.12 with PID 8408 (A:\InfraCode\AM-Portfolio\am-market\am-market-data\market-data-app\target\classes started by ssd26 in A:\InfraCode\AM-Portfolio\am-market)
+2026-01-08 02:00:33.523 [main] INFO  c.a.marketdata.MarketDataApplication - No active profile set, falling back to 1 default profile: "default"
+2026-01-08 02:00:38.913 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8092"]
+2026-01-08 02:00:38.916 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-01-08 02:00:38.917 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.41]
+2026-01-08 02:00:39.057 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-01-08 02:00:40.316 [main] INFO  org.mongodb.driver.client - MongoClient with metadata {"driver": {"name": "mongo-java-driver|sync|spring-boot", "version": "5.4.0"}, "os": {"type": "Windows", "name": "Windows 11", "architecture": "amd64", "version": "10.0"}, "platform": "Java/Oracle Corporation/17.0.12+8-LTS-286"} created with settings MongoClientSettings{readPreference=primary, writeConcern=WriteConcern{w=null, wTimeout=null ms, journal=null}, retryWrites=true, retryReads=true, readConcern=ReadConcern{level=null}, credential=MongoCredential{mechanism=null, userName='admin', source='admin', password=<hidden>, mechanismProperties=<hidden>}, transportSettings=null, commandListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsCommandListener@6a9ac8b], codecRegistry=ProvidersCodecRegistry{codecProviders=[ValueCodecProvider{}, BsonValueCodecProvider{}, DBRefCodecProvider{}, DBObjectCodecProvider{}, DocumentCodecProvider{}, CollectionCodecProvider{}, IterableCodecProvider{}, MapCodecProvider{}, GeoJsonCodecProvider{}, GridFSFileCodecProvider{}, Jsr310CodecProvider{}, JsonObjectCodecProvider{}, BsonCodecProvider{}, EnumCodecProvider{}, com.mongodb.client.model.mql.ExpressionCodecProvider@193f3306, com.mongodb.Jep395RecordCodecProvider@537a8915, com.mongodb.KotlinCodecProvider@31aa9b01]}, loggerSettings=LoggerSettings{maxDocumentLength=1000}, clusterSettings={hosts=[100.72.208.15:27017], srvServiceName=mongodb, mode=SINGLE, requiredClusterType=UNKNOWN, requiredReplicaSetName='null', serverSelector='null', clusterListeners='[]', serverSelectionTimeout='30000 ms', localThreshold='15 ms'}, socketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=0, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, heartbeatSocketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=10000, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, connectionPoolSettings=ConnectionPoolSettings{maxSize=100, minSize=0, maxWaitTimeMS=120000, maxConnectionLifeTimeMS=0, maxConnectionIdleTimeMS=0, maintenanceInitialDelayMS=0, maintenanceFrequencyMS=60000, connectionPoolListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsConnectionPoolListener@4b4bc73d], maxConnecting=2}, serverSettings=ServerSettings{heartbeatFrequencyMS=10000, minHeartbeatFrequencyMS=500, serverMonitoringMode=AUTO, serverListeners='[]', serverMonitorListeners='[]'}, sslSettings=SslSettings{enabled=false, invalidHostNameAllowed=false, context=null}, applicationName='null', compressorList=[], uuidRepresentation=JAVA_LEGACY, serverApi=null, autoEncryptionSettings=null, dnsClient=null, inetAddressResolver=null, contextProvider=null, timeoutMS=null}
+2026-01-08 02:00:40.363 [cluster-ClusterId{value='695ec270f6f9769db7c4d10e', description='null'}-100.72.208.15:27017] INFO  org.mongodb.driver.cluster - Monitor thread successfully connected to server with description ServerDescription{address=100.72.208.15:27017, type=STANDALONE, cryptd=false, state=CONNECTED, ok=true, minWireVersion=0, maxWireVersion=17, maxDocumentSize=16777216, logicalSessionTimeoutMinutes=30, roundTripTimeNanos=43009900, minRoundTripTimeNanos=0}
+2026-01-08 02:00:40.548 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
+2026-01-08 02:00:40.750 [main] WARN  o.s.d.m.c.m.BasicMongoPersistentProperty - Customizing field name for id property 'com.am.marketdata.service.model.ZerodhaInstrument.instrumentToken' is not allowed; Custom name ('instrument_token') will not be considered
+2026-01-08 02:00:40.816 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
+2026-01-08 02:00:41.315 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating market data provider factory
+2026-01-08 02:00:41.804 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis connection details - Host: 100.72.208.15, Port: 6379
+2026-01-08 02:00:41.804 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis password is provided
+2026-01-08 02:00:41.804 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Setting Redis password for authentication
+2026-01-08 02:00:42.554 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 02:00:42.555 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] SECURITY CONFIGURATION INITIALIZED
+2026-01-08 02:00:42.555 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 02:00:42.555 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] Mode: DEVELOPMENT (Security DISABLED)
+2026-01-08 02:00:42.556 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ??  WARNING: All endpoints are PUBLIC
+2026-01-08 02:00:42.556 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 02:00:42.625 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha thread pool executor with size: 5, queue capacity: 10
+2026-01-08 02:00:42.635 [main] INFO  c.m.s.m.BrokerageCalculatorService - Loaded broker fees: hdfcsec=0.5, motilaloswal=0.5, angelone=20.0, upstox=20.0, mstock=20.0, flattrade=0.0, groww=20.0, fyers=20.0, vested=0.0, kotaksecurities=0.5, aliceblue=15.0, finvasia=0.0, icicidirect=20.0, sharekhan=0.5, zerodha=20.0, 5paisa=10.0, dhan=20.0
+2026-01-08 02:00:42.636 [main] INFO  c.m.s.m.BrokerageCalculatorService - Initializing Brokerage Calculator Service with 17 broker configurations
+2026-01-08 02:00:42.652 [main] INFO  c.a.m.a.s.BrokerageCalculatorApiService - [BrokerageCalculatorApiService.BrokerageCalculatorApiService] Initializing Brokerage Calculator API Service
+2026-01-08 02:00:42.662 [main] INFO  c.a.m.a.c.BrokerageCalculatorController - [BrokerageCalculatorController.BrokerageCalculatorController] Initializing Brokerage Calculator Controller
+2026-01-08 02:00:42.759 [main] INFO  c.m.s.margin.MarginCalculatorService - Initializing Margin Calculator Service
+2026-01-08 02:00:42.768 [main] INFO  c.a.m.a.s.MarginCalculatorApiService - [MarginCalculatorApiService.MarginCalculatorApiService] Initializing Margin Calculator API Service
+2026-01-08 02:00:43.708 [main] INFO  c.a.m.s.s.MarketDataProcessingService - Initialized market data thread pool with size: 5, queue capacity: 10, max retries: 3, retry delay: 1000ms
+2026-01-08 02:00:43.949 [main] INFO  c.a.m.p.upstox.UpstoxIndexIdentifier - Loading Upstox Index Identifiers...
+2026-01-08 02:00:44.024 [main] INFO  c.a.m.p.upstox.UpstoxIndexIdentifier - Loaded 139 Upstox Index Identifiers
+2026-01-08 02:00:44.033 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox API service
+2026-01-08 02:00:44.037 [main] INFO  c.a.m.p.upstox.UpstoxApiService - Initializing Upstox API service
+2026-01-08 02:00:46.435 [main] INFO  c.a.marketdata.MarketDataApplication - Starting MarketDataApplication using Java 17.0.12 with PID 21716 (A:\InfraCode\AM-Portfolio\am-market\am-market-data\market-data-app\target\classes started by ssd26 in A:\InfraCode\AM-Portfolio\am-market)
+2026-01-08 02:00:46.437 [main] INFO  c.a.marketdata.MarketDataApplication - No active profile set, falling back to 1 default profile: "default"
+2026-01-08 02:00:51.979 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8092"]
+2026-01-08 02:00:51.988 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-01-08 02:00:51.989 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.41]
+2026-01-08 02:00:52.237 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-01-08 02:00:53.484 [main] INFO  org.mongodb.driver.client - MongoClient with metadata {"driver": {"name": "mongo-java-driver|sync|spring-boot", "version": "5.4.0"}, "os": {"type": "Windows", "name": "Windows 11", "architecture": "amd64", "version": "10.0"}, "platform": "Java/Oracle Corporation/17.0.12+8-LTS-286"} created with settings MongoClientSettings{readPreference=primary, writeConcern=WriteConcern{w=null, wTimeout=null ms, journal=null}, retryWrites=true, retryReads=true, readConcern=ReadConcern{level=null}, credential=MongoCredential{mechanism=null, userName='admin', source='admin', password=<hidden>, mechanismProperties=<hidden>}, transportSettings=null, commandListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsCommandListener@28dd8786], codecRegistry=ProvidersCodecRegistry{codecProviders=[ValueCodecProvider{}, BsonValueCodecProvider{}, DBRefCodecProvider{}, DBObjectCodecProvider{}, DocumentCodecProvider{}, CollectionCodecProvider{}, IterableCodecProvider{}, MapCodecProvider{}, GeoJsonCodecProvider{}, GridFSFileCodecProvider{}, Jsr310CodecProvider{}, JsonObjectCodecProvider{}, BsonCodecProvider{}, EnumCodecProvider{}, com.mongodb.client.model.mql.ExpressionCodecProvider@59db8216, com.mongodb.Jep395RecordCodecProvider@7bb86ac, com.mongodb.KotlinCodecProvider@33bf2602]}, loggerSettings=LoggerSettings{maxDocumentLength=1000}, clusterSettings={hosts=[100.72.208.15:27017], srvServiceName=mongodb, mode=SINGLE, requiredClusterType=UNKNOWN, requiredReplicaSetName='null', serverSelector='null', clusterListeners='[]', serverSelectionTimeout='30000 ms', localThreshold='15 ms'}, socketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=0, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, heartbeatSocketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=10000, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, connectionPoolSettings=ConnectionPoolSettings{maxSize=100, minSize=0, maxWaitTimeMS=120000, maxConnectionLifeTimeMS=0, maxConnectionIdleTimeMS=0, maintenanceInitialDelayMS=0, maintenanceFrequencyMS=60000, connectionPoolListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsConnectionPoolListener@42257df7], maxConnecting=2}, serverSettings=ServerSettings{heartbeatFrequencyMS=10000, minHeartbeatFrequencyMS=500, serverMonitoringMode=AUTO, serverListeners='[]', serverMonitorListeners='[]'}, sslSettings=SslSettings{enabled=false, invalidHostNameAllowed=false, context=null}, applicationName='null', compressorList=[], uuidRepresentation=JAVA_LEGACY, serverApi=null, autoEncryptionSettings=null, dnsClient=null, inetAddressResolver=null, contextProvider=null, timeoutMS=null}
+2026-01-08 02:00:53.532 [cluster-ClusterId{value='695ec27def2bad1427534dcb', description='null'}-100.72.208.15:27017] INFO  org.mongodb.driver.cluster - Monitor thread successfully connected to server with description ServerDescription{address=100.72.208.15:27017, type=STANDALONE, cryptd=false, state=CONNECTED, ok=true, minWireVersion=0, maxWireVersion=17, maxDocumentSize=16777216, logicalSessionTimeoutMinutes=30, roundTripTimeNanos=53934200, minRoundTripTimeNanos=0}
+2026-01-08 02:00:53.656 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
+2026-01-08 02:00:53.846 [main] WARN  o.s.d.m.c.m.BasicMongoPersistentProperty - Customizing field name for id property 'com.am.marketdata.service.model.ZerodhaInstrument.instrumentToken' is not allowed; Custom name ('instrument_token') will not be considered
+2026-01-08 02:00:53.880 [main] WARN  o.s.data.convert.CustomConversions - Registering converter from interface java.util.List to interface org.springframework.data.domain.Vector as reading converter although it doesn't convert from a store-supported type; You might want to check your annotation setup at the converter implementation
+2026-01-08 02:00:54.281 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating market data provider factory
+2026-01-08 02:00:54.968 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis connection details - Host: 100.72.208.15, Port: 6379
+2026-01-08 02:00:54.968 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Redis password is provided
+2026-01-08 02:00:54.970 [main] INFO  c.a.m.redis.config.RedisConfig - [RedisConfig.redisConnectionFactory] Setting Redis password for authentication
+2026-01-08 02:00:55.744 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 02:00:55.745 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] SECURITY CONFIGURATION INITIALIZED
+2026-01-08 02:00:55.745 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 02:00:55.745 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] Mode: DEVELOPMENT (Security DISABLED)
+2026-01-08 02:00:55.746 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ??  WARNING: All endpoints are PUBLIC
+2026-01-08 02:00:55.746 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.init] ================================================================================
+2026-01-08 02:00:55.827 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha thread pool executor with size: 5, queue capacity: 10
+2026-01-08 02:00:55.840 [main] INFO  c.m.s.m.BrokerageCalculatorService - Loaded broker fees: hdfcsec=0.5, motilaloswal=0.5, angelone=20.0, upstox=20.0, mstock=20.0, flattrade=0.0, groww=20.0, fyers=20.0, vested=0.0, kotaksecurities=0.5, aliceblue=15.0, finvasia=0.0, icicidirect=20.0, sharekhan=0.5, zerodha=20.0, 5paisa=10.0, dhan=20.0
+2026-01-08 02:00:55.841 [main] INFO  c.m.s.m.BrokerageCalculatorService - Initializing Brokerage Calculator Service with 17 broker configurations
+2026-01-08 02:00:55.866 [main] INFO  c.a.m.a.s.BrokerageCalculatorApiService - [BrokerageCalculatorApiService.BrokerageCalculatorApiService] Initializing Brokerage Calculator API Service
+2026-01-08 02:00:55.875 [main] INFO  c.a.m.a.c.BrokerageCalculatorController - [BrokerageCalculatorController.BrokerageCalculatorController] Initializing Brokerage Calculator Controller
+2026-01-08 02:00:55.999 [main] INFO  c.m.s.margin.MarginCalculatorService - Initializing Margin Calculator Service
+2026-01-08 02:00:56.010 [main] INFO  c.a.m.a.s.MarginCalculatorApiService - [MarginCalculatorApiService.MarginCalculatorApiService] Initializing Margin Calculator API Service
+2026-01-08 02:00:56.877 [main] INFO  c.a.m.s.s.MarketDataProcessingService - Initialized market data thread pool with size: 5, queue capacity: 10, max retries: 3, retry delay: 1000ms
+2026-01-08 02:00:57.114 [main] INFO  c.a.m.p.upstox.UpstoxIndexIdentifier - Loading Upstox Index Identifiers...
+2026-01-08 02:00:57.196 [main] INFO  c.a.m.p.upstox.UpstoxIndexIdentifier - Loaded 139 Upstox Index Identifiers
+2026-01-08 02:00:57.206 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox API service
+2026-01-08 02:00:57.209 [main] INFO  c.a.m.p.upstox.UpstoxApiService - Initializing Upstox API service
+2026-01-08 02:00:57.895 [main] INFO  c.a.m.p.upstox.UpstoxApiService - Found cached Access Token in Redis, applying to configuration
+2026-01-08 02:00:57.899 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox SDK service
+2026-01-08 02:00:57.903 [main] INFO  c.a.m.p.upstox.UpstoxSdkService - Initializing Upstox SDK Service
+2026-01-08 02:00:57.910 [main] INFO  c.a.m.p.upstox.UpstoxSdkService - Found cached Access Token in Redis for SDK Service
+2026-01-08 02:00:57.951 [main] INFO  c.a.m.s.registry.SchedulerRegistry - Initializing SchedulerRegistry
+2026-01-08 02:00:57.954 [main] INFO  c.a.m.s.registry.SchedulerRegistry - Registered 0 schedulers
+2026-01-08 02:00:59.612 [main] INFO  c.a.m.api.config.SecurityConfig - [SecurityConfig.filterChain] Configuring Security Filter Chain...
+2026-01-08 02:00:59.617 [main] WARN  c.a.m.api.config.SecurityConfig - [SecurityConfig.filterChain] Applying DEVELOPMENT security configuration (ALL ENDPOINTS PUBLIC)
+2026-01-08 02:00:59.814 [main] INFO  c.a.m.p.u.config.UpstoxApiConfig - Creating Upstox retry registry with max retries: 3, base delay: 1000ms
+2026-01-08 02:00:59.837 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha retry registry with max retries: 3, base delay: 1000ms
+2026-01-08 02:00:59.839 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha API service
+2026-01-08 02:00:59.845 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: null
+2026-01-08 02:00:59.859 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.ZerodhaApiService] Initializing Zerodha API service
+2026-01-08 02:00:59.869 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: u3bfkf1ttzvr00v3
+2026-01-08 02:00:59.871 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Setting access token: fT9jp...
+2026-01-08 02:00:59.964 [main] INFO  c.a.m.p.z.config.ZerodhaApiConfig - Creating Zerodha market data provider with mappers
+2026-01-08 02:00:59.965 [main] INFO  c.a.m.p.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.ZerodhaMarketDataProvider] Initialized Zerodha market data provider
+2026-01-08 02:00:59.966 [main] INFO  c.a.m.p.z.ZerodhaMarketDataProvider - [ZerodhaMarketDataProvider.initialize] Initializing Zerodha market data provider
+2026-01-08 02:00:59.967 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Initializing Zerodha API service with API key: u3bfkf1ttzvr00v3
+2026-01-08 02:00:59.968 [main] INFO  c.a.m.p.zerodha.ZerodhaApiService - [ZerodhaApiService.initialize] Setting access token: fT9jp...
+2026-01-08 02:01:00.032 [main] INFO  c.a.m.s.c.MarketDataExecutorConfig - Initialized market data thread pool with size: 5, queue capacity: 10
+2026-01-08 02:01:01.927 [main] INFO  o.a.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8092"]
+2026-01-08 02:01:02.017 [main] INFO  c.a.marketdata.MarketDataApplication - Started MarketDataApplication in 16.467 seconds (process running for 17.05)
+2026-01-08 02:03:54.882 [http-nio-8092-exec-1] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-01-08 02:03:54.883 [http-nio-8092-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-01-08 02:03:54.888 [http-nio-8092-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 3 ms
+2026-01-08 02:04:02.265 [http-nio-8092-exec-8] INFO  o.s.api.AbstractOpenApiResource - Init duration for springdoc-openapi is: 5914 ms
+2026-01-08 02:08:50.892 [http-nio-8092-exec-9] INFO  c.a.m.a.c.InstrumentController - Searching instruments with criteria: InstrumentSearchCriteria(queries=[], exchanges=[NSE], instrumentTypes=[INDEX], segments=null, isins=[], tradingSymbols=null, weekly=null, provider=UPSTOX)
+2026-01-08 02:11:26.674 [http-nio-8092-exec-2] INFO  c.a.m.a.c.MarketIndexController - [MarketIndexController.getAvailableIndices] Fetching available indices
+2026-01-08 02:11:26.767 [http-nio-8092-exec-4] INFO  c.a.m.a.c.MarketIndexController - [MarketIndexController.getLatestIndicesData] Fetching latest data for indices: [INDIA VIX, NIFTY 50, NIFTY NEXT 50, NIFTY 100, NIFTY 200, NIFTY 500, NIFTY MIDCAP 50, NIFTY MIDCAP 100, NIFTY SMLCAP 100, NIFTY MIDCAP 150, NIFTY SMLCAP 50, NIFTY SMLCAP 250, NIFTY SMLCAP 500, NIFTY BANK, NIFTY AUTO, NIFTY FMCG, NIFTY MEDIA, NIFTY METAL, NIFTY PHARMA, NIFTY PSU BANK, NIFTY PVT BANK, NIFTY REALTY, NIFTY HEALTHCARE, NIFTY CONSR DURABLE, NIFTY OIL AND GAS, NIFTY MIDSML HLTH, NIFTY IT, NIFTY FIN SERVICES, NIFTY ENERGY, NIFTY PHARMACEUTICALS], forceRefresh: false
+2026-01-08 02:11:27.134 [http-nio-8092-exec-4] INFO  c.a.m.a.service.StockIndicesService - [StockIndicesService.getLatestIndicesData] Retrieved 21 indices from cache (cached=true)
+2026-01-08 02:26:13.670 [http-nio-8092-exec-9] INFO  c.a.m.a.c.InstrumentController - Searching instruments with criteria: InstrumentSearchCriteria(queries=[NIFTY 50, Nifty 50], exchanges=[], instrumentTypes=[], segments=[NSE_INDEX], isins=null, tradingSymbols=null, weekly=false, provider=UPSTOX)
+2026-01-08 02:27:15.324 [http-nio-8092-exec-4] INFO  c.a.m.a.c.MarketIndexController - [MarketIndexController.getAvailableIndices] Fetching available indices
+2026-01-08 02:27:15.403 [http-nio-8092-exec-3] INFO  c.a.m.a.c.MarketIndexController - [MarketIndexController.getLatestIndicesData] Fetching latest data for indices: [INDIA VIX, NIFTY 50, NIFTY NEXT 50, NIFTY 100, NIFTY 200, NIFTY 500, NIFTY MIDCAP 50, NIFTY MIDCAP 100, NIFTY SMLCAP 100, NIFTY MIDCAP 150, NIFTY SMLCAP 50, NIFTY SMLCAP 250, NIFTY SMLCAP 500, NIFTY BANK, NIFTY AUTO, NIFTY FMCG, NIFTY MEDIA, NIFTY METAL, NIFTY PHARMA, NIFTY PSU BANK, NIFTY PVT BANK, NIFTY REALTY, NIFTY HEALTHCARE, NIFTY CONSR DURABLE, NIFTY OIL AND GAS, NIFTY MIDSML HLTH, NIFTY IT, NIFTY FIN SERVICES, NIFTY ENERGY, NIFTY PHARMACEUTICALS], forceRefresh: false
+2026-01-08 02:27:15.977 [http-nio-8092-exec-3] INFO  c.a.m.a.service.StockIndicesService - [StockIndicesService.getLatestIndicesData] Retrieved 21 indices from cache (cached=true)
+2026-01-08 02:28:34.427 [http-nio-8092-exec-10] INFO  c.a.m.a.c.MarketIndexController - [MarketIndexController.getAvailableIndices] Fetching available indices
+2026-01-08 02:28:34.825 [http-nio-8092-exec-9] INFO  c.a.m.a.c.MarketIndexController - [MarketIndexController.getLatestIndicesData] Fetching latest data for indices: [INDIA VIX, NIFTY 50, NIFTY NEXT 50, NIFTY 100, NIFTY 200, NIFTY 500, NIFTY MIDCAP 50, NIFTY MIDCAP 100, NIFTY SMLCAP 100, NIFTY MIDCAP 150, NIFTY SMLCAP 50, NIFTY SMLCAP 250, NIFTY SMLCAP 500, NIFTY BANK, NIFTY AUTO, NIFTY FMCG, NIFTY MEDIA, NIFTY METAL, NIFTY PHARMA, NIFTY PSU BANK, NIFTY PVT BANK, NIFTY REALTY, NIFTY HEALTHCARE, NIFTY CONSR DURABLE, NIFTY OIL AND GAS, NIFTY MIDSML HLTH, NIFTY IT, NIFTY FIN SERVICES, NIFTY ENERGY, NIFTY PHARMACEUTICALS], forceRefresh: false
+2026-01-08 02:28:35.307 [http-nio-8092-exec-9] INFO  c.a.m.a.service.StockIndicesService - [StockIndicesService.getLatestIndicesData] Retrieved 21 indices from cache (cached=true)

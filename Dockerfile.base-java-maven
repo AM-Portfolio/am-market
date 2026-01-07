@@ -1,0 +1,93 @@
+# Base Image for Java/Maven Projects
+# Pre-caches common Spring Boot dependencies to speed up builds
+FROM maven:3.9-eclipse-temurin-17
+
+# Set working directory
+WORKDIR /build
+
+# Create a dummy pom.xml with common dependencies to trigger download
+RUN echo '<?xml version="1.0" encoding="UTF-8"?>' > pom.xml && \
+    echo '<project xmlns="http://maven.apache.org/POM/4.0.0"' >> pom.xml && \
+    echo '         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' >> pom.xml && \
+    echo '         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">' >> pom.xml && \
+    echo '    <modelVersion>4.0.0</modelVersion>' >> pom.xml && \
+    echo '    <groupId>com.am.base</groupId>' >> pom.xml && \
+    echo '    <artifactId>base-dependencies</artifactId>' >> pom.xml && \
+    echo '    <version>1.0.0</version>' >> pom.xml && \
+    echo '    <packaging>pom</packaging>' >> pom.xml && \
+    echo '    <properties>' >> pom.xml && \
+    echo '        <java.version>17</java.version>' >> pom.xml && \
+    echo '        <spring.boot.version>3.5.0</spring.boot.version>' >> pom.xml && \
+    echo '        <maven.compiler.source>17</maven.compiler.source>' >> pom.xml && \
+    echo '        <maven.compiler.target>17</maven.compiler.target>' >> pom.xml && \
+    echo '    </properties>' >> pom.xml && \
+    echo '    <dependencies>' >> pom.xml && \
+    echo '        <!-- Spring Boot Starters -->' >> pom.xml && \
+    echo '        <dependency>' >> pom.xml && \
+    echo '            <groupId>org.springframework.boot</groupId>' >> pom.xml && \
+    echo '            <artifactId>spring-boot-starter-web</artifactId>' >> pom.xml && \
+    echo '            <version>${spring.boot.version}</version>' >> pom.xml && \
+    echo '        </dependency>' >> pom.xml && \
+    echo '        <dependency>' >> pom.xml && \
+    echo '            <groupId>org.springframework.boot</groupId>' >> pom.xml && \
+    echo '            <artifactId>spring-boot-starter-data-jpa</artifactId>' >> pom.xml && \
+    echo '            <version>${spring.boot.version}</version>' >> pom.xml && \
+    echo '        </dependency>' >> pom.xml && \
+    echo '        <dependency>' >> pom.xml && \
+    echo '            <groupId>org.springframework.boot</groupId>' >> pom.xml && \
+    echo '            <artifactId>spring-boot-starter-validation</artifactId>' >> pom.xml && \
+    echo '            <version>${spring.boot.version}</version>' >> pom.xml && \
+    echo '        </dependency>' >> pom.xml && \
+    echo '        <dependency>' >> pom.xml && \
+    echo '            <groupId>org.springframework.boot</groupId>' >> pom.xml && \
+    echo '            <artifactId>spring-boot-starter-data-redis</artifactId>' >> pom.xml && \
+    echo '            <version>${spring.boot.version}</version>' >> pom.xml && \
+    echo '        </dependency>' >> pom.xml && \
+    echo '        <dependency>' >> pom.xml && \
+    echo '            <groupId>org.springframework.kafka</groupId>' >> pom.xml && \
+    echo '            <artifactId>spring-kafka</artifactId>' >> pom.xml && \
+    echo '            <version>3.3.0</version>' >> pom.xml && \
+    echo '        </dependency>' >> pom.xml && \
+    echo '        <!-- Database Drivers -->' >> pom.xml && \
+    echo '        <dependency>' >> pom.xml && \
+    echo '            <groupId>org.postgresql</groupId>' >> pom.xml && \
+    echo '            <artifactId>postgresql</artifactId>' >> pom.xml && \
+    echo '            <version>42.7.2</version>' >> pom.xml && \
+    echo '        </dependency>' >> pom.xml && \
+    echo '        <!-- Lombok -->' >> pom.xml && \
+    echo '        <dependency>' >> pom.xml && \
+    echo '            <groupId>org.projectlombok</groupId>' >> pom.xml && \
+    echo '            <artifactId>lombok</artifactId>' >> pom.xml && \
+    echo '            <version>1.18.30</version>' >> pom.xml && \
+    echo '        </dependency>' >> pom.xml && \
+    echo '        <!-- MapStruct -->' >> pom.xml && \
+    echo '        <dependency>' >> pom.xml && \
+    echo '            <groupId>org.mapstruct</groupId>' >> pom.xml && \
+    echo '            <artifactId>mapstruct</artifactId>' >> pom.xml && \
+    echo '            <version>1.5.3.Final</version>' >> pom.xml && \
+    echo '        </dependency>' >> pom.xml && \
+    echo '        <!-- Jackson -->' >> pom.xml && \
+    echo '        <dependency>' >> pom.xml && \
+    echo '            <groupId>com.fasterxml.jackson.core</groupId>' >> pom.xml && \
+    echo '            <artifactId>jackson-databind</artifactId>' >> pom.xml && \
+    echo '            <version>2.15.0</version>' >> pom.xml && \
+    echo '        </dependency>' >> pom.xml && \
+    echo '        <!-- Apache Commons -->' >> pom.xml && \
+    echo '        <dependency>' >> pom.xml && \
+    echo '            <groupId>org.apache.commons</groupId>' >> pom.xml && \
+    echo '            <artifactId>commons-pool2</artifactId>' >> pom.xml && \
+    echo '            <version>2.12.0</version>' >> pom.xml && \
+    echo '        </dependency>' >> pom.xml && \
+    echo '    </dependencies>' >> pom.xml && \
+    echo '</project>' >> pom.xml
+
+# Download all dependencies to Maven local repository
+RUN mvn dependency:go-offline -B
+
+# Clean up the dummy pom.xml
+RUN rm pom.xml
+
+# Set Maven options for better performance
+ENV MAVEN_OPTS="-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
+
+WORKDIR /build

@@ -14,7 +14,7 @@ import com.am.marketdata.service.util.HistoricalDataRetriever;
 import com.am.marketdata.service.util.MarketDataRetrievalUtil;
 import com.am.marketdata.service.util.OHLCDataRetriever;
 import com.marketdata.common.MarketDataProvider;
-import com.marketdata.common.MarketDataProviderFactory;
+import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import com.zerodhatech.models.LTPQuote;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;

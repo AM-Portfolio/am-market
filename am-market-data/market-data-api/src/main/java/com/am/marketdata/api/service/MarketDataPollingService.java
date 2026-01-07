@@ -1,7 +1,7 @@
 package com.am.marketdata.api.service;
 
 import com.am.marketdata.api.websocket.MarketDataWebSocketHandler;
-import com.marketdata.common.MarketDataProviderFactory;
+import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.api.model.MarketDataUpdate;

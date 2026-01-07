@@ -23,6 +23,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import com.am.marketdata.common.log.AppLogger;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 @Service("upstoxMarketDataProvider")
@@ -36,7 +37,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     private final UpstoxIndexIdentifier indexIdentifier;
 
     public UpstoxMarketDataProvider(UpstoxApiService upstoxApiService,
-            com.am.marketdata.common.provider.InstrumentDataProvider instrumentDataProvider,
+            @Qualifier("upstoxInstrumentService") com.am.marketdata.common.provider.InstrumentDataProvider instrumentDataProvider,
             UpstoxSdkService upstoxSdkService,
             UpstoxIndexIdentifier indexIdentifier) {
         this.upstoxApiService = upstoxApiService;

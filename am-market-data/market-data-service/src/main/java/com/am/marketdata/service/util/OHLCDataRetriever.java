@@ -4,7 +4,7 @@ import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.MarketDataPersistenceService;
 import com.marketdata.common.MarketDataProvider;
-import com.marketdata.common.MarketDataProviderFactory;
+import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;

@@ -4,7 +4,7 @@
 
 name: 'am_market_sdk_flutter'
 version: '1.0.0'
-description: 'Flutter SDK for AM Market Data API'
+description: 'OpenAPI API client'
 homepage: 'homepage'
 environment:
   sdk: '>=2.12.0 <4.0.0'

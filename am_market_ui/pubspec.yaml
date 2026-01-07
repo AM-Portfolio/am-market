@@ -1,0 +1,66 @@
+name: am_market_ui
+description: "Market Data Module (Watchlist, Screener, Real-time Quotes)"
+version: 0.0.1
+homepage:
+
+environment:
+  sdk: ^3.10.1
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+    
+  am_design_system:
+    path: ../../../AM-Portfolio-grp/am-modern-ui/am_design_system
+  am_common:
+    path: ../../../AM-Portfolio-grp/am-modern-ui/am_common
+  am_auth_ui:
+    path: ../../../AM-Portfolio-grp/am-modern-ui/am_auth_ui
+  
+  # Market SDK (updated for new repo structure)
+  am_market_sdk_flutter:
+    path: ../am_market_sdk_flutter
+
+
+  # Third Party
+  provider: ^6.1.1
+  google_fonts: ^6.1.0
+  fl_chart: ^1.1.1
+  web_socket_channel: ^3.0.0
+  url_launcher: ^6.3.1
+
+  # State Management
+  flutter_bloc: ^9.1.1
+  flutter_riverpod: ^3.0.3
+  riverpod_annotation: ^3.0.3
+  equatable: ^2.0.7
+  
+  # Network & Data
+  dio: ^5.4.0
+  json_annotation: ^4.9.0
+  freezed_annotation: ^3.1.0
+  
+  # UI & Charts
+  intl: ^0.20.2
+  webview_flutter: ^4.9.0
+  
+  # DI
+  get_it: ^9.1.1
+  injectable: ^2.4.4
+
+  # Utils
+  dartz: ^0.10.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.8
+  freezed: ^3.2.3
+  json_serializable: ^6.8.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/application.properties

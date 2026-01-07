@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  # Java/Maven Base Image
+  base-java-maven:
+    image: am-java-maven-base:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.base-java-maven
+    container_name: base-java-maven-builder
+
+  # Python Base Image
+  base-python:
+    image: am-python-base:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.base-python
+    container_name: base-python-builder
+
+  # Flutter Base Image
+  base-flutter:
+    image: am-flutter-base:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.base-flutter
+    container_name: base-flutter-builder

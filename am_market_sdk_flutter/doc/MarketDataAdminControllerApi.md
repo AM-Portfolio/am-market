@@ -5,15 +5,15 @@
 import 'package:am_market_sdk_flutter/api.dart';
 ```
 
-All URIs are relative to *http://localhost:8099*
+All URIs are relative to *http://localhost*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**getJobDetails**](MarketDataAdminControllerApi.md#getjobdetails) | **GET** /api/admin/logs/{jobId} | 
-[**getLogs**](MarketDataAdminControllerApi.md#getlogs) | **GET** /api/admin/logs | 
-[**startIngestion**](MarketDataAdminControllerApi.md#startingestion) | **POST** /api/admin/ingestion/start | 
-[**stopIngestion**](MarketDataAdminControllerApi.md#stopingestion) | **POST** /api/admin/ingestion/stop | 
-[**triggerHistoricalSync**](MarketDataAdminControllerApi.md#triggerhistoricalsync) | **POST** /api/admin/sync/historical | 
+[**getJobDetails**](MarketDataAdminControllerApi.md#getjobdetails) | **GET** /v1/admin/logs/{jobId} | 
+[**getLogs**](MarketDataAdminControllerApi.md#getlogs) | **GET** /v1/admin/logs | 
+[**startIngestion**](MarketDataAdminControllerApi.md#startingestion) | **POST** /v1/admin/ingestion/start | 
+[**stopIngestion**](MarketDataAdminControllerApi.md#stopingestion) | **POST** /v1/admin/ingestion/stop | 
+[**triggerHistoricalSync**](MarketDataAdminControllerApi.md#triggerhistoricalsync) | **POST** /v1/admin/sync/historical | 
 
 
 # **getJobDetails**

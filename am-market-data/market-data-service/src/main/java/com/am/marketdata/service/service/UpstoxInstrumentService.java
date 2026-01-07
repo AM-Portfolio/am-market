@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.am.marketdata.service.provider.InstrumentDataProvider;
+import com.am.marketdata.common.provider.InstrumentDataProvider;
 
 @Slf4j
 @Service
@@ -105,7 +105,7 @@ public class UpstoxInstrumentService implements InstrumentDataProvider {
      * Search instruments with filters.
      */
     @Override
-    public List<UpstoxInstrument> searchInstruments(com.am.marketdata.service.dto.InstrumentSearchCriteria criteria) {
+    public List<UpstoxInstrument> searchInstruments(com.am.marketdata.common.dto.InstrumentSearchCriteria criteria) {
         org.springframework.data.mongodb.core.query.Query query = new org.springframework.data.mongodb.core.query.Query();
         List<org.springframework.data.mongodb.core.query.Criteria> criteriaList = new ArrayList<>();
 

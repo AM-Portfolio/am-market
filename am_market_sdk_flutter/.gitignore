@@ -15,11 +15,5 @@ doc/api/
 *.iws
 .idea/
 
-
-# Open API generator
-.openapi-generator/
-.openapi-generator-ignore
-flutter_*.log
-
 # Mac
 .DS_Store

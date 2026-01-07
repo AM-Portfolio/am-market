@@ -60,7 +60,7 @@ try {
 
 ## Documentation for API Endpoints
 
-All URIs are relative to *http://localhost:8099*
+All URIs are relative to *http://localhost*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
@@ -90,11 +90,11 @@ Class | Method | HTTP request | Description
 *MarketDataApi* | [**getQuotesPost**](doc//MarketDataApi.md#getquotespost) | **POST** /v1/market-data/quotes | Get quotes for multiple symbols (POST)
 *MarketDataApi* | [**getSymbolsForExchange**](doc//MarketDataApi.md#getsymbolsforexchange) | **GET** /v1/market-data/symbols/{exchange} | Get symbols for a specific exchange
 *MarketDataApi* | [**logout**](doc//MarketDataApi.md#logout) | **POST** /v1/market-data/auth/logout | Logout and invalidate session
-*MarketDataAdminControllerApi* | [**getJobDetails**](doc//MarketDataAdminControllerApi.md#getjobdetails) | **GET** /api/admin/logs/{jobId} | 
-*MarketDataAdminControllerApi* | [**getLogs**](doc//MarketDataAdminControllerApi.md#getlogs) | **GET** /api/admin/logs | 
-*MarketDataAdminControllerApi* | [**startIngestion**](doc//MarketDataAdminControllerApi.md#startingestion) | **POST** /api/admin/ingestion/start | 
-*MarketDataAdminControllerApi* | [**stopIngestion**](doc//MarketDataAdminControllerApi.md#stopingestion) | **POST** /api/admin/ingestion/stop | 
-*MarketDataAdminControllerApi* | [**triggerHistoricalSync**](doc//MarketDataAdminControllerApi.md#triggerhistoricalsync) | **POST** /api/admin/sync/historical | 
+*MarketDataAdminControllerApi* | [**getJobDetails**](doc//MarketDataAdminControllerApi.md#getjobdetails) | **GET** /v1/admin/logs/{jobId} | 
+*MarketDataAdminControllerApi* | [**getLogs**](doc//MarketDataAdminControllerApi.md#getlogs) | **GET** /v1/admin/logs | 
+*MarketDataAdminControllerApi* | [**startIngestion**](doc//MarketDataAdminControllerApi.md#startingestion) | **POST** /v1/admin/ingestion/start | 
+*MarketDataAdminControllerApi* | [**stopIngestion**](doc//MarketDataAdminControllerApi.md#stopingestion) | **POST** /v1/admin/ingestion/stop | 
+*MarketDataAdminControllerApi* | [**triggerHistoricalSync**](doc//MarketDataAdminControllerApi.md#triggerhistoricalsync) | **POST** /v1/admin/sync/historical | 
 *MarketDataStreamApi* | [**connect**](doc//MarketDataStreamApi.md#connect) | **POST** /v1/market-data/stream/connect | Connect to market data stream
 *MarketDataStreamApi* | [**disconnect**](doc//MarketDataStreamApi.md#disconnect) | **POST** /v1/market-data/stream/disconnect | Disconnect market data stream
 *MarketDataStreamApi* | [**initiate**](doc//MarketDataStreamApi.md#initiate) | **POST** /v1/market-data/stream/initiate | Connect to market data stream

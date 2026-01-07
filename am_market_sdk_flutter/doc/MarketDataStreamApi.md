@@ -5,7 +5,7 @@
 import 'package:am_market_sdk_flutter/api.dart';
 ```
 
-All URIs are relative to *http://localhost:8099*
+All URIs are relative to *http://localhost*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------

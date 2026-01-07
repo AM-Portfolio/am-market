@@ -3,7 +3,7 @@ package com.am.marketdata.service;
 import com.am.common.investment.model.equity.EquityPrice;
 import com.am.common.investment.service.EquityService;
 import com.am.marketdata.kafka.producer.KafkaProducerService;
-import com.am.marketdata.upstock.adapter.UpStockAdapter;
+import com.am.marketdata.provider.upstox.adapter.UpStockAdapter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
@@ -36,11 +36,11 @@ public class EquityPriceProcessingService {
         }
 
         Timer.Sample processingTimer = Timer.start(meterRegistry);
-        
+
         try {
             // Format ISINs with NSE prefix
             Set<String> formattedIsins = formatIsins(isins);
-            
+
             // Process in batches
             List<List<String>> batches = partition(formattedIsins.stream().toList(), BATCH_SIZE);
             log.info("Processing {} stocks in {} batches", isins.size(), batches.size());
@@ -55,7 +55,7 @@ public class EquityPriceProcessingService {
                 try {
                     Timer.Sample batchTimer = Timer.start(meterRegistry);
                     var equityPrices = upStockAdapter.getStocksOHLC(batch);
-                    
+
                     if (!equityPrices.isEmpty()) {
                         equityService.saveAllPrices(equityPrices);
                         allUpdatedStocks.addAll(equityPrices);
@@ -65,7 +65,7 @@ public class EquityPriceProcessingService {
                         meterRegistry.counter("equity.price.batch.empty").increment();
                         hasErrors = true;
                     }
-                    
+
                     batchTimer.stop(meterRegistry.timer("equity.price.batch.processing.time"));
                 } catch (Exception e) {
                     log.error("Error processing batch: {}", e.getMessage(), e);
@@ -90,28 +90,29 @@ public class EquityPriceProcessingService {
             log.error("Error in equity price processing: {}", e.getMessage(), e);
             meterRegistry.counter("equity.price.processing.error").increment();
         }
-        
+
         processingTimer.stop(meterRegistry.timer("equity.price.total.processing.time"));
         return false;
     }
 
     private Set<String> formatIsins(List<String> isins) {
         return isins.stream()
-            .map(isin -> NSE_PREFIX + isin)
-            .collect(Collectors.toSet());
+                .map(isin -> NSE_PREFIX + isin)
+                .collect(Collectors.toSet());
     }
 
     private <T> List<List<T>> partition(List<T> list, int size) {
         return list.stream()
-            .collect(Collectors.groupingBy(item -> list.indexOf(item) / size))
-            .values()
-            .stream()
-            .toList();
+                .collect(Collectors.groupingBy(item -> list.indexOf(item) / size))
+                .values()
+                .stream()
+                .toList();
     }
-    
+
     /**
      * Get the latest equity prices for the specified ISINs
-     * This method fetches the latest prices directly from the data source without persisting them
+     * This method fetches the latest prices directly from the data source without
+     * persisting them
      * 
      * @param isins List of ISINs to get prices for
      * @return List of equity prices with current market data
@@ -121,21 +122,21 @@ public class EquityPriceProcessingService {
             log.warn("No ISINs provided to fetch prices for");
             return List.of();
         }
-        
+
         Timer.Sample fetchTimer = Timer.start(meterRegistry);
         log.info("Fetching latest prices for {} ISINs", isins.size());
-        
+
         try {
             // Format ISINs with NSE prefix
             Set<String> formattedIsins = formatIsins(isins);
-            
+
             // Process in batches for better performance
             List<List<String>> batches = partition(formattedIsins.stream().toList(), BATCH_SIZE);
             log.debug("Processing {} ISINs in {} batches", isins.size(), batches.size());
-            
+
             // Use a thread-safe collection to store results from all batches
             List<EquityPrice> allPrices = new ArrayList<>();
-            
+
             // Process each batch and collect results
             for (List<String> batch : batches) {
                 try {
@@ -152,11 +153,11 @@ public class EquityPriceProcessingService {
                     meterRegistry.counter("equity.price.fetch.error").increment();
                 }
             }
-            
+
             log.info("Successfully fetched {} equity prices", allPrices.size());
             fetchTimer.stop(meterRegistry.timer("equity.price.fetch.time"));
             return allPrices;
-            
+
         } catch (Exception e) {
             log.error("Error fetching latest equity prices: {}", e.getMessage(), e);
             meterRegistry.counter("equity.price.fetch.error").increment();

@@ -4,7 +4,7 @@ import com.am.common.investment.model.historical.HistoricalData;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.MarketDataPersistenceService;
 import com.marketdata.common.MarketDataProvider;
-import com.marketdata.common.MarketDataProviderFactory;
+import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import lombok.extern.slf4j.Slf4j;
 
 import java.text.SimpleDateFormat;
