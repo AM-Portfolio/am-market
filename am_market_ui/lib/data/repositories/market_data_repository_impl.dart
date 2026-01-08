@@ -1,4 +1,4 @@
-import 'package:am_market_sdk_flutter/am_market_sdk_flutter.dart' as sdk;
+import 'package:am_market_sdk/market/api.dart' as sdk;
 import '../../models/market_data.dart';
 import '../../models/available_indices.dart';
 import '../../services/market_data_sdk_service.dart';

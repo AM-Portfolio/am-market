@@ -50,6 +50,7 @@ target/
 # Logs
 logs/
 *.log
+build_log.txt
 
 # Environment
 .env

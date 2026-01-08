@@ -2,13 +2,18 @@ package com.am.marketdata.api.config;
 
 import com.am.marketdata.api.websocket.MarketDataWebSocketHandler;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.socket.config.annotation.EnableWebSocket;
-import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
-import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.*;
 
+/**
+ * WebSocket configuration supporting both:
+ * 1. Basic WebSocket (for custom handlers)
+ * 2. STOMP over WebSocket (for message broker)
+ */
 @Configuration
 @EnableWebSocket
-public class WebSocketConfig implements WebSocketConfigurer {
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketConfigurer, WebSocketMessageBrokerConfigurer {
 
     private final MarketDataWebSocketHandler marketDataWebSocketHandler;
 
@@ -16,9 +21,27 @@ public class WebSocketConfig implements WebSocketConfigurer {
         this.marketDataWebSocketHandler = marketDataWebSocketHandler;
     }
 
+    // Basic WebSocket configuration
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(marketDataWebSocketHandler, "/ws/market-data-stream")
                 .setAllowedOrigins("*");
+    }
+
+    // STOMP WebSocket configuration (for SimpMessagingTemplate)
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic", "/queue");
+        config.setApplicationDestinationPrefixes("/app");
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns("*")
+                .withSockJS();
+
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns("*");
     }
 }

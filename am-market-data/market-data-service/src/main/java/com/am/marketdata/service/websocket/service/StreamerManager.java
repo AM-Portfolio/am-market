@@ -117,7 +117,8 @@ public class StreamerManager implements StreamerListener {
             Map<String, OHLCQuote> quotes = processor.processUpdate(message);
 
             if (quotes != null && !quotes.isEmpty()) {
-                persistenceService.saveOHLCData(quotes);
+                log.debug("StreamerManager",
+                        "Processed " + quotes.size() + " quotes (published to Kafka via processor).");
             }
         } catch (Exception e) {
             log.error("StreamerManager", "Error handling message", e);

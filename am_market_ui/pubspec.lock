@@ -12,28 +12,28 @@ packages:
   am_auth_ui:
     dependency: "direct main"
     description:
-      path: "../../../AM-Portfolio-grp/am-modern-ui/am_auth_ui"
+      path: "../../am-modern-ui/am_auth_ui"
       relative: true
     source: path
     version: "0.0.1"
   am_common:
     dependency: "direct main"
     description:
-      path: "../../../AM-Portfolio-grp/am-modern-ui/am_common"
+      path: "../../am-modern-ui/am_common"
       relative: true
     source: path
     version: "1.0.0"
   am_design_system:
     dependency: "direct main"
     description:
-      path: "../../../AM-Portfolio-grp/am-modern-ui/am_design_system"
+      path: "../../am-modern-ui/am_design_system"
       relative: true
     source: path
     version: "1.0.0"
-  am_market_sdk_flutter:
+  am_market_sdk:
     dependency: "direct main"
     description:
-      path: "../am_market_sdk_flutter"
+      path: "../am-market-sdk/flutter-sdk"
       relative: true
     source: path
     version: "1.0.0"

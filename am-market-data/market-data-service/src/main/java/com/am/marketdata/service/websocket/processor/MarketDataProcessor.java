@@ -2,57 +2,105 @@ package com.am.marketdata.service.websocket.processor;
 
 import com.am.marketdata.common.model.OHLCQuote;
 
-import com.upstox.feeder.MarketUpdateV3;
-import com.upstox.feeder.MarketUpdateV3.Feed;
-import com.upstox.feeder.MarketUpdateV3.FullFeed;
-import com.upstox.feeder.MarketUpdateV3.OHLC;
-// import com.upstox.feeder.MarketUpdateV3.LTPC; // If available
-
-import com.am.marketdata.common.log.AppLogger;
+import com.am.common.investment.model.equity.EquityPrice;
+import com.am.marketdata.common.mapper.OHLCMapper;
+import com.am.marketdata.kafka.producer.KafkaProducerService;
+import com.am.marketdata.provider.upstox.model.feed.FeedItem;
+import com.am.marketdata.provider.upstox.model.feed.OHLCInterval;
+import com.am.marketdata.provider.upstox.model.feed.UpstoxFeedResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Component
+@RequiredArgsConstructor
 public class MarketDataProcessor {
 
-    private final AppLogger log = AppLogger.getLogger();
+    private final ObjectMapper objectMapper;
+    private final KafkaProducerService kafkaProducerService;
+    private final OHLCMapper ohlcMapper;
 
     /**
      * Process incoming market update object and convert to OHLCQuote items.
      * 
-     * @param marketUpdate The raw update object from Upstox SDK (MarketUpdateV3)
+     * @param marketUpdate The raw update object (expected JSON string or
+     *                     UpstoxFeedResponse)
      * @return Map of Symbol -> OHLCQuote
      */
     public Map<String, OHLCQuote> processUpdate(Object marketUpdate) {
         Map<String, OHLCQuote> results = new HashMap<>();
 
         try {
-            if (marketUpdate instanceof MarketUpdateV3) {
-                MarketUpdateV3 update = (MarketUpdateV3) marketUpdate;
+            UpstoxFeedResponse response = null;
 
-                // Inspect structure
-                // Assuming update.getFeeds() returns Map<String, Feed> based on typical V3
-                // structure
-                // Use reflection or getter if methods known
-                // Since I cannot call methods blindly, I'll log what I have for now
-                // untill I know exact getter name (usually getFeeds() or getData())
-
-                log.debug("MarketDataProcessor", "Received MarketUpdateV3: " + update.toString());
-
-                // Stub: If you know methods, add them here.
-                // E.g.
-                // Map<String, Feed> feeds = update.getFeeds();
-                // for (Entry<String, Feed> entry : feeds.entrySet()) { ... }
-
+            // 1. Deserialize input
+            if (marketUpdate instanceof String) {
+                response = objectMapper.readValue((String) marketUpdate, UpstoxFeedResponse.class);
+            } else if (marketUpdate instanceof UpstoxFeedResponse) {
+                response = (UpstoxFeedResponse) marketUpdate;
             } else {
-                log.warn("MarketDataProcessor",
-                        "Unknown update type: " + (marketUpdate != null ? marketUpdate.getClass().getName() : "null"));
+                log.warn("Received unknown update type or V3 object. Expecting JSON string or UpstoxFeedResponse.");
+                return results;
+            }
+
+            if (response == null || response.getFeeds() == null) {
+                log.warn("Invalid or empty response object");
+                return results;
+            }
+
+            // 2. Map to OHLCQuote
+            for (Map.Entry<String, FeedItem> entry : response.getFeeds().entrySet()) {
+                String instrumentKey = entry.getKey(); // e.g., "NSE_FO|61755"
+                FeedItem feedItem = entry.getValue();
+
+                if (feedItem.getFullFeed() != null && feedItem.getFullFeed().getMarketFF() != null) {
+                    var marketFF = feedItem.getFullFeed().getMarketFF();
+
+                    OHLCQuote quote = new OHLCQuote();
+                    // Set LTP
+                    quote.setLastPrice(marketFF.getLtpc().getLtp());
+
+                    // Set OHLC from "marketOHLC" -> "1d" interval usually
+                    if (marketFF.getMarketOHLC() != null && marketFF.getMarketOHLC().getOhlc() != null) {
+                        for (OHLCInterval interval : marketFF.getMarketOHLC().getOhlc()) {
+                            // prioritizing "1d" or "day" for the main OHLC
+                            if ("1d".equalsIgnoreCase(interval.getInterval())
+                                    || "I1".equalsIgnoreCase(interval.getInterval())) {
+                                OHLCQuote.OHLC ohlcData = new OHLCQuote.OHLC();
+                                ohlcData.setOpen(interval.getOpen());
+                                ohlcData.setHigh(interval.getHigh());
+                                ohlcData.setLow(interval.getLow());
+                                ohlcData.setClose(interval.getClose());
+                                quote.setOhlc(ohlcData);
+
+                                if ("1d".equalsIgnoreCase(interval.getInterval())) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (quote.getLastPrice() != 0) {
+                        results.put(instrumentKey, quote);
+                    }
+                }
+            }
+
+            // 3. Publish to Kafka
+            if (!results.isEmpty()) {
+                log.info("Processed {} quotes. Publishing to Kafka.", results.size());
+                List<EquityPrice> equityPrices = ohlcMapper.toEquityPriceList(results);
+                kafkaProducerService.sendEquityPriceUpdates(equityPrices);
             }
 
         } catch (Exception e) {
-            log.error("MarketDataProcessor", "Error processing update", e);
+            log.error("Error processing update", e);
         }
 
         return results;

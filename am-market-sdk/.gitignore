@@ -1,0 +1,7 @@
+# Temporary Generation Folders
+temp-*/
+.openapi-generator/
+
+# OS Junk
+.DS_Store
+Thumbs.db

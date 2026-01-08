@@ -18,9 +18,9 @@ dependencies:
   am_auth_ui:
     path: ../../../AM-Portfolio-grp/am-modern-ui/am_auth_ui
   
-  # Market SDK (updated for new repo structure)
-  am_market_sdk_flutter:
-    path: ../am_market_sdk_flutter
+  # Unified Market SDK
+  am_market_sdk:
+    path: ../am-market-sdk/flutter-sdk
 
 
   # Third Party

@@ -1,10 +1,10 @@
 import 'package:am_auth_ui/core/services/secure_storage_service.dart';
 
-import 'package:am_market_sdk_flutter/am_market_sdk_flutter.dart';
+import 'package:am_market_sdk/market/api.dart' show ApiClient;
 
 /// Service class to configure and provide Market Data SDK API clients
 class MarketDataSdkService {
-  static const String baseUrl = 'https://am.munish.org/api/market';
+  static const String baseUrl = 'http://localhost:8092';
   
   late final ApiClient _apiClient;
   late final MarketDataApi marketDataApi;

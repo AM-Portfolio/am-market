@@ -7,7 +7,7 @@ import 'package:get_it/get_it.dart';
 import '../models/market_data.dart';
 import '../models/available_indices.dart';
 
-import 'package:am_market_sdk_flutter/api.dart' as sdk;
+import 'package:am_market_sdk/market/api.dart' as sdk;
 
 import 'package:am_market_ui/core/constants/market_endpoints.dart';
 

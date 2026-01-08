@@ -2,7 +2,7 @@ package com.am.marketdata.api.service;
 
 import com.marketdata.common.model.margin.MarginCalculationRequest;
 import com.marketdata.common.model.margin.MarginCalculationResponse;
-import com.marketdata.service.margin.MarginCalculatorService;
+import com.am.marketdata.service.margin.MarginCalculatorService;
 
 import com.am.marketdata.common.log.AppLogger;
 import io.micrometer.core.instrument.MeterRegistry;

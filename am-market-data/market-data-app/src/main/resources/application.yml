@@ -55,7 +55,13 @@ app:
   kafka:
     enabled: false
 
+kafka:
+  topics:
+    stock-price: am-stock-price-update
+
 spring:
+  main:
+    allow-bean-definition-overriding: true  # Allow bean overriding (MarketDataProviderFactory defined in multiple places)
   application:
     name: market-data-service
   data:
@@ -74,8 +80,8 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     consumer:
-      group-id: ${KAFKA_CONSUMER_GROUP_ID}
-      auto-offset-reset: ${KAFKA_CONSUMER_AUTO_OFFSET_RESET}
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:market-data-group}
+      auto-offset-reset: ${KAFKA_CONSUMER_AUTO_OFFSET_RESET:earliest}
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     producer:

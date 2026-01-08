@@ -119,11 +119,7 @@
             <version>${kong-unirest.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>com.am.common</groupId>
-            <artifactId>am-common-investment-model</artifactId>
-            <version>${investment-model.version}</version>
-        </dependency>
+
         <dependency>
             <groupId>com.am.common</groupId>
             <artifactId>am-common-investment-service</artifactId>

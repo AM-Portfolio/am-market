@@ -1,0 +1,39 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The file .packages was used by the pub tool to manage packages.
+# It is no longer supported in Dart 2.19 (Flutter 3.7) and later.
+.packages
+
+# The .dart_tool directory is used by the pub tool to store
+# compilation artifacts and dependencies.
+.dart_tool/
+
+# The build directory is used by the pub tool to store
+# compilation artifacts.
+build/
+
+# The pubspec.lock file is used by the pub tool to lock
+# dependency versions. It should be committed to version control
+# for application packages, but not for library packages.
+# pubspec.lock
+
+# Generated files
+lib/src/api_client.mocks.dart
+coverage/
+test/coverage/
+doc/api/

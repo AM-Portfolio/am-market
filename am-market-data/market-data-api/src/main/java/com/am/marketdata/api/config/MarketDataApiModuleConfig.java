@@ -8,14 +8,13 @@ import com.am.marketdata.provider.zerodha.config.ZerodhaApiConfig;
 
 @Configuration
 @ComponentScan(basePackages = {
-        "com.am.marketdata.api", // External API module
-        "com.am.marketdata.common", // Common API module
-        "com.am.marketdata.service", // Services
-        "com.marketdata.service", // Services
-        "com.am.marketdata.tradebrain"
+                "com.am.marketdata.api", // External API module
+                "com.am.marketdata.common", // Common API module
+                "com.am.marketdata.service", // Services
+                "com.am.marketdata.tradebrain"
 })
 @Import({
-        ZerodhaApiConfig.class
+                ZerodhaApiConfig.class
 })
 public class MarketDataApiModuleConfig {
 
