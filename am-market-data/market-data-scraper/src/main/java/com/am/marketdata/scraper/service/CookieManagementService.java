@@ -31,13 +31,8 @@ public class CookieManagementService {
             log.info("Initializing CookieManagementService");
             refreshCookies();
 
-            // If within trading hours, start market data processing
-            if (isWithinTradingHours()) {
-                log.info("Within trading hours, starting initial market data processing");
-                marketDataProcessingService.fetchAndProcessStockIndicesOnly();
-            } else {
-                log.info("Outside trading hours, skipping initial market data processing");
-            }
+            // Initial market data processing removed as per requirements
+            log.info("CookieService Initialized. Waiting for scheduler.");
         } catch (Exception e) {
             log.error("Failed to initialize service: {}", e.getMessage(), e);
         }
