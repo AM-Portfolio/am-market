@@ -8,9 +8,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface UpstoxInstrumentRepository extends MongoRepository<UpstoxIns Hello
-everyone trument, String>
-{
+public interface UpstoxInstrumentRepository extends MongoRepository<UpstoxInstrument, String> {
 
     // For "gym balls" - exact match on list of symbols
     List<UpstoxInstrument> findByAssetSymbolIn(List<String> assetSymbols);
