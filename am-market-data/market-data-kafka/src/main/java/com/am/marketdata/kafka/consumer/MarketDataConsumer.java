@@ -93,6 +93,7 @@ public class MarketDataConsumer {
                 return;
             }
 
+            log.info("MarketDataConsumer: Processing Kafka message for topic: market-data-historical-ingestion");
             log.info("Received Historical ingestion event: {} symbols from {}", event.getData().size(),
                     event.getProvider());
 

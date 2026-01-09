@@ -97,9 +97,11 @@ public abstract class AbstractMarketDataRetriever<K, T> {
 
         log.debug("Starting data retrieval for {} keys with forceRefresh={}", keys.size(), forceRefresh);
 
-        // If force refresh is requested, check database first, then provider
+        // If force refresh is requested, bypass DB and go directly to provider
         if (forceRefresh) {
-            return retrieveFromDatabaseAndProvider(keys, timeFrame);
+            log.info("[FORCE_REFRESH] Skipping database check, fetching directly from provider");
+            Map<K, T> result = retrieveFromProviderOnly(keys);
+            return result != null ? result : Collections.emptyMap();
         }
 
         // Track which keys still need to be retrieved

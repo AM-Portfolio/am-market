@@ -254,9 +254,14 @@ public class UpstoxSdkService {
                     fromDate, toDate);
 
             // Call SDK
+            // Upstox V3 SDK typically expects: instrumentKey, interval (string), toDate,
+            // fromDate
+            // "unit" passed here is actually the interval string (e.g. "day", "minute")
+            // "interval" (int) is legacy/unused for V3 or merged into string.
+            // Correcting signature to match standard usage: getHistoricalCandleData1(key,
+            // intervalStr, to, from)
             GetHistoricalCandleResponse sdkResponse = historyV3Api.getHistoricalCandleData1(instrumentKey, unit,
-                    interval,
-                    toDate, fromDate);
+                    interval, toDate, fromDate);
 
             return mapToHistoricalDataResponse(sdkResponse);
         } catch (Exception e) {

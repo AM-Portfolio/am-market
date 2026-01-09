@@ -169,7 +169,7 @@ scheduler:
   ingestion:
     enabled: true
     symbols: "NIFTY 50,NIFTY BANK"
-    provider: ZERODHA
+    provider: UPSTOX
     force: true
     start-cron: "0 15 9 * * MON-FRI"  # 9:15 AM weekdays
     stop-cron: "0 30 15 * * MON-FRI"   # 3:30 PM weekdays

@@ -304,7 +304,7 @@ public class MarketDataService {
                     "[BATCH_HISTORICAL] MarketDataService.getHistoricalDataBatch → Strategy: {}, Calling with {} symbols",
                     DataRetrievalStrategyUtil.getStrategyDescription(forceRefresh), symbols.size());
 
-            Map<String, HistoricalData> result = retriever.retrieveData(symbols, interval, false);
+            Map<String, HistoricalData> result = retriever.retrieveData(symbols, interval, forceRefresh);
 
             int totalDataPoints = result.values().stream()
                     .filter(hd -> hd != null && hd.getDataPoints() != null)
@@ -315,14 +315,16 @@ public class MarketDataService {
                     "[BATCH_HISTORICAL] MarketDataService.getHistoricalDataBatch: Retrieved data for {}/{} symbols with {} total data points",
                     result.size(), symbols.size(), totalDataPoints);
 
-            meterRegistry.counter("market.data.success.count", "operation", "getHistoricalDataBatch").increment();
+            meterRegistry.counter("market.data.success.count", "operation", "getHistoricalDataBatch", "timeFrame",
+                    interval != null ? interval.getApiValue() : "null").increment();
             return result;
         } catch (Exception e) {
             log.error("[BATCH_HISTORICAL] Error getting batch historical data: {}", e.getMessage(), e);
             meterRegistry.counter("market.data.failure.count", "operation", "getHistoricalDataBatch").increment();
             throw new RuntimeException("Failed to get batch historical data", e);
         } finally {
-            timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getHistoricalDataBatch"));
+            timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getHistoricalDataBatch",
+                    "timeFrame", interval != null ? interval.getApiValue() : "null"));
         }
     }
 

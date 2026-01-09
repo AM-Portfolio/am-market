@@ -314,41 +314,45 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 instrumentKey = symbol;
             }
 
-            // Encode instrumentKey to handle special characters (e.g., |, spaces)
-            if (instrumentKey != null) {
-                try {
-                    instrumentKey = URLEncoder.encode(instrumentKey, StandardCharsets.UTF_8.toString())
-                            .replace("+", "%20"); // Ensure spaces are encoded as %20 for path
-                } catch (Exception e) {
-                    log.error("getHistoricalData", "Failed to encode instrument key: " + instrumentKey, e);
-                }
-            }
-
             HistoricalDataResponse response = null;
 
-            // 1. Try SDK Service if key resolved
-            // if (instrumentKey != null) {
-            // try {
-            // log.info("getHistoricalData",
-            // "Fetching historical data via SDK for instrument key: " + instrumentKey + ",
-            // unit: " + unit
-            // + ", interval: " + intervalValue);
-            // response = upstoxSdkService.getHistoricalCandleData(instrumentKey, unit,
-            // intervalValue, toDateStr,
-            // fromDateStr);
-            // } catch (Exception e) {
-            // log.warn("getHistoricalData", "Failed to fetch historical data via SDK: " +
-            // e.getMessage());
-            // }
-            // }
+            // 1. Try SDK Service
+            try {
+                // Pass RAW instrument key to SDK, do not URL encode it manually as SDK handles
+                // it
+
+                log.info("getHistoricalData",
+                        "Fetching historical data via SDK for instrument key: " + instrumentKey + ", unit: " + unit
+                                + ", interval: " + intervalValue);
+
+                response = upstoxSdkService.getHistoricalCandleData(instrumentKey, unit,
+                        intervalValue, toDateStr,
+                        fromDateStr);
+            } catch (Exception e) {
+                log.warn("getHistoricalData", "Failed to fetch historical data via SDK: " +
+                        e.getMessage());
+            }
 
             // 2. Try API Service if SDK failed or returned empty
             if (response == null || response.getData() == null || response.getData().getCandles() == null
                     || response.getData().getCandles().isEmpty()) {
+
+                // Encode key for API usage (manual URL construction)
+                String encodedKey = instrumentKey;
+                try {
+                    if (encodedKey != null) {
+                        encodedKey = java.net.URLEncoder
+                                .encode(encodedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
+                                .replace("+", "%20");
+                    }
+                } catch (Exception ex) {
+                    log.error("Failed to encode key for API fallback", ex);
+                }
+
                 log.info("getHistoricalData",
-                        "Fetching historical data via API for instrument key: " + instrumentKey + ", unit: " + unit
+                        "Fetching historical data via API for instrument key: " + encodedKey + ", unit: " + unit
                                 + ", interval: " + intervalValue + ",from: " + fromDateStr + ", to: " + toDateStr);
-                response = upstoxApiService.getHistoricalCandleData(instrumentKey, unit, fromDateStr, toDateStr);
+                response = upstoxApiService.getHistoricalCandleData(encodedKey, unit, fromDateStr, toDateStr);
             }
 
             // Map to Common HistoricalData model
