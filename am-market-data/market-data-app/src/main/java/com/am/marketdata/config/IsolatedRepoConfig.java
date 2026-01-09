@@ -169,10 +169,10 @@ public class IsolatedRepoConfig {
     }
 
     @Bean
-    public com.am.marketdata.service.repo.UpstoxInstrumentRepository upstoxInstrumentRepository() {
-        return (com.am.marketdata.service.repo.UpstoxInstrumentRepository) Proxy.newProxyInstance(
-                com.am.marketdata.service.repo.UpstoxInstrumentRepository.class.getClassLoader(),
-                new Class[] { com.am.marketdata.service.repo.UpstoxInstrumentRepository.class },
+    public com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository upstoxInstrumentRepository() {
+        return (com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository) Proxy.newProxyInstance(
+                com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository.class.getClassLoader(),
+                new Class[] { com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository.class },
                 (proxy, method, args) -> {
                     if (method.getName().equals("equals"))
                         return false;
@@ -185,10 +185,10 @@ public class IsolatedRepoConfig {
     }
 
     @Bean
-    public com.am.marketdata.service.repo.ZerodhaInstrumentRepository zerodhaInstrumentRepository() {
-        return (com.am.marketdata.service.repo.ZerodhaInstrumentRepository) Proxy.newProxyInstance(
-                com.am.marketdata.service.repo.ZerodhaInstrumentRepository.class.getClassLoader(),
-                new Class[] { com.am.marketdata.service.repo.ZerodhaInstrumentRepository.class },
+    public com.am.marketdata.provider.zerodha.repo.ZerodhaInstrumentRepository zerodhaInstrumentRepository() {
+        return (com.am.marketdata.provider.zerodha.repo.ZerodhaInstrumentRepository) Proxy.newProxyInstance(
+                com.am.marketdata.provider.zerodha.repo.ZerodhaInstrumentRepository.class.getClassLoader(),
+                new Class[] { com.am.marketdata.provider.zerodha.repo.ZerodhaInstrumentRepository.class },
                 (proxy, method, args) -> {
                     if (method.getName().equals("equals"))
                         return false;

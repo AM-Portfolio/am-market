@@ -1,7 +1,7 @@
-package com.am.marketdata.service.service;
+package com.am.marketdata.provider.upstox.service;
 
 import com.am.marketdata.common.model.UpstoxInstrument;
-import com.am.marketdata.service.repo.UpstoxInstrumentRepository;
+import com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;

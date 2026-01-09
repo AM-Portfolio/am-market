@@ -1,6 +1,6 @@
-package com.am.marketdata.service.repo;
+package com.am.marketdata.provider.zerodha.repo;
 
-import com.am.marketdata.service.model.ZerodhaInstrument;
+import com.am.marketdata.provider.zerodha.model.ZerodhaInstrument;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;

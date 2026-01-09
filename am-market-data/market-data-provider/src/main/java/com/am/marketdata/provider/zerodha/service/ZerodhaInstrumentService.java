@@ -1,7 +1,7 @@
-package com.am.marketdata.service.service;
+package com.am.marketdata.provider.zerodha.service;
 
-import com.am.marketdata.service.model.ZerodhaInstrument;
-import com.am.marketdata.service.repo.ZerodhaInstrumentRepository;
+import com.am.marketdata.provider.zerodha.model.ZerodhaInstrument;
+import com.am.marketdata.provider.zerodha.repo.ZerodhaInstrumentRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

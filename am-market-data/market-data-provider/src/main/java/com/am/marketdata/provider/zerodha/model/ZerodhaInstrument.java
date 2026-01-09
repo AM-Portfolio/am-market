@@ -1,4 +1,4 @@
-package com.am.marketdata.service.model;
+package com.am.marketdata.provider.zerodha.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
