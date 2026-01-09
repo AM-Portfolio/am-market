@@ -401,6 +401,35 @@ class ApiService {
     }
   }
 
+  Future<void> triggerHistoricalSync({
+    required String symbol,
+    required String duration,
+    bool forceRefresh = true,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      // Using query parameters
+      final uri = Uri.parse('$baseUrl/v1/admin/sync/historical').replace(queryParameters: {
+        'symbol': symbol,
+        'duration': duration,
+        'forceRefresh': forceRefresh.toString(),
+        'fetchIndexStocks': 'true', // Always true via UI manual trigger per requirement
+      });
+
+      final response = await http.post(
+        uri,
+        headers: headers,
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to trigger historical sync: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      CommonLogger.error("Error triggering historical sync", tag: "ApiService.triggerHistoricalSync", error: e);
+      throw Exception('Error triggering historical sync: $e');
+    }
+  }
+
   Future<Map<String, dynamic>> fetchMarketCapAnalysis() async {
     try {
       final headers = await _getHeaders();

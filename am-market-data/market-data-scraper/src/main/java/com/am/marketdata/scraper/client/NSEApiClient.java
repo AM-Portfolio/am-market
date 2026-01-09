@@ -54,22 +54,24 @@ public class NSEApiClient {
     public void initialize() {
         // Initialize timers for each endpoint
         stockIndicesRequestTimer = Timer.builder(METRIC_REQUEST_TIME)
-            .tag(TAG_ENDPOINT, "stock_indices")
-            .description("Time taken for stock indices API requests")
-            .register(meterRegistry);
+                .tag(TAG_ENDPOINT, "stock_indices")
+                .description("Time taken for stock indices API requests")
+                .register(meterRegistry);
 
         indicesRequestTimer = Timer.builder(METRIC_REQUEST_TIME)
-            .tag(TAG_ENDPOINT, "indices")
-            .description("Time taken for indices API requests")
-            .register(meterRegistry);
+                .tag(TAG_ENDPOINT, "indices")
+                .description("Time taken for indices API requests")
+                .register(meterRegistry);
     }
 
     public NSEStockInsidicesData getStockIndices(String indexSymbol) {
-        return stockIndicesRequestTimer.record(() -> executeApiCall("/api/equity-stockIndices?index=" + indexSymbol, NSEStockInsidicesData.class, this::logStockIndicesResponse));
+        return stockIndicesRequestTimer.record(() -> executeApiCall("/api/equity-stockIndices?index=" + indexSymbol,
+                NSEStockInsidicesData.class, this::logStockIndicesResponse));
     }
 
     public NSEIndicesResponse getAllIndices() {
-        return indicesRequestTimer.record(() -> executeApiCall("/api/allIndices", NSEIndicesResponse.class, this::logIndicesResponse));
+        return indicesRequestTimer
+                .record(() -> executeApiCall("/api/allIndices", NSEIndicesResponse.class, this::logIndicesResponse));
     }
 
     private HttpHeaders createBasicHeaders() {
@@ -88,12 +90,12 @@ public class NSEApiClient {
         meterRegistry.counter(METRIC_REQUEST_COUNT, TAG_ENDPOINT, endpoint).increment();
 
         try {
-            log.info("Calling NSE API - Endpoint: {}, Cookies: {}, Headers: {}", 
-                endpoint, 
-                maskCookieValues(cookies),
-                maskSensitiveHeaders(entity.getHeaders()));
+            log.info("Calling NSE API - Endpoint: {}, Cookies: {}, Headers: {}",
+                    endpoint,
+                    maskCookieValues(cookies),
+                    maskSensitiveHeaders(entity.getHeaders()));
             ResponseEntity<T> response = restTemplate.exchange(url, HttpMethod.GET, entity, responseType);
-            
+
             if (response.getBody() == null) {
                 recordError(endpoint, "empty_response");
                 throw new NSEApiException(endpoint, response.getStatusCode(), "null", "Empty response from NSE API");
@@ -104,43 +106,45 @@ public class NSEApiClient {
 
         } catch (HttpClientErrorException.Unauthorized e) {
             String responseBody = e.getResponseBodyAsString();
-            log.error("Unauthorized access to NSE API - Endpoint: {}, Response: {}, Headers: {}", 
-                endpoint, responseBody, maskSensitiveHeaders(e.getResponseHeaders()));
+            log.error("Unauthorized access to NSE API - Endpoint: {}, Response: {}, Headers: {}",
+                    endpoint, responseBody, maskSensitiveHeaders(e.getResponseHeaders()));
             cookieCache.invalidateCookies();
             recordError(endpoint, "unauthorized");
-            throw new NSEApiException(endpoint, HttpStatus.UNAUTHORIZED, responseBody, "Unauthorized access, cookies might be expired", e);
-        
+            throw new NSEApiException(endpoint, HttpStatus.UNAUTHORIZED, responseBody,
+                    "Unauthorized access, cookies might be expired", e);
+
         } catch (HttpClientErrorException e) {
             String responseBody = e.getResponseBodyAsString();
-            log.error("Client error from NSE API - Endpoint: {}, Status: {}, Response: {}, Headers: {}", 
-                endpoint, e.getStatusCode(), responseBody, maskSensitiveHeaders(e.getResponseHeaders()));
+            log.error("Client error from NSE API - Endpoint: {}, Status: {}, Response: {}, Headers: {}",
+                    endpoint, e.getStatusCode(), responseBody, maskSensitiveHeaders(e.getResponseHeaders()));
             recordError(endpoint, "client_error");
             throw new NSEApiException(endpoint, e.getStatusCode(), responseBody, "Client error from NSE API", e);
-        
+
         } catch (HttpServerErrorException e) {
             String responseBody = e.getResponseBodyAsString();
-            log.error("Server error from NSE API - Endpoint: {}, Status: {}, Response: {}, Headers: {}", 
-                endpoint, e.getStatusCode(), responseBody, maskSensitiveHeaders(e.getResponseHeaders()));
+            log.error("Server error from NSE API - Endpoint: {}, Status: {}, Response: {}, Headers: {}",
+                    endpoint, e.getStatusCode(), responseBody, maskSensitiveHeaders(e.getResponseHeaders()));
             recordError(endpoint, "server_error");
             throw new NSEApiException(endpoint, e.getStatusCode(), responseBody, "Server error from NSE API", e);
-        
+
         } catch (ResourceAccessException e) {
             log.error("Network error calling NSE API - Endpoint: {}, Error: {}", endpoint, e.getMessage());
             recordError(endpoint, "network_error");
-            throw new NSEApiException(endpoint, HttpStatus.SERVICE_UNAVAILABLE, "N/A", "Network error accessing NSE API", e);
-        
+            throw new NSEApiException(endpoint, HttpStatus.SERVICE_UNAVAILABLE, "N/A",
+                    "Network error accessing NSE API", e);
+
         } catch (Exception e) {
             log.error("Unexpected error calling NSE API - Endpoint: {}, Error: {}", endpoint, e.getMessage(), e);
             recordError(endpoint, "unexpected_error");
-            throw new NSEApiException(endpoint, HttpStatus.INTERNAL_SERVER_ERROR, "N/A", "Unexpected error calling NSE API", e);
+            throw new NSEApiException(endpoint, HttpStatus.INTERNAL_SERVER_ERROR, "N/A",
+                    "Unexpected error calling NSE API", e);
         }
     }
 
     private void recordError(String endpoint, String errorType) {
         meterRegistry.counter(METRIC_ERROR_COUNT,
-            TAG_ENDPOINT, endpoint,
-            TAG_ERROR_TYPE, errorType
-        ).increment();
+                TAG_ENDPOINT, endpoint,
+                TAG_ERROR_TYPE, errorType).increment();
     }
 
     private String getCookiesOrThrow() {
@@ -160,7 +164,8 @@ public class NSEApiClient {
     }
 
     private HttpHeaders maskSensitiveHeaders(HttpHeaders headers) {
-        if (headers == null) return null;
+        if (headers == null)
+            return null;
         HttpHeaders masked = new HttpHeaders();
         headers.forEach((key, value) -> {
             if (HttpHeaders.COOKIE.equalsIgnoreCase(key)) {
@@ -173,23 +178,24 @@ public class NSEApiClient {
     }
 
     private String maskCookieValues(String cookies) {
-        if (cookies == null) return null;
+        if (cookies == null)
+            return null;
         // Split cookies and mask values while preserving names
         return Stream.of(cookies.split(";"))
-            .map(cookie -> {
-                String[] parts = cookie.split("=", 2);
-                return parts.length > 1 
-                    ? parts[0].trim() + "=*****" 
-                    : cookie.trim() + "=*****";
-            })
-            .collect(Collectors.joining("; "));
+                .map(cookie -> {
+                    String[] parts = cookie.split("=", 2);
+                    return parts.length > 1
+                            ? parts[0].trim() + "=*****"
+                            : cookie.trim() + "=*****";
+                })
+                .collect(Collectors.joining("; "));
     }
 
     private <T> void logApiResponse(String endpoint, ResponseEntity<T> response, ResponseLogger<T> responseLogger) {
         try {
-            log.info("NSE API Response - Endpoint: {}, Status: {}, Headers: {}", 
-                endpoint, response.getStatusCode(), maskSensitiveHeaders(response.getHeaders()));
-            
+            log.info("NSE API Response - Endpoint: {}, Status: {}, Headers: {}",
+                    endpoint, response.getStatusCode(), maskSensitiveHeaders(response.getHeaders()));
+
             if (response.getBody() != null) {
                 responseLogger.log(response.getBody());
             }
@@ -204,28 +210,24 @@ public class NSEApiClient {
     }
 
     private void logStockIndicesResponse(NSEStockInsidicesData stockIndices) throws Exception {
-        log.info("Stock Indices Response - Raw: {}", objectMapper.writeValueAsString(stockIndices));
+        log.debug("Stock Indices Response - Raw: {}", objectMapper.writeValueAsString(stockIndices));
         if (stockIndices.getData() != null) {
-            log.info("Stock Indices Summary - Count: {}, First Stock Index: {}", 
-                stockIndices.getData().size(),
-                stockIndices.getData().isEmpty() ? "none" : 
-                stockIndices.getData().get(0).getSymbol()
-            );
+            log.info("Stock Indices Summary - Count: {}, First Stock Index: {}",
+                    stockIndices.getData().size(),
+                    stockIndices.getData().isEmpty() ? "none" : stockIndices.getData().get(0).getSymbol());
         }
     }
 
     private void logIndicesResponse(NSEIndicesResponse indices) throws Exception {
-        log.info("Indices Response - Raw: {}", objectMapper.writeValueAsString(indices));
+        log.debug("Indices Response - Raw: {}", objectMapper.writeValueAsString(indices));
         if (indices.getData() != null) {
-            log.info("Indices Summary - Count: {}, First Index: {}", 
-                indices.getData().size(),
-                indices.getData().isEmpty() ? "none" : 
-                    String.format("%s (Last: %.2f, Change: %.2f%%)", 
-                        indices.getData().get(0).getIndexSymbol(),
-                        indices.getData().get(0).getLast(),
-                        indices.getData().get(0).getPercentChange()
-                    )
-            );
+            log.info("Indices Summary - Count: {}, First Index: {}",
+                    indices.getData().size(),
+                    indices.getData().isEmpty() ? "none"
+                            : String.format("%s (Last: %.2f, Change: %.2f%%)",
+                                    indices.getData().get(0).getIndexSymbol(),
+                                    indices.getData().get(0).getLast(),
+                                    indices.getData().get(0).getPercentChange()));
         }
     }
 }

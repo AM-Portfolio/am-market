@@ -153,6 +153,19 @@ public class MarketDataOrchestrator {
     // --- Daily: Maintenance ---
 
     /**
+     * Manual Historical Data Sync Trigger
+     */
+    public void triggerHistoricalData(String symbol, String duration, boolean forceRefresh) {
+        log.info("Orchestrator: Triggering Manual Historical Data Sync for {}, Duration: {}, Force: {}", symbol,
+                duration, forceRefresh);
+        if (ingestionScheduler.isPresent()) {
+            ingestionScheduler.get().executeManualHistoricalSync(symbol, duration, forceRefresh);
+        } else {
+            log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Manual Historical Data Sync");
+        }
+    }
+
+    /**
      * Historical Data Sync (e.g. 7:15 AM)
      */
     @Scheduled(cron = "${scheduler.historical.sync-cron:0 15 7 * * *}")

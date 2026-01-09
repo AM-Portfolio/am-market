@@ -9,6 +9,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -88,30 +91,60 @@ public class MarketDataProducer {
             return;
         }
 
-        try {
-            com.am.marketdata.common.model.events.HistoricalDataIngestionEvent event = com.am.marketdata.common.model.events.HistoricalDataIngestionEvent
-                    .builder()
-                    .data(data)
-                    .timeFrame(timeFrame)
-                    .provider(provider)
-                    .timestamp(System.currentTimeMillis())
-                    .build();
+        // Split into smaller batches to avoid RecordTooLargeException
+        // 11MB for 51 symbols suggests ~200KB-250KB per symbol.
+        // A single message limit is often 1MB.
+        // So a batch of 1-3 symbols is safe. Let's use 2 to be very safe across all
+        // scenarios.
+        int batchSize = 2;
 
-            log.info("Sending Historical ingestion event to Kafka topic {}: {} symbols from {}",
-                    historicalIngestionTopic, data.size(), provider);
+        List<Map<String, com.am.common.investment.model.historical.HistoricalData>> batches = new ArrayList<>();
+        Map<String, com.am.common.investment.model.historical.HistoricalData> currentBatch = new HashMap<>();
 
-            // Using constant key for sequential processing
-            kafkaTemplate.send(historicalIngestionTopic, "HISTORICAL_INGESTION", event)
-                    .whenComplete((result, ex) -> {
-                        if (ex == null) {
-                            log.debug("Successfully sent Historical ingestion event to Kafka");
-                        } else {
-                            log.error("Failed to send Historical ingestion event to Kafka", ex);
-                        }
-                    });
+        for (Map.Entry<String, com.am.common.investment.model.historical.HistoricalData> entry : data.entrySet()) {
+            currentBatch.put(entry.getKey(), entry.getValue());
+            if (currentBatch.size() >= batchSize) {
+                batches.add(new HashMap<>(currentBatch));
+                currentBatch.clear();
+            }
+        }
+        if (!currentBatch.isEmpty()) {
+            batches.add(currentBatch);
+        }
 
-        } catch (Exception e) {
-            log.error("Error creating/sending Historical ingestion event", e);
+        log.info("Splitting {} symbols into {} batches for Kafka ingestion (Batch Size: {})",
+                data.size(), batches.size(), batchSize);
+
+        for (int i = 0; i < batches.size(); i++) {
+            Map<String, com.am.common.investment.model.historical.HistoricalData> batch = batches.get(i);
+            try {
+                com.am.marketdata.common.model.events.HistoricalDataIngestionEvent event = com.am.marketdata.common.model.events.HistoricalDataIngestionEvent
+                        .builder()
+                        .data(batch)
+                        .timeFrame(timeFrame)
+                        .provider(provider)
+                        .timestamp(System.currentTimeMillis())
+                        .build();
+
+                log.info("Sending Historical ingestion event batch {}/{} to Kafka topic {}: {} symbols",
+                        i + 1, batches.size(), historicalIngestionTopic, batch.size());
+
+                // Using constant key for sequential processing, but appending index to track
+                // different messages if needed
+                // Actually sticking to "HISTORICAL_INGESTION" is fine as long as they are
+                // ordered.
+                kafkaTemplate.send(historicalIngestionTopic, "HISTORICAL_INGESTION", event)
+                        .whenComplete((result, ex) -> {
+                            if (ex == null) {
+                                log.debug("Successfully sent Historical ingestion event batch to Kafka");
+                            } else {
+                                log.error("Failed to send Historical ingestion event batch to Kafka", ex);
+                            }
+                        });
+
+            } catch (Exception e) {
+                log.error("Error creating/sending Historical ingestion event batch " + (i + 1), e);
+            }
         }
     }
 }

@@ -81,7 +81,16 @@ public class MarketDataIngestionScheduler {
         if (!enabled)
             return;
         log.info("scheduledHistoricalSync", "Scheduled trigger: Starting Historical Data Sync (Smart Delta)");
-        historicalSyncService.syncHistoricalData(null, true, false); // fetchIndexStocks=false for scheduled sync
+        // null duration -> uses default logic (10yr or incremental)
+        historicalSyncService.syncHistoricalData(null, null, true, false);
+    }
+
+    public void executeManualHistoricalSync(String symbol, String duration, boolean forceRefresh) {
+        log.info("executeManualHistoricalSync",
+                "Manual trigger: Starting Historical Data Sync for {}, Duration: {}, Force: {}", symbol, duration,
+                forceRefresh);
+        // fetchIndexStocks is defaulted to TRUE for manual triggers as per requirements
+        historicalSyncService.syncHistoricalData(symbol, duration, forceRefresh, true);
     }
 
     protected List<String> getSymbolsToProcess() {

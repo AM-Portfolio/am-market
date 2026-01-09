@@ -44,12 +44,22 @@ public class MarketDataHistoricalSyncService {
      * @param fetchIndexStocks If true, fetch individual stocks from index symbols;
      *                         if false, keep index symbols as-is
      */
-    public void syncHistoricalData(String symbol, boolean forceRefresh, boolean fetchIndexStocks) {
+    /**
+     * Triggered by Scheduler or Admin Controller
+     * 
+     * @param symbol           Symbol or index to sync (comma-separated)
+     * @param durationStr      Duration string (e.g. "1Y", "5Y", "6M"). If null,
+     *                         uses default logic.
+     * @param forceRefresh     Whether to force refresh from provider
+     * @param fetchIndexStocks If true, fetch individual stocks from index symbols;
+     *                         if false, keep index symbols as-is
+     */
+    public void syncHistoricalData(String symbol, String durationStr, boolean forceRefresh, boolean fetchIndexStocks) {
         String jobId = UUID.randomUUID().toString();
         LocalDateTime startTime = LocalDateTime.now();
         log.info("syncHistoricalData",
-                "Starting Historical Data Sync Job: {} (Force Refresh: {}, Fetch Index Stocks: {})", jobId,
-                forceRefresh, fetchIndexStocks);
+                "Starting Historical Data Sync Job: {} (Symbol: {}, Duration: {}, Force: {}, ExpandIndex: {})",
+                jobId, symbol, durationStr, forceRefresh, fetchIndexStocks);
 
         IngestionJobLog jobLog = IngestionJobLog.builder()
                 .jobId(jobId)
@@ -59,31 +69,30 @@ public class MarketDataHistoricalSyncService {
                 .logs(new ArrayList<>())
                 .build();
 
-        addLog(jobLog, "Starting Historical Data Sync Job: " + jobId + ", Force Refresh: " + forceRefresh);
+        addLog(jobLog, "Starting Historical Data Sync Job: " + jobId);
         jobLog = ingestionJobLogRepository.save(jobLog);
 
         try {
-            // 1. Get Symbols
+            // 1. Get Symbols and Expand if needed
             Set<String> allSymbols;
             if (symbol != null && !symbol.trim().isEmpty()) {
-                allSymbols = java.util.Arrays.stream(symbol.split(","))
-                        .map(String::trim)
-                        .filter(s -> !s.isEmpty())
-                        .collect(java.util.stream.Collectors.toSet());
-                addLog(jobLog, "Targeting symbols: " + allSymbols);
+                allSymbols = instrumentUtils.resolveSymbols(symbol, fetchIndexStocks);
+                addLog(jobLog, "Resolved symbols count: " + allSymbols.size());
             } else {
                 allSymbols = getAllSymbolsToSync();
             }
             jobLog.setTotalSymbols(allSymbols.size());
-            addLog(jobLog, "Found " + allSymbols.size() + " symbols to sync");
             log.info("syncHistoricalData", "Found {} symbols to sync", allSymbols.size());
 
-            // 2. Resolve Status & Group into Buckets
-            Map<LocalDate, List<String>> buckets = groupSymbolsByStartDate(allSymbols, forceRefresh);
-
-            if (!forceRefresh) {
-                // Comments preserved
+            // Calculate override start date if duration provided
+            LocalDate overrideStartDate = parseDurationStartDate(durationStr);
+            if (overrideStartDate != null) {
+                log.info("syncHistoricalData", "Using override start date: {}", overrideStartDate);
+                addLog(jobLog, "Duration " + durationStr + " resolved to start date: " + overrideStartDate);
             }
+
+            // 2. Resolve Status & Group into Buckets
+            Map<LocalDate, List<String>> buckets = groupSymbolsByStartDate(allSymbols, forceRefresh, overrideStartDate);
 
             int successCount = 0;
             int failureCount = 0;
@@ -131,6 +140,27 @@ public class MarketDataHistoricalSyncService {
         }
     }
 
+    private LocalDate parseDurationStartDate(String durationStr) {
+        if (durationStr == null || durationStr.trim().isEmpty()) {
+            return null;
+        }
+        String d = durationStr.trim().toUpperCase();
+        LocalDate now = LocalDate.now();
+        try {
+            if (d.endsWith("Y"))
+                return now.minusYears(Long.parseLong(d.replace("Y", "")));
+            if (d.endsWith("M"))
+                return now.minusMonths(Long.parseLong(d.replace("M", "")));
+            if (d.endsWith("W"))
+                return now.minusWeeks(Long.parseLong(d.replace("W", "")));
+            if (d.endsWith("D"))
+                return now.minusDays(Long.parseLong(d.replace("D", "")));
+        } catch (NumberFormatException e) {
+            log.warn("Invalid duration format: {}", durationStr);
+        }
+        return null; // Fallback to default
+    }
+
     private Set<String> getAllSymbolsToSync() {
         // Fetch NSE 500 Constitutents
         // Assuming "NIFTY 500" is the index we want. Or user mentioned "NSE 500 list".
@@ -146,13 +176,18 @@ public class MarketDataHistoricalSyncService {
         return resolvedSymbols;
     }
 
-    private Map<LocalDate, List<String>> groupSymbolsByStartDate(Set<String> symbols, boolean forceRefresh) {
+    private Map<LocalDate, List<String>> groupSymbolsByStartDate(Set<String> symbols, boolean forceRefresh,
+            LocalDate overrideStartDate) {
         Map<LocalDate, List<String>> buckets = new HashMap<>();
         LocalDate today = LocalDate.now();
         LocalDate defaultStart = today.minusYears(10);
 
-        log.info("groupSymbolsByStartDate", "Grouping {} symbols by start date (forceRefresh: {})", symbols.size(),
-                forceRefresh);
+        if (overrideStartDate != null) {
+            defaultStart = overrideStartDate;
+        }
+
+        log.info("groupSymbolsByStartDate", "Grouping {} symbols (forceRefresh: {}, overrideDate: {})", symbols.size(),
+                forceRefresh, overrideStartDate);
 
         List<MarketDataIngestionStatus> statuses = ingestionStatusRepository.findAllById(symbols);
         Map<String, LocalDate> statusMap = statuses.stream()
@@ -167,23 +202,16 @@ public class MarketDataHistoricalSyncService {
         for (String symbol : symbols) {
             LocalDate startDate;
 
-            if (forceRefresh) {
-                // Force refresh: Always fetch from historical start, ignore last sync date
+            if (forceRefresh || overrideStartDate != null) {
+                // Force refresh OR override provided: Use the target start date
                 startDate = defaultStart;
-                log.debug("groupSymbolsByStartDate", "Symbol {} will be fetched from {} (force refresh)", symbol,
-                        startDate);
             } else {
                 // Normal mode: Use incremental sync from last sync date
                 LocalDate lastDate = statusMap.get(symbol);
                 LocalDate nextDate = (lastDate != null) ? lastDate.plusDays(1) : defaultStart;
 
-                log.debug("groupSymbolsByStartDate", "Symbol {} - Last sync date: {}, Next date to fetch: {}",
-                        symbol, lastDate != null ? lastDate : "NEVER", nextDate);
-
                 // If already up to date, skip
                 if (!nextDate.isBefore(today)) {
-                    log.debug("groupSymbolsByStartDate", "Symbol {} is already up to date (last sync: {}), skipping",
-                            symbol, lastDate);
                     skippedSymbols.add(symbol);
                     continue;
                 }
@@ -195,17 +223,8 @@ public class MarketDataHistoricalSyncService {
         }
 
         if (!skippedSymbols.isEmpty()) {
-            log.info("groupSymbolsByStartDate", "Skipped {} symbols that are already up to date: {}",
-                    skippedSymbols.size(),
-                    skippedSymbols.size() > 10 ? skippedSymbols.subList(0, 10) + "..." : skippedSymbols);
-        }
-
-        log.info("groupSymbolsByStartDate", "Created {} buckets for {} symbols to process", buckets.size(),
-                processedSymbols);
-        for (Map.Entry<LocalDate, List<String>> entry : buckets.entrySet()) {
-            log.info("groupSymbolsByStartDate", "Bucket [{}]: {} symbols (sample: {})",
-                    entry.getKey(), entry.getValue().size(),
-                    entry.getValue().size() > 3 ? entry.getValue().subList(0, 3) + "..." : entry.getValue());
+            log.info("groupSymbolsByStartDate", "Skipped {} symbols that are already up to date",
+                    skippedSymbols.size());
         }
 
         return buckets;

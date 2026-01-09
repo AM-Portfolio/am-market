@@ -67,14 +67,18 @@ public class MarketDataAdminController {
     @PostMapping("/sync/historical")
     public ResponseEntity<String> triggerHistoricalSync(
             @RequestParam(required = false) String symbol,
+            @RequestParam(required = false) String duration,
             @RequestParam(defaultValue = "true") boolean forceRefresh,
             @RequestParam(defaultValue = "false") boolean fetchIndexStocks) {
-        log.info("Manual trigger: Historical Sync (Symbol: {}, Force Refresh: {}, Fetch Index Stocks: {})", symbol,
+        log.info(
+                "Manual trigger: Historical Sync (Symbol: {}, Duration: {}, Force Refresh: {}, Fetch Index Stocks: {})",
+                symbol, duration,
                 forceRefresh, fetchIndexStocks);
         // Running asynchronously to avoid blocking
-        new Thread(() -> historicalSyncService.syncHistoricalData(symbol, forceRefresh, fetchIndexStocks)).start();
-        return ResponseEntity.ok("Historical Sync Triggered (Force: " + forceRefresh + ", Fetch Index Stocks: "
-                + fetchIndexStocks + ")");
+        new Thread(() -> historicalSyncService.syncHistoricalData(symbol, duration, forceRefresh, fetchIndexStocks))
+                .start();
+        return ResponseEntity.ok("Historical Sync Triggered (Symbol: " + symbol + ", Duration: " + duration
+                + ", Force: " + forceRefresh + ")");
     }
 
     @PostMapping("/ingestion/start")
