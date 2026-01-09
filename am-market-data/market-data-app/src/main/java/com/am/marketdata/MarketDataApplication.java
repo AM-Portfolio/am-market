@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.ComponentScans;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
+
 //import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
@@ -35,10 +35,7 @@ import com.am.marketdata.scheduler.config.MarketDataSchedulerConfig;
                 @ComponentScan("com.am.marketdata"),
                 @ComponentScan("com.marketdata")
 })
-@EnableMongoRepositories(basePackages = {
-                "com.am.common.investment.persistence.repository",
-                "com.am.marketdata.service.repo"
-})
+
 // @EnableRetry
 @EnableScheduling
 @org.springframework.cache.annotation.EnableCaching

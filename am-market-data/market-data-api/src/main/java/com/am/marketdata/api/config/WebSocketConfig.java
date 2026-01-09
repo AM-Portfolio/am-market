@@ -2,6 +2,8 @@ package com.am.marketdata.api.config;
 
 import com.am.marketdata.api.websocket.MarketDataWebSocketHandler;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.*;
 
@@ -13,6 +15,8 @@ import org.springframework.web.socket.config.annotation.*;
 @Configuration
 @EnableWebSocket
 @EnableWebSocketMessageBroker
+@ConditionalOnProperty(name = "market-data.websocket.enabled", havingValue = "true", matchIfMissing = true)
+@Profile("!isolated")
 public class WebSocketConfig implements WebSocketConfigurer, WebSocketMessageBrokerConfigurer {
 
     private final MarketDataWebSocketHandler marketDataWebSocketHandler;

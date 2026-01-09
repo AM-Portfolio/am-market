@@ -1,0 +1,54 @@
+spring:
+  config:
+    activate:
+      on-profile: isolated
+  
+  # Disable data repositories to prevent connection attempts
+  data:
+    redis:
+      repositories:
+        enabled: false
+    mongodb:
+      auto-index-creation: false
+
+  # Disable Kafka auto-configuration
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration
+
+app:
+  kafka:
+    enabled: false
+
+market-data:
+  cache:
+    enabled: false
+  provider: mock
+  scheduler:
+    enabled: false
+
+# Disable Security
+security:
+  enabled: false
+
+# Disable Management/Actuator checking external services
+management:
+  health:
+    redis:
+      enabled: false
+    mongo:
+      enabled: false
+    influxdb:
+      enabled: false
+    kafka:
+      enabled: false
+
+logging:
+  level:
+    root: INFO
+    '[org.springframework.boot.autoconfigure]': ERROR

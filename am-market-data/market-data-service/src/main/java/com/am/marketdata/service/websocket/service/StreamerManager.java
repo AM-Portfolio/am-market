@@ -51,20 +51,18 @@ public class StreamerManager implements StreamerListener {
     }
 
     /**
-     * Start the streamer (Scheduled at 8:00 AM)
+     * Start the streamer
      */
-    @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
     public void startStreaming() {
-        log.info("StreamerManager", "Starting Market Data Streamer (Scheduled)...");
+        log.info("StreamerManager", "Starting Market Data Streamer (Manual/External Trigger)...");
         connectAndSubscribe();
     }
 
     /**
-     * Stop the streamer (Scheduled at 4:00 PM)
+     * Stop the streamer
      */
-    @Scheduled(cron = "0 0 16 * * *", zone = "Asia/Kolkata")
     public void stopStreaming() {
-        log.info("StreamerManager", "Stopping Market Data Streamer (Scheduled)...");
+        log.info("StreamerManager", "Stopping Market Data Streamer (Manual/External Trigger)...");
         if (streamer.isConnected()) {
             streamer.disconnect();
         }

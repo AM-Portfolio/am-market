@@ -8,7 +8,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.context.annotation.Primary;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 import com.am.marketdata.common.mapper.OHLCMapper;
@@ -31,6 +33,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 @Configuration
 @EnableScheduling
+@ConditionalOnProperty(name = "zerodha.api.enabled", havingValue = "true", matchIfMissing = true)
+@Profile("!isolated")
 public class ZerodhaApiConfig {
 
     @Value("${market-data.zerodha.api.thread.pool.size:5}")

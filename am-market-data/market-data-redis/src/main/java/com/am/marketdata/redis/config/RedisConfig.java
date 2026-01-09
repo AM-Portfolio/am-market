@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
@@ -27,6 +28,7 @@ import java.time.Duration;
  */
 @Configuration
 @EnableCaching
+@Profile("!isolated")
 public class RedisConfig {
 
     private final AppLogger log = AppLogger.getLogger();

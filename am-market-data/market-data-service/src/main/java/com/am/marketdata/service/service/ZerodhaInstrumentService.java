@@ -2,9 +2,6 @@ package com.am.marketdata.service.service;
 
 import com.am.marketdata.service.model.ZerodhaInstrument;
 import com.am.marketdata.service.repo.ZerodhaInstrumentRepository;
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

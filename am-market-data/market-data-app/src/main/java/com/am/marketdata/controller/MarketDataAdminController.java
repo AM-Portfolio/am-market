@@ -17,10 +17,13 @@ import java.time.LocalDate;
 
 import org.springframework.format.annotation.DateTimeFormat;
 
+import org.springframework.context.annotation.Profile;
+
 @Slf4j
 @RestController
 @RequestMapping("/v1/admin")
 @RequiredArgsConstructor
+@Profile("!isolated")
 public class MarketDataAdminController {
 
     private final IngestionJobLogRepository ingestionJobLogRepository;
