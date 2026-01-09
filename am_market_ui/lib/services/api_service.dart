@@ -382,6 +382,25 @@ class ApiService {
     }
   }
 
+  // --- Scheduler Manual Triggers ---
+
+  Future<void> triggerScheduler(String endpoint) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/v1/admin/scheduler/$endpoint'),
+        headers: headers,
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to trigger $endpoint: ${response.statusCode}');
+      }
+    } catch (e) {
+      CommonLogger.error("Error triggering scheduler $endpoint", tag: "ApiService.triggerScheduler", error: e);
+      throw Exception('Error triggering scheduler $endpoint: $e');
+    }
+  }
+
   Future<Map<String, dynamic>> fetchMarketCapAnalysis() async {
     try {
       final headers = await _getHeaders();

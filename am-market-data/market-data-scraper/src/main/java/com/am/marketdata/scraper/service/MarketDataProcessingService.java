@@ -143,6 +143,7 @@ public class MarketDataProcessingService {
     @ConditionalOnProperty(name = "scheduler.indices.enabled", havingValue = "true", matchIfMissing = true)
     public void fetchAndProcessMarketData() {
         try {
+            log.info("Executing fetchAndProcessMarketData...");
             // Refresh cookies if needed
             cookieManager.refreshIfNeeded();
 

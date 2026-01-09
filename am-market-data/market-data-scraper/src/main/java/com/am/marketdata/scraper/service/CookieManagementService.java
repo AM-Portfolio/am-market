@@ -45,15 +45,17 @@ public class CookieManagementService {
 
     public void processIndicesData() {
         try {
+            log.info("Processing indices data check...");
             // Only process between 9:15 AM and 3:35 PM
             if (isWithinTradingHours()) {
+                log.info("Within trading hours. Refreshing cookies if needed...");
                 // Refresh cookies if needed before processing
                 cookieManager.refreshIfNeeded();
 
                 log.info("Starting indices data processing (triggered)");
                 marketDataProcessingService.fetchAndProcessMarketData();
             } else {
-                log.debug("Outside trading hours, skipping indices data processing");
+                log.info("Outside trading hours, skipping indices data processing");
             }
         } catch (Exception e) {
             log.error("Failed to process indices data (execution): {}", e.getMessage(), e);

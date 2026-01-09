@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:am_market_ui/features/analysis/analysis_page.dart';
 import 'package:am_market_ui/providers/market_provider.dart';
 import 'package:am_market_ui/screens/admin/historical_sync_page.dart';
+import 'package:am_market_ui/screens/admin_dashboard_page.dart';
 import 'package:am_market_ui/screens/etf_explorer_page.dart';
 import 'package:am_market_ui/screens/instrument_explorer_page.dart';
 import 'package:am_market_ui/screens/price_test_page.dart';
@@ -339,7 +340,7 @@ class _MarketContentState extends State<MarketContent> {
         title: 'Admin Dashboard',
         subtitle: 'System Tools',
         icon: Icons.admin_panel_settings_rounded,
-        page: HistoricalSyncPage(),
+        page: AdminDashboardPage(),
         accentColor: Color(0xFFFF6B6B),
       ),
     );

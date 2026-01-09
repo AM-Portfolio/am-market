@@ -32,8 +32,12 @@ public class MarketDataOrchestrator {
      */
     @Scheduled(cron = "${scheduler.indices.fetch:0 */2 * * * *}", zone = "Asia/Kolkata")
     public void triggerIndicesDataProcessing() {
-        log.debug("Orchestrator: Triggering Indices Data Processing");
-        cookieScheduler.ifPresent(CookieScheduler::executeIndicesDataProcessing);
+        log.info("Orchestrator: Triggering Indices Data Processing");
+        if (cookieScheduler.isPresent()) {
+            cookieScheduler.get().executeIndicesDataProcessing();
+        } else {
+            log.warn("Orchestrator: CookieScheduler is not present, skipping Indices Data Processing");
+        }
     }
 
     /**
@@ -41,8 +45,12 @@ public class MarketDataOrchestrator {
      */
     @Scheduled(cron = "${scheduler.stock-indices.retry.cron:0 */15 * * * *}", zone = "Asia/Kolkata")
     public void triggerStockIndicesRetry() {
-        log.debug("Orchestrator: Triggering Stock Indices Retry Check");
-        stockIndicesSchedulerService.ifPresent(StockIndicesSchedulerService::executeRetryJob);
+        log.info("Orchestrator: Triggering Stock Indices Retry Check");
+        if (stockIndicesSchedulerService.isPresent()) {
+            stockIndicesSchedulerService.get().executeRetryJob();
+        } else {
+            log.warn("Orchestrator: StockIndicesSchedulerService is not present, skipping Stock Indices Retry");
+        }
     }
 
     // --- Hourly Jobs ---
@@ -53,7 +61,11 @@ public class MarketDataOrchestrator {
     @Scheduled(cron = "${scheduler.cookie.refresh:0 0 * * * *}")
     public void triggerCookieRefresh() {
         log.info("Orchestrator: Triggering Cookie Refresh");
-        cookieScheduler.ifPresent(CookieScheduler::executeCookieRefresh);
+        if (cookieScheduler.isPresent()) {
+            cookieScheduler.get().executeCookieRefresh();
+        } else {
+            log.warn("Orchestrator: CookieScheduler is not present, skipping Cookie Refresh");
+        }
     }
 
     // --- Daily: Market Open/Close ---
@@ -65,7 +77,11 @@ public class MarketDataOrchestrator {
     @Scheduled(cron = "${scheduler.ingestion.start-cron:0 15 9 * * MON-FRI}", zone = "Asia/Kolkata")
     public void triggerMarketOpenJobs() {
         log.info("Orchestrator: Triggering Market Open Jobs");
-        ingestionScheduler.ifPresent(MarketDataIngestionScheduler::startIngestionJob);
+        if (ingestionScheduler.isPresent()) {
+            ingestionScheduler.get().startIngestionJob();
+        } else {
+            log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Market Open Jobs");
+        }
     }
 
     /**
@@ -74,7 +90,11 @@ public class MarketDataOrchestrator {
     @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
     public void triggerStreamerStart() {
         log.info("Orchestrator: Triggering Streamer Start");
-        streamerScheduler.ifPresent(StreamerScheduler::executeStartStreaming);
+        if (streamerScheduler.isPresent()) {
+            streamerScheduler.get().executeStartStreaming();
+        } else {
+            log.warn("Orchestrator: StreamerScheduler is not present, skipping Streamer Start");
+        }
     }
 
     /**
@@ -84,7 +104,11 @@ public class MarketDataOrchestrator {
     @Scheduled(cron = "${scheduler.ingestion.stop-cron:0 30 15 * * MON-FRI}", zone = "Asia/Kolkata")
     public void triggerIngestionStop() {
         log.info("Orchestrator: Triggering Ingestion Stop");
-        ingestionScheduler.ifPresent(MarketDataIngestionScheduler::stopIngestionJob);
+        if (ingestionScheduler.isPresent()) {
+            ingestionScheduler.get().stopIngestionJob();
+        } else {
+            log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Ingestion Stop");
+        }
     }
 
     /**
@@ -93,7 +117,11 @@ public class MarketDataOrchestrator {
     @Scheduled(cron = "0 0 16 * * *", zone = "Asia/Kolkata")
     public void triggerStreamerStop() {
         log.info("Orchestrator: Triggering Streamer Stop");
-        streamerScheduler.ifPresent(StreamerScheduler::executeStopStreaming);
+        if (streamerScheduler.isPresent()) {
+            streamerScheduler.get().executeStopStreaming();
+        } else {
+            log.warn("Orchestrator: StreamerScheduler is not present, skipping Streamer Stop");
+        }
     }
 
     /**
@@ -102,7 +130,11 @@ public class MarketDataOrchestrator {
     @Scheduled(cron = "${scheduler.stock-indices.morning-fetch:0 30 9 * * *}", zone = "Asia/Kolkata")
     public void triggerMorningStockIndicesFetch() {
         log.info("Orchestrator: Triggering Morning Stock Indices Fetch");
-        stockIndicesSchedulerService.ifPresent(StockIndicesSchedulerService::executeMorningStockIndicesFetch);
+        if (stockIndicesSchedulerService.isPresent()) {
+            stockIndicesSchedulerService.get().executeMorningStockIndicesFetch();
+        } else {
+            log.warn("Orchestrator: StockIndicesSchedulerService is not present, skipping Morning Stock Indices Fetch");
+        }
     }
 
     /**
@@ -111,7 +143,11 @@ public class MarketDataOrchestrator {
     @Scheduled(cron = "${scheduler.stock-indices.evening-fetch:0 0 16 * * *}", zone = "Asia/Kolkata")
     public void triggerEveningStockIndicesFetch() {
         log.info("Orchestrator: Triggering Evening Stock Indices Fetch");
-        stockIndicesSchedulerService.ifPresent(StockIndicesSchedulerService::executeEveningStockIndicesFetch);
+        if (stockIndicesSchedulerService.isPresent()) {
+            stockIndicesSchedulerService.get().executeEveningStockIndicesFetch();
+        } else {
+            log.warn("Orchestrator: StockIndicesSchedulerService is not present, skipping Evening Stock Indices Fetch");
+        }
     }
 
     // --- Daily: Maintenance ---
@@ -122,7 +158,11 @@ public class MarketDataOrchestrator {
     @Scheduled(cron = "${scheduler.historical.sync-cron:0 15 7 * * *}")
     public void triggerHistoricalSync() {
         log.info("Orchestrator: Triggering Historical Data Sync");
-        ingestionScheduler.ifPresent(MarketDataIngestionScheduler::executeHistoricalSync);
+        if (ingestionScheduler.isPresent()) {
+            ingestionScheduler.get().executeHistoricalSync();
+        } else {
+            log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Historical Data Sync");
+        }
     }
 
     /**
@@ -131,6 +171,10 @@ public class MarketDataOrchestrator {
     @Scheduled(cron = "${scheduler.redis.cleanup.cron:0 0 2 * * *}")
     public void triggerRedisCleanup() {
         log.info("Orchestrator: Triggering Redis Cleanup");
-        redisCacheCleanupScheduler.ifPresent(RedisCacheCleanupScheduler::executeCleanup);
+        if (redisCacheCleanupScheduler.isPresent()) {
+            redisCacheCleanupScheduler.get().executeCleanup();
+        } else {
+            log.warn("Orchestrator: RedisCacheCleanupScheduler is not present, skipping Redis Cleanup");
+        }
     }
 }

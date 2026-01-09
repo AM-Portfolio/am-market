@@ -29,6 +29,7 @@ public class MarketDataAdminController {
     private final IngestionJobLogRepository ingestionJobLogRepository;
     private final MarketDataHistoricalSyncService historicalSyncService;
     private final MarketDataIngestionService ingestionService;
+    private final com.am.marketdata.scheduler.service.MarketDataOrchestrator orchestrator;
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     @GetMapping("/logs/{jobId}")
@@ -89,5 +90,77 @@ public class MarketDataAdminController {
         log.info("Manual trigger: Stop Ingestion");
         ingestionService.stopIngestion(provider);
         return ResponseEntity.ok("Ingestion Stopped");
+    }
+
+    // --- Scheduler Manual Triggers ---
+
+    @PostMapping("/scheduler/indices/process")
+    public ResponseEntity<String> triggerIndicesProcessing() {
+        log.info("Manual trigger: Indices Data Processing");
+        orchestrator.triggerIndicesDataProcessing();
+        return ResponseEntity.ok("Triggered Indices Data Processing");
+    }
+
+    @PostMapping("/scheduler/indices/retry")
+    public ResponseEntity<String> triggerIndicesRetry() {
+        log.info("Manual trigger: Stock Indices Retry");
+        orchestrator.triggerStockIndicesRetry();
+        return ResponseEntity.ok("Triggered Stock Indices Retry");
+    }
+
+    @PostMapping("/scheduler/cookie/refresh")
+    public ResponseEntity<String> triggerCookieRefresh() {
+        log.info("Manual trigger: Cookie Refresh");
+        orchestrator.triggerCookieRefresh();
+        return ResponseEntity.ok("Triggered Cookie Refresh");
+    }
+
+    @PostMapping("/scheduler/streamer/start")
+    public ResponseEntity<String> triggerStreamerStart() {
+        log.info("Manual trigger: Streamer Start");
+        orchestrator.triggerStreamerStart();
+        return ResponseEntity.ok("Triggered Streamer Start");
+    }
+
+    @PostMapping("/scheduler/streamer/stop")
+    public ResponseEntity<String> triggerStreamerStop() {
+        log.info("Manual trigger: Streamer Stop");
+        orchestrator.triggerStreamerStop();
+        return ResponseEntity.ok("Triggered Streamer Stop");
+    }
+
+    @PostMapping("/scheduler/indices/morning")
+    public ResponseEntity<String> triggerMorningIndicesFetch() {
+        log.info("Manual trigger: Morning Stock Indices Fetch");
+        orchestrator.triggerMorningStockIndicesFetch();
+        return ResponseEntity.ok("Triggered Morning Stock Indices Fetch");
+    }
+
+    @PostMapping("/scheduler/indices/evening")
+    public ResponseEntity<String> triggerEveningIndicesFetch() {
+        log.info("Manual trigger: Evening Stock Indices Fetch");
+        orchestrator.triggerEveningStockIndicesFetch();
+        return ResponseEntity.ok("Triggered Evening Stock Indices Fetch");
+    }
+
+    @PostMapping("/scheduler/redis/cleanup")
+    public ResponseEntity<String> triggerRedisCleanup() {
+        log.info("Manual trigger: Redis Cleanup");
+        orchestrator.triggerRedisCleanup();
+        return ResponseEntity.ok("Triggered Redis Cleanup");
+    }
+
+    @PostMapping("/scheduler/market/open")
+    public ResponseEntity<String> triggerMarketOpen() {
+        log.info("Manual trigger: Market Open Jobs");
+        orchestrator.triggerMarketOpenJobs();
+        return ResponseEntity.ok("Triggered Market Open Jobs");
+    }
+
+    @PostMapping("/scheduler/market/close")
+    public ResponseEntity<String> triggerMarketClose() {
+        log.info("Manual trigger: Market Close/Ingestion Stop");
+        orchestrator.triggerIngestionStop(); // Orchestrator method for market close/stop ingestion
+        return ResponseEntity.ok("Triggered Market Close/Ingestion Stop");
     }
 }

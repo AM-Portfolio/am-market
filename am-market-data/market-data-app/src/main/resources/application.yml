@@ -163,9 +163,9 @@ server:
 
 scheduler:
   cookie:
-    enabled: false
+    enabled: true
   stock-indices:
-    enabled: false
+    enabled: true
   ingestion:
     enabled: true
     symbols: "NIFTY 50,NIFTY BANK"

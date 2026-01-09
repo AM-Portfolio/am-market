@@ -1,6 +1,7 @@
 name: am_market_ui
 description: "Market Data Module (Watchlist, Screener, Real-time Quotes)"
 version: 0.0.1
+publish_to: 'none'
 homepage:
 
 environment:
