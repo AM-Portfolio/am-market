@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
@@ -50,8 +50,10 @@ public class StockIndicesSchedulerService {
     /**
      * Morning schedule at 9:30 AM IST
      */
-    @Scheduled(cron = "${scheduler.stock-indices.morning-fetch:0 30 9 * * *}", zone = "Asia/Kolkata")
-    public void scheduleMorningStockIndicesFetch() {
+    /**
+     * Morning schedule at 9:30 AM IST
+     */
+    public void executeMorningStockIndicesFetch() {
         resetFlagsIfNeeded();
 
         if (!morningFetchCompleted.get()) {
@@ -65,8 +67,7 @@ public class StockIndicesSchedulerService {
     /**
      * Evening schedule at 4:00 PM IST
      */
-    @Scheduled(cron = "${scheduler.stock-indices.evening-fetch:0 0 16 * * *}", zone = "Asia/Kolkata")
-    public void scheduleEveningStockIndicesFetch() {
+    public void executeEveningStockIndicesFetch() {
         resetFlagsIfNeeded();
 
         if (!eveningFetchCompleted.get()) {
@@ -80,8 +81,7 @@ public class StockIndicesSchedulerService {
     /**
      * Retry scheduler that runs every X minutes if needed
      */
-    @Scheduled(cron = "${scheduler.stock-indices.retry.cron:0 */15 * * * *}", zone = "Asia/Kolkata")
-    public void retryFailedFetch() {
+    public void executeRetryJob() {
         resetFlagsIfNeeded();
 
         // Only retry if we have active failures and haven't exceeded max retries

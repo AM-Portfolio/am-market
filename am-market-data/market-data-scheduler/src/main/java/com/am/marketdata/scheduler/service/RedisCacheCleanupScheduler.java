@@ -4,7 +4,6 @@ import com.am.marketdata.common.log.AppLogger;
 import com.am.marketdata.redis.service.RedisCacheCleanupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 /**
@@ -27,8 +26,10 @@ public class RedisCacheCleanupScheduler {
     /**
      * Scheduled cleanup job - runs daily at 2:00 AM
      */
-    @Scheduled(cron = "${scheduler.redis.cleanup.cron:0 0 2 * * *}")
-    public void scheduledCleanup() {
+    /**
+     * Scheduled cleanup job - runs daily at 2:00 AM
+     */
+    public void executeCleanup() {
         if (!enabled) {
             log.debug("scheduledCleanup", "Redis cleanup is disabled");
             return;

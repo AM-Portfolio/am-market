@@ -1,0 +1,136 @@
+package com.am.marketdata.scheduler.service;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+/**
+ * Centralized Orchestrator for all Market Data Scheduled Tasks.
+ * Replaces individual scheduler configurations to provide a single view of all
+ * jobs.
+ */
+@Slf4j
+@Component
+@Configuration
+@EnableScheduling
+@RequiredArgsConstructor
+public class MarketDataOrchestrator {
+
+    private final java.util.Optional<CookieScheduler> cookieScheduler;
+    private final java.util.Optional<MarketDataIngestionScheduler> ingestionScheduler;
+    private final java.util.Optional<RedisCacheCleanupScheduler> redisCacheCleanupScheduler;
+    private final java.util.Optional<StockIndicesSchedulerService> stockIndicesSchedulerService;
+    private final java.util.Optional<StreamerScheduler> streamerScheduler;
+
+    // --- High Frequency Jobs ---
+
+    /**
+     * Indices Data Processing: Runs every 2 minutes
+     */
+    @Scheduled(cron = "${scheduler.indices.fetch:0 */2 * * * *}", zone = "Asia/Kolkata")
+    public void triggerIndicesDataProcessing() {
+        log.debug("Orchestrator: Triggering Indices Data Processing");
+        cookieScheduler.ifPresent(CookieScheduler::executeIndicesDataProcessing);
+    }
+
+    /**
+     * Stock Indices Retry: Runs every 15 minutes (or configured interval)
+     */
+    @Scheduled(cron = "${scheduler.stock-indices.retry.cron:0 */15 * * * *}", zone = "Asia/Kolkata")
+    public void triggerStockIndicesRetry() {
+        log.debug("Orchestrator: Triggering Stock Indices Retry Check");
+        stockIndicesSchedulerService.ifPresent(StockIndicesSchedulerService::executeRetryJob);
+    }
+
+    // --- Hourly Jobs ---
+
+    /**
+     * Cookie Refresh: Runs every hour
+     */
+    @Scheduled(cron = "${scheduler.cookie.refresh:0 0 * * * *}")
+    public void triggerCookieRefresh() {
+        log.info("Orchestrator: Triggering Cookie Refresh");
+        cookieScheduler.ifPresent(CookieScheduler::executeCookieRefresh);
+    }
+
+    // --- Daily: Market Open/Close ---
+
+    /**
+     * Market Open Operations (e.g., 9:15 AM)
+     * Starts Ingestion
+     */
+    @Scheduled(cron = "${scheduler.ingestion.start-cron:0 15 9 * * MON-FRI}", zone = "Asia/Kolkata")
+    public void triggerMarketOpenJobs() {
+        log.info("Orchestrator: Triggering Market Open Jobs");
+        ingestionScheduler.ifPresent(MarketDataIngestionScheduler::startIngestionJob);
+    }
+
+    /**
+     * Streamer Start (e.g., 8:00 AM)
+     */
+    @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
+    public void triggerStreamerStart() {
+        log.info("Orchestrator: Triggering Streamer Start");
+        streamerScheduler.ifPresent(StreamerScheduler::executeStartStreaming);
+    }
+
+    /**
+     * Market Close Operations (e.g., 3:30 PM)
+     * Stops Ingestion
+     */
+    @Scheduled(cron = "${scheduler.ingestion.stop-cron:0 30 15 * * MON-FRI}", zone = "Asia/Kolkata")
+    public void triggerIngestionStop() {
+        log.info("Orchestrator: Triggering Ingestion Stop");
+        ingestionScheduler.ifPresent(MarketDataIngestionScheduler::stopIngestionJob);
+    }
+
+    /**
+     * Streamer Stop (e.g., 4:00 PM)
+     */
+    @Scheduled(cron = "0 0 16 * * *", zone = "Asia/Kolkata")
+    public void triggerStreamerStop() {
+        log.info("Orchestrator: Triggering Streamer Stop");
+        streamerScheduler.ifPresent(StreamerScheduler::executeStopStreaming);
+    }
+
+    /**
+     * Morning Stock Indices Fetch (e.g., 9:30 AM)
+     */
+    @Scheduled(cron = "${scheduler.stock-indices.morning-fetch:0 30 9 * * *}", zone = "Asia/Kolkata")
+    public void triggerMorningStockIndicesFetch() {
+        log.info("Orchestrator: Triggering Morning Stock Indices Fetch");
+        stockIndicesSchedulerService.ifPresent(StockIndicesSchedulerService::executeMorningStockIndicesFetch);
+    }
+
+    /**
+     * Evening Stock Indices Fetch (e.g., 4:00 PM)
+     */
+    @Scheduled(cron = "${scheduler.stock-indices.evening-fetch:0 0 16 * * *}", zone = "Asia/Kolkata")
+    public void triggerEveningStockIndicesFetch() {
+        log.info("Orchestrator: Triggering Evening Stock Indices Fetch");
+        stockIndicesSchedulerService.ifPresent(StockIndicesSchedulerService::executeEveningStockIndicesFetch);
+    }
+
+    // --- Daily: Maintenance ---
+
+    /**
+     * Historical Data Sync (e.g. 7:15 AM)
+     */
+    @Scheduled(cron = "${scheduler.historical.sync-cron:0 15 7 * * *}")
+    public void triggerHistoricalSync() {
+        log.info("Orchestrator: Triggering Historical Data Sync");
+        ingestionScheduler.ifPresent(MarketDataIngestionScheduler::executeHistoricalSync);
+    }
+
+    /**
+     * Redis Cache Cleanup (e.g., 2:00 AM)
+     */
+    @Scheduled(cron = "${scheduler.redis.cleanup.cron:0 0 2 * * *}")
+    public void triggerRedisCleanup() {
+        log.info("Orchestrator: Triggering Redis Cleanup");
+        redisCacheCleanupScheduler.ifPresent(RedisCacheCleanupScheduler::executeCleanup);
+    }
+}

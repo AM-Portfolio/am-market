@@ -6,8 +6,10 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 
 @Configuration
 @EnableMongoRepositories(basePackages = {
-        "com.am.common.investment.persistence.repository",
-        "com.am.marketdata.service.repo"
+                "com.am.common.investment.persistence.repository",
+                "com.am.marketdata.service.repo",
+                "com.am.marketdata.provider.upstox.repo",
+                "com.am.marketdata.provider.zerodha.repo"
 })
 @Profile("!isolated")
 public class MongoConfig {

@@ -5,7 +5,9 @@ import com.am.marketdata.common.StreamerListener;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.log.AppLogger;
 import com.am.marketdata.service.MarketDataPersistenceService;
+import com.am.marketdata.service.SymbolOrchestratorService;
 import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,7 @@ public class StreamerManager implements StreamerListener {
     private final MarketDataStreamer streamer;
     private final MarketDataPersistenceService persistenceService;
     private final MarketDataProcessor processor;
+    private final SymbolOrchestratorService symbolService;
 
     private Set<String> subscribedSymbols = new HashSet<>();
     private static final String DEFAULT_MODE = "full";
@@ -36,18 +39,27 @@ public class StreamerManager implements StreamerListener {
     @Autowired
     public StreamerManager(MarketDataStreamer streamer,
             MarketDataPersistenceService persistenceService,
-            MarketDataProcessor processor) {
+            MarketDataProcessor processor,
+            SymbolOrchestratorService symbolService) {
         this.streamer = streamer;
         this.persistenceService = persistenceService;
         this.processor = processor;
+        this.symbolService = symbolService;
     }
 
     @PostConstruct
     public void init() {
         streamer.setListener(this);
-        // Initial set of symbols to subscribe (could be loaded from DB/Config)
-        subscribedSymbols.add("NSE_INDEX|Nifty 50");
-        subscribedSymbols.add("NSE_INDEX|Nifty Bank");
+        // Load symbols from SymbolOrchestratorService
+        refreshSubscriptions();
+    }
+
+    public void refreshSubscriptions() {
+        List<String> symbols = symbolService.findDistinctIsins();
+        if (symbols != null) {
+            this.subscribedSymbols.clear();
+            this.subscribedSymbols.addAll(symbols);
+        }
     }
 
     /**

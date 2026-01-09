@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 
+import com.am.marketdata.service.SymbolOrchestratorService;
+
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -25,11 +27,11 @@ import java.util.concurrent.CompletableFuture;
 public abstract class AbstractMarketDataScheduler<T> {
 
     private static final String TAG_OPERATION_TYPE = "operation.type";
-    
+
     protected final MeterRegistry meterRegistry;
-    protected final ISINService isinService;
+    protected final SymbolOrchestratorService symbolService;
     protected final Timer executionTimer;
-    
+
     @Value("${scheduler.timezone:Asia/Kolkata}")
     protected String timeZone;
 
@@ -37,18 +39,18 @@ public abstract class AbstractMarketDataScheduler<T> {
      * Constructor for AbstractMarketDataScheduler
      * 
      * @param meterRegistry Metrics registry for recording metrics
-     * @param isinService Service to retrieve symbols for processing
-     * @param metricPrefix Prefix for metrics related to this scheduler
+     * @param symbolService Service to retrieve symbols for processing
+     * @param metricPrefix  Prefix for metrics related to this scheduler
      * @param operationType Type of operation for tagging metrics
      */
     protected AbstractMarketDataScheduler(
             MeterRegistry meterRegistry,
-            ISINService isinService,
+            SymbolOrchestratorService symbolService,
             String metricPrefix,
             String operationType) {
         this.meterRegistry = meterRegistry;
-        this.isinService = isinService;
-        
+        this.symbolService = symbolService;
+
         this.executionTimer = Timer.builder(metricPrefix + ".execution.time")
                 .description("Time taken to execute " + operationType + " processing")
                 .tag(TAG_OPERATION_TYPE, operationType)
@@ -72,12 +74,13 @@ public abstract class AbstractMarketDataScheduler<T> {
 
     /**
      * Main scheduling method to be implemented by concrete schedulers
-     * This will typically be annotated with @Scheduled in the concrete implementation
+     * This will typically be annotated with @Scheduled in the concrete
+     * implementation
      */
     public void scheduleProcessing() {
         MDC.put("scheduler", getSchedulerName());
         MDC.put("execution_time", LocalDateTime.now().toString());
-        
+
         try {
             if (!isWithinTradingHours()) {
                 log.info("Outside trading hours, skipping {} processing", getSchedulerName());
@@ -104,19 +107,19 @@ public abstract class AbstractMarketDataScheduler<T> {
     protected boolean process() {
         Timer.Sample sample = Timer.start();
         boolean anySuccess = false;
-        
+
         try {
             List<String> symbols = getSymbolsToProcess();
             log.info("Processing {} data for {} symbols", getSchedulerName(), symbols.size());
-            
+
             // Process each symbol in parallel with CompletableFuture
             CompletableFuture<?>[] futures = symbols.stream()
-                .map(this::processSymbolAsync)
-                .toArray(CompletableFuture[]::new);
-            
+                    .map(this::processSymbolAsync)
+                    .toArray(CompletableFuture[]::new);
+
             // Wait for all futures to complete
             CompletableFuture.allOf(futures).join();
-            
+
             // Check if any operation succeeded
             for (CompletableFuture<?> future : futures) {
                 try {
@@ -128,7 +131,7 @@ public abstract class AbstractMarketDataScheduler<T> {
                     // Individual failures are already logged
                 }
             }
-            
+
             if (anySuccess) {
                 log.info("Successfully processed {} data for at least one symbol", getSchedulerName());
                 recordSuccessMetric();
@@ -136,7 +139,7 @@ public abstract class AbstractMarketDataScheduler<T> {
                 log.error("Failed to process {} data for any symbols", getSchedulerName());
                 recordFailureMetric();
             }
-            
+
             return anySuccess;
         } catch (Exception e) {
             log.error("Error in {} processing: {}", getSchedulerName(), e.getMessage(), e);
@@ -152,7 +155,8 @@ public abstract class AbstractMarketDataScheduler<T> {
      * Template method to be implemented by concrete schedulers
      * 
      * @param symbol The symbol to process
-     * @return CompletableFuture with the result (true if successful, false otherwise)
+     * @return CompletableFuture with the result (true if successful, false
+     *         otherwise)
      */
     protected abstract CompletableFuture<Boolean> processSymbolAsync(String symbol);
 
@@ -170,7 +174,7 @@ public abstract class AbstractMarketDataScheduler<T> {
      * @return List of symbols to process
      */
     protected List<String> getSymbolsToProcess() {
-        return isinService.findDistinctIsins();
+        return symbolService.findDistinctIsins();
     }
 
     /**
@@ -193,7 +197,7 @@ public abstract class AbstractMarketDataScheduler<T> {
      */
     protected boolean isWithinTradingHours() {
         LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
-        
+
         // By default, check if it's a weekend
         DayOfWeek day = now.getDayOfWeek();
         if (isTradingDay(day)) {
@@ -203,7 +207,7 @@ public abstract class AbstractMarketDataScheduler<T> {
 
             return !time.isBefore(marketOpen) && !time.isAfter(marketClose);
         }
-        
+
         return true;
     }
 
@@ -217,15 +221,14 @@ public abstract class AbstractMarketDataScheduler<T> {
     protected boolean isTradingDay(DayOfWeek day) {
         // Map cron days to DayOfWeek
         Map<String, DayOfWeek> cronDayMap = Map.of(
-            "MON", DayOfWeek.MONDAY,
-            "TUE", DayOfWeek.TUESDAY,
-            "WED", DayOfWeek.WEDNESDAY,
-            "THU", DayOfWeek.THURSDAY,
-            "FRI", DayOfWeek.FRIDAY,
-            "SAT", DayOfWeek.SATURDAY,
-            "SUN", DayOfWeek.SUNDAY
-        );
-        
+                "MON", DayOfWeek.MONDAY,
+                "TUE", DayOfWeek.TUESDAY,
+                "WED", DayOfWeek.WEDNESDAY,
+                "THU", DayOfWeek.THURSDAY,
+                "FRI", DayOfWeek.FRIDAY,
+                "SAT", DayOfWeek.SATURDAY,
+                "SUN", DayOfWeek.SUNDAY);
+
         // Check if current day is in the trading days
         return cronDayMap.containsKey(day.name().substring(0, 3));
     }

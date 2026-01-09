@@ -1,10 +1,10 @@
 package com.am.marketdata.scheduler.service;
 
 import com.am.marketdata.internal.service.MarketDataIngestionService;
+import com.am.marketdata.service.SymbolOrchestratorService;
 import com.am.marketdata.common.log.AppLogger;
 import com.am.marketdata.internal.service.MarketDataHistoricalSyncService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -25,11 +25,13 @@ public class MarketDataIngestionScheduler {
     private final MarketDataIngestionService ingestionService;
     private final MarketDataHistoricalSyncService historicalSyncService;
 
+    private final SymbolOrchestratorService symbolService;
+
     @Value("${scheduler.ingestion.enabled:true}")
     private boolean enabled;
 
-    @Value("${scheduler.ingestion.symbols:NIFTY 50,NIFTY BANK}")
-    private List<String> symbols;
+    // derived from service now
+    // private List<String> symbols;
 
     @Value("${scheduler.ingestion.provider:ZERODHA}")
     private String provider;
@@ -55,8 +57,7 @@ public class MarketDataIngestionScheduler {
     /**
      * Start Ingestion at Market Open (e.g., 9:15 AM)
      */
-    @Scheduled(cron = "${scheduler.ingestion.start-cron:0 15 9 * * MON-FRI}")
-    public void scheduledStart() {
+    public void startIngestionJob() {
         if (!enabled)
             return;
         log.info("scheduledStart", "Scheduled trigger: Starting Market Data Ingestion");
@@ -66,8 +67,7 @@ public class MarketDataIngestionScheduler {
     /**
      * Stop Ingestion at Market Close (e.g., 3:30 PM)
      */
-    @Scheduled(cron = "${scheduler.ingestion.stop-cron:0 30 15 * * MON-FRI}")
-    public void scheduledStop() {
+    public void stopIngestionJob() {
         if (!enabled)
             return;
         log.info("scheduledStop", "Scheduled trigger: Stopping Market Data Ingestion");
@@ -77,18 +77,28 @@ public class MarketDataIngestionScheduler {
     /**
      * Run Historical Sync (Smart Delta) at 07:15 AM
      */
-    @Scheduled(cron = "${scheduler.historical.sync-cron:0 15 7 * * *}")
-    public void scheduledHistoricalSync() {
+    public void executeHistoricalSync() {
         if (!enabled)
             return;
         log.info("scheduledHistoricalSync", "Scheduled trigger: Starting Historical Data Sync (Smart Delta)");
         historicalSyncService.syncHistoricalData(null, true, false); // fetchIndexStocks=false for scheduled sync
     }
 
+    protected List<String> getSymbolsToProcess() {
+        return symbolService.findDistinctIsins();
+    }
+
     private void startIngestion() {
-        // Trigger for NIFTY 50 and BANKNIFTY by default
-        // In real scenario, this list might come from DB or config
-        ingestionService.startIngestion(symbols, provider, "1D", true, forceRefresh);
+        // Trigger Ingestion for symbols from orchestrator
+        List<String> symbolsToProcess = getSymbolsToProcess();
+        log.info("startIngestion", "Starting ingestion for {} symbols",
+                symbolsToProcess != null ? symbolsToProcess.size() : 0);
+
+        if (symbolsToProcess != null && !symbolsToProcess.isEmpty()) {
+            ingestionService.startIngestion(symbolsToProcess, provider, "1D", true, forceRefresh);
+        } else {
+            log.warn("startIngestion", "No symbols found to process!");
+        }
     }
 
     private boolean isMarketOpen() {

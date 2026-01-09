@@ -4,7 +4,6 @@ import com.am.marketdata.scraper.service.CookieManagementService;
 import com.am.marketdata.scraper.exception.CookieException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,13 +12,13 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "scheduler.cookie.enabled", havingValue = "true", matchIfMissing = true)
 public class CookieScheduler {
 
     private final CookieManagementService cookieManagementService;
 
     // Run every hour for cookie refresh
-    @Scheduled(cron = "${scheduler.cookie.refresh:0 0 * * * *}")
-    public void scheduledCookieRefresh() {
+    public void executeCookieRefresh() {
         try {
             log.info("Starting scheduled cookie refresh");
             cookieManagementService.refreshCookies(); // Ensure this method exists and is public
@@ -29,8 +28,7 @@ public class CookieScheduler {
     }
 
     // Run every 2 minutes for indices data processing
-    @Scheduled(cron = "${scheduler.indices.fetch:0 */2 * * * *}", zone = "Asia/Kolkata")
-    public void scheduleIndicesDataProcessing() {
+    public void executeIndicesDataProcessing() {
         try {
             log.info("Triggering scheduled indices data processing");
             cookieManagementService.processIndicesData();
