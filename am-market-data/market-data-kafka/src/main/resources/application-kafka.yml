@@ -17,6 +17,8 @@ app:
     # Topic configuration
     topics:
       stock-price: ${STOKUPATE_TOPIC_NAME:am-stock-price-update}
+      market-data-ohlc-ingestion: ${MARKET_DATA_OHLC_INGESTION_TOPIC_NAME:market-data-ohlc-ingestion}
+      market-data-historical-ingestion: ${MARKET_DATA_HISTORICAL_INGESTION_TOPIC_NAME:market-data-historical-ingestion}
       nse-indices: ${NSE_INDICES_TOPIC_NAME:am-nse-indices}
       stock-indices: ${NSE_STOCK_INDICES_TOPIC_NAME:am-stock-indices}
       stock-board-of-directors: ${BOARD_OF_DIRECTORS_TOPIC_NAME:stock-board-of-directors}

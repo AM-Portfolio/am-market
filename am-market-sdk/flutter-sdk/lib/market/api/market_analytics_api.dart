@@ -165,7 +165,7 @@ class MarketAnalyticsApi {
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       final responseBody = await _decodeBodyBytes(response);
       return (await apiClient.deserializeAsync(responseBody, 'List<Map<String, Object>>') as List)
-        .cast<Map>()
+        .cast<Map<String, Object>>()
         .toList(growable: false);
 
     }
@@ -242,7 +242,7 @@ class MarketAnalyticsApi {
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       final responseBody = await _decodeBodyBytes(response);
       return (await apiClient.deserializeAsync(responseBody, 'List<Map<String, Object>>') as List)
-        .cast<Map>()
+        .cast<Map<String, Object>>()
         .toList(growable: false);
 
     }

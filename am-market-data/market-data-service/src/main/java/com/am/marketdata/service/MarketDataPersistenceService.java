@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-public class MarketDataPersistenceService {
+public class MarketDataPersistenceService implements com.am.marketdata.common.service.MarketDataIngestionService {
 
     private final HistoricalDataService historicalDataService;
     private final MarketDataCacheService marketDataCacheService;

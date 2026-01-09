@@ -1,6 +1,6 @@
 package com.am.marketdata.service.repo;
 
-import com.am.marketdata.service.model.UpstoxInstrument;
+import com.am.marketdata.common.model.UpstoxInstrument;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;

@@ -55,6 +55,11 @@ public class KafkaConfig {
     }
 
     @Bean
+    public org.springframework.kafka.support.converter.StringJsonMessageConverter jsonMessageConverter() {
+        return new org.springframework.kafka.support.converter.StringJsonMessageConverter(objectMapper());
+    }
+
+    @Bean
     public Map<String, Object> kafkaConfigs() {
         Map<String, Object> props = new HashMap<>();
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaProperties.getBootstrapServers());

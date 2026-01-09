@@ -24,6 +24,7 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
     private final Map<String, Object> additionalParams;
     private final boolean isIndexSymbol;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+    private final com.am.marketdata.service.kafka.producer.MarketDataProducer producer;
 
     private HistoricalDataRetriever(
             MarketDataPersistenceService persistenceService,
@@ -36,7 +37,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             boolean continuous,
             Map<String, Object> additionalParams,
             String targetProviderName,
-            boolean isIndexSymbol) {
+            boolean isIndexSymbol,
+            com.am.marketdata.service.kafka.producer.MarketDataProducer producer) {
         super(persistenceService, providerFactory, retrievalOrder, cacheResults, targetProviderName);
         this.fromDate = fromDate;
         this.toDate = toDate;
@@ -44,6 +46,7 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         this.continuous = continuous;
         this.additionalParams = additionalParams != null ? additionalParams : new HashMap<>();
         this.isIndexSymbol = isIndexSymbol;
+        this.producer = producer;
     }
 
     /**
@@ -188,19 +191,16 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
 
         String methodName = "saveDataAsync";
         try {
-            log.info(methodName, "[PROVIDER_CACHE] Starting async save of {} symbols to DATABASE and REDIS",
+            log.info(methodName, "[PROVIDER_ASYNC] Sending {} historical data records to KAFKA for ingestion",
                     data.size());
 
-            for (Map.Entry<String, HistoricalData> entry : data.entrySet()) {
-                persistenceService.saveHistoricalData(entry.getKey(), interval, entry.getValue());
-            }
+            // Use producer to send to Kafka (Fire and Forget)
+            producer.sendHistoricalData(data, this.interval, targetProviderName);
 
-            log.info(methodName,
-                    "[PROVIDER_CACHE] Successfully initiated async save: {} symbols → DATABASE (InfluxDB) + REDIS cache",
-                    data.size());
+            log.info(methodName, "[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
         } catch (Exception e) {
             log.error(methodName,
-                    "[PROVIDER_CACHE] FAILED to save historical data to DATABASE/REDIS: " + e.getMessage(), e);
+                    "[PROVIDER_ASYNC] FAILED to send historical data to KAFKA: " + e.getMessage(), e);
         }
     }
 
@@ -238,6 +238,12 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         private boolean continuous;
         private Map<String, Object> additionalParams;
         private boolean isIndexSymbol;
+        private com.am.marketdata.service.kafka.producer.MarketDataProducer producer;
+
+        public Builder producer(com.am.marketdata.service.kafka.producer.MarketDataProducer producer) {
+            this.producer = producer;
+            return this;
+        }
 
         public Builder fromDate(Date fromDate) {
             this.fromDate = fromDate;
@@ -287,6 +293,10 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                 throw new IllegalStateException("Interval must be provided");
             }
 
+            if (producer == null) {
+                throw new IllegalStateException("MarketDataProducer must be provided");
+            }
+
             return new HistoricalDataRetriever(
                     persistenceService,
                     providerFactory,
@@ -298,7 +308,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     continuous,
                     additionalParams,
                     targetProviderName,
-                    isIndexSymbol);
+                    isIndexSymbol,
+                    producer);
         }
     }
 

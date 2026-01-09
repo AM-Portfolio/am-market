@@ -22,13 +22,17 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
     @Setter
     private TimeFrame timeFrame = TimeFrame.DAY; // Default to 5-minute timeframe
 
+    private final com.am.marketdata.service.kafka.producer.MarketDataProducer producer;
+
     private OHLCDataRetriever(
             MarketDataPersistenceService persistenceService,
             MarketDataProviderFactory providerFactory,
             List<DataSourceType> retrievalOrder,
             boolean cacheResults,
-            String targetProviderName) {
+            String targetProviderName,
+            com.am.marketdata.service.kafka.producer.MarketDataProducer producer) {
         super(persistenceService, providerFactory, retrievalOrder, cacheResults, targetProviderName);
+        this.producer = producer;
     }
 
     /**
@@ -157,14 +161,14 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
 
         String methodName = "saveDataAsync";
         try {
-            log.info(methodName, "[PROVIDER_CACHE] Starting async save of {} OHLC quotes to DATABASE and REDIS",
-                    data.size());
-            persistenceService.saveOHLCData(data);
-            log.info(methodName,
-                    "[PROVIDER_CACHE] Successfully initiated async save: {} quotes → DATABASE (InfluxDB) + REDIS cache",
-                    data.size());
+            log.info(methodName, "[PROVIDER_ASYNC] Sending {} OHLC quotes to KAFKA for ingestion", data.size());
+
+            // Use producer to send to Kafka (Fire and Forget)
+            producer.sendOHLCData(data, this.timeFrame, targetProviderName);
+
+            log.info(methodName, "[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
         } catch (Exception e) {
-            log.error(methodName, "[PROVIDER_CACHE] FAILED to save OHLC data to DATABASE/REDIS: " + e.getMessage(), e);
+            log.error(methodName, "[PROVIDER_ASYNC] FAILED to send OHLC data to KAFKA: " + e.getMessage(), e);
         }
     }
 
@@ -199,6 +203,13 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
      * Builder for OHLCDataRetriever
      */
     public static class Builder extends AbstractBuilder<String, OHLCQuote, Builder, OHLCDataRetriever> {
+        private com.am.marketdata.service.kafka.producer.MarketDataProducer producer;
+
+        public Builder producer(com.am.marketdata.service.kafka.producer.MarketDataProducer producer) {
+            this.producer = producer;
+            return this;
+        }
+
         @Override
         public OHLCDataRetriever build() {
             if (persistenceService == null) {
@@ -208,12 +219,19 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
                 throw new IllegalStateException("ProviderFactory must be provided");
             }
 
+            if (producer == null) {
+                // If producer not set, throw or log?
+                // Currently we enforce it as it's critical for async flow
+                throw new IllegalStateException("MarketDataProducer must be provided");
+            }
+
             return new OHLCDataRetriever(
                     persistenceService,
                     providerFactory,
                     retrievalOrder,
                     cacheResults != null ? cacheResults : true,
-                    targetProviderName);
+                    targetProviderName,
+                    producer);
         }
     }
 

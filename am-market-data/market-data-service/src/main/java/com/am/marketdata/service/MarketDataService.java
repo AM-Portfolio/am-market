@@ -50,6 +50,7 @@ public class MarketDataService {
     private final MarketDataGenericMapper genericMapper;
     private final MarketDataPersistenceService persistenceService;
     private final MarketDataRetrievalUtil marketDataRetrievalUtil;
+    private final com.am.marketdata.service.kafka.producer.MarketDataProducer producer;
 
     @Value("${market.data.max.retries:3}")
     private int maxRetries;
@@ -60,7 +61,8 @@ public class MarketDataService {
     public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
             MeterRegistry meterRegistry, InstrumentMapper instrumentMapper,
             MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
-            MarketDataRetrievalUtil marketDataRetrievalUtil) {
+            MarketDataRetrievalUtil marketDataRetrievalUtil,
+            com.am.marketdata.service.kafka.producer.MarketDataProducer producer) {
         this.providerFactory = providerFactory;
         this.instrumentService = instrumentService;
         this.meterRegistry = meterRegistry;
@@ -68,6 +70,7 @@ public class MarketDataService {
         this.genericMapper = genericMapper;
         this.persistenceService = persistenceService;
         this.marketDataRetrievalUtil = marketDataRetrievalUtil;
+        this.producer = producer;
     }
 
     private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh) {
@@ -77,6 +80,7 @@ public class MarketDataService {
                 .retrievalOrder(DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh))
                 .cacheResults(true)
                 .targetProviderName(providerName)
+                .producer(producer)
                 .build();
     }
 
@@ -221,6 +225,7 @@ public class MarketDataService {
                     .continuous(continuous)
                     .additionalParams(additionalParams)
                     .targetProviderName(providerName)
+                    .producer(producer)
                     .build();
 
             log.info(
@@ -292,6 +297,7 @@ public class MarketDataService {
                     .continuous(continuous)
                     .additionalParams(additionalParams)
                     .targetProviderName(providerName)
+                    .producer(producer)
                     .build();
 
             log.info(

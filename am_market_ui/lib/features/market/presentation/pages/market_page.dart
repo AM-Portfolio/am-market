@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 
 import 'package:am_common/core/utils/logger.dart';
 import 'package:am_market_ui/widgets/market_index_detail_view.dart';
+import 'package:am_market_ui/developer/screens/developer_dashboard.dart';
 
 /// Market feature page with Swipe Navigation
 class MarketPage extends StatelessWidget {
@@ -210,6 +211,8 @@ class _MarketContentState extends State<MarketContent> {
     }
 
     final adminIndex = 7 + dynamicIndicesCount;
+    final developerIndex = adminIndex + 1;
+
     final adminItem = SecondarySidebarItem(
       title: 'Admin Dashboard',
       icon: Icons.admin_panel_settings_rounded,
@@ -221,11 +224,22 @@ class _MarketContentState extends State<MarketContent> {
       },
     );
 
+    final developerItem = SecondarySidebarItem(
+      title: 'Developer Dashboard',
+      icon: Icons.developer_mode_rounded,
+      isSelected: currentIndex == developerIndex,
+      accentColor: Colors.deepPurple,
+      onTap: () {
+        _swipeController.navigateTo(developerIndex.toInt());
+        provider.selectIndex('Developer Dashboard');
+      },
+    );
+
     return [
       SecondarySidebarSection(title: 'Data', items: mainItems),
       if (indexItems.isNotEmpty)
         SecondarySidebarSection(title: 'Major Indices', items: indexItems),
-      SecondarySidebarSection(title: 'System Tools', items: [adminItem]),
+      SecondarySidebarSection(title: 'System Tools', items: [adminItem, developerItem]),
     ];
   }
 
@@ -327,6 +341,16 @@ class _MarketContentState extends State<MarketContent> {
         icon: Icons.admin_panel_settings_rounded,
         page: HistoricalSyncPage(),
         accentColor: Color(0xFFFF6B6B),
+      ),
+    );
+
+    items.add(
+      const NavigationItem(
+        title: 'Developer Dashboard',
+        subtitle: 'Dev Tools & Scheduler',
+        icon: Icons.developer_mode_rounded,
+        page: DeveloperDashboard(),
+        accentColor: Colors.deepPurple,
       ),
     );
 
