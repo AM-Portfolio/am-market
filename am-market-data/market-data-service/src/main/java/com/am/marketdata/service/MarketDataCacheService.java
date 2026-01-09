@@ -129,14 +129,9 @@ public class MarketDataCacheService {
                 if (timeFrame == TimeFrame.DAY || timeFrame == TimeFrame.WEEK ||
                         timeFrame == TimeFrame.MONTH || timeFrame == TimeFrame.YEAR) {
 
-                    // Cache each day's data point individually
-                    for (OHLCVTPoint point : points) {
-                        LocalDate date = point.getTime().toLocalDate();
-                        String dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE);
-                        OHLCV ohlcv = StockCacheService.createPricePoint(point.getTime(), point.getOpen(),
-                                point.getHigh(), point.getLow(), point.getClose(), point.getVolume(), null);
-                        stockCacheService.cacheHistoricalBar(symbol, dateStr, ohlcv, timeFrame);
-                    }
+                    // Use batch caching for better performance (Redis Pipelining)
+                    stockCacheService.cacheHistoricalDataBatch(symbol, timeFrame, ohlcvs);
+
                 } else {
                     // For intraday data, use the intraday bars caching
                     stockCacheService.cacheIntradayBars(symbol, timeFrame.getApiValue(), ohlcvs);

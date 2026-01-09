@@ -66,6 +66,30 @@ public class StockCacheService {
     }
 
     /**
+     * Cache multiple historical bars for a symbol in a batch
+     */
+    public boolean cacheHistoricalDataBatch(String symbol, TimeFrame timeFrame, List<OHLCV> bars) {
+        if (bars == null || bars.isEmpty()) {
+            return false;
+        }
+
+        // Create StockBars object containing all bars
+        // The underlying StockRedisCache.saveHistoricalBar iterates through the bars
+        // and creates keys based on each bar's date, so we can pass all bars in one
+        // object.
+        String startDate = bars.get(0).getTime().toLocalDate().format(DATE_FORMATTER);
+
+        StockBars stockBars = StockBars.builder()
+                .symbol(symbol)
+                .interval(timeFrame.getApiValue())
+                .startDate(startDate)
+                .bars(bars)
+                .build();
+
+        return historicalService.cacheHistoricalBar(List.of(stockBars));
+    }
+
+    /**
      * Get bars for a symbol with cache statistics tracking
      */
     public StockBars getBarsWithStats(String symbol, String interval, String date) {
