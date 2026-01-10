@@ -40,6 +40,7 @@ import com.am.marketdata.scheduler.config.MarketDataSchedulerConfig;
 // @EnableRetry
 @EnableScheduling
 @org.springframework.cache.annotation.EnableCaching
+@org.springframework.data.mongodb.repository.config.EnableMongoRepositories(basePackages = "com.am.marketdata")
 public class MarketDataApplication {
         private static final Logger logger = LoggerFactory.getLogger(MarketDataApplication.class);
 

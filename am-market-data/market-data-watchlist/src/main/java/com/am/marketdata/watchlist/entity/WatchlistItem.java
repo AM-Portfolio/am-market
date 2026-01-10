@@ -5,13 +5,18 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "watchlist_items", 
-       uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "symbol"}),
-       indexes = @Index(name = "idx_watchlist_user_id", columnList = "user_id"))
+@Document(collection = "watchlist_items")
+@CompoundIndexes({
+        @CompoundIndex(name = "idx_watchlist_user_symbol", def = "{'userId': 1, 'symbol': 1}", unique = true)
+})
 @Data
 @Builder
 @NoArgsConstructor
@@ -19,33 +24,20 @@ import java.time.LocalDateTime;
 public class WatchlistItem {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(name = "user_id", nullable = false)
+    @Field("user_id")
     private String userId;
 
-    @Column(nullable = false, length = 50)
     private String symbol;
 
-    @Column(name = "display_order")
+    @Field("display_order")
     @Builder.Default
     private Integer displayOrder = 0;
 
-    @Column(name = "created_at", updatable = false)
+    @Field("created_at")
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Field("updated_at")
     private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
 }
