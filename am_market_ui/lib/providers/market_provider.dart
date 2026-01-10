@@ -104,6 +104,10 @@ class MarketProvider with ChangeNotifier {
     _selectedIndex = indexSymbol;
     if (_selectedIndex == "All Indices") {
       await loadAllIndicesData();
+    } else if (_selectedIndex == "Dashboard") {
+      // Dashboard needs all indices data just like "All Indices"
+      CommonLogger.debug("Loading Dashboard data", tag: "MarketProvider.selectIndex");
+      await loadAllIndicesData();
     } else if ([
       "Streamer", 
       "Instrument Explorer", 
@@ -111,7 +115,11 @@ class MarketProvider with ChangeNotifier {
       "Price Test", 
       "ETF Explorer",
       "Admin Dashboard",
-      "Analysis Dashboard"
+      "Analysis Dashboard",
+      "Developer Dashboard",
+      // User Mode navigation items (no data fetch required)
+      "Market Analysis",
+      "Heatmap",
     ].contains(_selectedIndex)) {
       CommonLogger.debug("Selected view: $_selectedIndex (no data fetch required)", tag: "MarketProvider.selectIndex");
       // Do nothing, just update selection

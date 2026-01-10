@@ -15,6 +15,9 @@ import 'package:provider/provider.dart';
 import 'package:am_common/core/utils/logger.dart';
 import 'package:am_market_ui/widgets/market_index_detail_view.dart';
 import 'package:am_market_ui/developer/screens/developer_dashboard.dart';
+import 'package:am_market_ui/providers/view_mode_provider.dart';
+import 'package:am_market_ui/widgets/mode_toggle_widget.dart';
+import 'package:am_market_ui/features/market/presentation/pages/user_dashboard_page.dart';
 
 /// Market feature page with Swipe Navigation
 class MarketPage extends StatelessWidget {
@@ -27,21 +30,28 @@ class MarketPage extends StatelessWidget {
   Widget build(BuildContext context) {
     CommonLogger.methodEntry('build', tag: 'MarketPage');
 
-    return ChangeNotifierProvider(
-      create: (_) {
-        CommonLogger.info(
-          'Initializing MarketProvider for MarketPage',
-          tag: 'MarketPage',
-        );
-        final provider = MarketProvider();
-        // Trigger initial load
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (provider.availableIndices == null) {
-            provider.loadIndices();
-          }
-        });
-        return provider;
-      },
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) {
+            CommonLogger.info(
+              'Initializing MarketProvider for MarketPage',
+              tag: 'MarketPage',
+            );
+            final provider = MarketProvider();
+            // Trigger initial load
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (provider.availableIndices == null) {
+                provider.loadIndices();
+              }
+            });
+            return provider;
+          },
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ViewModeProvider(),
+        ),
+      ],
       child: MarketContent(userId: userId, onBack: onBack),
     );
   }
@@ -68,7 +78,10 @@ class _MarketContentState extends State<MarketContent> {
 
   void _initializeSwipeController() {
     _swipeController = SwipeNavigationController(
-      items: _buildNavigationItems(context.read<MarketProvider>()),
+      items: _buildNavigationItems(
+        context.read<MarketProvider>(),
+        context.read<ViewModeProvider>(),
+      ),
     );
 
     _swipeController.addListener(() {
@@ -85,15 +98,10 @@ class _MarketContentState extends State<MarketContent> {
   }
 
   @override
-  Widget build(BuildContext context) => Consumer<MarketProvider>(
-    builder: (context, provider, _) {
+  Widget build(BuildContext context) => Consumer2<MarketProvider, ViewModeProvider>(
+    builder: (context, provider, viewModeProvider, _) {
       // Update controller items when provider updates (e.g. indices loaded)
-      // We use a post-frame callback to avoid updating during build if possible,
-      // or just update directly if it's safe.
-      // Since updateItems calls notifyListeners, doing it in build might error.
-      // Better to check if items changed.
-
-      final newItems = _buildNavigationItems(provider);
+      final newItems = _buildNavigationItems(provider, viewModeProvider);
       if (_hasItemsChanged(newItems)) {
         // Defer update to avoid build cycle
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -103,10 +111,6 @@ class _MarketContentState extends State<MarketContent> {
         });
       }
 
-      // Also sync simple selectedIndex from provider if it was changed externally?
-      // Actually, we want the controller to drive the provider if anything.
-      // But for sidebar selection, we use controller.currentIndex.
-
       return UnifiedSidebarScaffold(
         module: ModuleType.market,
         onBackToGlobal: widget.onBack,
@@ -114,7 +118,7 @@ class _MarketContentState extends State<MarketContent> {
           controller: _swipeController,
           showIndicator: !provider.isLoading,
         ),
-        sections: _buildSidebarSections(provider),
+        sections: _buildSidebarSections(provider, viewModeProvider),
       );
     },
   );
@@ -128,7 +132,16 @@ class _MarketContentState extends State<MarketContent> {
     return false;
   }
 
-  List<SecondarySidebarSection> _buildSidebarSections(MarketProvider provider) {
+  List<SecondarySidebarSection> _buildSidebarSections(
+    MarketProvider provider,
+    ViewModeProvider viewModeProvider,
+  ) {
+    // If User mode, show simplified navigation
+    if (viewModeProvider.isUserMode) {
+      return _buildUserModeSections(provider);
+    }
+    
+    // Developer mode - show all sections (existing behavior)
     // Map controller items back to sections
     // Indices:
     // 0: All Indices
@@ -236,11 +249,43 @@ class _MarketContentState extends State<MarketContent> {
       },
     );
 
+    // Add mode toggle as first section (using section's customWidget)
+    final modeToggleSection = SecondarySidebarSection(
+      title: '',
+      items: [], // Empty items since we're using customWidget
+      customWidget: const ModeToggleWidget(),
+    );
+
     return [
+      modeToggleSection,
       SecondarySidebarSection(title: 'Data', items: mainItems),
       if (indexItems.isNotEmpty)
-        SecondarySidebarSection(title: 'Major Indices', items: indexItems),
+        SecondarySidebarSection(title: 'Major Ind ices', items: indexItems),
       SecondarySidebarSection(title: 'System Tools', items: [adminItem, developerItem]),
+    ];
+  }
+
+  // User Mode - Simplified Navigation (Dashboard, Overview, Heatmap)
+  List<SecondarySidebarSection> _buildUserModeSections(MarketProvider provider) {
+    const accentColor = ModuleColors.market;
+    final currentIndex = _swipeController.currentIndex;
+
+    final userItems = [
+      _createSidebarItem(0, 'Dashboard', Icons.home_rounded, 'Overview'),
+      _createSidebarItem(1, 'Market Analysis', Icons.analytics_rounded, 'Detailed charts'),
+      _createSidebarItem(2, 'Heatmap', Icons.grid_on_rounded, 'Calendar view'),
+    ];
+
+    // Mode toggle at the top
+    final modeToggleSection = SecondarySidebarSection(
+      title: '',
+      items: [],
+      customWidget: const ModeToggleWidget(),
+    );
+
+    return [
+      modeToggleSection,
+      SecondarySidebarSection(title: 'Navigation', items: userItems),
     ];
   }
 
@@ -261,7 +306,16 @@ class _MarketContentState extends State<MarketContent> {
     },
   );
 
-  List<NavigationItem> _buildNavigationItems(MarketProvider provider) {
+  List<NavigationItem> _buildNavigationItems(
+    MarketProvider provider,
+    ViewModeProvider viewModeProvider,
+  ) {
+    // If User mode, show only 3 pages: Dashboard, Market Analysis, Heatmap
+    if (viewModeProvider.isUserMode) {
+      return _buildUserModeNavigationItems(provider);
+    }
+    
+    // Developer mode - show all items
     const accentColor = ModuleColors.market;
 
     final items = [
@@ -356,5 +410,33 @@ class _MarketContentState extends State<MarketContent> {
     );
 
     return items;
+  }
+
+  List<NavigationItem> _buildUserModeNavigationItems(MarketProvider provider) {
+    const accentColor = ModuleColors.market;
+
+    return [
+      const NavigationItem(
+        title: 'Dashboard',
+        subtitle: 'Overview',
+        icon: Icons.home_rounded,
+        page: UserDashboardPage(), // User Dashboard with cards + chart
+        accentColor: accentColor,
+      ),
+      const NavigationItem(
+        title: 'Market Analysis',
+        subtitle: 'Detailed charts',
+        icon: Icons.analytics_rounded,
+        page: AnalysisPage(),
+        accentColor: accentColor,
+      ),
+      const NavigationItem(
+        title: 'Heatmap',
+        subtitle: 'Calendar view',
+        icon: Icons.grid_on_rounded,
+        page: AnalysisPage(),
+        accentColor: accentColor,
+      ),
+    ];
   }
 }
