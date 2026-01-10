@@ -1,9 +1,9 @@
 package com.am.marketdata.analysis.controller;
 
 import com.am.marketdata.analysis.service.AnalysisService;
-import com.am.marketdata.analysis.model.CalendarHeatmapResponse;
-import com.am.marketdata.analysis.model.SeasonalityResponse;
-import com.am.marketdata.analysis.model.TechnicalAnalysisResponse;
+import com.am.marketdata.common.model.analysis.CalendarHeatmapResponse;
+import com.am.marketdata.common.model.analysis.SeasonalityResponse;
+import com.am.marketdata.common.model.analysis.TechnicalAnalysisResponse;
 import com.am.marketdata.common.model.TimeFrame;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +23,7 @@ public class AnalysisController {
     public ResponseEntity<SeasonalityResponse> getSeasonality(
             @RequestParam String symbol,
             @RequestParam(defaultValue = "DAY") String timeframe) {
-        
+
         TimeFrame tf = parseTimeFrame(timeframe);
         return ResponseEntity.ok(analysisService.getSeasonalityAnalysis(symbol, tf));
     }
@@ -32,7 +32,7 @@ public class AnalysisController {
     public ResponseEntity<TechnicalAnalysisResponse> getTechnicalAnalysis(
             @RequestParam String symbol,
             @RequestParam(defaultValue = "DAY") String timeframe) {
-        
+
         TimeFrame tf = parseTimeFrame(timeframe);
         return ResponseEntity.ok(analysisService.getTechnicalAnalysis(symbol, tf));
     }
@@ -41,8 +41,9 @@ public class AnalysisController {
     public ResponseEntity<CalendarHeatmapResponse> getCalendarHeatmap(
             @RequestParam String symbol,
             @RequestParam(defaultValue = "-1") int year) {
-        
-        if (year == -1) year = java.time.LocalDate.now().getYear();
+
+        if (year == -1)
+            year = java.time.LocalDate.now().getYear();
         return ResponseEntity.ok(analysisService.getCalendarHeatmap(symbol, year));
     }
 
@@ -50,7 +51,7 @@ public class AnalysisController {
     public ResponseEntity<java.util.Map<String, SeasonalityResponse>> getSeasonalityBatch(
             @RequestParam java.util.List<String> symbols,
             @RequestParam(defaultValue = "DAY") String timeframe) {
-        
+
         TimeFrame tf = parseTimeFrame(timeframe);
         return ResponseEntity.ok(analysisService.getSeasonalityAnalysisBatch(symbols, tf));
     }
@@ -59,7 +60,7 @@ public class AnalysisController {
     public ResponseEntity<java.util.Map<String, TechnicalAnalysisResponse>> getTechnicalBatch(
             @RequestParam java.util.List<String> symbols,
             @RequestParam(defaultValue = "DAY") String timeframe) {
-        
+
         TimeFrame tf = parseTimeFrame(timeframe);
         return ResponseEntity.ok(analysisService.getTechnicalAnalysisBatch(symbols, tf));
     }
@@ -68,7 +69,7 @@ public class AnalysisController {
         try {
             return TimeFrame.valueOf(tf.toUpperCase());
         } catch (IllegalArgumentException e) {
-             return TimeFrame.DAY;
+            return TimeFrame.DAY;
         }
     }
 }

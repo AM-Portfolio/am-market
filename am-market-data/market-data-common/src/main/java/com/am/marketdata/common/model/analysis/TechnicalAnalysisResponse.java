@@ -1,10 +1,14 @@
-package com.am.marketdata.analysis.model;
+package com.am.marketdata.common.model.analysis;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class TechnicalAnalysisResponse {
     private String symbol;
     private double currentPrice;

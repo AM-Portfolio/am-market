@@ -1,0 +1,180 @@
+{
+    "info": {
+        "_postman_id": "b3f06d8a-1234-4567-8901-abcdef123456",
+        "name": "Market Data Analysis",
+        "description": "Collection for testing Analysis Controller endpoints",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Seasonality Analysis",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:8092/api/v1/analysis/seasonality?symbol=RELIANCE&timeframe=DAY",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "8092",
+                    "path": [
+                        "api",
+                        "v1",
+                        "analysis",
+                        "seasonality"
+                    ],
+                    "query": [
+                        {
+                            "key": "symbol",
+                            "value": "RELIANCE"
+                        },
+                        {
+                            "key": "timeframe",
+                            "value": "DAY"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Technical Analysis",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:8092/api/v1/analysis/technical?symbol=RELIANCE&timeframe=DAY",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "8092",
+                    "path": [
+                        "api",
+                        "v1",
+                        "analysis",
+                        "technical"
+                    ],
+                    "query": [
+                        {
+                            "key": "symbol",
+                            "value": "RELIANCE"
+                        },
+                        {
+                            "key": "timeframe",
+                            "value": "DAY"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Calendar Heatmap",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:8092/api/v1/analysis/heatmap/calendar?symbol=RELIANCE&year=-1",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "8092",
+                    "path": [
+                        "api",
+                        "v1",
+                        "analysis",
+                        "heatmap",
+                        "calendar"
+                    ],
+                    "query": [
+                        {
+                            "key": "symbol",
+                            "value": "RELIANCE"
+                        },
+                        {
+                            "key": "year",
+                            "value": "-1",
+                            "description": "Use -1 for current year"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Batch Seasonality Analysis",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:8092/api/v1/analysis/seasonality/batch?symbols=RELIANCE,TCS,INFY&timeframe=DAY",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "8092",
+                    "path": [
+                        "api",
+                        "v1",
+                        "analysis",
+                        "seasonality",
+                        "batch"
+                    ],
+                    "query": [
+                        {
+                            "key": "symbols",
+                            "value": "RELIANCE,TCS,INFY"
+                        },
+                        {
+                            "key": "timeframe",
+                            "value": "DAY"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "Batch Technical Analysis",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:8092/api/v1/analysis/technical/batch?symbols=RELIANCE,TCS,INFY&timeframe=DAY",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "8092",
+                    "path": [
+                        "api",
+                        "v1",
+                        "analysis",
+                        "technical",
+                        "batch"
+                    ],
+                    "query": [
+                        {
+                            "key": "symbols",
+                            "value": "RELIANCE,TCS,INFY"
+                        },
+                        {
+                            "key": "timeframe",
+                            "value": "DAY"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8092"
+        }
+    ]
+}
