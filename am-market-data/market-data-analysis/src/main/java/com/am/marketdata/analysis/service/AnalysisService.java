@@ -109,7 +109,7 @@ public class AnalysisService {
         for (DayOfWeek day : DayOfWeek.values()) {
             if (dayOfWeekReturns.containsKey(day)) {
                 avgDayOfWeek.put(day.toString(),
-                        dayOfWeekReturns.get(day).stream().mapToDouble(d -> d).average().orElse(0.0));
+                        round2(dayOfWeekReturns.get(day).stream().mapToDouble(d -> d).average().orElse(0.0)));
             }
         }
 
@@ -117,7 +117,7 @@ public class AnalysisService {
         for (int m = 1; m <= 12; m++) {
             if (monthlyReturns.containsKey(m)) {
                 avgMonth.put(Month.of(m).toString(),
-                        monthlyReturns.get(m).stream().mapToDouble(d -> d).average().orElse(0.0));
+                        round2(monthlyReturns.get(m).stream().mapToDouble(d -> d).average().orElse(0.0)));
             }
         }
 
@@ -182,12 +182,12 @@ public class AnalysisService {
                 .collect(Collectors.toList());
 
         int n = closes.size();
-        double currentPrice = n > 0 ? closes.get(n - 1) : 0.0;
+        double currentPrice = round2(n > 0 ? closes.get(n - 1) : 0.0);
 
-        Double sma20 = calculateSMA(closes, 20);
-        Double sma50 = calculateSMA(closes, 50);
-        Double sma200 = calculateSMA(closes, 200);
-        Double rsi14 = calculateRSI(closes, 14);
+        Double sma20 = round2(calculateSMA(closes, 20));
+        Double sma50 = round2(calculateSMA(closes, 50));
+        Double sma200 = round2(calculateSMA(closes, 200));
+        Double rsi14 = round2(calculateRSI(closes, 14));
 
         TechnicalAnalysisResponse.TechnicalAnalysisResponseBuilder builder = TechnicalAnalysisResponse.builder()
                 .symbol(symbol)
@@ -264,7 +264,7 @@ public class AnalysisService {
                     if (prevClose != null && prevClose > 0) {
                         double currentClose = closeMap.get(curr);
                         double change = (currentClose - prevClose) / prevClose * 100.0;
-                        responseData.get(curr.getMonth().toString()).put(curr.getDayOfMonth(), change);
+                        responseData.get(curr.getMonth().toString()).put(curr.getDayOfMonth(), round2(change));
                     }
                 }
                 curr = curr.plusDays(1);
@@ -281,6 +281,16 @@ public class AnalysisService {
     }
 
     // --- Helpers ---
+
+    private double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
+    private Double round2(Double value) {
+        if (value == null)
+            return null;
+        return Math.round(value * 100.0) / 100.0;
+    }
 
     private Double calculateSMA(List<Double> prices, int period) {
         if (prices.size() < period)

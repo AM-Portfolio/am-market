@@ -27,6 +27,7 @@
         <module>market-data-app</module>
         <module>market-data-redis</module>
         <module>market-data-internal</module>
+        <module>market-data-watchlist</module>
     </modules>
 
     <properties>
