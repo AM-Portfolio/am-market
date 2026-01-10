@@ -48,7 +48,7 @@ public class MarketDataIngestionScheduler {
 
     @PostConstruct
     public void init() {
-        if (enabled && isMarketOpen()) {
+        if (enabled && isMarketOpen() && !isWeekend()) {
             log.info("init", "Application started during market hours. Triggering ingestion.");
             startIngestion();
         }
@@ -60,6 +60,10 @@ public class MarketDataIngestionScheduler {
     public void startIngestionJob() {
         if (!enabled)
             return;
+        if (isWeekend()) {
+            log.info("startIngestionJob", "Skipping market data ingestion on weekends.");
+            return;
+        }
         log.info("scheduledStart", "Scheduled trigger: Starting Market Data Ingestion");
         startIngestion();
     }
@@ -80,6 +84,10 @@ public class MarketDataIngestionScheduler {
     public void executeHistoricalSync() {
         if (!enabled)
             return;
+        if (isWeekend()) {
+            log.info("executeHistoricalSync", "Skipping historical data sync on weekends.");
+            return;
+        }
         log.info("scheduledHistoricalSync", "Scheduled trigger: Starting Historical Data Sync (Smart Delta)");
         // null duration -> uses default logic (10yr or incremental)
         historicalSyncService.syncHistoricalData(null, null, true, false);
@@ -115,5 +123,10 @@ public class MarketDataIngestionScheduler {
         LocalTime start = LocalTime.parse(marketStartTime);
         LocalTime end = LocalTime.parse(marketEndTime);
         return now.isAfter(start) && now.isBefore(end);
+    }
+
+    private boolean isWeekend() {
+        java.time.DayOfWeek day = java.time.LocalDate.now().getDayOfWeek();
+        return day == java.time.DayOfWeek.SATURDAY || day == java.time.DayOfWeek.SUNDAY;
     }
 }
