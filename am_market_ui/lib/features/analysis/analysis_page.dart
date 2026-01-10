@@ -40,9 +40,20 @@ class _AnalysisPageState extends State<AnalysisPage> {
     });
 
     try {
-      final data = await _service.analyzeSymbol(symbol);
+      // Fetch both technical and seasonality data
+      final technical = await _service.getTechnicalAnalysis(symbol);
+      final seasonality = await _service.getSeasonality(symbol);
+      
+      final combined = <String, dynamic>{
+        'symbol': symbol,
+        'results': {
+            ...technical,
+            'seasonality': seasonality['monthlyReturns'], // Simplify for display
+        }
+      };
+
       setState(() {
-        _results = data;
+        _results = combined;
       });
     } catch (e) {
       setState(() {

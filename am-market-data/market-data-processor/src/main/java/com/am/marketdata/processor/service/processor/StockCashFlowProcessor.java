@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class StockCashFlowProcessor implements DataProcessor<StockCashFlow, Void> {
     
-    private final StockPortfolioProducerService stockPortfolioProducer;
+    private final java.util.Optional<StockPortfolioProducerService> stockPortfolioProducer;
     private final StockFinancialPerformanceService stockFinancialPerformanceService;
 
     @Override
@@ -41,7 +41,7 @@ public class StockCashFlowProcessor implements DataProcessor<StockCashFlow, Void
                 data.getCashFlow().size());
             // Publish to Kafka
             try {
-                stockPortfolioProducer.sendCashFlowFinancialsUpdate(data.getSymbol(), data);
+                stockPortfolioProducer.ifPresent(producer -> producer.sendCashFlowFinancialsUpdate(data.getSymbol(), data));
                 log.debug("Published stock cash flow data for symbol: {}", data.getSymbol());
             } catch (Exception e) {
                 log.error("Failed to publish stock cash flow data for symbol: {}", data.getSymbol(), e);

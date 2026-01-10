@@ -17,45 +17,47 @@ import com.am.common.investment.model.events.StockIndicesPriceUpdateEvent;
 
 @Service
 @RequiredArgsConstructor
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true", matchIfMissing = false)
 public class KafkaProducerService {
 
-    private static final Logger log = LoggerFactory.getLogger(KafkaProducerService.class);
+        private static final Logger log = LoggerFactory.getLogger(KafkaProducerService.class);
 
-    private final BaseKafkaProducer<EquityPriceUpdateEvent> equityProducer;
-    private final BaseKafkaProducer<StockIndicesPriceUpdateEvent> stockIndicesProducer;
-    private final BaseKafkaProducer<MarketIndexIndicesPriceUpdateEvent> indicesProducer;
-    private final KafkaProperties kafkaProperties;
+        private final BaseKafkaProducer<EquityPriceUpdateEvent> equityProducer;
+        private final BaseKafkaProducer<StockIndicesPriceUpdateEvent> stockIndicesProducer;
+        private final BaseKafkaProducer<MarketIndexIndicesPriceUpdateEvent> indicesProducer;
+        private final KafkaProperties kafkaProperties;
 
-    public void sendEquityPriceUpdates(List<EquityPrice> equityPrices) {
-        var event = EquityPriceUpdateEvent.builder()
-                .eventType("EQUITY_PRICE_UPDATE")
-                .timestamp(LocalDateTime.now())
-                .equityPrices(equityPrices)
-                .build();
+        public void sendEquityPriceUpdates(List<EquityPrice> equityPrices) {
+                var event = EquityPriceUpdateEvent.builder()
+                                .eventType("EQUITY_PRICE_UPDATE")
+                                .timestamp(LocalDateTime.now())
+                                .equityPrices(equityPrices)
+                                .build();
 
-        equityProducer.sendEvent(event, kafkaProperties.getTopics().getStockPrice(), event.getEventType(),
-                event.getTimestamp());
-    }
+                equityProducer.sendEvent(event, kafkaProperties.getTopics().getStockPrice(), event.getEventType(),
+                                event.getTimestamp());
+        }
 
-    public void sendStockIndicesUpdate(StockInsidicesEventData stockIndice) {
-        var event = StockIndicesPriceUpdateEvent.builder()
-                .eventType("STOCK_INDICES_PRICE_UPDATE")
-                .timestamp(LocalDateTime.now())
-                .stockIndices(stockIndice)
-                .build();
+        public void sendStockIndicesUpdate(StockInsidicesEventData stockIndice) {
+                var event = StockIndicesPriceUpdateEvent.builder()
+                                .eventType("STOCK_INDICES_PRICE_UPDATE")
+                                .timestamp(LocalDateTime.now())
+                                .stockIndices(stockIndice)
+                                .build();
 
-        stockIndicesProducer.sendEvent(event, kafkaProperties.getTopics().getStockIndices(), event.getEventType(),
-                event.getTimestamp());
-    }
+                stockIndicesProducer.sendEvent(event, kafkaProperties.getTopics().getStockIndices(),
+                                event.getEventType(),
+                                event.getTimestamp());
+        }
 
-    public void sendIndicesUpdate(List<MarketIndexIndices> marketIndexIndices) {
-        var event = MarketIndexIndicesPriceUpdateEvent.builder()
-                .eventType("MARKET_INDICES_PRICE_UPDATE")
-                .timestamp(LocalDateTime.now())
-                .marketIndices(marketIndexIndices)
-                .build();
+        public void sendIndicesUpdate(List<MarketIndexIndices> marketIndexIndices) {
+                var event = MarketIndexIndicesPriceUpdateEvent.builder()
+                                .eventType("MARKET_INDICES_PRICE_UPDATE")
+                                .timestamp(LocalDateTime.now())
+                                .marketIndices(marketIndexIndices)
+                                .build();
 
-        indicesProducer.sendEvent(event, kafkaProperties.getTopics().getNseIndices(), event.getEventType(),
-                event.getTimestamp());
-    }
+                indicesProducer.sendEvent(event, kafkaProperties.getTopics().getNseIndices(), event.getEventType(),
+                                event.getTimestamp());
+        }
 }

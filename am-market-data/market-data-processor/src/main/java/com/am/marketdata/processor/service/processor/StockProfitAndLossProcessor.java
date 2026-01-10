@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 public class StockProfitAndLossProcessor implements DataProcessor<StockProfitAndLoss, Void> {
     
     private final StockFinancialPerformanceService stockFinancialPerformanceService;
-    private final StockPortfolioProducerService stockPortfolioProducer;
+    private final java.util.Optional<StockPortfolioProducerService> stockPortfolioProducer;
 
     @Override
     @SneakyThrows
@@ -45,7 +45,7 @@ public class StockProfitAndLossProcessor implements DataProcessor<StockProfitAnd
                 data.getProfitAndLoss().size());
             // Publish to Kafka
             try {
-                stockPortfolioProducer.sendStockProfitAndLossFinancialsUpdate(data.getSymbol(), data);
+                stockPortfolioProducer.ifPresent(producer -> producer.sendStockProfitAndLossFinancialsUpdate(data.getSymbol(), data));
                 log.debug("Published stock profit and loss data for symbol: {}", data.getSymbol());
             } catch (Exception e) {
                 log.error("Failed to publish stock profit and loss data for symbol: {}", data.getSymbol(), e);

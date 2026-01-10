@@ -23,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class ProcessorFactory {
     
-    private final StockPortfolioProducerService stockPortfolioProducer;
+    private final java.util.Optional<StockPortfolioProducerService> stockPortfolioProducer;
     private final StockFinancialPerformanceService stockFinancialPerformanceService;
     private final MeterRegistry meterRegistry;
     

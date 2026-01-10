@@ -70,6 +70,13 @@ class MarketSidebar extends StatelessWidget {
         onTap: () => provider.selectIndex('Market Analysis'),
       ),
       SecondarySidebarItem(
+        title: 'Analysis Dashboard',
+        icon: Icons.dashboard_customize_rounded, // Distinct icon
+        accentColor: marketAccent,
+        isSelected: selectedIndex == 'Analysis Dashboard',
+        onTap: () => provider.selectIndex('Analysis Dashboard'),
+      ),
+      SecondarySidebarItem(
         title: 'Price Test',
         icon: Icons.price_check_rounded,
         accentColor: marketAccent,

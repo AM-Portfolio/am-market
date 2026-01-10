@@ -62,7 +62,7 @@ public class MarketDataService {
             MeterRegistry meterRegistry, InstrumentMapper instrumentMapper,
             MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
             MarketDataRetrievalUtil marketDataRetrievalUtil,
-            com.am.marketdata.service.kafka.producer.MarketDataProducer producer) {
+            java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer) {
         this.providerFactory = providerFactory;
         this.instrumentService = instrumentService;
         this.meterRegistry = meterRegistry;
@@ -70,7 +70,7 @@ public class MarketDataService {
         this.genericMapper = genericMapper;
         this.persistenceService = persistenceService;
         this.marketDataRetrievalUtil = marketDataRetrievalUtil;
-        this.producer = producer;
+        this.producer = producer.orElse(null);
     }
 
     private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh) {

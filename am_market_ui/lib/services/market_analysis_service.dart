@@ -7,15 +7,13 @@ import 'package:get_it/get_it.dart';
 import 'package:am_design_system/am_design_system.dart';
 
 class MarketAnalysisService {
-  // Use the new public base URL mapped via Traefik
-  // Updated to match Traefik routing: /api/market/analysis
-  final String baseUrl = 'https://am.munish.org/api/market/analysis';
+  // Matches backend AnalysisController
+  final String baseUrl = 'http://localhost:8092/api/v1/analysis';
 
   final _storage = GetIt.I<SecureStorageService>();
 
   Future<Map<String, String>> _getHeaders() async {
     final token = await _storage.getAccessToken();
-    // Use print since CommonLogger might not be imported here, but actually it is better to import it
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -23,34 +21,42 @@ class MarketAnalysisService {
     };
   }
 
-  Future<Map<String, dynamic>> analyzeSymbol(String symbol, {String timeframe = "1D"}) async {
+  Future<Map<String, dynamic>> getSeasonality(String symbol, {String timeframe = "DAY"}) async {
+    return _get('/seasonality', {'symbol': symbol, 'timeframe': timeframe});
+  }
+
+  Future<Map<String, dynamic>> getTechnicalAnalysis(String symbol, {String timeframe = "DAY"}) async {
+    return _get('/technical', {'symbol': symbol, 'timeframe': timeframe});
+  }
+
+  Future<Map<String, dynamic>> getSeasonalityBatch(List<String> symbols, {String timeframe = "DAY"}) async {
+    return _get('/seasonality/batch', {'symbols': symbols.join(','), 'timeframe': timeframe});
+  }
+
+  Future<Map<String, dynamic>> getTechnicalBatch(List<String> symbols, {String timeframe = "DAY"}) async {
+    return _get('/technical/batch', {'symbols': symbols.join(','), 'timeframe': timeframe});
+  }
+
+  Future<Map<String, dynamic>> getCalendarHeatmap(String symbol, {int? year}) async {
+    final params = {'symbol': symbol};
+    if (year != null) params['year'] = year.toString();
+    return _get('/heatmap/calendar', params);
+  }
+
+  Future<Map<String, dynamic>> _get(String path, Map<String, String> queryParams) async {
     try {
       final headers = await _getHeaders();
+      final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
       
-      final payload = {
-        "symbol": symbol,
-        "timeframe": timeframe,
-        "exchange": "NSE",
-        "indicators": [
-          { "kind": "sma", "length": 50 },
-          { "kind": "rsi", "length": 14 },
-          { "kind": "ema", "length": 20 }
-        ]
-      };
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/v1/analyze'), 
-        headers: headers,
-        body: jsonEncode(payload),
-      );
+      final response = await http.get(uri, headers: headers);
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        throw Exception('Analysis failed: ${response.statusCode} ${response.body}');
+        throw Exception('Request failed: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      print("Analysis Error: $e");
+      print("Analysis Error ($path): $e");
       rethrow;
     }
   }

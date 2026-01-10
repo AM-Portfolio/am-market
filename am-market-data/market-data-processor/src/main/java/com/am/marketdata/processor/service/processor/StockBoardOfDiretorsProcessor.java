@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class StockBoardOfDiretorsProcessor implements DataProcessor<BoardOfDirectors, Void> {
     
-    private final StockPortfolioProducerService stockPortfolioProducer;
+    private final java.util.Optional<StockPortfolioProducerService> stockPortfolioProducer;
     private final StockFinancialPerformanceService stockFinancialPerformanceService;
 
     @Override
@@ -45,7 +45,7 @@ public class StockBoardOfDiretorsProcessor implements DataProcessor<BoardOfDirec
                 data.getDirectors().size());
             // Publish to Kafka
             try {
-                stockPortfolioProducer.sendBoardOfDirectorsUpdate(data.getSymbol(), data);
+                stockPortfolioProducer.ifPresent(producer -> producer.sendBoardOfDirectorsUpdate(data.getSymbol(), data));
                 log.debug("Published stock board of directors data for symbol: {}", data.getSymbol());
             } catch (Exception e) {
                 log.error("Failed to publish stock board of directors data for symbol: {}", data.getSymbol(), e);

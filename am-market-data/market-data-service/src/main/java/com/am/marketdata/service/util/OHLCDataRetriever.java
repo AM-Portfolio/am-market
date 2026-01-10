@@ -163,10 +163,13 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
         try {
             log.info(methodName, "[PROVIDER_ASYNC] Sending {} OHLC quotes to KAFKA for ingestion", data.size());
 
-            // Use producer to send to Kafka (Fire and Forget)
-            producer.sendOHLCData(data, this.timeFrame, targetProviderName);
-
-            log.info(methodName, "[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
+            if (producer != null) {
+                // Use producer to send to Kafka (Fire and Forget)
+                producer.sendOHLCData(data, this.timeFrame, targetProviderName);
+                log.info(methodName, "[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
+            } else {
+                log.warn(methodName, "[PROVIDER_ASYNC] Skipping Kafka ingestion (Kafka disabled/Producer null)");
+            }
         } catch (Exception e) {
             log.error(methodName, "[PROVIDER_ASYNC] FAILED to send OHLC data to KAFKA: " + e.getMessage(), e);
         }
@@ -219,11 +222,12 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
                 throw new IllegalStateException("ProviderFactory must be provided");
             }
 
-            if (producer == null) {
-                // If producer not set, throw or log?
-                // Currently we enforce it as it's critical for async flow
-                throw new IllegalStateException("MarketDataProducer must be provided");
-            }
+            // Producer is optional
+            // if (producer == null) {
+            // // If producer not set, throw or log?
+            // // Currently we enforce it as it's critical for async flow
+            // throw new IllegalStateException("MarketDataProducer must be provided");
+            // }
 
             return new OHLCDataRetriever(
                     persistenceService,

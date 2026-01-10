@@ -64,7 +64,7 @@ public class MarketDataProcessingService {
     private static final String TAG_DATA_TYPE = "data.type";
 
     private final NSEApiClient nseApiClient;
-    private final KafkaProducerService kafkaProducer;
+    private final java.util.Optional<KafkaProducerService> kafkaProducer;
     private final MarketIndexIndicesService indexIndicesService;
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final MeterRegistry meterRegistry;
@@ -267,7 +267,7 @@ public class MarketDataProcessingService {
                         Timer.Sample processSample = Timer.start();
                         log.info("Successfully fetched NSE indices data");
                         var indices = saveIndicesAndGetData(response);
-                        kafkaProducer.sendIndicesUpdate(indices);
+                        kafkaProducer.ifPresent(producer -> producer.sendIndicesUpdate(indices));
                         processSample.stop(indicesProcessTimer);
 
                         log.info("Successfully processed and sent indices data to Kafka");
@@ -424,7 +424,7 @@ public class MarketDataProcessingService {
         try {
             StockInsidicesEventData stockIndice = StockIndicesMapper.convertToStockIndices(stockIndicesResponse);
 
-            kafkaProducer.sendStockIndicesUpdate(stockIndice);
+            kafkaProducer.ifPresent(producer -> producer.sendStockIndicesUpdate(stockIndice));
             log.info("Successfully processed stock indices data. Market Status: {}, Advances: {}, Declines: {}",
                     stockIndice.getMarketStatus() != null ? stockIndice.getMarketStatus().getMarketStatus() : "N/A",
                     stockIndice.getAdvance().getAdvances(),

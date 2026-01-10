@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class QuaterlyFinancialResultProcessor implements DataProcessor<QuaterlyResult, Void> {
     
-    private final StockPortfolioProducerService stockPortfolioProducer;
+    private final java.util.Optional<StockPortfolioProducerService> stockPortfolioProducer;
     private final StockFinancialPerformanceService stockFinancialPerformanceService;
 
     @Override
@@ -45,7 +45,7 @@ public class QuaterlyFinancialResultProcessor implements DataProcessor<QuaterlyR
                 data.getFinancialResults().size());
             // Publish to Kafka
             try {
-                stockPortfolioProducer.sendQuaterlyFinancialsUpdate(data.getSymbol(), data);
+                stockPortfolioProducer.ifPresent(producer -> producer.sendQuaterlyFinancialsUpdate(data.getSymbol(), data));
                 log.debug("Published stock quaterly financials data for symbol: {}", data.getSymbol());
             } catch (Exception e) {
                 log.error("Failed to publish stock quaterly financials data for symbol: {}", data.getSymbol(), e);

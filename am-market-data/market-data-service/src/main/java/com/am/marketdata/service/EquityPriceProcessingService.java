@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 public class EquityPriceProcessingService {
     private final UpStockAdapter upStockAdapter;
     private final EquityService equityService;
-    private final KafkaProducerService kafkaProducerService;
+    private final java.util.Optional<KafkaProducerService> kafkaProducerService;
     private final MeterRegistry meterRegistry;
 
     private static final int BATCH_SIZE = 50;
@@ -77,7 +77,7 @@ public class EquityPriceProcessingService {
             // Send Kafka events if we have data and no errors occurred
             if (!allUpdatedStocks.isEmpty() && !hasErrors) {
                 log.info("Sending Kafka events for {} updated stocks", allUpdatedStocks.size());
-                kafkaProducerService.sendEquityPriceUpdates(allUpdatedStocks);
+                kafkaProducerService.ifPresent(service -> service.sendEquityPriceUpdates(allUpdatedStocks));
                 meterRegistry.counter("equity.price.kafka.events.sent").increment();
                 processingTimer.stop(meterRegistry.timer("equity.price.total.processing.time"));
                 return true;

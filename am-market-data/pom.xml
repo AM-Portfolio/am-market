@@ -22,6 +22,7 @@
         <module>market-data-scraper</module>
         <!-- <module>market-data-processor</module>   -->
         <module>market-data-scheduler</module>
+        <module>market-data-analysis</module>
         <module>market-data-api</module>
         <module>market-data-app</module>
         <module>market-data-redis</module>

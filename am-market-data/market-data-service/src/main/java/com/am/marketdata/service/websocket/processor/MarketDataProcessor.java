@@ -23,8 +23,8 @@ import java.util.Map;
 public class MarketDataProcessor {
 
     private final ObjectMapper objectMapper;
-    private final KafkaProducerService kafkaProducerService;
-    private final com.am.marketdata.service.kafka.producer.MarketDataProducer marketDataProducer;
+    private final java.util.Optional<KafkaProducerService> kafkaProducerService;
+    private final java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> marketDataProducer;
     private final OHLCMapper ohlcMapper;
 
     /**
@@ -97,10 +97,11 @@ public class MarketDataProcessor {
             if (!results.isEmpty()) {
                 log.info("Processed {} quotes. Publishing to Kafka.", results.size());
                 List<EquityPrice> equityPrices = ohlcMapper.toEquityPriceList(results);
-                kafkaProducerService.sendEquityPriceUpdates(equityPrices);
+                kafkaProducerService.ifPresent(service -> service.sendEquityPriceUpdates(equityPrices));
 
                 // Also send to Ingestion topic for robust persistence (Streaming Injection)
-                marketDataProducer.sendOHLCData(results, com.am.marketdata.common.model.TimeFrame.DAY, "UPSTOX_STREAM");
+                marketDataProducer.ifPresent(producer -> producer.sendOHLCData(results,
+                        com.am.marketdata.common.model.TimeFrame.DAY, "UPSTOX_STREAM"));
             }
 
         } catch (Exception e) {

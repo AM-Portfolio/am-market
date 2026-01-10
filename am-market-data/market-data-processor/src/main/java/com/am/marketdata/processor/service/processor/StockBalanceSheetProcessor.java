@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class StockBalanceSheetProcessor implements DataProcessor<StockBalanceSheet, Void> {
     
-    private final StockPortfolioProducerService stockPortfolioProducer;
+    private final java.util.Optional<StockPortfolioProducerService> stockPortfolioProducer;
     private final StockFinancialPerformanceService stockFinancialPerformanceService;
 
     @Override
@@ -41,7 +41,7 @@ public class StockBalanceSheetProcessor implements DataProcessor<StockBalanceShe
                 data.getBalanceSheet().size());
             // Publish to Kafka
             try {
-                stockPortfolioProducer.sendBalanceSheetFinancialsUpdate(data.getSymbol(), data);
+                stockPortfolioProducer.ifPresent(producer -> producer.sendBalanceSheetFinancialsUpdate(data.getSymbol(), data));
                 log.debug("Published stock balance sheet data for symbol: {}", data.getSymbol());
             } catch (Exception e) {
                 log.error("Failed to publish stock balance sheet data for symbol: {}", data.getSymbol(), e);

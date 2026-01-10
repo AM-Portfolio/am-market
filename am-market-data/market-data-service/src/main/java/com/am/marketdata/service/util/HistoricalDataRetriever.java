@@ -194,10 +194,13 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             log.info(methodName, "[PROVIDER_ASYNC] Sending {} historical data records to KAFKA for ingestion",
                     data.size());
 
-            // Use producer to send to Kafka (Fire and Forget)
-            producer.sendHistoricalData(data, this.interval, targetProviderName);
-
-            log.info(methodName, "[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
+            if (producer != null) {
+                // Use producer to send to Kafka (Fire and Forget)
+                producer.sendHistoricalData(data, this.interval, targetProviderName);
+                log.info(methodName, "[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
+            } else {
+                log.warn(methodName, "[PROVIDER_ASYNC] Skipping Kafka ingestion (Kafka disabled/Producer null)");
+            }
         } catch (Exception e) {
             log.error(methodName,
                     "[PROVIDER_ASYNC] FAILED to send historical data to KAFKA: " + e.getMessage(), e);
@@ -293,9 +296,10 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                 throw new IllegalStateException("Interval must be provided");
             }
 
-            if (producer == null) {
-                throw new IllegalStateException("MarketDataProducer must be provided");
-            }
+            // Producer is optional now
+            // if (producer == null) {
+            // throw new IllegalStateException("MarketDataProducer must be provided");
+            // }
 
             return new HistoricalDataRetriever(
                     persistenceService,

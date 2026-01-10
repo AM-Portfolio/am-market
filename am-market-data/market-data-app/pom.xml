@@ -52,6 +52,11 @@
         </dependency>
         <dependency>
             <groupId>com.marketdata</groupId>
+            <artifactId>market-data-analysis</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.marketdata</groupId>
             <artifactId>market-data-scraper</artifactId>
             <version>${project.version}</version>
         </dependency>

@@ -26,7 +26,8 @@ import com.am.marketdata.internal.config.MarketDataInternalConfig;
 import com.am.marketdata.scheduler.config.MarketDataSchedulerConfig;
 
 @SpringBootApplication(exclude = {
-                DataSourceAutoConfiguration.class
+                DataSourceAutoConfiguration.class,
+                org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration.class
 })
 @EnableConfigurationProperties
 @Import({ MetricsConfig.class, InfluxDBConfig.class, SecurityConfig.class,

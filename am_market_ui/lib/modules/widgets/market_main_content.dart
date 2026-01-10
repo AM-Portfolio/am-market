@@ -15,6 +15,7 @@ import '../../screens/admin/historical_sync_page.dart';
 import '../../widgets/constituents_table.dart';
 import '../../widgets/heatmap_view.dart';
 import '../../screens/market_analytics_page.dart';
+import '../../screens/analysis_dashboard_page.dart';
 
 /// Market main content area - RESTORED FULL VERSION
 class MarketMainContent extends StatefulWidget {
@@ -92,6 +93,9 @@ class _MarketMainContentState extends State<MarketMainContent> {
 
                 // Index 8: Specific Index View (Table/Heatmap/Analytics)
                 _buildIndexDetailView(provider),
+                
+                // Index 9: Analysis Dashboard (New)
+                const AnalysisDashboardPage(symbol: 'NIFTY 50'), // Default symbol for now
 
               ],
             ),
@@ -123,6 +127,7 @@ class _MarketMainContentState extends State<MarketMainContent> {
       case 'ETF Explorer': return 5;
       case 'Market Analysis': return 6;
       case 'Admin Dashboard': return 7;
+      case 'Analysis Dashboard': return 9;
       default: return 8; // Specific Index Detail
     }
   }

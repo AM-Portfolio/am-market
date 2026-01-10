@@ -120,11 +120,7 @@
         </dependency>
 
 
-        <dependency>
-            <groupId>com.am.common</groupId>
-            <artifactId>am-common-investment-service</artifactId>
-            <version>${investment-service.version}</version>
-        </dependency>
+
         
         <dependency>
             <groupId>com.zerodhatech.kiteconnect</groupId>
@@ -134,7 +130,7 @@
         <dependency>
             <groupId>com.upstox.api</groupId>
             <artifactId>upstox-java-sdk</artifactId>
-            <version>LATEST</version>
+            <version>1.19</version>
             <scope>compile</scope>
         </dependency>
         <dependency>

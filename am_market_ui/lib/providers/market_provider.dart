@@ -110,7 +110,8 @@ class MarketProvider with ChangeNotifier {
       "Security Explorer", 
       "Price Test", 
       "ETF Explorer",
-      "Admin Dashboard"
+      "Admin Dashboard",
+      "Analysis Dashboard"
     ].contains(_selectedIndex)) {
       CommonLogger.debug("Selected view: $_selectedIndex (no data fetch required)", tag: "MarketProvider.selectIndex");
       // Do nothing, just update selection
