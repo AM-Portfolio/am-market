@@ -284,7 +284,8 @@ public class MarketDataHistoricalSyncService {
                     TimeFrame.DAY,
                     "STOCK", // Instrument Type
                     new HashMap<>(), // Additional Params
-                    forceRefresh, // Force Refresh (we need to fetch from provider)
+                    true, // Always force refresh from provider for Ingestion Job (we know data is
+                          // missing/needed)
                     fetchIndexStocks // Fetch individual stocks from index symbols if true
             );
 
