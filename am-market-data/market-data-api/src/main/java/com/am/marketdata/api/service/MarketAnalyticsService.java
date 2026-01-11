@@ -76,8 +76,9 @@ public class MarketAnalyticsService {
         // 2. Sort for Gainers (Descending)
         List<EnrichedStockData> allSorted = stockDataEnricher.sortByPercentChange(enrichedData, true);
 
-        // 3. Extract Top Gainers
+        // 3. Extract Top Gainers (Strictly Positive)
         List<Map<String, Object>> gainers = allSorted.stream()
+                .filter(d -> d.getPercentChange() > 0)
                 .limit(limit)
                 .map(this::enrichedDataToMap)
                 .collect(Collectors.toList());
@@ -87,6 +88,7 @@ public class MarketAnalyticsService {
         List<EnrichedStockData> allSortedAsc = stockDataEnricher.sortByPercentChange(enrichedData, false);
 
         List<Map<String, Object>> losers = allSortedAsc.stream()
+                .filter(d -> d.getPercentChange() < 0)
                 .limit(limit)
                 .map(this::enrichedDataToMap)
                 .collect(Collectors.toList());

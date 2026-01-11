@@ -201,7 +201,8 @@ public class StockDataEnricher {
             }
 
             // Use Smart Service to get quotes (Cache -> DB -> History Fallback)
-            Map<String, OHLCQuote> prices = smartStockService.getSmartQuotes(new ArrayList<>(resolvedSymbols));
+            Map<String, OHLCQuote> prices = smartStockService.getSmartQuotes(new ArrayList<>(resolvedSymbols),
+                    timeFrame);
 
             if (prices == null) {
                 prices = new HashMap<>();

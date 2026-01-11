@@ -77,10 +77,61 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                 .getHistoricalDataFromCacheBatch(new ArrayList<>(remainingSymbols), interval, fromDateStr, toDateStr,
                         isIndexSymbol);
 
-        // Remove all symbols found in cache from remainingSymbols
+        // VALIDATION: Strict Date Range Check
+        // Filter out cached data that does not cover the full requested range
+        // This prevents partial cache hits (e.g., finding only 1 month of data when 1
+        // year is requested)
+        long requiredStartMs = fromDate.getTime();
+        long requiredEndMs = toDate.getTime();
+        long toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for holidays/weekends
+
+        List<String> keysToRemove = new ArrayList<>();
+
+        for (Map.Entry<String, HistoricalData> entry : result.entrySet()) {
+            String symbol = entry.getKey();
+            HistoricalData data = entry.getValue();
+
+            if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
+                keysToRemove.add(symbol);
+                continue;
+            }
+
+            List<com.am.common.investment.model.historical.OHLCVTPoint> points = data.getDataPoints();
+
+            // Check start date (ascending order assumed)
+            java.time.LocalDateTime firstPointTime = points.get(0).getTime();
+            java.time.LocalDateTime lastPointTime = points.get(points.size() - 1).getTime();
+
+            long dataStartMs = firstPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+            long dataEndMs = lastPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+
+            // Logic:
+            // 1. Data Start must be <= Request Start + Tolerance (Data shouldn't start too
+            // late)
+            // 2. Data End must be >= Request End - Tolerance (Data shouldn't end too early)
+
+            boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
+            boolean missingRecentData = dataEndMs < (requiredEndMs - toleranceMs);
+
+            if (missingEarlyData || missingRecentData) {
+                log.info("[CACHE_VALIDATION] Partial cache hit detected for {}. Invalidating cache entry. " +
+                        "Req: {} to {}, Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
+                        symbol, fromDateStr, toDateStr,
+                        firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
+                        missingEarlyData, missingRecentData);
+                keysToRemove.add(symbol);
+            }
+        }
+
+        // Remove invalid entries
+        for (String key : keysToRemove) {
+            result.remove(key);
+        }
+
+        // Remove all symbols found in VALID cache from remainingSymbols
         if (!result.isEmpty()) {
             remainingSymbols.removeAll(result.keySet());
-            log.info("[CACHE] Found historical data for {}/{} symbols in cache",
+            log.info("[CACHE] Found valid historical data for {}/{} symbols in cache",
                     result.size(), allSymbols.size());
         }
 

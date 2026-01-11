@@ -27,6 +27,99 @@ public class SmartStockService {
     private final MarketDataService marketDataService;
 
     /**
+     * Get the latest quotes for a list of symbols with TimeFrame support.
+     * If TimeFrame is provided and not DAY, it fetches historical data to calculate
+     * change/pChange
+     * relative to that timeframe (e.g. 1 Year ago).
+     */
+    public Map<String, OHLCQuote> getSmartQuotes(List<String> symbols, TimeFrame timeFrame) {
+        // 1. Get Base Quotes (Live/Latest)
+        Map<String, OHLCQuote> currentQuotes = getSmartQuotes(symbols);
+
+        if (timeFrame == null || timeFrame == TimeFrame.DAY) {
+            return currentQuotes; // Default behavior
+        }
+
+        log.info("getSmartQuotes", "Calculating quotes for TimeFrame: " + timeFrame);
+
+        // 2. Fetch Historical Data for Previous Reference Point
+        LocalDate to = LocalDate.now();
+        LocalDate from = getStartDateForTimeFrame(to, timeFrame);
+
+        try {
+            // We need data around 'from' date to get the close price at that time
+            // We ask for a small buffer around 'from' date to ensure we get a point
+            Date fromDate = Date.from(from.minusDays(5).atStartOfDay(ZoneId.systemDefault()).toInstant());
+            // We only need up to 'from' date essentially, but let's ask for a range to be
+            // safe
+            Date toDate = Date.from(from.plusDays(5).atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+            Map<String, com.am.common.investment.model.historical.HistoricalData> historyMap = marketDataService
+                    .getHistoricalDataBatch(
+                            new ArrayList<>(symbols),
+                            fromDate,
+                            toDate,
+                            TimeFrame.DAY, // We want Daily candles to find the close
+                            false,
+                            null,
+                            null,
+                            false,
+                            false // Cache is fine
+                    );
+
+            if (historyMap != null) {
+                currentQuotes.forEach((symbol, quote) -> {
+                    if (historyMap.containsKey(symbol)) {
+                        var history = historyMap.get(symbol);
+                        if (history.getDataPoints() != null && !history.getDataPoints().isEmpty()) {
+                            // Find the point closest to 'from' date
+                            // Since we asked for -5 to +5 days, we pick the one closest to 'from'
+                            // OR simpler: just pick the *last available* point in this historical range
+                            // which would be closest to the 'target start date'.
+
+                            // Actually, simple sorting by date and taking the last one (which is closest to
+                            // 'from')
+                            // is a good approximation for "price at start of timeframe".
+
+                            var points = history.getDataPoints();
+                            var refPoint = points.get(points.size() - 1); // Last point in the requested past window
+
+                            double pastClose = refPoint.getClose();
+                            quote.setPreviousClose(pastClose);
+
+                            // Recalculate Change & PChange logic is usually in EnrichedStockData or
+                            // implicitly in UI.
+                            // But OHLCQuote object itself doesn't hold 'change'/'pChange' fields explicitly
+                            // standardly?
+                            // Wait, StockDataEnricher calculates change = lastPrice - previousClose.
+                            // So by updating previousClose here, we effectively update the change
+                            // calculation!
+                        }
+                    }
+                });
+            }
+
+        } catch (Exception e) {
+            log.error("getSmartQuotes", "Error fetching historical reference for timeframe: " + timeFrame, e);
+        }
+
+        return currentQuotes;
+    }
+
+    private LocalDate getStartDateForTimeFrame(LocalDate current, TimeFrame timeFrame) {
+        switch (timeFrame) {
+            case WEEK:
+                return current.minusWeeks(1);
+            case MONTH:
+                return current.minusMonths(1);
+            case YEAR:
+                return current.minusYears(1);
+            default:
+                return current.minusDays(1);
+        }
+    }
+
+    /**
      * Get the latest quotes for a list of symbols.
      * Strategy:
      * 1. Try Cache/DB (forceRefresh=false).
