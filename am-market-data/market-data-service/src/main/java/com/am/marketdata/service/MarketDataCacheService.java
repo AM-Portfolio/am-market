@@ -495,27 +495,16 @@ public class MarketDataCacheService {
                 }
 
                 if (!points.isEmpty()) {
-                    // Smart logging: if cache hits are huge (>1000), show only count in INFO and
-                    // one sample in DEBUG
-                    if (cacheHits.size() > 1000) {
-                        log.info("getHistoricalDataFromCache",
-                                String.format(
-                                        "Retrieved %d historical data points from cache for symbol: %s (%d cache hits)",
-                                        points.size(), symbol, cacheHits.size()));
+                    // Always log just the count in INFO
+                    log.info("getHistoricalDataFromCache",
+                            String.format(
+                                    "Retrieved %d historical data points from cache for symbol: %s (%d cache hits)",
+                                    points.size(), symbol, cacheHits.size()));
 
-                        // Show one sample record in DEBUG mode to know the pattern
-                        if (!cacheHits.isEmpty()) {
-                            Map.Entry<String, String> firstEntry = cacheHits.entrySet().iterator().next();
-                            log.debug("getHistoricalDataFromCache",
-                                    String.format("Sample cache hit: %s -> %s", firstEntry.getKey(),
-                                            firstEntry.getValue()));
-                        }
-                    } else {
-                        // Log all cache hits for smaller datasets
-                        log.info("getHistoricalDataFromCache",
-                                String.format(
-                                        "Retrieved %d historical data points from cache for symbol: %s with values: %s",
-                                        points.size(), symbol, cacheHits));
+                    // Log detailed values in DEBUG mode
+                    if (!cacheHits.isEmpty()) {
+                        log.debug("getHistoricalDataFromCache",
+                                String.format("Retrieved values: %s", cacheHits));
                     }
 
                     return convertToHistoricalData(symbol, points);

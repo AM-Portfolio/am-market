@@ -53,7 +53,7 @@ UPSTOX_CODE: rNLu2Q
 
 app:
   kafka:
-    enabled: false
+    enabled: true
 
 kafka:
   topics:

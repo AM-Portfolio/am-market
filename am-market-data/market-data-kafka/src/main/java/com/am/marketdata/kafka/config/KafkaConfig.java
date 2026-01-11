@@ -29,6 +29,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -36,8 +40,6 @@ import java.util.Map;
 @Configuration
 @EnableKafka
 @RequiredArgsConstructor
-@org.springframework.context.annotation.DependsOn("kafkaProperties")
-@ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true", matchIfMissing = false)
 @Profile("!isolated")
 public class KafkaConfig {
 
@@ -60,6 +62,50 @@ public class KafkaConfig {
     @Bean
     public org.springframework.kafka.support.converter.StringJsonMessageConverter jsonMessageConverter() {
         return new org.springframework.kafka.support.converter.StringJsonMessageConverter(objectMapper());
+    }
+
+    @Bean
+    public Map<String, Object> consumerConfigs() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaProperties.getBootstrapServers());
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+
+        KafkaProperties.ConsumerProperties consumerProps = kafkaProperties.getConsumer();
+        if (consumerProps != null) {
+            props.put(ConsumerConfig.GROUP_ID_CONFIG, consumerProps.getGroupId());
+            String autoOffsetReset = consumerProps.getAutoOffsetReset();
+            if (autoOffsetReset != null) {
+                props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, autoOffsetReset);
+            }
+        } else {
+            props.put(ConsumerConfig.GROUP_ID_CONFIG, "market-data-service-group");
+            props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        }
+
+        // Security props
+        if (kafkaProperties.getProperties() != null && kafkaProperties.getProperties().getSaslJaasConfig() != null
+                && !kafkaProperties.getProperties().getSaslJaasConfig().isEmpty()) {
+            props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG,
+                    kafkaProperties.getProperties().getSecurityProtocol());
+            props.put(SaslConfigs.SASL_MECHANISM, kafkaProperties.getProperties().getSaslMechanism());
+            props.put(SaslConfigs.SASL_JAAS_CONFIG, kafkaProperties.getProperties().getSaslJaasConfig());
+        }
+
+        return props;
+    }
+
+    @Bean
+    public ConsumerFactory<String, Object> consumerFactory() {
+        return new DefaultKafkaConsumerFactory<>(consumerConfigs());
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        factory.setRecordMessageConverter(jsonMessageConverter());
+        return factory;
     }
 
     @Bean

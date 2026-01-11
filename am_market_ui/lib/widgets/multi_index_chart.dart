@@ -8,6 +8,7 @@ class MultiIndexChart extends StatelessWidget {
   final List<String> selectedIndices;
   final bool isLoading;
   final String? error;
+  final bool isBarChart;
 
   const MultiIndexChart({
     super.key,
@@ -15,6 +16,7 @@ class MultiIndexChart extends StatelessWidget {
     required this.selectedIndices,
     this.isLoading = false,
     this.error,
+    this.isBarChart = false,
   });
 
   // Color palette for different indices
@@ -22,6 +24,8 @@ class MultiIndexChart extends StatelessWidget {
     Color(0xFF3B82F6), // Blue
     Color(0xFF10B981), // Green
     Color(0xFFEF4444), // Red
+    Color(0xFFF59E0B), // Amber
+    Color(0xFF8B5CF6), // Violet
   ];
 
   @override
@@ -30,7 +34,7 @@ class MultiIndexChart extends StatelessWidget {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(48),
-          child: CircularProgressIndicator(),
+          child: CircularProgressIndicator(color: Color(0xFF00D1FF)),
         ),
       );
     }
@@ -97,7 +101,9 @@ class MultiIndexChart extends StatelessWidget {
           _buildLegend(context),
           const SizedBox(height: 24),
           Expanded(
-            child: _buildChart(context, chartData),
+            child: isBarChart 
+                ? _buildBarChart(context, chartData)
+                : _buildChart(context, chartData),
           ),
         ],
       ),
@@ -140,6 +146,138 @@ class MultiIndexChart extends StatelessWidget {
     );
   }
 
+  Widget _buildBarChart(BuildContext context, List<Map<String, dynamic>> chartData) {
+    final theme = Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Ensure enough width for bars
+        final minWidth = chartData.length * (selectedIndices.length * 10.0 + 20.0);
+        
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: minWidth > constraints.maxWidth ? minWidth : constraints.maxWidth,
+            height: constraints.maxHeight,
+            child: BarChart(
+              BarChartData(
+                gridData: FlGridData(show: false),
+                titlesData: FlTitlesData(
+                  show: true,
+                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 30,
+                      getTitlesWidget: (value, meta) {
+                        final index = value.toInt();
+                        if (index >= 0 && index < chartData.length) {
+                          // Show fewer labels if too many
+                          if (chartData.length > 20 && index % (chartData.length ~/ 10) != 0) {
+                            return const SizedBox.shrink();
+                          }
+                          
+                          final dateStr = chartData[index]['time'] as String;
+                          try {
+                            final date = DateTime.parse(dateStr);
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                DateFormat('dd MMM').format(date),
+                                style: TextStyle(
+                                  color: theme.textTheme.bodySmall?.color?.withOpacity(0.6),
+                                  fontSize: 10,
+                                ),
+                              ),
+                            );
+                          } catch (e) {
+                            return const SizedBox.shrink();
+                          }
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      getTitlesWidget: (value, meta) {
+                         return Text(
+                          '${value.toStringAsFixed(0)}%',
+                          style: TextStyle(
+                            color: theme.textTheme.bodySmall?.color?.withOpacity(0.6),
+                            fontSize: 10,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(
+                  show: true,
+                  border: Border(
+                    bottom: BorderSide(color: theme.dividerColor.withOpacity(0.5), width: 1),
+                    left: BorderSide(color: theme.dividerColor.withOpacity(0.5), width: 1),
+                    top: BorderSide.none,
+                    right: BorderSide.none,
+                  ),
+                ),
+                minY: _getMinPrice(chartData),
+                maxY: _getMaxPrice(chartData),
+                barGroups: chartData.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final point = entry.value;
+                  
+                  return BarChartGroupData(
+                    x: index,
+                    barsSpace: 4,
+                    barRods: selectedIndices.asMap().entries.map((idxEntry) {
+                      final idx = idxEntry.key;
+                      final symbol = idxEntry.value;
+                      final val = (point[symbol] as num?)?.toDouble() ?? 0.0;
+                      // Logic: If value < 0, use RED, else use Index Color
+                      final isNegative = val < 0;
+                      final color = isNegative ? const Color(0xFFEF4444) : indexColors[idx % indexColors.length];
+                      
+                      return BarChartRodData(
+                        toY: val,
+                        color: color,
+                        width: 14, // Fixed width
+                        borderRadius: val > 0 
+                            ? const BorderRadius.only(topLeft: Radius.circular(2), topRight: Radius.circular(2))
+                            : const BorderRadius.only(bottomLeft: Radius.circular(2), bottomRight: Radius.circular(2)),
+                        backDrawRodData: BackgroundBarChartRodData(
+                            show: true, toY: 0, color: Colors.transparent), 
+                      );
+                    }).toList(),
+                  );
+                }).toList(),
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final dateStr = chartData[group.x]['time'] as String;
+                      final date = DateTime.parse(dateStr);
+                      final symbol = selectedIndices[rodIndex]; 
+                      return BarTooltipItem(
+                        '${DateFormat('dd MMM yy').format(date)}\n$symbol\n${rod.toY.toStringAsFixed(2)}%',
+                        const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildChart(BuildContext context, List<Map<String, dynamic>> chartData) {
     final theme = Theme.of(context);
     return LayoutBuilder(
@@ -154,7 +292,7 @@ class MultiIndexChart extends StatelessWidget {
             child: LineChart(
               LineChartData(
                   gridData: FlGridData(
-                    show: false, // Hide all grid lines as requested
+                    show: false, 
                   ),
                 titlesData: FlTitlesData(
                   show: true,
@@ -175,10 +313,13 @@ class MultiIndexChart extends StatelessWidget {
                           final dateStr = chartData[index]['time'] as String;
                           try {
                             final date = DateTime.parse(dateStr);
+                            // Show Year if jan or for better context
+                            final isYearStart = date.month == 1 && date.day == 1;
+                            final fmt = DateFormat('MMM yy'); // Always show Year for better context
                             return Padding(
                               padding: const EdgeInsets.only(top: 8.0),
                               child: Text(
-                                DateFormat('dd MMM').format(date),
+                                fmt.format(date),
                                 style: TextStyle(
                                   color: theme.textTheme.bodySmall?.color?.withOpacity(0.6),
                                   fontSize: 10,
@@ -346,7 +487,14 @@ class MultiIndexChart extends StatelessWidget {
         dotData: FlDotData(show: false),
         belowBarData: BarAreaData(
           show: true,
-          color: color.withOpacity(0.1),
+          gradient: LinearGradient(
+            colors: [
+              color.withOpacity(0.3),
+              color.withOpacity(0.0),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
         ),
       );
     }).toList();

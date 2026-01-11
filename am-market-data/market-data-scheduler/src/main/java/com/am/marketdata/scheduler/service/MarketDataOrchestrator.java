@@ -56,15 +56,30 @@ public class MarketDataOrchestrator {
     // --- Hourly Jobs ---
 
     /**
-     * Cookie Refresh: Runs every hour
+     * Cookie Refresh: Runs every hour ONLY during market hours (9 AM - 4 PM,
+     * Mon-Fri)
      */
-    @Scheduled(cron = "${scheduler.cookie.refresh:0 0 * * * *}")
+    @Scheduled(cron = "${scheduler.cookie.refresh:0 0 9-16 * * MON-FRI}", zone = "Asia/Kolkata")
     public void triggerCookieRefresh() {
-        log.info("Orchestrator: Triggering Cookie Refresh");
+        log.info("Orchestrator: Triggering Cookie Refresh (Market Hours)");
         if (cookieScheduler.isPresent()) {
             cookieScheduler.get().executeCookieRefresh();
         } else {
             log.warn("Orchestrator: CookieScheduler is not present, skipping Cookie Refresh");
+        }
+    }
+
+    /**
+     * Weekend Cookie Maintenance: Runs on Saturday at 10:00 AM
+     * Ensures cookies are valid/refreshed for weekend analysis or preparation.
+     */
+    @Scheduled(cron = "${scheduler.cookie.weekend:0 0 10 * * SAT}", zone = "Asia/Kolkata")
+    public void triggerWeekendCookieMaintenance() {
+        log.info("Orchestrator: Triggering Weekend Cookie Maintenance");
+        if (cookieScheduler.isPresent()) {
+            cookieScheduler.get().executeCookieRefresh();
+        } else {
+            log.warn("Orchestrator: CookieScheduler is not present, skipping Weekend Cookie Maintenance");
         }
     }
 

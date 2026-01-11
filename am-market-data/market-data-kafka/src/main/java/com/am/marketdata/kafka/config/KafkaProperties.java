@@ -12,9 +12,41 @@ public class KafkaProperties {
     private TopicProperties topics;
     private ProducerProperties producer;
     private Properties properties;
+    private ConsumerProperties consumer;
 
     public String getBootstrapServers() {
         return bootstrapServers;
+    }
+
+    public ConsumerProperties getConsumer() {
+        return consumer;
+    }
+
+    public void setConsumer(ConsumerProperties consumer) {
+        this.consumer = consumer;
+    }
+
+    // ... existing getters/setters
+
+    public static class ConsumerProperties {
+        private String groupId;
+        private String autoOffsetReset;
+
+        public String getGroupId() {
+            return groupId;
+        }
+
+        public void setGroupId(String groupId) {
+            this.groupId = groupId;
+        }
+
+        public String getAutoOffsetReset() {
+            return autoOffsetReset;
+        }
+
+        public void setAutoOffsetReset(String autoOffsetReset) {
+            this.autoOffsetReset = autoOffsetReset;
+        }
     }
 
     public void setBootstrapServers(String bootstrapServers) {

@@ -7,7 +7,7 @@ KAFKA_SASL_JAAS_CONFIG:
 # Application-specific Kafka properties
 app:
   kafka:
-    enabled: false
+    enabled: true
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     properties:
       security-protocol: ${KAFKA_SECURITY_PROTOCOL}

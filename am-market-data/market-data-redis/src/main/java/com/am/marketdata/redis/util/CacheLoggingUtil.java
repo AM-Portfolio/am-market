@@ -103,20 +103,13 @@ public class CacheLoggingUtil {
                                 })
                                 .collect(Collectors.toList());
 
-                // Smart logging: if key-value pairs are huge (>1000), show only count in INFO
-                // and one sample in DEBUG
-                if (keyValuePairs.size() > 100) {
-                        logger.info("Successfully cached OHLC data for {} symbols in Redis with {} key-value pairs",
-                                        symbolPrices.size(), keyValuePairs.size());
+                // Always log just the count in INFO
+                logger.info("Successfully cached OHLC data for {} symbols in Redis with {} key-value pairs",
+                                symbolPrices.size(), keyValuePairs.size());
 
-                        // Show one sample record in DEBUG mode to know the pattern
-                        if (logger.isDebugEnabled() && !keyValuePairs.isEmpty()) {
-                                logger.debug("Sample key-value pair pattern: {}", keyValuePairs.get(0));
-                        }
-                } else {
-                        logger.info("Successfully cached OHLC data for symbols: {} in Redis with key-value pairs: {}",
-                                        String.join(", ", symbolPrices.keySet()),
-                                        String.join(", ", keyValuePairs));
+                // Log detailed key-value pairs in DEBUG mode
+                if (logger.isDebugEnabled() && !keyValuePairs.isEmpty()) {
+                        logger.debug("Cached key-value pairs: {}", String.join(", ", keyValuePairs));
                 }
 
                 // Log detailed information at debug level
@@ -168,22 +161,14 @@ public class CacheLoggingUtil {
                                 })
                                 .collect(Collectors.toList());
 
-                // Smart logging: if key-value pairs are huge (>1000), show only count in INFO
-                // and one sample in DEBUG
-                if (keyValuePairs.size() > 1000) {
-                        logger.info(methodName,
-                                        String.format("Successfully cached OHLC data for %d symbols in Redis with %d key-value pairs",
-                                                        symbolPrices.size(), keyValuePairs.size()));
+                // Always log just the count in INFO
+                logger.info(methodName,
+                                String.format("Successfully cached OHLC data for %d symbols in Redis with %d key-value pairs",
+                                                symbolPrices.size(), keyValuePairs.size()));
 
-                        // Show one sample record in DEBUG mode to know the pattern
-                        if (!keyValuePairs.isEmpty()) {
-                                logger.debug(methodName, "Sample key-value pair pattern: " + keyValuePairs.get(0));
-                        }
-                } else {
-                        logger.info(methodName,
-                                        String.format("Successfully cached OHLC data for symbols: %s in Redis with key-value pairs: %s",
-                                                        String.join(", ", symbolPrices.keySet()),
-                                                        String.join(", ", keyValuePairs)));
+                // Log detailed key-value pairs in DEBUG mode
+                if (!keyValuePairs.isEmpty()) {
+                        logger.debug(methodName, "Cached key-value pairs: " + String.join(", ", keyValuePairs));
                 }
 
                 // Log detailed information at debug level
@@ -238,19 +223,13 @@ public class CacheLoggingUtil {
                                 })
                                 .collect(Collectors.toList());
 
-                // Smart logging: if key-value pairs are huge (>1000), show only count in INFO
-                // and one sample in DEBUG
-                if (keyValuePairs.size() > 1000) {
-                        logger.info("Successfully cached {} historical bars for {} in Redis with {} key-value pairs",
-                                        points.size(), symbol, keyValuePairs.size());
+                // Always log just the count in INFO
+                logger.info("Successfully cached {} historical bars for {} in Redis with {} key-value pairs",
+                                points.size(), symbol, keyValuePairs.size());
 
-                        // Show one sample record in DEBUG mode to know the pattern
-                        if (logger.isDebugEnabled() && !keyValuePairs.isEmpty()) {
-                                logger.debug("Sample key-value pair pattern: {}", keyValuePairs.get(0));
-                        }
-                } else {
-                        logger.info("Successfully cached {} historical bars for {} in Redis with key-value pairs: {}",
-                                        points.size(), symbol, String.join(", ", keyValuePairs));
+                // Log detailed key-value pairs in DEBUG mode
+                if (logger.isDebugEnabled() && !keyValuePairs.isEmpty()) {
+                        logger.debug("Cached key-value pairs: {}", String.join(", ", keyValuePairs));
                 }
 
                 // Log detailed information at debug level
@@ -295,21 +274,14 @@ public class CacheLoggingUtil {
                                 })
                                 .collect(Collectors.toList());
 
-                // Smart logging: if key-value pairs are huge (>1000), show only count in INFO
-                // and one sample in DEBUG
-                if (keyValuePairs.size() > 1000) {
-                        logger.info(methodName,
-                                        String.format("Successfully cached %d historical bars for %s in Redis with %d key-value pairs",
-                                                        points.size(), symbol, keyValuePairs.size()));
+                // Always log just the count in INFO
+                logger.info(methodName,
+                                String.format("Successfully cached %d historical bars for %s in Redis with %d key-value pairs",
+                                                points.size(), symbol, keyValuePairs.size()));
 
-                        // Show one sample record in DEBUG mode to know the pattern
-                        if (!keyValuePairs.isEmpty()) {
-                                logger.debug(methodName, "Sample key-value pair pattern: " + keyValuePairs.get(0));
-                        }
-                } else {
-                        logger.info(methodName,
-                                        String.format("Successfully cached %d historical bars for %s in Redis with key-value pairs: %s",
-                                                        points.size(), symbol, String.join(", ", keyValuePairs)));
+                // Log detailed key-value pairs in DEBUG mode
+                if (!keyValuePairs.isEmpty()) {
+                        logger.debug(methodName, "Cached key-value pairs: " + String.join(", ", keyValuePairs));
                 }
 
                 // Log detailed information at debug level

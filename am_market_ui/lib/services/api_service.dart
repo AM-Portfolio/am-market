@@ -337,12 +337,16 @@ class ApiService {
   Future<List<Map<String, dynamic>>> fetchMovers({
     String type = 'gainers', 
     int limit = 10, 
-    String? indexSymbol
+    String? indexSymbol,
+    String? timeFrame,
   }) async {
     try {
       String url = '$baseUrl${MarketEndpoints.movers}?type=$type&limit=$limit';
       if (indexSymbol != null && indexSymbol.isNotEmpty) {
         url += '&indexSymbol=$indexSymbol';
+      }
+      if (timeFrame != null && timeFrame.isNotEmpty) {
+        url += '&timeFrame=$timeFrame';
       }
       
       final headers = await _getHeaders();

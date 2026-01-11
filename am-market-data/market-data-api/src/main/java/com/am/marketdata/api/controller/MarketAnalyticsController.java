@@ -104,9 +104,11 @@ public class MarketAnalyticsController {
     })
     public ResponseEntity<HistoricalDataResponseV1> getHistoricalCharts(
             @PathVariable String symbol,
-            @RequestParam(defaultValue = "1D") String range) {
+            @RequestParam(defaultValue = "1D") String range,
+            @RequestParam(defaultValue = "true") boolean isIndexSymbol) {
         try {
-            log.info("getHistoricalCharts", "Fetching historical charts for symbol: " + symbol + ", range: " + range);
+            log.info("getHistoricalCharts", "Fetching historical charts for symbol: " + symbol + ", range: " + range
+                    + ", isIndexSymbol: " + isIndexSymbol);
 
             String interval = "1D";
             java.time.LocalDateTime to = java.time.LocalDateTime.now();
@@ -162,6 +164,7 @@ public class MarketAnalyticsController {
                     .to(to.toLocalDate().toString())
                     .interval(TimeFrame.fromApiValue(interval)) // Convert string to TimeFrame
                     .filterType("price")
+                    .indexSymbol(isIndexSymbol)
                     .build();
 
             // Fetch Data

@@ -29,7 +29,8 @@ public class CookieManagementService {
     public void initialize() {
         try {
             log.info("Initializing CookieManagementService");
-            refreshCookies();
+            // refreshCookies(); // Disabled on startup as per requirement. Relying on
+            // Scheduler.
 
             // Initial market data processing removed as per requirements
             log.info("CookieService Initialized. Waiting for scheduler.");
@@ -69,11 +70,8 @@ public class CookieManagementService {
 
     private boolean isWithinTradingHours() {
         LocalTime now = LocalTime.now(ZoneId.of("Asia/Kolkata"));
-        // marketStart and marketEnd unused in simplified return
-        // LocalTime marketStart = LocalTime.of(9, 15);
-        // LocalTime marketEnd = LocalTime.of(15, 35);
-
-        // Simplified check as per request/original logic potentially
-        return true;
+        LocalTime marketStart = LocalTime.of(9, 15);
+        LocalTime marketEnd = LocalTime.of(15, 35);
+        return now.isAfter(marketStart) && now.isBefore(marketEnd);
     }
 }
