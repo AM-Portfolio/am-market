@@ -100,6 +100,35 @@ public class MarketAnalyticsController {
     }
 
     /**
+     * Get Index Performance (All Constituents)
+     */
+    @GetMapping(value = "/index-performance", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Get Index Performance", description = "Retrieves performance of all constituent stocks in the specified index for a given timeframe")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Data retrieved successfully"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<List<Map<String, Object>>> getIndexPerformance(
+            @RequestParam(required = false) String indexSymbol,
+            @RequestParam(required = false) String timeFrame) {
+        try {
+            String index = indexSymbol != null ? indexSymbol : "NIFTY 50";
+            com.am.marketdata.common.model.TimeFrame tf = timeFrame != null
+                    ? com.am.marketdata.common.model.TimeFrame.fromApiValue(timeFrame)
+                    : null;
+
+            log.info("getIndexPerformance",
+                    "Fetching index performance for " + index + " with timeFrame: " + timeFrame);
+
+            List<Map<String, Object>> result = marketAnalyticsService.getIndexPerformance(index, tf);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("getIndexPerformance", "Error fetching index performance", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
      * Get Historical Charts (Batch or Single)
      */
     @GetMapping(value = "/historical-charts", produces = MediaType.APPLICATION_JSON_VALUE)

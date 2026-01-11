@@ -100,7 +100,10 @@ public class AnalysisService {
 
             // Use LocalDateTime directly
             if (curr.getTime() != null) {
-                dayOfWeekReturns.computeIfAbsent(curr.getTime().getDayOfWeek(), k -> new ArrayList<>()).add(ret);
+                DayOfWeek day = curr.getTime().getDayOfWeek();
+                if (day != DayOfWeek.SATURDAY && day != DayOfWeek.SUNDAY) {
+                    dayOfWeekReturns.computeIfAbsent(day, k -> new ArrayList<>()).add(ret);
+                }
                 monthlyReturns.computeIfAbsent(curr.getTime().getMonthValue(), k -> new ArrayList<>()).add(ret);
             }
         }
@@ -332,5 +335,183 @@ public class AnalysisService {
             return 100.0;
         double rs = avgGain / avgLoss;
         return 100.0 - (100.0 / (1.0 + rs));
+    }
+    // --- Historical Monthly Performance ---
+
+    public com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse getHistoricalPerformance(
+            String symbol, int years, boolean detailed) {
+
+        // Validate years
+        if (years <= 0)
+            years = 5;
+
+        // Check Cache
+        com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse cached = analysisRedisCache
+                .getHistoricalPerformance(symbol, years, detailed);
+        if (cached != null) {
+            return cached;
+        }
+
+        LocalDate to = LocalDate.now();
+        LocalDate from = LocalDate.of(to.getYear() - years + 1, 1, 1); // Start from Jan 1st of the starting year
+        LocalDate fetchFrom = from.minusDays(15); // Fetch extra days for previous close
+
+        HistoricalData data = marketDataService.getHistoricalData(symbol,
+                java.sql.Date.valueOf(fetchFrom),
+                java.sql.Date.valueOf(to),
+                TimeFrame.DAY,
+                true,
+                null,
+                null);
+
+        if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
+            return com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse.builder()
+                    .symbol(symbol)
+                    .startYear(from.getYear())
+                    .endYear(to.getYear())
+                    .build();
+        }
+
+        List<OHLCVTPoint> points = data.getDataPoints();
+        // Sort points by date just in case
+        points.sort(Comparator.comparing(OHLCVTPoint::getTime));
+
+        Map<Integer, com.am.marketdata.common.model.analysis.YearlyPerformance> yearlyMap = new TreeMap<>(
+                Comparator.reverseOrder());
+
+        // Map Date -> Close
+        NavigableMap<LocalDate, Double> closeMap = new TreeMap<>();
+        for (OHLCVTPoint p : points) {
+            if (p.getTime() != null && p.getClose() != null) {
+                closeMap.put(p.getTime().toLocalDate(), p.getClose());
+            }
+        }
+
+        double overallStartPrice = -1;
+        double overallEndPrice = -1;
+
+        // Iterate through each year
+        for (int y = to.getYear(); y >= from.getYear(); y--) {
+            int currentYear = y;
+            Map<String, Double> monthlyReturns = new LinkedHashMap<>();
+            Map<String, Map<Integer, Double>> dailyReturns = detailed ? new LinkedHashMap<>() : null;
+
+            double yearStartPrice = -1;
+            double yearEndPrice = -1;
+
+            // Iterate through months
+            for (Month m : Month.values()) {
+                // Skip future months
+                if (currentYear == to.getYear() && m.getValue() > to.getMonthValue())
+                    continue;
+
+                LocalDate monthStart = LocalDate.of(currentYear, m, 1);
+                LocalDate monthEnd = monthStart.withDayOfMonth(monthStart.lengthOfMonth());
+
+                // Adjust monthEnd if it's the current month and today is before end
+                if (currentYear == to.getYear() && m == to.getMonth() && to.isBefore(monthEnd)) {
+                    monthEnd = to;
+                }
+
+                // Find last available price for this month
+                Map.Entry<LocalDate, Double> lastEntry = closeMap.floorEntry(monthEnd);
+                // Find last available price BEFORE this month (for return calculation)
+                Map.Entry<LocalDate, Double> prevEntry = closeMap.floorEntry(monthStart.minusDays(1));
+
+                if (lastEntry != null && prevEntry != null
+                        && lastEntry.getKey().getMonth() == m // Ensure last entry is actually IN this month
+                        && lastEntry.getKey().getYear() == currentYear) {
+
+                    double startPrice = prevEntry.getValue();
+                    double endPrice = lastEntry.getValue();
+
+                    if (startPrice > 0) {
+                        double ret = (endPrice - startPrice) / startPrice * 100.0;
+                        monthlyReturns.put(m.toString(), round2(ret));
+                    }
+
+                    if (yearStartPrice == -1 && startPrice > 0)
+                        yearStartPrice = startPrice; // First month processed (Jan or partial)
+                    yearEndPrice = endPrice; // Keep updating
+                }
+
+                // Detailed Daily Returns
+                if (detailed) {
+                    Map<Integer, Double> days = new LinkedHashMap<>();
+                    LocalDate d = monthStart;
+                    while (!d.isAfter(monthEnd)) {
+                        Double todayClose = closeMap.get(d);
+                        Double yesterdayClose = closeMap.get(d.minusDays(1)); // This might rely on map having exact key
+                        // Better: use floorEntry for yesterday? No, return is strict day-to-day
+                        // Actually, for calendar heatmap, it compares to previous trading day
+                        if (todayClose != null) {
+                            Map.Entry<LocalDate, Double> prevDayEntry = closeMap.floorEntry(d.minusDays(1));
+                            if (prevDayEntry != null) {
+                                double pClose = prevDayEntry.getValue();
+                                double change = (todayClose - pClose) / pClose * 100.0;
+                                days.put(d.getDayOfMonth(), round2(change));
+                            }
+                        }
+                        d = d.plusDays(1);
+                    }
+                    if (!days.isEmpty()) {
+                        if (dailyReturns == null)
+                            dailyReturns = new LinkedHashMap<>();
+                        dailyReturns.put(m.toString(), days);
+                    }
+                }
+            }
+
+            // Calculate Yearly Return
+            // This is roughly (YearClose - YearOpen) / YearOpen
+            // But YearOpen is essentially Close of Dec 31st Previous Year
+            Double yearlyRet = null;
+
+            // Re-eval year start price: it should be the close of the year BEFORE
+            Map.Entry<LocalDate, Double> yearPrevEntry = closeMap
+                    .floorEntry(LocalDate.of(currentYear, 1, 1).minusDays(1));
+            // And year end price is close of last avail day in year
+            Map.Entry<LocalDate, Double> yearLastEntry = closeMap.floorEntry(LocalDate.of(currentYear, 12, 31));
+
+            if (yearPrevEntry != null && yearLastEntry != null && yearLastEntry.getKey().getYear() == currentYear) {
+                double yStart = yearPrevEntry.getValue();
+                double yEnd = yearLastEntry.getValue();
+                if (yStart > 0) {
+                    yearlyRet = round2((yEnd - yStart) / yStart * 100.0);
+                }
+
+                // Capture for overall
+                if (currentYear == to.getYear())
+                    overallEndPrice = yEnd;
+                if (currentYear == from.getYear())
+                    overallStartPrice = yStart;
+            }
+
+            if (!monthlyReturns.isEmpty()) {
+                yearlyMap.put(currentYear, com.am.marketdata.common.model.analysis.YearlyPerformance.builder()
+                        .year(currentYear)
+                        .yearlyReturn(yearlyRet)
+                        .monthlyReturns(monthlyReturns)
+                        .dailyReturns(dailyReturns)
+                        .build());
+            }
+        }
+
+        Double overallReturn = null;
+        if (overallStartPrice > 0 && overallEndPrice > 0) {
+            overallReturn = round2((overallEndPrice - overallStartPrice) / overallStartPrice * 100.0);
+        }
+
+        com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse response = com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse
+                .builder()
+                .symbol(symbol)
+                .startYear(from.getYear())
+                .endYear(to.getYear())
+                .overallReturn(overallReturn)
+                .yearlyPerformance(new ArrayList<>(yearlyMap.values()))
+                .build();
+
+        analysisRedisCache.saveHistoricalPerformance(response, years, detailed);
+        return response;
     }
 }

@@ -65,6 +65,15 @@ public class AnalysisController {
         return ResponseEntity.ok(analysisService.getTechnicalAnalysisBatch(symbols, tf));
     }
 
+    @GetMapping("/performance/monthly")
+    public ResponseEntity<com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse> getHistoricalPerformance(
+            @RequestParam String symbol,
+            @RequestParam(defaultValue = "10") int years,
+            @RequestParam(defaultValue = "false") boolean detailed) {
+
+        return ResponseEntity.ok(analysisService.getHistoricalPerformance(symbol, years, detailed));
+    }
+
     private TimeFrame parseTimeFrame(String tf) {
         try {
             return TimeFrame.valueOf(tf.toUpperCase());

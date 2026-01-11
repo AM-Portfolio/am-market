@@ -6,10 +6,12 @@ import 'package:am_design_system/am_design_system.dart';
 import 'package:get_it/get_it.dart';
 import '../models/market_data.dart';
 import '../models/available_indices.dart';
+import '../models/historical_performance_model.dart';
 
 import 'package:am_market_sdk/market/api.dart' as sdk;
 
 import 'package:am_market_ui/core/constants/market_endpoints.dart';
+import '../models/seasonality_model.dart';
 
 class ApiService {
   static const String baseUrl = MarketEndpoints.baseUrl; 
@@ -440,6 +442,26 @@ class ApiService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> fetchIndexPerformance({
+    required String indexSymbol,
+    required String timeFrame,
+  }) async {
+    try {
+      String url = '$baseUrl/v1/market-analytics/index-performance?indexSymbol=$indexSymbol&timeFrame=$timeFrame';
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse(url), headers: headers);
+
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(json.decode(response.body));
+      } else {
+        throw Exception('Failed to fetch index performance: ${response.statusCode}');
+      }
+    } catch (e) {
+      CommonLogger.error("Error fetching index performance", tag: "ApiService.fetchIndexPerformance", error: e);
+      return [];
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchSectorPerformance({String? indexSymbol}) async {
     try {
       String url = '$baseUrl${MarketEndpoints.sectors}';
@@ -459,6 +481,25 @@ class ApiService {
       CommonLogger.error("Error fetching sectors", tag: "ApiService.fetchSectorPerformance", error: e);
 
       return [];
+    }
+  }
+
+  Future<HistoricalPerformanceResponse> fetchHistoricalPerformance(String symbol, {int years = 10}) async {
+    try {
+      final headers = await _getHeaders();
+      // Use the new endpoint
+      // Note: Endpoint param is 'years', not 'range'
+      final url = '$baseUrl/api/v1/analysis/performance/monthly?symbol=$symbol&years=$years&detailed=false';
+      final response = await http.get(Uri.parse(url), headers: headers);
+      
+      if (response.statusCode == 200) {
+        return HistoricalPerformanceResponse.fromJson(json.decode(response.body));
+      } else {
+        throw Exception('Failed to fetch historical performance: ${response.statusCode}');
+      }
+    } catch (e) {
+      CommonLogger.error("Error fetching historical performance for $symbol", tag: "ApiService.fetchHistoricalPerformance", error: e);
+      rethrow;
     }
   }
 
@@ -616,6 +657,23 @@ class ApiService {
       CommonLogger.error("Error searching securities", tag: "ApiService.searchSecuritiesAdvanced", error: e);
 
       return [];
+    }
+  }
+
+  Future<SeasonalityResponse> fetchSeasonality(String symbol, {String timeframe = 'DAY'}) async {
+    try {
+      final headers = await _getHeaders();
+      final url = '$baseUrl/api/v1/analysis/seasonality?symbol=$symbol&timeframe=$timeframe';
+      final response = await http.get(Uri.parse(url), headers: headers);
+      
+      if (response.statusCode == 200) {
+        return SeasonalityResponse.fromJson(json.decode(response.body));
+      } else {
+        throw Exception('Failed to fetch seasonality: ${response.statusCode}');
+      }
+    } catch (e) {
+      CommonLogger.error("Error fetching seasonality for $symbol", tag: "ApiService.fetchSeasonality", error: e);
+      rethrow;
     }
   }
 }

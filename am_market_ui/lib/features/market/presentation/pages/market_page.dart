@@ -18,6 +18,7 @@ import 'package:am_market_ui/developer/screens/developer_dashboard.dart';
 import 'package:am_market_ui/providers/view_mode_provider.dart';
 import 'package:am_market_ui/widgets/mode_toggle_widget.dart';
 import 'package:am_market_ui/features/market/presentation/pages/user_dashboard_page.dart';
+import 'package:am_market_ui/features/market/presentation/widgets/heatmap_explorer_view.dart';
 
 /// Market feature page with Swipe Navigation
 class MarketPage extends StatelessWidget {
@@ -273,7 +274,7 @@ class _MarketContentState extends State<MarketContent> {
     final userItems = [
       _createSidebarItem(0, 'Dashboard', Icons.home_rounded, 'Overview'),
       _createSidebarItem(1, 'Market Analysis', Icons.analytics_rounded, 'Detailed charts'),
-      _createSidebarItem(2, 'Heatmap', Icons.grid_on_rounded, 'Calendar view'),
+      _createSidebarItem(2, 'Heatmap Explorer', Icons.view_comfy_alt_rounded, 'Market Heatmap'),
     ];
 
     // Mode toggle at the top
@@ -431,10 +432,10 @@ class _MarketContentState extends State<MarketContent> {
         accentColor: accentColor,
       ),
       const NavigationItem(
-        title: 'Heatmap',
-        subtitle: 'Calendar view',
-        icon: Icons.grid_on_rounded,
-        page: AnalysisPage(),
+        title: 'Heatmap Explorer',
+        subtitle: 'Market Heatmap',
+        icon: Icons.view_comfy_alt_rounded,
+        page: HeatmapExplorerView(),
         accentColor: accentColor,
       ),
     ];

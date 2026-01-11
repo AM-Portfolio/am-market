@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:am_design_system/am_design_system.dart';
 import '../models/market_data.dart';
 import '../models/available_indices.dart';
+import '../models/historical_performance_model.dart';
+import '../models/seasonality_model.dart';
 import '../services/api_service.dart';
 import '../data/repositories/market_data_repository.dart';
 
@@ -34,6 +36,22 @@ class MarketProvider with ChangeNotifier {
   Map<String, Map<String, dynamic>> get livePrices => _livePrices;
   Stream<Map<String, dynamic>> get livePriceStream => _livePriceController.stream;
   
+  // Cache for specific index constituents (used by Heatmap/Explorers)
+  Map<String, List<StockData>> _indexConstituents = {};
+  Map<String, List<StockData>> get indexConstituents => _indexConstituents;
+
+  // Cache for Heatmap Data (Timeframe aware)
+  Map<String, List<Map<String, dynamic>>> _heatmapData = {};
+  Map<String, List<Map<String, dynamic>>> get heatmapData => _heatmapData;
+
+  // Historical Performance Data (10Y view)
+  HistoricalPerformanceResponse? _historicalPerformance;
+  HistoricalPerformanceResponse? get historicalPerformance => _historicalPerformance;
+
+  // Seasonality Data
+  SeasonalityResponse? _seasonality;
+  SeasonalityResponse? get seasonality => _seasonality;
+
   String? get selectedIndex => _selectedIndex;
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -120,6 +138,7 @@ class MarketProvider with ChangeNotifier {
       // User Mode navigation items (no data fetch required)
       "Market Analysis",
       "Heatmap",
+      "Heatmap Explorer",
     ].contains(_selectedIndex)) {
       CommonLogger.debug("Selected view: $_selectedIndex (no data fetch required)", tag: "MarketProvider.selectIndex");
       // Do nothing, just update selection
@@ -216,6 +235,68 @@ class MarketProvider with ChangeNotifier {
       _error = "Failed to refresh cookies";
       notifyListeners();
     }
+  }
+
+  Future<void> fetchIndexConstituents(String indexSymbol) async {
+      CommonLogger.info("Fetching constituents for: $indexSymbol", tag: "MarketProvider.fetchIndexConstituents");
+      try {
+          final data = await _apiService.fetchIndexData(indexSymbol, forceRefresh: _forceRefresh);
+          if (data != null) {
+              _indexConstituents[indexSymbol] = data.stocks;
+              notifyListeners();
+          }
+      } catch (e) {
+          CommonLogger.error("Error fetching constituents for $indexSymbol", tag: "MarketProvider.fetchIndexConstituents", error: e);
+          // Don't set global error to avoid disrupting other views
+      }
+  }
+
+  Future<void> fetchHeatmapData(String indexSymbol, String timeFrame) async {
+      final key = "$indexSymbol:$timeFrame";
+      CommonLogger.info("Fetching heatmap data to key: $key", tag: "MarketProvider.fetchHeatmapData");
+      
+      try {
+          // Use new dedicated endpoint for full index performance
+          final result = await _apiService.fetchIndexPerformance(
+              indexSymbol: indexSymbol,
+              timeFrame: timeFrame,
+          );
+          
+          _heatmapData[key] = result;
+          notifyListeners();
+          
+      } catch (e) {
+          CommonLogger.error("Error fetching heatmap data", tag: "MarketProvider.fetchHeatmapData", error: e);
+      }
+  }
+
+  Future<void> loadHistoricalPerformance(String symbol) async {
+      CommonLogger.info("Loading historical performance for $symbol", tag: "MarketProvider.loadHistoricalPerformance");
+      _isLoading = true; 
+      // Don't clear previous data immediately to avoid flicker, or maybe clear if symbol changed
+      // For now, let's keep it simple
+      notifyListeners();
+
+      try {
+          // Hardcoded 10 years as per requirement
+          _historicalPerformance = await _apiService.fetchHistoricalPerformance(symbol, years: 10);
+      } catch (e) {
+          CommonLogger.error("Error loading historical performance", tag: "MarketProvider.loadHistoricalPerformance", error: e);
+          _error = e.toString();
+      } finally {
+          _isLoading = false;
+          notifyListeners();
+      }
+  }
+
+  Future<void> loadSeasonality(String symbol) async {
+      CommonLogger.info("Loading seasonality for $symbol", tag: "MarketProvider.loadSeasonality");
+      try {
+          _seasonality = await _apiService.fetchSeasonality(symbol);
+          notifyListeners();
+      } catch (e) {
+          CommonLogger.error("Error loading seasonality", tag: "MarketProvider.loadSeasonality", error: e);
+      }
   }
 }
 

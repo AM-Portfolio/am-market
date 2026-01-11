@@ -62,6 +62,13 @@ class MarketSidebar extends StatelessWidget {
         isSelected: selectedIndex == 'ETF Explorer',
         onTap: () => provider.selectIndex('ETF Explorer'),
       ),
+      SecondarySidebarItem(
+        title: 'Heatmap Explorer',
+        icon: Icons.view_comfy_alt_rounded,
+        accentColor: marketAccent,
+        isSelected: selectedIndex == 'Heatmap Explorer',
+        onTap: () => provider.selectIndex('Heatmap Explorer'),
+      ),
        SecondarySidebarItem(
         title: 'Market Analysis',
         icon: Icons.analytics_rounded,

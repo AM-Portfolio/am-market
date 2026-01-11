@@ -192,6 +192,28 @@ public class MarketAnalyticsService {
     }
 
     /**
+     * Get Index Performance (All Constituents)
+     * Returns performance data for all stocks in the index for the given timeframe.
+     */
+    public List<Map<String, Object>> getIndexPerformance(String indexSymbol,
+            com.am.marketdata.common.model.TimeFrame timeFrame) {
+        String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
+
+        // Fetch enriched data for ALL constituents (expandIndices=true)
+        List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, true);
+
+        if (enrichedData.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Return all data mapped to response format (optionally sorted by pChange desc)
+        return enrichedData.stream()
+                .sorted((a, b) -> Double.compare(b.getPercentChange(), a.getPercentChange()))
+                .map(this::enrichedDataToMap)
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Convert EnrichedStockData to Map for API response
      */
     private Map<String, Object> enrichedDataToMap(EnrichedStockData data) {

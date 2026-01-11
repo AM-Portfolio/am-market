@@ -14,6 +14,7 @@ import '../../features/analysis/analysis_page.dart';
 import '../../screens/admin/historical_sync_page.dart';
 import '../../widgets/constituents_table.dart';
 import '../../widgets/heatmap_view.dart';
+import '../../features/market/presentation/widgets/heatmap_explorer_view.dart';
 import '../../screens/market_analytics_page.dart';
 
 /// Market main content area - RESTORED FULL VERSION
@@ -84,13 +85,16 @@ class _MarketMainContentState extends State<MarketMainContent> {
                 // Index 5: ETF Explorer
                 const EtfExplorerPage(),
 
-                // Index 6: Market Analysis (Global)
+                // Index 6: Heatmap Explorer
+                const HeatmapExplorerView(),
+
+                // Index 7: Market Analysis (Global)
                 const AnalysisPage(),
 
-                // Index 7: Admin Dashboard
+                // Index 8: Admin Dashboard
                 const HistoricalSyncPage(),
 
-                // Index 8: Specific Index View (Table/Heatmap/Analytics)
+                // Index 9: Specific Index View (Table/Heatmap/Analytics)
                 _buildIndexDetailView(provider),
 
               ],
@@ -98,7 +102,7 @@ class _MarketMainContentState extends State<MarketMainContent> {
           ),
 
           // View Mode Toggler (only for specific index view)
-          if (_determineIndex(selectedIndex) == 8)
+          if (_determineIndex(selectedIndex) == 9)
             Positioned(
               top: 20,
               right: 20,
@@ -121,9 +125,10 @@ class _MarketMainContentState extends State<MarketMainContent> {
       case 'Security Explorer': return 3;
       case 'Price Test': return 4;
       case 'ETF Explorer': return 5;
-      case 'Market Analysis': return 6;
-      case 'Admin Dashboard': return 7;
-      default: return 8; // Specific Index Detail
+      case 'Heatmap Explorer': return 6;
+      case 'Market Analysis': return 7;
+      case 'Admin Dashboard': return 8;
+      default: return 9; // Specific Index Detail
     }
   }
 

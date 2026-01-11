@@ -159,4 +159,43 @@ public class AnalysisRedisCache {
             log.error("saveSeasonalityBatch", "Error batch caching seasonality: " + e.getMessage());
         }
     }
+    // --- HISTORICAL PERFORMANCE ---
+
+    private static final String HISTORY_PREFIX = "analysis:history";
+
+    private String getHistoryKey(String symbol, int years, boolean detailed) {
+        return String.format("%s:%s:%d:%b", HISTORY_PREFIX, symbol.toUpperCase(), years, detailed);
+    }
+
+    public void saveHistoricalPerformance(
+            com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse response, int years,
+            boolean detailed) {
+        if (response == null)
+            return;
+        try {
+            String key = getHistoryKey(response.getSymbol(), years, detailed);
+            String json = redisObjectMapper.writeValueAsString(response);
+            redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
+            log.debug("saveHistoricalPerformance", "Cached historical performance for " + response.getSymbol());
+        } catch (Exception e) {
+            log.error("saveHistoricalPerformance",
+                    "Error caching historical performance for " + response.getSymbol() + ": " + e.getMessage());
+        }
+    }
+
+    public com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse getHistoricalPerformance(String symbol,
+            int years, boolean detailed) {
+        try {
+            String key = getHistoryKey(symbol, years, detailed);
+            String json = redisTemplate.opsForValue().get(key);
+            if (json != null) {
+                return redisObjectMapper.readValue(json,
+                        com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse.class);
+            }
+        } catch (Exception e) {
+            log.error("getHistoricalPerformance",
+                    "Error retrieving historical performance for " + symbol + ": " + e.getMessage());
+        }
+        return null;
+    }
 }
