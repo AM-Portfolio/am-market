@@ -63,6 +63,10 @@ class MarketAnalyticsService {
     String range = '1Y', // Default 1 year
   }) async {
     try {
+      if (symbols.isEmpty) {
+        return {};
+      }
+
       CommonLogger.debug(
         'Fetching historical data for ${symbols.join(", ")} with range $range',
         tag: 'MarketAnalyticsService.getHistoricalData',
@@ -70,35 +74,39 @@ class MarketAnalyticsService {
 
       final Map<String, List<Map<String, dynamic>>> result = {};
 
-      // Fetch data for each symbol
-      for (final symbol in symbols) {
-        try {
-          final response = await _dio.get(
-            '$baseUrl/v1/market-analytics/historical-charts/$symbol',
-            queryParameters: {
-              'range': range,
-            },
-          );
+      // Make a single batch request
+      try {
+        final response = await _dio.get(
+          '$baseUrl/v1/market-analytics/historical-charts',
+          queryParameters: {
+            'symbols': symbols.join(','),
+            'range': range,
+          },
+        );
 
-          if (response.statusCode == 200 && response.data != null) {
-            final data = response.data;
+        if (response.statusCode == 200 && response.data != null) {
+          final data = response.data;
+          
+          if (data is Map && data.containsKey('data')) {
+            final Map<String, dynamic> symbolsData = data['data'];
             
-            // Extract the data array from response
-            if (data is Map && data.containsKey('data')) {
-              result[symbol] = List<Map<String, dynamic>>.from(data['data'] as List);
-            } else if (data is List) {
-              result[symbol] = List<Map<String, dynamic>>.from(data);
-            }
+            // Iterate through the response map where keys are symbols
+            symbolsData.forEach((symbol, symbolData) {
+              if (symbolData is Map && symbolData.containsKey('dataPoints')) {
+                result[symbol] = List<Map<String, dynamic>>.from(symbolData['dataPoints'] as List);
+              } else if (symbolData is Map && symbolData.containsKey('data')) {
+                 // Fallback if structure is slightly different
+                 result[symbol] = List<Map<String, dynamic>>.from(symbolData['data'] as List);
+              }
+            });
           }
-        } catch (e) {
-          CommonLogger.error(
-            'Error fetching historical data for $symbol',
-            tag: 'MarketAnalyticsService.getHistoricalData',
-            error: e,
-          );
-          // Continue with other symbols
-          result[symbol] = [];
         }
+      } catch (e) {
+        CommonLogger.error(
+          'Error fetching historical data batch',
+          tag: 'MarketAnalyticsService.getHistoricalData',
+          error: e,
+        );
       }
 
       return result;

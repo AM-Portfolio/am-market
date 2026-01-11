@@ -40,6 +40,66 @@ public class MarketAnalyticsService {
         // Use provided index or default
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
 
+        // Fetch enriched data
+        List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices);
+
+        if (enrichedData.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Sort by percentage change
+        boolean descending = "gainers".equalsIgnoreCase(type);
+        List<EnrichedStockData> sortedData = stockDataEnricher.sortByPercentChange(enrichedData, descending);
+
+        // Convert to response format and limit results
+        return sortedData.stream()
+                .limit(limit)
+                .map(this::enrichedDataToMap)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get Top Gainers AND Losers (Unified)
+     */
+    public Map<String, List<Map<String, Object>>> getMoversUnified(int limit, String indexSymbol,
+            com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
+
+        String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
+
+        // 1. Fetch data ONCE
+        List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices);
+
+        if (enrichedData.isEmpty()) {
+            return Map.of("gainers", Collections.emptyList(), "losers", Collections.emptyList());
+        }
+
+        // 2. Sort for Gainers (Descending)
+        List<EnrichedStockData> allSorted = stockDataEnricher.sortByPercentChange(enrichedData, true);
+
+        // 3. Extract Top Gainers
+        List<Map<String, Object>> gainers = allSorted.stream()
+                .limit(limit)
+                .map(this::enrichedDataToMap)
+                .collect(Collectors.toList());
+
+        // 4. Extract Top Losers (Reverse of the descending list is ascending)
+        // Or re-sort ascending
+        List<EnrichedStockData> allSortedAsc = stockDataEnricher.sortByPercentChange(enrichedData, false);
+
+        List<Map<String, Object>> losers = allSortedAsc.stream()
+                .limit(limit)
+                .map(this::enrichedDataToMap)
+                .collect(Collectors.toList());
+
+        Map<String, List<Map<String, Object>>> result = new HashMap<>();
+        result.put("gainers", gainers);
+        result.put("losers", losers);
+
+        return result;
+    }
+
+    private List<EnrichedStockData> fetchEnrichedData(String targetIndex,
+            com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
         // Fetch index constituent data
         StockIndicesMarketData indexData = stockIndicesService.getLatestIndexData(targetIndex);
 
@@ -59,15 +119,7 @@ public class MarketAnalyticsService {
             return Collections.emptyList();
         }
 
-        // Sort by percentage change
-        boolean descending = "gainers".equalsIgnoreCase(type);
-        List<EnrichedStockData> sortedData = stockDataEnricher.sortByPercentChange(enrichedData, descending);
-
-        // Convert to response format and limit results
-        return sortedData.stream()
-                .limit(limit)
-                .map(this::enrichedDataToMap)
-                .collect(Collectors.toList());
+        return enrichedData;
     }
 
     /**

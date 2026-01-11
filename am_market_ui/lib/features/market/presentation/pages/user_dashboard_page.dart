@@ -59,25 +59,18 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
     });
 
     try {
-      final gainersData = await _apiService.fetchMovers(
-        type: 'gainers',
+      // Unified call for both gainers and losers
+      final unifiedData = await _apiService.fetchMoversUnified(
         limit: 5,
         indexSymbol: selectedIndexForMovers,
-        timeFrame: selectedTimeframe, // Apply global timeframe
+        timeFrame: selectedTimeframe,
       );
       
-      final losersData = await _apiService.fetchMovers(
-        type: 'losers',
-        limit: 5,
-        indexSymbol: selectedIndexForMovers,
-        timeFrame: selectedTimeframe, // Apply global timeframe
-      );
-
       if (!mounted) return;
       
       setState(() {
-        topGainers = gainersData.map((e) => TopMoverStock.fromJson(e)).toList();
-        topLosers = losersData.map((e) => TopMoverStock.fromJson(e)).toList();
+        topGainers = (unifiedData['gainers'] ?? []).map((e) => TopMoverStock.fromJson(e)).toList();
+        topLosers = (unifiedData['losers'] ?? []).map((e) => TopMoverStock.fromJson(e)).toList();
         isLoadingMovers = false;
       });
     } catch (e) {
@@ -99,12 +92,7 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
     });
 
     try {
-      final Map<String, List<Map<String, dynamic>>> data = {};
-      
-      for (final symbol in selectedIndicesForChart) {
-        final symbolData = await _apiService.fetchHistory(symbol, selectedTimeframe);
-        data[symbol] = symbolData;
-      }
+      final data = await _apiService.fetchHistoryBatch(selectedIndicesForChart, selectedTimeframe);
 
       if (!mounted) return;
       

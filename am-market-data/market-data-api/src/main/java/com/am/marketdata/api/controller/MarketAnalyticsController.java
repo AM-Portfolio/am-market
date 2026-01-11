@@ -39,7 +39,7 @@ public class MarketAnalyticsController {
             @ApiResponse(responseCode = "200", description = "Data retrieved successfully"),
             @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<List<Map<String, Object>>> getMovers(
+    public ResponseEntity<?> getMovers(
             @RequestParam(defaultValue = "gainers") String type,
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) String indexSymbol,
@@ -53,9 +53,16 @@ public class MarketAnalyticsController {
             log.info("getMovers",
                     "Fetching top " + limit + " " + type + " from " + index + " with timeFrame: " + timeFrame
                             + ", expandIndices: " + expandIndices);
-            List<Map<String, Object>> movers = marketAnalyticsService.getMovers(limit, type, indexSymbol, tf,
-                    expandIndices);
-            return ResponseEntity.ok(movers);
+
+            if ("all".equalsIgnoreCase(type)) {
+                Map<String, List<Map<String, Object>>> movers = marketAnalyticsService.getMoversUnified(limit,
+                        indexSymbol, tf, expandIndices);
+                return ResponseEntity.ok(movers);
+            } else {
+                List<Map<String, Object>> movers = marketAnalyticsService.getMovers(limit, type, indexSymbol, tf,
+                        expandIndices);
+                return ResponseEntity.ok(movers);
+            }
         } catch (Exception e) {
             log.error("getMovers", "Error fetching movers", e);
             return ResponseEntity.internalServerError().build();
@@ -93,9 +100,9 @@ public class MarketAnalyticsController {
     }
 
     /**
-     * Get Historical Charts
+     * Get Historical Charts (Batch or Single)
      */
-    @GetMapping(value = "/historical-charts/{symbol}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/historical-charts", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get historical charts data", description = "Retrieves historical data for charts with various time frames (10m, 1H, 1D, 1W, 1M, 5Y, etc.)")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Chart data retrieved successfully"),
@@ -103,12 +110,12 @@ public class MarketAnalyticsController {
             @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     public ResponseEntity<HistoricalDataResponseV1> getHistoricalCharts(
-            @PathVariable String symbol,
+            @RequestParam String symbols,
             @RequestParam(defaultValue = "1D") String range,
             @RequestParam(defaultValue = "true") boolean isIndexSymbol) {
         try {
-            log.info("getHistoricalCharts", "Fetching historical charts for symbol: " + symbol + ", range: " + range
-                    + ", isIndexSymbol: " + isIndexSymbol);
+            log.info("getHistoricalCharts", "Fetching historical charts for symbols: " + symbols + ", range: "
+                    + range + ", isIndexSymbol: " + isIndexSymbol);
 
             String interval = "1D";
             java.time.LocalDateTime to = java.time.LocalDateTime.now();
@@ -136,7 +143,7 @@ public class MarketAnalyticsController {
                     interval = "5m";
                     from = to.minusHours(4);
                     break;
-                case "1D":
+                case "1D": // Change default to 1D to match daily chart expectation
                     interval = "5m";
                     from = to.minusDays(1);
                     break;
@@ -152,14 +159,14 @@ public class MarketAnalyticsController {
                     interval = "1W";
                     from = to.minusYears(5);
                     break;
-                default:
+                default: // Default 1Y
                     interval = "1D";
                     from = to.minusYears(1);
             }
 
             // Construct Request
             HistoricalDataRequest request = HistoricalDataRequest.builder()
-                    .symbols(symbol)
+                    .symbols(symbols)
                     .from(from.toLocalDate().toString())
                     .to(to.toLocalDate().toString())
                     .interval(TimeFrame.fromApiValue(interval)) // Convert string to TimeFrame
@@ -174,37 +181,55 @@ public class MarketAnalyticsController {
                 return ResponseEntity.status(500).body(response);
             }
 
-            // Filter data points by time range
+            // Filter data points by time range for each symbol
             if (response.getData() != null) {
-                HistoricalData symbolData = response.getData().get(symbol);
-                if (symbolData != null && symbolData.getDataPoints() != null) {
-                    long minTime = from.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+                long minTime = from.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
 
-                    List<OHLCVTPoint> filteredPoints = symbolData.getDataPoints().stream()
-                            .filter(p -> {
-                                try {
-                                    long timestamp = p.getTime().atZone(java.time.ZoneId.systemDefault()).toInstant()
-                                            .toEpochMilli();
-                                    return timestamp >= minTime;
-                                } catch (Exception e) {
-                                    return true;
-                                }
-                            })
-                            .collect(Collectors.toList());
+                response.getData().forEach((s, symbolData) -> {
+                    if (symbolData != null && symbolData.getDataPoints() != null) {
+                        List<OHLCVTPoint> filteredPoints = symbolData.getDataPoints().stream()
+                                .filter(p -> {
+                                    try {
+                                        long timestamp = p.getTime().atZone(java.time.ZoneId.systemDefault())
+                                                .toInstant()
+                                                .toEpochMilli();
+                                        return timestamp >= minTime;
+                                    } catch (Exception e) {
+                                        return true;
+                                    }
+                                })
+                                .collect(Collectors.toList());
 
-                    symbolData.setDataPoints(filteredPoints);
-                }
+                        symbolData.setDataPoints(filteredPoints);
+                    }
+                });
             }
 
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            log.error("getHistoricalCharts", "Error fetching historical charts for " + symbol + ": " + e.getMessage());
+            log.error("getHistoricalCharts", "Error fetching historical charts: " + e.getMessage());
             HistoricalDataResponseV1 errorResponse = HistoricalDataResponseV1.builder()
                     .error("Failed to fetch chart data")
                     .message(e.getMessage())
                     .build();
             return ResponseEntity.internalServerError().body(errorResponse);
         }
+    }
+
+    /**
+     * Get Historical Charts (Single Symbol - Legacy Support)
+     */
+    @GetMapping(value = "/historical-charts/{symbol}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Get historical charts data (Legacy path)", description = "Retrieves historical data for charts with various time frames")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Chart data retrieved successfully"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<HistoricalDataResponseV1> getHistoricalChartsLegacy(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "1D") String range,
+            @RequestParam(defaultValue = "true") boolean isIndexSymbol) {
+        return getHistoricalCharts(symbol, range, isIndexSymbol);
     }
 }

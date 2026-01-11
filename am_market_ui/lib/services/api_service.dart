@@ -194,6 +194,7 @@ class ApiService {
     try {
       final headers = await _getHeaders();
       final response = await http.get(
+        // Legacy support: mapping single symbol call to new endpoint equivalent
         Uri.parse('$baseUrl${MarketEndpoints.historicalCharts}/$symbol?range=$range'),
         headers: headers,
       );
@@ -237,6 +238,43 @@ class ApiService {
       CommonLogger.error("Error fetching history for $symbol", tag: "ApiService.fetchHistory", error: e);
 
       throw Exception('Error fetching history: $e');
+    }
+  }
+
+  Future<Map<String, List<Map<String, dynamic>>>> fetchHistoryBatch(List<String> symbols, String range) async {
+    try {
+      if (symbols.isEmpty) return {};
+      
+      final headers = await _getHeaders();
+      // Use query param 'symbols'
+      final query = symbols.join(',');
+      final response = await http.get(
+        Uri.parse('$baseUrl${MarketEndpoints.historicalCharts}?symbols=$query&range=$range'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final dynamic jsonResponse = json.decode(response.body);
+        final Map<String, List<Map<String, dynamic>>> result = {};
+        
+        // Expected structure: { "data": { "SYMBOL1": { "dataPoints": [...] }, "SYMBOL2": ... } }
+        if (jsonResponse is Map && jsonResponse.containsKey('data')) {
+            final Map<String, dynamic> dataMap = jsonResponse['data'];
+            
+            dataMap.forEach((sym, val) {
+                if (val is Map && val.containsKey('dataPoints')) {
+                    result[sym] = List<Map<String, dynamic>>.from(val['dataPoints']);
+                }
+            });
+        }
+        
+        return result;
+      } else {
+        throw Exception('Failed to load batch history: ${response.statusCode}');
+      }
+    } catch (e) {
+      CommonLogger.error("Error fetching batch history", tag: "ApiService.fetchHistoryBatch", error: e);
+      return {}; 
     }
   }
 
@@ -361,6 +399,44 @@ class ApiService {
       CommonLogger.error("Error fetching $type", tag: "ApiService.fetchMovers", error: e);
 
       return [];
+    }
+  }
+
+  Future<Map<String, List<Map<String, dynamic>>>> fetchMoversUnified({
+    int limit = 10,
+    String? indexSymbol,
+    String? timeFrame,
+  }) async {
+    try {
+      String url = '$baseUrl${MarketEndpoints.movers}?type=all&limit=$limit'; // type=all triggers unified response
+      if (indexSymbol != null && indexSymbol.isNotEmpty) {
+        url += '&indexSymbol=$indexSymbol';
+      }
+      if (timeFrame != null && timeFrame.isNotEmpty) {
+        url += '&timeFrame=$timeFrame';
+      }
+
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse(url), headers: headers);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, List<Map<String, dynamic>>> result = {};
+        
+        if (data.containsKey('gainers')) {
+            result['gainers'] = List<Map<String, dynamic>>.from(data['gainers']);
+        }
+        if (data.containsKey('losers')) {
+            result['losers'] = List<Map<String, dynamic>>.from(data['losers']);
+        }
+        
+        return result;
+      } else {
+        throw Exception('Failed to fetch unified movers: ${response.statusCode}');
+      }
+    } catch (e) {
+      CommonLogger.error("Error fetching unified movers", tag: "ApiService.fetchMoversUnified", error: e);
+      return {'gainers': [], 'losers': []};
     }
   }
 
