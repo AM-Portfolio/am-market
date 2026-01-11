@@ -58,11 +58,14 @@ public class MarketDataService {
     @Value("${market.data.retry.delay.ms:1000}")
     private int retryDelayMs;
 
+    private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService;
+
     public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
             MeterRegistry meterRegistry, InstrumentMapper instrumentMapper,
             MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
             MarketDataRetrievalUtil marketDataRetrievalUtil,
-            java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer) {
+            java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
+            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService) {
         this.providerFactory = providerFactory;
         this.instrumentService = instrumentService;
         this.meterRegistry = meterRegistry;
@@ -71,6 +74,7 @@ public class MarketDataService {
         this.persistenceService = persistenceService;
         this.marketDataRetrievalUtil = marketDataRetrievalUtil;
         this.producer = producer.orElse(null);
+        this.stockIndicesService = stockIndicesService;
     }
 
     private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh) {
@@ -591,4 +595,24 @@ public class MarketDataService {
         }
     }
 
+    public List<String> getIndexConstituents(String indexSymbol) {
+        if ("INDICES".equalsIgnoreCase(indexSymbol)) {
+            return java.util.Arrays.asList("NIFTY 50", "NIFTY BANK", "NIFTY IT", "SENSEX", "NIFTY MIDCAP 50",
+                    "NIFTY SMALLCAP 50", "NIFTY 100", "NIFTY AUTO", "NIFTY PHARMA", "NIFTY FMCG", "NIFTY METAL",
+                    "NIFTY REALTY", "NIFTY ENERGY", "NIFTY INFRA");
+        }
+
+        // Use StockIndicesService to fetch constituents
+        com.am.common.investment.model.stockindice.StockIndicesMarketData indexData = stockIndicesService
+                .findByIndexSymbol(indexSymbol);
+
+        if (indexData != null && indexData.getData() != null) {
+            return indexData.getData().stream()
+                    .map(com.am.common.investment.model.stockindice.StockData::getSymbol)
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
+        log.warn("No constituents found for index: {}", indexSymbol);
+        return new java.util.ArrayList<>();
+    }
 }

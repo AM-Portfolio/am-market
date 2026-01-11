@@ -676,4 +676,23 @@ class ApiService {
       rethrow;
     }
   }
+
+  Future<Map<String, double>> fetchHeatmap(String symbol, {String timeframe = '1D'}) async {
+    try {
+      final headers = await _getHeaders();
+      final url = '$baseUrl/api/v1/analysis/heatmap?symbol=$symbol&timeframe=$timeframe';
+      final response = await http.get(Uri.parse(url), headers: headers);
+      
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        // Cast values to double, handling integers if any
+        return data.map((key, value) => MapEntry(key, (value as num).toDouble()));
+      } else {
+        throw Exception('Failed to fetch heatmap: ${response.statusCode}');
+      }
+    } catch (e) {
+      CommonLogger.error("Error fetching heatmap for $symbol", tag: "ApiService.fetchHeatmap", error: e);
+      return {};
+    }
+  }
 }

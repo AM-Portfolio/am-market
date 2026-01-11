@@ -58,6 +58,10 @@ class MarketProvider with ChangeNotifier {
   bool get forceRefresh => _forceRefresh;
   bool get indexSymbol => _indexSymbol;
 
+  // New Heatmap Values (Symbol -> Change%)
+  Map<String, double>? _heatmapValues;
+  Map<String, double>? get heatmapValues => _heatmapValues;
+
   void toggleForceRefresh(bool value) {
     _forceRefresh = value;
     notifyListeners();
@@ -287,6 +291,19 @@ class MarketProvider with ChangeNotifier {
           _isLoading = false;
           notifyListeners();
       }
+  }
+
+  Future<void> loadHeatmap(String symbol, String timeframe) async {
+    CommonLogger.info("Loading heatmap for $symbol ($timeframe)", tag: "MarketProvider.loadHeatmap");
+    try {
+      _heatmapValues = await _apiService.fetchHeatmap(symbol, timeframe: timeframe);
+      notifyListeners();
+    } catch (e) {
+      CommonLogger.error("Error loading heatmap", tag: "MarketProvider.loadHeatmap", error: e);
+      _heatmapValues = {}; // Clear or keep previous?
+      // Better to clear or show error
+      notifyListeners();
+    }
   }
 
   Future<void> loadSeasonality(String symbol) async {

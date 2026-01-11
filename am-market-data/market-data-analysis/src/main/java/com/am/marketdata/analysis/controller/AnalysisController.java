@@ -74,6 +74,14 @@ public class AnalysisController {
         return ResponseEntity.ok(analysisService.getHistoricalPerformance(symbol, years, detailed));
     }
 
+    @GetMapping("/heatmap")
+    public ResponseEntity<java.util.Map<String, Double>> getHeatmap(
+            @RequestParam String symbol,
+            @RequestParam(defaultValue = "1D") String timeframe) {
+
+        return ResponseEntity.ok(analysisService.getHeatmap(symbol, timeframe));
+    }
+
     private TimeFrame parseTimeFrame(String tf) {
         try {
             return TimeFrame.valueOf(tf.toUpperCase());

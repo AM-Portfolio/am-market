@@ -426,18 +426,12 @@ class _MarketContentState extends State<MarketContent> {
       ),
       const NavigationItem(
         title: 'Market Analysis',
-        subtitle: 'Detailed charts',
+        subtitle: 'Heatmap & Details',
         icon: Icons.analytics_rounded,
-        page: AnalysisPage(),
+        page: HeatmapExplorerView(), // Was AnalysisPage(), now consolidated
         accentColor: accentColor,
       ),
-      const NavigationItem(
-        title: 'Heatmap Explorer',
-        subtitle: 'Market Heatmap',
-        icon: Icons.view_comfy_alt_rounded,
-        page: HeatmapExplorerView(),
-        accentColor: accentColor,
-      ),
+      // Heatmap Explorer removed as it's now Market Analysis
     ];
   }
 }

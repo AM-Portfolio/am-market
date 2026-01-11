@@ -514,4 +514,165 @@ public class AnalysisService {
         analysisRedisCache.saveHistoricalPerformance(response, years, detailed);
         return response;
     }
+    // --- Heatmap Analysis ---
+
+    public Map<String, Double> getHeatmap(String symbol, String timeframeStr) {
+        // 1. Get Constituents
+        List<String> symbols = marketDataService.getIndexConstituents(symbol);
+        if (symbols == null || symbols.isEmpty()) {
+            // Fallback: if no constituents, maybe it's a single stock?
+            // But the feature is "Index Heatmap".
+            // If the user requests a stock ticker like "RELIANCE", getIndexConstituents
+            // returns empty.
+            // In that case, we return map with single entry?
+            // Let's assume valid index for now.
+            if (!"INDICES".equalsIgnoreCase(symbol)) {
+                symbols = Collections.singletonList(symbol);
+            } else {
+                return new HashMap<>();
+            }
+        }
+
+        // 2. Parse Timeframe & Determine Dates
+        LocalDate to = LocalDate.now();
+        LocalDate from;
+
+        // Custom logic for duration
+        String tfUpper = timeframeStr.toUpperCase();
+        if (tfUpper.equals("1D")) {
+            from = to.minusDays(5); // Look back enough to find prev close
+        } else if (tfUpper.equals("1W") || tfUpper.equals("5D")) {
+            from = to.minusWeeks(1);
+        } else if (tfUpper.equals("1M")) {
+            from = to.minusMonths(1);
+        } else if (tfUpper.equals("3M")) {
+            from = to.minusMonths(3);
+        } else if (tfUpper.equals("6M")) {
+            from = to.minusMonths(6);
+        } else if (tfUpper.equals("1Y")) {
+            from = to.minusYears(1);
+        } else if (tfUpper.equals("3Y")) {
+            from = to.minusYears(3);
+        } else if (tfUpper.equals("5Y")) {
+            from = to.minusYears(5);
+        } else {
+            // Default 1D
+            from = to.minusDays(5);
+        }
+
+        // Optimize interval: For > 1Y, use WEEKLY to save data size
+        TimeFrame interval = TimeFrame.DAY;
+        if (tfUpper.equals("3Y") || tfUpper.equals("5Y")) {
+            interval = TimeFrame.WEEK;
+        }
+
+        boolean isIndexBatch = "INDICES".equalsIgnoreCase(symbol);
+
+        // 3. Fetch Data
+        Map<String, HistoricalData> batchData = marketDataService.getHistoricalDataBatch(
+                symbols,
+                java.sql.Date.valueOf(from.minusDays(10)), // Buffer
+                java.sql.Date.valueOf(to),
+                interval,
+                true,
+                null,
+                null,
+                isIndexBatch, // isIndex
+                false // forceRefresh
+        );
+
+        // 4. Calculate Returns
+        Map<String, Double> heatmap = new HashMap<>();
+
+        // Target Date Logic
+        LocalDate targetStartDate = CalculateTargetDate(to, tfUpper);
+
+        for (String sym : symbols) {
+            HistoricalData hd = batchData.get(sym);
+            if (hd == null || hd.getDataPoints() == null || hd.getDataPoints().isEmpty()) {
+                heatmap.put(sym, 0.0);
+                continue;
+            }
+
+            List<OHLCVTPoint> points = hd.getDataPoints();
+            points.sort(Comparator.comparing(OHLCVTPoint::getTime));
+
+            // Find End Price (Latest)
+            OHLCVTPoint lastPoint = points.get(points.size() - 1);
+            Double endPrice = lastPoint.getClose();
+
+            // Find Start Price
+            // For 1D: Prev Close relative to Last Point
+            Double startPrice = null;
+
+            if (tfUpper.equals("1D")) {
+                // Find point before last point
+                if (points.size() >= 2) {
+                    startPrice = points.get(points.size() - 2).getClose();
+                }
+            } else {
+                // Find point closest to targetStartDate
+                startPrice = findClosestPrice(points, targetStartDate);
+            }
+
+            if (endPrice != null && startPrice != null && startPrice != 0) {
+                double change = (endPrice - startPrice) / startPrice * 100.0;
+                heatmap.put(sym, round2(change));
+            } else {
+                heatmap.put(sym, 0.0);
+            }
+        }
+
+        // Sort by change desc?
+        // Map is unordered, but UI might want sorted.
+        // Let's return LinkedHashMap sorted
+        return heatmap.entrySet().stream()
+                .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (e1, e2) -> e1,
+                        LinkedHashMap::new));
+    }
+
+    private LocalDate CalculateTargetDate(LocalDate to, String tf) {
+        if (tf.equals("1D"))
+            return to.minusDays(1);
+        if (tf.equals("5D") || tf.equals("1W"))
+            return to.minusWeeks(1);
+        if (tf.equals("1M"))
+            return to.minusMonths(1);
+        if (tf.equals("3M"))
+            return to.minusMonths(3);
+        if (tf.equals("6M"))
+            return to.minusMonths(6);
+        if (tf.equals("1Y"))
+            return to.minusYears(1);
+        if (tf.equals("3Y"))
+            return to.minusYears(3);
+        if (tf.equals("5Y"))
+            return to.minusYears(5);
+        return to.minusDays(1);
+    }
+
+    private Double findClosestPrice(List<OHLCVTPoint> points, LocalDate targetDate) {
+        Double closestPrice = null;
+        long minDiff = Long.MAX_VALUE;
+
+        for (OHLCVTPoint p : points) {
+            if (p.getTime() == null)
+                continue;
+            LocalDate pointDate = p.getTime().toLocalDate();
+            long diff = Math.abs(java.time.temporal.ChronoUnit.DAYS.between(targetDate, pointDate));
+
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestPrice = p.getClose();
+            }
+        }
+        // If the closest point is too far away (e.g. > 10 days for short timeframes),
+        // maybe valid?
+        // For now, accept best effort.
+        return closestPrice;
+    }
 }
