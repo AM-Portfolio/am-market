@@ -1,4 +1,5 @@
 import 'package:am_auth_ui/core/services/secure_storage_service.dart';
+import 'package:am_market_ui/models/indices_performance_model.dart';
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -41,6 +42,11 @@ class MarketAnalysisService {
     final params = {'symbol': symbol};
     if (year != null) params['year'] = year.toString();
     return _get('/heatmap/calendar', params);
+  }
+
+  Future<IndicesHistoricalPerformanceResponse> getIndicesHistoricalPerformance({int years = 10}) async {
+    final response = await _get('/indices/historical-performance', {'years': years.toString()});
+    return IndicesHistoricalPerformanceResponse.fromJson(response);
   }
 
   Future<Map<String, dynamic>> _get(String path, Map<String, String> queryParams) async {

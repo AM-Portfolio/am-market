@@ -198,4 +198,43 @@ public class AnalysisRedisCache {
         }
         return null;
     }
+    // --- INDICES HISTORICAL PERFORMANCE (AGGREGATE) ---
+
+    private static final String INDICES_HISTORY_PREFIX = "analysis:history:indices";
+
+    private String getIndicesHistoryKey(int years) {
+        return String.format("%s:%d", INDICES_HISTORY_PREFIX, years);
+    }
+
+    public void saveIndicesHistoricalPerformance(
+            com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse response, int years) {
+        if (response == null)
+            return;
+        try {
+            String key = getIndicesHistoryKey(years);
+            String json = redisObjectMapper.writeValueAsString(response);
+            redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
+            log.debug("saveIndicesHistoricalPerformance",
+                    "Cached indices historical performance for " + years + " years");
+        } catch (Exception e) {
+            log.error("saveIndicesHistoricalPerformance",
+                    "Error caching indices historical performance: " + e.getMessage());
+        }
+    }
+
+    public com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse getIndicesHistoricalPerformance(
+            int years) {
+        try {
+            String key = getIndicesHistoryKey(years);
+            String json = redisTemplate.opsForValue().get(key);
+            if (json != null) {
+                return redisObjectMapper.readValue(json,
+                        com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse.class);
+            }
+        } catch (Exception e) {
+            log.error("getIndicesHistoricalPerformance",
+                    "Error retrieving indices historical performance: " + e.getMessage());
+        }
+        return null;
+    }
 }

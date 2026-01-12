@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.Collections;
 import java.util.stream.Collectors;
 
 /**
@@ -93,13 +92,13 @@ public class SymbolOrchestratorService {
         }
 
         // 2. Add Nifty 500 symbols
-        // combinedSymbols.addAll(getNifty500Symbols());
+        combinedSymbols.addAll(getNifty500Symbols());
 
         // 3. Add ETF symbols
-        // combinedSymbols.addAll(getEtfSymbols());
+        combinedSymbols.addAll(getEtfSymbols());
 
         // Test
-        combinedSymbols.addAll(List.of("RELIANCE"));
+        // combinedSymbols.addAll(List.of("RELIANCE"));
 
         // 5. Deduplicate and return
         cachedSymbols = combinedSymbols.stream()

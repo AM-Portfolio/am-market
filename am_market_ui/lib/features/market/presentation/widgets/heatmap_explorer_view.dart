@@ -6,6 +6,7 @@ import 'package:am_market_ui/widgets/glass_container.dart';
 import 'package:intl/intl.dart';
 import '../../../../models/historical_performance_model.dart';
 import '../../../../models/seasonality_model.dart';
+import 'package:am_market_ui/features/market/presentation/widgets/historical_performance_section.dart';
 
 class HeatmapExplorerView extends StatefulWidget {
   const HeatmapExplorerView({super.key});
@@ -188,6 +189,8 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
                         _buildQuickActionChip(provider, "INDIA VIX", "INDIA VIX"),
                         _buildQuickActionChip(provider, "NIFTY 50", "NIFTY 50"),
                         _buildQuickActionChip(provider, "SMALL CAP", "NIFTY SMALLCAP 50"),
+                        const SizedBox(width: 8),
+                        _buildHistoryButton(context),
                       ],
                     ),
                   )
@@ -199,6 +202,9 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
 
         _buildHeatmapSection(),
         const SizedBox(height: 16),
+
+        // if (_showingIndices)
+        //   const Expanded(child: SingleChildScrollView(child: HistoricalPerformanceSection())),
 
         if (!_showingIndices)
         // 2. Heatmap Grid
@@ -668,6 +674,66 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
           style: TextStyle(
             color: Colors.white.withOpacity(isSelected ? 1 : 0.7),
             fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+  Widget _buildHistoryButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showHistoryDialog(context),
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF6C5DD3).withOpacity(0.3), // Primary color tint
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFF6C5DD3).withOpacity(0.5)),
+        ),
+        child: Row(
+          children: const [
+            Icon(Icons.history, color: Colors.white, size: 14),
+            SizedBox(width: 6),
+            Text(
+              "History",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showHistoryDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: AppColors.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.8, // 80% width
+          height: MediaQuery.of(context).size.height * 0.8, // 80% height
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+               Row(
+                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                 children: [
+                   const Text("Historical Performance", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                   IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
+                 ],
+               ),
+               const Divider(color: Colors.white10),
+               const Expanded(
+                 child: SingleChildScrollView(
+                   child: HistoricalPerformanceSection(),
+                 ),
+               ),
+            ],
           ),
         ),
       ),

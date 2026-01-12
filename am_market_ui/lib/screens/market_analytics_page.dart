@@ -3,6 +3,7 @@ import '../services/api_service.dart';
 import '../widgets/market_movers_view.dart';
 import '../widgets/sector_performance_view.dart';
 import '../widgets/heatmap_view.dart';
+import '../features/market/presentation/widgets/historical_performance_section.dart';
 import 'package:provider/provider.dart';
 import '../providers/market_provider.dart';
 
@@ -158,6 +159,10 @@ class _MarketAnalyticsPageState extends State<MarketAnalyticsPage> {
                 sectors: _sectors,
                 isLoading: _isLoadingSectors,
               ),
+              const SizedBox(height: 24),
+
+              // Historical Performance
+              const HistoricalPerformanceSection(),
               const SizedBox(height: 24),
   
               // Heatmap Section

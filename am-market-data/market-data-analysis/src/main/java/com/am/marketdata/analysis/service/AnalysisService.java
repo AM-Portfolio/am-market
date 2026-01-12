@@ -675,4 +675,138 @@ public class AnalysisService {
         // For now, accept best effort.
         return closestPrice;
     }
+    // --- Indices Historical Performance ---
+
+    public com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse getIndicesHistoricalPerformance(
+            int years) {
+
+        // Check Cache
+        com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse cached = analysisRedisCache
+                .getIndicesHistoricalPerformance(years);
+        if (cached != null) {
+            return cached;
+        }
+
+        // 1. Get List of Indices
+        List<String> indices = getAllTrackedIndices();
+
+        // 2. Data Structure to hold aggregates: Year -> Month (1-12) -> List of
+        // Performances
+        Map<Integer, Map<Integer, List<com.am.marketdata.common.model.analysis.IndexPerformance>>> aggregateMap = new TreeMap<>(
+                Collections.reverseOrder());
+
+        // 3. Iterate and Fetch
+        for (String index : indices) {
+            // Re-use existing method
+            try {
+                com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse response = getHistoricalPerformance(
+                        index, years, false);
+
+                if (response != null && response.getYearlyPerformance() != null) {
+                    for (com.am.marketdata.common.model.analysis.YearlyPerformance yp : response
+                            .getYearlyPerformance()) {
+                        int year = yp.getYear();
+                        Map<String, Double> monthly = yp.getMonthlyReturns();
+
+                        if (monthly != null) {
+                            for (Map.Entry<String, Double> entry : monthly.entrySet()) {
+                                String monthStr = entry.getKey(); // "JANUARY"
+                                Double ret = entry.getValue();
+
+                                try {
+                                    Month m = Month.valueOf(monthStr);
+                                    int monthVal = m.getValue();
+
+                                    aggregateMap.computeIfAbsent(year, k -> new TreeMap<>())
+                                            .computeIfAbsent(monthVal, k -> new ArrayList<>())
+                                            .add(com.am.marketdata.common.model.analysis.IndexPerformance.builder()
+                                                    .symbol(index)
+                                                    .returnPercentage(ret)
+                                                    .build());
+                                } catch (IllegalArgumentException e) {
+                                    log.warn("Invalid month string: {}", monthStr);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error fetching historical performance for index: {}", index, e);
+            }
+        }
+
+        // 4. Transform to Response
+        List<com.am.marketdata.common.model.analysis.MonthlyIndicesPerformance> performanceList = new ArrayList<>();
+
+        for (Map.Entry<Integer, Map<Integer, List<com.am.marketdata.common.model.analysis.IndexPerformance>>> yearEntry : aggregateMap
+                .entrySet()) {
+            int year = yearEntry.getKey();
+
+            for (Map.Entry<Integer, List<com.am.marketdata.common.model.analysis.IndexPerformance>> monthEntry : yearEntry
+                    .getValue().entrySet()) {
+                int month = monthEntry.getKey();
+                List<com.am.marketdata.common.model.analysis.IndexPerformance> indicesPerf = monthEntry.getValue();
+
+                if (indicesPerf.isEmpty())
+                    continue;
+
+                // Sort by return desc
+                indicesPerf.sort((a, b) -> Double.compare(b.getReturnPercentage(), a.getReturnPercentage()));
+
+                com.am.marketdata.common.model.analysis.IndexPerformance top = indicesPerf.get(0);
+                com.am.marketdata.common.model.analysis.IndexPerformance worst = indicesPerf
+                        .get(indicesPerf.size() - 1);
+
+                performanceList.add(com.am.marketdata.common.model.analysis.MonthlyIndicesPerformance.builder()
+                        .year(year)
+                        .month(month)
+                        .monthName(Month.of(month).toString())
+                        .topPerformer(top)
+                        .worstPerformer(worst)
+                        .allIndices(indicesPerf)
+                        .build());
+            }
+        }
+
+        // Sort final list by Date Descending
+        performanceList.sort((a, b) -> {
+            if (a.getYear() != b.getYear()) {
+                return b.getYear() - a.getYear();
+            }
+            return b.getMonth() - a.getMonth();
+        });
+
+        LocalDate to = LocalDate.now();
+        int endYear = to.getYear();
+        int startYear = endYear - years + 1;
+
+        com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse response = com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse
+                .builder()
+                .startYear(startYear)
+                .endYear(endYear)
+                .monthlyPerformance(performanceList)
+                .build();
+
+        analysisRedisCache.saveIndicesHistoricalPerformance(response, years);
+        return response;
+    }
+
+    private List<String> getAllTrackedIndices() {
+        return Arrays.asList(
+                "NIFTY 50",
+                "NIFTY BANK",
+                "NIFTY IT",
+                "SENSEX",
+                "NIFTY SMALLCAP 100",
+                "NIFTY METAL",
+                "NIFTY MIDCAP 100",
+                "NIFTY INFRA",
+                "NIFTY PHARMA",
+                "NIFTY ENERGY",
+                "NIFTY FMCG",
+                "NIFTY AUTO",
+                "NIFTY REALTY",
+                "NIFTY PSU BANK", // Added common ones
+                "NIFTY FIN SERVICE");
+    }
 }

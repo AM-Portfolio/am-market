@@ -8,11 +8,17 @@ import 'package:am_design_system/am_design_system.dart';
 
 import 'package:get_it/get_it.dart';
 import 'package:am_auth_ui/am_auth_ui.dart';
+import 'package:am_market_ui/services/market_analysis_service.dart';
 
 void main() {
   // Initialize Bundle/DI
   final storage = SecureStorageService();
   GetIt.I.registerSingleton<SecureStorageService>(storage);
+  
+  // Register Services
+  final apiService = ApiService();
+  GetIt.I.registerSingleton<ApiService>(apiService);
+  GetIt.I.registerSingleton<MarketAnalysisService>(MarketAnalysisService());
 
   runApp(
     MultiProvider(

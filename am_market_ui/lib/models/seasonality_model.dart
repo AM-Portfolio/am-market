@@ -5,13 +5,15 @@ part 'seasonality_model.g.dart';
 @JsonSerializable()
 class SeasonalityResponse {
   final String symbol;
+  @JsonKey(defaultValue: {})
   final Map<String, double> dayOfWeekReturns;
+  @JsonKey(defaultValue: {})
   final Map<String, double> monthlyReturns;
 
   SeasonalityResponse({
     required this.symbol,
-    required this.dayOfWeekReturns,
-    required this.monthlyReturns,
+    this.dayOfWeekReturns = const {}, // Default to empty map
+    this.monthlyReturns = const {}, // Default to empty map
   });
 
   factory SeasonalityResponse.fromJson(Map<String, dynamic> json) =>

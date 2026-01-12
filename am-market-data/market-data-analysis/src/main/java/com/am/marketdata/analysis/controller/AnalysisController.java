@@ -82,6 +82,13 @@ public class AnalysisController {
         return ResponseEntity.ok(analysisService.getHeatmap(symbol, timeframe));
     }
 
+    @GetMapping("/indices/historical-performance")
+    public ResponseEntity<com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse> getIndicesHistoricalPerformance(
+            @RequestParam(defaultValue = "10") int years) {
+
+        return ResponseEntity.ok(analysisService.getIndicesHistoricalPerformance(years));
+    }
+
     private TimeFrame parseTimeFrame(String tf) {
         try {
             return TimeFrame.valueOf(tf.toUpperCase());
