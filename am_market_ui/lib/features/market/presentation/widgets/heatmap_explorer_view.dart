@@ -85,17 +85,14 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Title
+              // Title REMOVED or Changed to Generic
+              /*
               const Text(
                 'Historical Performance',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
+                style: TextStyle(...),
               ),
               const SizedBox(height: 16),
+              */
               
               // Search & Controls Row
               Row(
@@ -189,8 +186,6 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
                         _buildQuickActionChip(provider, "INDIA VIX", "INDIA VIX"),
                         _buildQuickActionChip(provider, "NIFTY 50", "NIFTY 50"),
                         _buildQuickActionChip(provider, "SMALL CAP", "NIFTY SMALLCAP 50"),
-                        const SizedBox(width: 8),
-                        _buildHistoryButton(context),
                       ],
                     ),
                   )
@@ -200,132 +195,151 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
 
         const SizedBox(height: 16),
 
-        _buildHeatmapSection(),
-        const SizedBox(height: 16),
-
-        // if (_showingIndices)
-        //   const Expanded(child: SingleChildScrollView(child: HistoricalPerformanceSection())),
-
-        if (!_showingIndices)
-        // 2. Heatmap Grid
+        // Main Content Area
         Expanded(
-          child: data == null 
-              ? Center(child: Text(provider.isLoading ? 'Loading...' : 'No data available', style: const TextStyle(color: Colors.white54)))
-              : SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                      padding: const EdgeInsets.all(16),
+          child: _showingIndices
+            ? SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildHeatmapSection(),
+                    const SizedBox(height: 16),
+                    Container(
                       decoration: BoxDecoration(
                         color: AppColors.darkCard,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.white.withOpacity(0.05)),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                           // Overall Return Header (Optional)
-                           if (data.overallReturn != null)
-                             Padding(
-                               padding: const EdgeInsets.only(bottom: 16.0),
-                               child: Text(
-                                 "Overall Return (${data.startYear}-${data.endYear}): ${data.overallReturn}%",
-                                 style: TextStyle(
-                                     color: _getColorForChange(data.overallReturn!),
-                                     fontWeight: FontWeight.bold,
-                                     fontSize: 16
-                                 ),
-                               ),
-                             ),
-
-                           // Fixed Header Row (Months)
-                           Row(
-                             children: [
-                               const SizedBox(width: 60), // Year column width
-                               ..._shortMonths.map((m) => Expanded(
-                                 child: Center(
-                                   child: Text(
-                                     m,
-                                     style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold),
-                                   ),
-                                 ),
-                               )),
-                               const SizedBox(width: 50), // Yearly Total width
-                             ],
-                           ),
-                           const SizedBox(height: 8),
-                           Divider(color: Colors.white.withOpacity(0.1), height: 1),
-                           const SizedBox(height: 8),
-
-                           // Year Rows
-                           ...data.yearlyPerformance.map((yearly) {
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                child: Row(
+                      child: const HistoricalPerformanceSection(),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              )
+            : Column(
+                children: [
+                  _buildHeatmapSection(), // This might still overflow if too large, but usually detailed view is for single stock
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: data == null 
+                        ? Center(child: Text(provider.isLoading ? 'Loading...' : 'No data available', style: const TextStyle(color: Colors.white54)))
+                        : SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppColors.darkCard,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: Colors.white.withOpacity(0.05)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Year Label
-                                    SizedBox(
-                                      width: 60,
-                                      child: Text(
-                                        '${yearly.year}',
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                    
-                                    // Monthly Cells
-                                    ..._months.map((monthKey) {
-                                       final val = yearly.monthlyReturns[monthKey];
-                                       return Expanded(
-                                         child: Container(
-                                           margin: const EdgeInsets.symmetric(horizontal: 2),
-                                           height: 30,
-                                           decoration: BoxDecoration(
-                                             color: val != null ? _getColorForChange(val).withOpacity(0.8) : Colors.white.withOpacity(0.05),
-                                             borderRadius: BorderRadius.circular(4),
-                                           ),
-                                           child: Center(
-                                             child: Text(
-                                               val != null ? val.toStringAsFixed(1) : '-',
-                                               style: TextStyle(
-                                                 color: Colors.white, 
-                                                 fontSize: 10,
-                                                 fontWeight: val != null ? FontWeight.w500 : FontWeight.normal
-                                               ),
-                                             ),
+                                     // Overall Return Header (Optional)
+                                     if (data.overallReturn != null)
+                                       Padding(
+                                         padding: const EdgeInsets.only(bottom: 16.0),
+                                         child: Text(
+                                           "Overall Return (${data.startYear}-${data.endYear}): ${data.overallReturn}%",
+                                           style: TextStyle(
+                                               color: _getColorForChange(data.overallReturn!),
+                                               fontWeight: FontWeight.bold,
+                                               fontSize: 16
                                            ),
                                          ),
-                                       );
-                                    }).toList(),
-
-                                    // Yearly Total
-                                    SizedBox(
-                                      width: 50,
-                                      child: Center(
-                                        child: Text(
-                                          yearly.yearlyReturn != null ? '${yearly.yearlyReturn}%' : '-',
-                                           style: TextStyle(
-                                             color: _getColorForChange(yearly.yearlyReturn ?? 0),
-                                             fontSize: 11,
-                                             fontWeight: FontWeight.bold
+                                       ),
+          
+                                     // Fixed Header Row (Months)
+                                     Row(
+                                       children: [
+                                         const SizedBox(width: 60), // Year column width
+                                         ..._shortMonths.map((m) => Expanded(
+                                           child: Center(
+                                             child: Text(
+                                               m,
+                                               style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold),
+                                             ),
                                            ),
-                                           textAlign: TextAlign.end,
-                                        ),
-                                      ),
-                                    )
+                                         )),
+                                         const SizedBox(width: 50), // Yearly Total width
+                                       ],
+                                     ),
+                                     const SizedBox(height: 8),
+                                     Divider(color: Colors.white.withOpacity(0.1), height: 1),
+                                     const SizedBox(height: 8),
+          
+                                     // Year Rows
+                                     ...data.yearlyPerformance.map((yearly) {
+                                        return Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                          child: Row(
+                                            children: [
+                                              // Year Label
+                                              SizedBox(
+                                                width: 60,
+                                                child: Text(
+                                                  '${yearly.year}',
+                                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                              
+                                              // Monthly Cells
+                                              ..._months.map((monthKey) {
+                                                 final val = yearly.monthlyReturns[monthKey];
+                                                 return Expanded(
+                                                   child: Container(
+                                                     margin: const EdgeInsets.symmetric(horizontal: 2),
+                                                     height: 30,
+                                                     decoration: BoxDecoration(
+                                                       color: val != null ? _getColorForChange(val).withOpacity(0.8) : Colors.white.withOpacity(0.05),
+                                                       borderRadius: BorderRadius.circular(4),
+                                                     ),
+                                                     child: Center(
+                                                       child: Text(
+                                                         val != null ? val.toStringAsFixed(1) : '-',
+                                                         style: TextStyle(
+                                                           color: Colors.white, 
+                                                           fontSize: 10,
+                                                           fontWeight: val != null ? FontWeight.w500 : FontWeight.normal
+                                                         ),
+                                                       ),
+                                                     ),
+                                                   ),
+                                                 );
+                                              }).toList(),
+          
+                                              // Yearly Total
+                                              SizedBox(
+                                                width: 50,
+                                                child: Center(
+                                                  child: Text(
+                                                    yearly.yearlyReturn != null ? '${yearly.yearlyReturn}%' : '-',
+                                                     style: TextStyle(
+                                                       color: _getColorForChange(yearly.yearlyReturn ?? 0),
+                                                       fontSize: 11,
+                                                       fontWeight: FontWeight.bold
+                                                     ),
+                                                     textAlign: TextAlign.end,
+                                                  ),
+                                                ),
+                                              )
+                                            ],
+                                          ),
+                                        );
+                                     }).toList(),
                                   ],
                                 ),
-                              );
-                           }).toList(),
-                        ],
+                            ),
+                            const SizedBox(height: 16),
+                            if (provider.seasonality != null) _buildSeasonality(provider.seasonality!),
+                            const SizedBox(height: 16), // Bottom padding
+                           ],
+                          ),
                       ),
                   ),
-                  const SizedBox(height: 16),
-                  if (provider.seasonality != null) _buildSeasonality(provider.seasonality!),
-                  const SizedBox(height: 16), // Bottom padding
-                 ],
-                ),
+                ],
             ),
         ),
       ],
@@ -679,64 +693,5 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
       ),
     );
   }
-  Widget _buildHistoryButton(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _showHistoryDialog(context),
-      child: Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFF6C5DD3).withOpacity(0.3), // Primary color tint
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF6C5DD3).withOpacity(0.5)),
-        ),
-        child: Row(
-          children: const [
-            Icon(Icons.history, color: Colors.white, size: 14),
-            SizedBox(width: 6),
-            Text(
-              "History",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  void _showHistoryDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: AppColors.darkCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.8, // 80% width
-          height: MediaQuery.of(context).size.height * 0.8, // 80% height
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-               Row(
-                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                 children: [
-                   const Text("Historical Performance", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                   IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
-                 ],
-               ),
-               const Divider(color: Colors.white10),
-               const Expanded(
-                 child: SingleChildScrollView(
-                   child: HistoricalPerformanceSection(),
-                 ),
-               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

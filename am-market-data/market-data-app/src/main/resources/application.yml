@@ -192,7 +192,8 @@ redis:
       size: 1000    # Process 1000 keys at a time
   cache:
     ttl:
-      historical: 86400    # 24 hours
+      historical: 2592000    # 30 days
+      analysis: 2592000    # 30 days for historical analysis data
       intraday:
         past: 14400        # 4 hours for past dates
         future: 86400      # 24 hours for future dates

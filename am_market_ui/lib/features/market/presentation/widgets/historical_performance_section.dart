@@ -17,10 +17,26 @@ class _HistoricalPerformanceSectionState extends State<HistoricalPerformanceSect
   final MarketAnalysisService _service = GetIt.I<MarketAnalysisService>();
   late Future<IndicesHistoricalPerformanceResponse> _future;
 
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _future = _service.getIndicesHistoricalPerformance(years: 10);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scroll(double offset) {
+    _scrollController.animateTo(
+      (_scrollController.offset + offset).clamp(0.0, _scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
   @override
@@ -30,9 +46,19 @@ class _HistoricalPerformanceSectionState extends State<HistoricalPerformanceSect
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Text(
-            'Historical Monthly Performance (10 Years)',
-            style: AmTextStyles.h6.copyWith(color: AppColors.textPrimaryDark),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Historical Monthly Performance (10 Years)',
+                style: AmTextStyles.h6.copyWith(color: AppColors.textPrimaryDark),
+              ),
+              // Hint text
+              const Text(
+                'Scroll to view more months  ➡',
+                style: TextStyle(color: Colors.white24, fontSize: 12),
+              ),
+            ],
           ),
         ),
           FutureBuilder<IndicesHistoricalPerformanceResponse>(
@@ -49,22 +75,112 @@ class _HistoricalPerformanceSectionState extends State<HistoricalPerformanceSect
               }
 
               final data = snapshot.data!.monthlyPerformance;
+              
+              // Group data by Year
+              final Map<int, Map<String, MonthlyIndicesPerformance>> groupedData = {};
+              for (var item in data) {
+                if (!groupedData.containsKey(item.year)) {
+                  groupedData[item.year] = {};
+                }
+                groupedData[item.year]![item.monthName.toUpperCase()] = item;
+              }
+              
+              // Sort years descending
+              final sortedYears = groupedData.keys.toList()..sort((a, b) => b.compareTo(a));
+              
+              final months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+              final shortMonths = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
-              return GridView.builder(
-                padding: const EdgeInsets.all(16),
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 6, // Adjust based on screen width usually, but 6 is fine for wide screens
-                  childAspectRatio: 1.2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                ),
-                itemCount: data.length,
-                itemBuilder: (context, index) {
-                  return MonthlyPerformanceCard(data: data[index]);
-                },
-              );
+              return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Left Scroll Button
+                    Padding(
+                      padding: const EdgeInsets.only(top: 40.0), // Align with first row approx
+                      child: IconButton(
+                          icon: const Icon(Icons.arrow_back_ios, color: Colors.white54),
+                          onPressed: () => _scroll(-300),
+                      ),
+                    ),
+                    Expanded(
+                      child: Scrollbar(
+                        controller: _scrollController,
+                        thumbVisibility: true,
+                        trackVisibility: true,
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: 2400, // Wide width for table
+                            child: Column(
+                              children: [
+                                // Header Row
+                                Row(
+                                  children: [
+                                    const SizedBox(width: 60), // Space for Year column
+                                    ...shortMonths.map((m) => Expanded(
+                                      child: Center(
+                                        child: Text(
+                                          m,
+                                          style: const TextStyle(color: Colors.white54, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    )),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                
+                                // Year Rows
+                                ...sortedYears.map((year) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: IntrinsicHeight(
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          // Year Label
+                                          SizedBox(
+                                            width: 60,
+                                            child: Center(
+                                              child: Text(
+                                                '$year',
+                                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                                              ),
+                                            ),
+                                          ),
+                                          // Month Cells
+                                          ...months.map((month) {
+                                            final item = groupedData[year]?[month];
+                                            return Expanded(
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                                child: item != null 
+                                                  ? MonthlyPerformanceCard(data: item, isCompactTable: true)
+                                                  : Container(decoration: BoxDecoration(color: Colors.white.withOpacity(0.02), borderRadius: BorderRadius.circular(8))),
+                                              ),
+                                            );
+                                          }),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Right Scroll Button
+                    Padding(
+                      padding: const EdgeInsets.only(top: 40.0),
+                      child: IconButton(
+                          icon: const Icon(Icons.arrow_forward_ios, color: Colors.white54),
+                          onPressed: () => _scroll(300),
+                      ),
+                    ),
+                  ],
+                );
             },
           ),
       ],
