@@ -19,6 +19,7 @@ import 'package:am_market_ui/providers/view_mode_provider.dart';
 import 'package:am_market_ui/widgets/mode_toggle_widget.dart';
 import 'package:am_market_ui/features/user/market/presentation/pages/user_dashboard_page.dart';
 import 'package:am_market_ui/features/user/market/presentation/widgets/heatmap_explorer_view.dart';
+import 'package:am_market_ui/widgets/vertical_scroll_navigator.dart';
 
 /// Market feature page with Swipe Navigation
 class MarketPage extends StatelessWidget {
@@ -98,6 +99,28 @@ class _MarketContentState extends State<MarketContent> {
     });
   }
 
+  void _navigateToNext() {
+    // Only navigate if not at the last item
+    if (_swipeController.currentIndex < _swipeController.items.length - 1) {
+      _swipeController.navigateTo(_swipeController.currentIndex + 1);
+    }
+  }
+
+  void _navigateToPrev() {
+    // Only navigate if not at the first item
+    if (_swipeController.currentIndex > 0) {
+      _swipeController.navigateTo(_swipeController.currentIndex - 1);
+    }
+  }
+
+  Widget _wrapPage(Widget page) {
+    return VerticalScrollNavigator(
+      child: page,
+      onNextPage: _navigateToNext,
+      onPreviousPage: _navigateToPrev,
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Consumer2<MarketProvider, ViewModeProvider>(
     builder: (context, provider, viewModeProvider, _) {
@@ -116,6 +139,8 @@ class _MarketContentState extends State<MarketContent> {
         module: ModuleType.market,
         onBackToGlobal: widget.onBack,
         body: SwipeablePageView(
+          key: const PageStorageKey('market_page_info'), // Maintain state across layout rebuilds
+          scrollDirection: Axis.vertical,
           controller: _swipeController,
           showIndicator: !provider.isLoading,
         ),
@@ -274,7 +299,6 @@ class _MarketContentState extends State<MarketContent> {
     final userItems = [
       _createSidebarItem(0, 'Dashboard', Icons.home_rounded, 'Overview'),
       _createSidebarItem(1, 'Market Analysis', Icons.analytics_rounded, 'Detailed charts'),
-      _createSidebarItem(2, 'Heatmap Explorer', Icons.view_comfy_alt_rounded, 'Market Heatmap'),
     ];
 
     // Mode toggle at the top
@@ -320,53 +344,53 @@ class _MarketContentState extends State<MarketContent> {
     const accentColor = ModuleColors.market;
 
     final items = [
-      const NavigationItem(
+      NavigationItem(
         title: 'All Indices',
         subtitle: 'Market Overview',
         icon: Icons.dashboard_rounded,
-        page: IndicesPerformanceViewV2(),
+        page: _wrapPage(const IndicesPerformanceViewV2()),
         accentColor: accentColor,
       ),
-      const NavigationItem(
+      NavigationItem(
         title: 'Streamer',
         subtitle: 'Real-time data',
         icon: Icons.waves_rounded,
-        page: StreamerPage(),
+        page: _wrapPage(const StreamerPage()),
         accentColor: accentColor,
       ),
-      const NavigationItem(
+      NavigationItem(
         title: 'Instrument Explorer',
         subtitle: 'Search instruments',
         icon: Icons.manage_search_rounded,
-        page: InstrumentExplorerPage(),
+        page: _wrapPage(const InstrumentExplorerPage()),
         accentColor: accentColor,
       ),
-      const NavigationItem(
+      NavigationItem(
         title: 'Security Explorer',
         subtitle: 'Security details',
         icon: Icons.security_rounded,
-        page: SecurityExplorerPage(),
+        page: _wrapPage(const SecurityExplorerPage()),
         accentColor: accentColor,
       ),
-      const NavigationItem(
+      NavigationItem(
         title: 'ETF Explorer',
         subtitle: 'ETF insights',
         icon: Icons.dashboard_customize_rounded,
-        page: EtfExplorerPage(),
+        page: _wrapPage(const EtfExplorerPage()),
         accentColor: accentColor,
       ),
-      const NavigationItem(
+      NavigationItem(
         title: 'Price Test',
         subtitle: 'Price validation',
         icon: Icons.price_check_rounded,
-        page: PriceTestPage(),
+        page: _wrapPage(const PriceTestPage()),
         accentColor: accentColor,
       ),
-      const NavigationItem(
+      NavigationItem(
         title: 'Market Analysis',
         subtitle: 'Detailed charts',
         icon: Icons.analytics_rounded,
-        page: AnalysisPage(),
+        page: _wrapPage(const AnalysisPage()),
         accentColor: accentColor,
       ),
     ];
@@ -379,10 +403,10 @@ class _MarketContentState extends State<MarketContent> {
             title: indexName,
             subtitle: 'Live Index Data',
             icon: Icons.trending_up_rounded,
-            page: MarketIndexDetailView(
+            page: _wrapPage(MarketIndexDetailView(
               provider: provider,
               indexSymbol: indexName,
-            ),
+            )),
             accentColor: accentColor,
           ),
         );
@@ -391,21 +415,21 @@ class _MarketContentState extends State<MarketContent> {
 
     // Admin
     items.add(
-      const NavigationItem(
+      NavigationItem(
         title: 'Admin Dashboard',
         subtitle: 'System Tools',
         icon: Icons.admin_panel_settings_rounded,
-        page: AdminDashboardPage(),
+        page: _wrapPage(const AdminDashboardPage()),
         accentColor: Color(0xFFFF6B6B),
       ),
     );
 
     items.add(
-      const NavigationItem(
+      NavigationItem(
         title: 'Developer Dashboard',
         subtitle: 'Dev Tools & Scheduler',
         icon: Icons.developer_mode_rounded,
-        page: DeveloperDashboard(),
+        page: _wrapPage(const DeveloperDashboard()),
         accentColor: Colors.deepPurple,
       ),
     );
@@ -417,18 +441,18 @@ class _MarketContentState extends State<MarketContent> {
     const accentColor = ModuleColors.market;
 
     return [
-      const NavigationItem(
+      NavigationItem(
         title: 'Dashboard',
         subtitle: 'Overview',
         icon: Icons.home_rounded,
-        page: UserDashboardPage(), // User Dashboard with cards + chart
+        page: _wrapPage(const UserDashboardPage()), // User Dashboard with cards + chart
         accentColor: accentColor,
       ),
-      const NavigationItem(
+      NavigationItem(
         title: 'Market Analysis',
         subtitle: 'Heatmap & Details',
         icon: Icons.analytics_rounded,
-        page: HeatmapExplorerView(), // Was AnalysisPage(), now consolidated
+        page: _wrapPage(const HeatmapExplorerView()), // Was AnalysisPage(), now consolidated
         accentColor: accentColor,
       ),
       // Heatmap Explorer removed as it's now Market Analysis

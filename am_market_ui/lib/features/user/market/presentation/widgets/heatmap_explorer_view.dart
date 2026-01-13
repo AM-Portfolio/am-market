@@ -218,18 +218,19 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
                   ],
                 ),
               )
-            : Column(
-                children: [
-                  _buildHeatmapSection(), // This might still overflow if too large, but usually detailed view is for single stock
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: data == null 
-                        ? Center(child: Text(provider.isLoading ? 'Loading...' : 'No data available', style: const TextStyle(color: Colors.white54)))
-                        : SingleChildScrollView(
-                            scrollDirection: Axis.vertical,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
+            : SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildHeatmapSection(),
+                    const SizedBox(height: 16),
+                    data == null 
+                        ? SizedBox(
+                            height: 200,
+                            child: Center(child: Text(provider.isLoading ? 'Loading...' : 'No data available', style: const TextStyle(color: Colors.white54)))
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
                                 Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
@@ -362,10 +363,9 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
                             const SizedBox(height: 16), // Bottom padding
                            ],
                           ),
-                      ),
-                  ),
-                ],
-            ),
+                  ],
+                ),
+              ),
         ),
       ],
     );
@@ -601,7 +601,7 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
 
   Widget _buildHeatmapSection() {
       // Logic to determine title
-      String title = _showingIndices ? "Market Heatmap (Indices)" : "Constituents: $_selectedSymbol";
+      String title = _showingIndices ? "Market Heatmap (Indices)" : "Heatmap: $_selectedSymbol";
 
       return Container(
           decoration: BoxDecoration(
