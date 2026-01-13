@@ -1,4 +1,4 @@
-package com.am.marketdata.api.util;
+package com.am.marketdata.analysis.util;
 
 import com.am.common.investment.model.stockindice.StockData;
 import com.am.marketdata.common.log.AppLogger;
@@ -6,6 +6,7 @@ import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.MarketDataService;
 import com.am.marketdata.service.SmartStockService;
+import com.am.marketdata.api.util.InstrumentUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

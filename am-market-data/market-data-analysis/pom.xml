@@ -32,6 +32,11 @@
             <artifactId>market-data-redis</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.marketdata</groupId>
+            <artifactId>market-data-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         
         <!-- Spring Web -->
         <dependency>

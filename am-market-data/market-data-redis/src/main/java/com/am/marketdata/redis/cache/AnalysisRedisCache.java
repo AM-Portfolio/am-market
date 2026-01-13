@@ -77,6 +77,10 @@ public class AnalysisRedisCache {
 
     // --- HEATMAP ---
 
+    private String getIndexHeatmapKey(String symbol, String interval) {
+        return String.format("%s:index:%s:%s", HEATMAP_PREFIX, symbol.toUpperCase(), interval);
+    }
+
     public void saveHeatmap(CalendarHeatmapResponse response, int year) {
         if (response == null)
             return;
@@ -90,6 +94,20 @@ public class AnalysisRedisCache {
         }
     }
 
+    public void saveIndexHeatmap(String symbol, String interval, Map<String, Double> heatmap) {
+        if (heatmap == null)
+            return;
+        try {
+            String key = getIndexHeatmapKey(symbol, interval);
+            String json = redisObjectMapper.writeValueAsString(heatmap);
+            redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
+            log.debug("saveIndexHeatmap", "Cached index heatmap for " + symbol);
+        } catch (Exception e) {
+            log.error("saveIndexHeatmap",
+                    "Error caching index heatmap for " + symbol + ": " + e.getMessage());
+        }
+    }
+
     public CalendarHeatmapResponse getHeatmap(String symbol, int year) {
         try {
             String key = getHeatmapKey(symbol, year);
@@ -99,6 +117,21 @@ public class AnalysisRedisCache {
             }
         } catch (Exception e) {
             log.error("getHeatmap", "Error retrieving heatmap for " + symbol + ": " + e.getMessage());
+        }
+        return null;
+    }
+
+    public Map<String, Double> getIndexHeatmap(String symbol, String interval) {
+        try {
+            String key = getIndexHeatmapKey(symbol, interval);
+            String json = redisTemplate.opsForValue().get(key);
+            if (json != null) {
+                return redisObjectMapper.readValue(json,
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, Double>>() {
+                        });
+            }
+        } catch (Exception e) {
+            log.error("getIndexHeatmap", "Error retrieving index heatmap for " + symbol + ": " + e.getMessage());
         }
         return null;
     }

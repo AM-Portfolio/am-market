@@ -1,11 +1,12 @@
-package com.am.marketdata.api.service;
+package com.am.marketdata.analysis.service;
 
 import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.model.stockindice.StockData;
-import com.am.marketdata.api.util.StockDataEnricher;
-import com.am.marketdata.api.util.StockDataEnricher.EnrichedStockData;
+import com.am.marketdata.analysis.util.StockDataEnricher;
+import com.am.marketdata.analysis.util.StockDataEnricher.EnrichedStockData;
 import com.am.marketdata.common.log.AppLogger;
 import com.am.marketdata.service.SecurityService;
+import com.am.marketdata.api.service.StockIndicesService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,9 +21,118 @@ public class MarketAnalyticsService {
     private final StockIndicesService stockIndicesService;
     private final SecurityService securityService;
     private final StockDataEnricher stockDataEnricher;
+    private final com.am.marketdata.api.service.MarketDataFetchService marketDataFetchService;
 
     // Default broad index for "entire market" analytics
     private static final String DEFAULT_MARKET_INDEX = "NIFTY 50";
+
+    /**
+     * Get Historical Charts (Batch or Single)
+     */
+    public com.am.marketdata.api.model.HistoricalDataResponseV1 getHistoricalCharts(
+            String symbols, String range, boolean isIndexSymbol) {
+
+        String interval = "1D";
+        java.time.LocalDateTime to = java.time.LocalDateTime.now();
+        java.time.LocalDateTime from = to.minusDays(1);
+
+        // Determine Interval and From Time based on Range
+        switch (range.toUpperCase()) {
+            case "10M":
+                interval = "1m";
+                from = to.minusMinutes(10);
+                break;
+            case "15M":
+                interval = "1m";
+                from = to.minusMinutes(15);
+                break;
+            case "30M":
+                interval = "1m";
+                from = to.minusMinutes(30);
+                break;
+            case "1H":
+                interval = "1m";
+                from = to.minusHours(1);
+                break;
+            case "4H":
+                interval = "5m";
+                from = to.minusHours(4);
+                break;
+            case "1D":
+                interval = "5m";
+                from = to.minusDays(1);
+                break;
+            case "1W":
+                interval = "1H";
+                from = to.minusWeeks(1);
+                break;
+            case "1M":
+                interval = "1D";
+                from = to.minusMonths(1);
+                break;
+            case "5Y":
+                interval = "1W";
+                from = to.minusYears(5);
+                break;
+            default: // Default 1Y
+                interval = "1D";
+                from = to.minusYears(1);
+        }
+
+        // Construct Request
+        com.am.marketdata.api.dto.HistoricalDataRequest request = com.am.marketdata.api.dto.HistoricalDataRequest
+                .builder()
+                .symbols(symbols)
+                .from(from.toLocalDate().toString())
+                .to(to.toLocalDate().toString())
+                .interval(com.am.marketdata.common.model.TimeFrame.fromApiValue(interval)) // Convert string to
+                                                                                           // TimeFrame
+                .filterType("price")
+                .indexSymbol(isIndexSymbol)
+                .build();
+
+        // Fetch Data
+        try {
+            com.am.marketdata.api.model.HistoricalDataResponseV1 response = marketDataFetchService
+                    .processHistoricalDataRequest(request);
+
+            if (response.getError() != null) {
+                return response;
+            }
+
+            // Filter data points by time range for each symbol
+            if (response.getData() != null) {
+                long minTime = from.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+
+                response.getData().forEach((s, symbolData) -> {
+                    if (symbolData != null && symbolData.getDataPoints() != null) {
+                        List<com.am.common.investment.model.historical.OHLCVTPoint> filteredPoints = symbolData
+                                .getDataPoints().stream()
+                                .filter(p -> {
+                                    try {
+                                        long timestamp = p.getTime().atZone(java.time.ZoneId.systemDefault())
+                                                .toInstant()
+                                                .toEpochMilli();
+                                        return timestamp >= minTime;
+                                    } catch (Exception e) {
+                                        return true;
+                                    }
+                                })
+                                .collect(Collectors.toList());
+
+                        symbolData.setDataPoints(filteredPoints);
+                    }
+                });
+            }
+            return response;
+        } catch (Exception e) {
+            log.error("getHistoricalCharts", "Error fetching historical charts: " + e.getMessage());
+            return com.am.marketdata.api.model.HistoricalDataResponseV1.builder()
+                    .error("Failed to fetch chart data")
+                    .message(e.getMessage())
+                    .build();
+        }
+    }
 
     /**
      * Get Top Gainers or Losers

@@ -24,9 +24,13 @@ public class MarketDataOrchestrator {
     private final java.util.Optional<RedisCacheCleanupScheduler> redisCacheCleanupScheduler;
     private final java.util.Optional<StockIndicesSchedulerService> stockIndicesSchedulerService;
     private final java.util.Optional<StreamerScheduler> streamerScheduler;
+    private final java.util.Optional<MarketAnalysisSchedulerService> marketAnalysisSchedulerService;
 
     // --- High Frequency Jobs ---
 
+    /**
+     * Indices Data Processing: Runs every 2 minutes
+     */
     /**
      * Indices Data Processing: Runs every 2 minutes
      */
@@ -40,6 +44,9 @@ public class MarketDataOrchestrator {
         }
     }
 
+    /**
+     * Stock Indices Retry: Runs every 15 minutes (or configured interval)
+     */
     /**
      * Stock Indices Retry: Runs every 15 minutes (or configured interval)
      */
@@ -59,6 +66,10 @@ public class MarketDataOrchestrator {
      * Cookie Refresh: Runs every hour ONLY during market hours (9 AM - 4 PM,
      * Mon-Fri)
      */
+    /**
+     * Cookie Refresh: Runs every hour ONLY during market hours (9 AM - 4 PM,
+     * Mon-Fri)
+     */
     @Scheduled(cron = "${scheduler.cookie.refresh:0 0 9-16 * * MON-FRI}", zone = "Asia/Kolkata")
     public void triggerCookieRefresh() {
         log.info("Orchestrator: Triggering Cookie Refresh (Market Hours)");
@@ -73,18 +84,24 @@ public class MarketDataOrchestrator {
      * Weekend Cookie Maintenance: Runs on Saturday at 10:00 AM
      * Ensures cookies are valid/refreshed for weekend analysis or preparation.
      */
-    @Scheduled(cron = "${scheduler.cookie.weekend:0 0 10 * * SAT}", zone = "Asia/Kolkata")
-    public void triggerWeekendCookieMaintenance() {
-        log.info("Orchestrator: Triggering Weekend Cookie Maintenance");
-        if (cookieScheduler.isPresent()) {
-            cookieScheduler.get().executeCookieRefresh();
-        } else {
-            log.warn("Orchestrator: CookieScheduler is not present, skipping Weekend Cookie Maintenance");
-        }
-    }
+    // @Scheduled(cron = "${scheduler.cookie.weekend:0 0 10 * * SAT}", zone =
+    // "Asia/Kolkata")
+    // public void triggerWeekendCookieMaintenance() {
+    // log.info("Orchestrator: Triggering Weekend Cookie Maintenance");
+    // if (cookieScheduler.isPresent()) {
+    // cookieScheduler.get().executeCookieRefresh();
+    // } else {
+    // log.warn("Orchestrator: CookieScheduler is not present, skipping Weekend
+    // Cookie Maintenance");
+    // }
+    // }
 
     // --- Daily: Market Open/Close ---
 
+    /**
+     * Market Open Operations (e.g., 9:15 AM)
+     * Starts Ingestion
+     */
     /**
      * Market Open Operations (e.g., 9:15 AM)
      * Starts Ingestion
@@ -142,6 +159,9 @@ public class MarketDataOrchestrator {
     /**
      * Morning Stock Indices Fetch (e.g., 9:30 AM)
      */
+    /**
+     * Morning Stock Indices Fetch (e.g., 9:30 AM)
+     */
     @Scheduled(cron = "${scheduler.stock-indices.morning-fetch:0 30 9 * * *}", zone = "Asia/Kolkata")
     public void triggerMorningStockIndicesFetch() {
         log.info("Orchestrator: Triggering Morning Stock Indices Fetch");
@@ -152,6 +172,9 @@ public class MarketDataOrchestrator {
         }
     }
 
+    /**
+     * Evening Stock Indices Fetch (e.g., 4:00 PM)
+     */
     /**
      * Evening Stock Indices Fetch (e.g., 4:00 PM)
      */
@@ -190,6 +213,19 @@ public class MarketDataOrchestrator {
             ingestionScheduler.get().executeHistoricalSync();
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Historical Data Sync");
+        }
+    }
+
+    /**
+     * Daily Market Analysis: Runs at 1:00 AM
+     */
+    @Scheduled(cron = "${scheduler.analysis.daily:0 0 1 * * *}", zone = "Asia/Kolkata")
+    public void triggerDailyAnalysis() {
+        log.info("Orchestrator: Triggering Daily Market Analysis");
+        if (marketAnalysisSchedulerService.isPresent()) {
+            marketAnalysisSchedulerService.get().executeDailyAnalysis();
+        } else {
+            log.warn("Orchestrator: MarketAnalysisSchedulerService is not present, skipping Analysis");
         }
     }
 

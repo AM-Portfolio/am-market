@@ -30,7 +30,7 @@ class MarketAnalyticsService {
       );
 
       final response = await _dio.get(
-        '$baseUrl/v1/market-analytics/movers',
+        '$baseUrl/api/v1/analysis/movers',
         queryParameters: {
           'type': type,
           'limit': limit,
@@ -77,7 +77,7 @@ class MarketAnalyticsService {
       // Make a single batch request
       try {
         final response = await _dio.get(
-          '$baseUrl/v1/market-analytics/historical-charts',
+          '$baseUrl/api/v1/analysis/historical-charts',
           queryParameters: {
             'symbols': symbols.join(','),
             'range': range,

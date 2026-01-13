@@ -340,16 +340,23 @@ public class AnalysisService {
 
     public com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse getHistoricalPerformance(
             String symbol, int years, boolean detailed) {
+        return getHistoricalPerformance(symbol, years, detailed, false);
+    }
+
+    public com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse getHistoricalPerformance(
+            String symbol, int years, boolean detailed, boolean bypassCache) {
 
         // Validate years
         if (years <= 0)
             years = 5;
 
         // Check Cache
-        com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse cached = analysisRedisCache
-                .getHistoricalPerformance(symbol, years, detailed);
-        if (cached != null) {
-            return cached;
+        if (!bypassCache) {
+            com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse cached = analysisRedisCache
+                    .getHistoricalPerformance(symbol, years, detailed);
+            if (cached != null) {
+                return cached;
+            }
         }
 
         LocalDate to = LocalDate.now();
@@ -517,6 +524,18 @@ public class AnalysisService {
     // --- Heatmap Analysis ---
 
     public Map<String, Double> getHeatmap(String symbol, String timeframeStr) {
+        return getHeatmap(symbol, timeframeStr, false);
+    }
+
+    public Map<String, Double> getHeatmap(String symbol, String timeframeStr, boolean bypassCache) {
+        // Check Cache
+        if (!bypassCache) {
+            Map<String, Double> cached = analysisRedisCache.getIndexHeatmap(symbol, timeframeStr);
+            if (cached != null) {
+                return cached;
+            }
+        }
+
         // 1. Get Constituents
         List<String> symbols = marketDataService.getIndexConstituents(symbol);
         if (symbols == null || symbols.isEmpty()) {
@@ -626,13 +645,16 @@ public class AnalysisService {
         // Sort by change desc?
         // Map is unordered, but UI might want sorted.
         // Let's return LinkedHashMap sorted
-        return heatmap.entrySet().stream()
+        Map<String, Double> sortedHeatmap = heatmap.entrySet().stream()
                 .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
                         Map.Entry::getValue,
                         (e1, e2) -> e1,
                         LinkedHashMap::new));
+
+        analysisRedisCache.saveIndexHeatmap(symbol, timeframeStr, sortedHeatmap);
+        return sortedHeatmap;
     }
 
     private LocalDate CalculateTargetDate(LocalDate to, String tf) {
@@ -679,12 +701,19 @@ public class AnalysisService {
 
     public com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse getIndicesHistoricalPerformance(
             int years) {
+        return getIndicesHistoricalPerformance(years, false);
+    }
+
+    public com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse getIndicesHistoricalPerformance(
+            int years, boolean bypassCache) {
 
         // Check Cache
-        com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse cached = analysisRedisCache
-                .getIndicesHistoricalPerformance(years);
-        if (cached != null) {
-            return cached;
+        if (!bypassCache) {
+            com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse cached = analysisRedisCache
+                    .getIndicesHistoricalPerformance(years);
+            if (cached != null) {
+                return cached;
+            }
         }
 
         // 1. Get List of Indices
@@ -700,7 +729,7 @@ public class AnalysisService {
             // Re-use existing method
             try {
                 com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse response = getHistoricalPerformance(
-                        index, years, false);
+                        index, years, false, bypassCache);
 
                 if (response != null && response.getYearlyPerformance() != null) {
                     for (com.am.marketdata.common.model.analysis.YearlyPerformance yp : response

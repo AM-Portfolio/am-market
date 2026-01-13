@@ -14,10 +14,11 @@ class MarketEndpoints {
   static const String streamDisconnect = '/v1/market-data/stream/disconnect';
   
   // Market Analytics
-  static const String movers = '/v1/market-analytics/movers';
-  static const String sectors = '/v1/market-analytics/sectors';
-  static const String marketCap = '/v1/market-analytics/market-cap';
-  static const String historicalCharts = '/v1/market-analytics/historical-charts';
+  // Market Analytics
+  static const String movers = '/api/v1/analysis/movers';
+  static const String sectors = '/api/v1/analysis/sectors';
+  static const String marketCap = '/api/v1/analysis/market-cap';
+  static const String historicalCharts = '/api/v1/analysis/historical-charts';
   
   // Instruments
   static const String instrumentsSearch = '/v1/instruments/search';
