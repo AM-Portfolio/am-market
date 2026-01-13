@@ -41,149 +41,171 @@ class _HistoricalPerformanceSectionState extends State<HistoricalPerformanceSect
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Historical Monthly Performance (10 Years)',
-                style: AmTextStyles.h6.copyWith(color: AppColors.textPrimaryDark),
-              ),
-              // Hint text
-              const Text(
-                'Scroll to view more months  ➡',
-                style: TextStyle(color: Colors.white24, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-          FutureBuilder<IndicesHistoricalPerformanceResponse>(
-            future: _future,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              }
-              if (!snapshot.hasData || snapshot.data!.monthlyPerformance.isEmpty) {
-                return const Center(child: Text('No data available'));
-              }
-
-              final data = snapshot.data!.monthlyPerformance;
-              
-              // Group data by Year
-              final Map<int, Map<String, MonthlyIndicesPerformance>> groupedData = {};
-              for (var item in data) {
-                if (!groupedData.containsKey(item.year)) {
-                  groupedData[item.year] = {};
-                }
-                groupedData[item.year]![item.monthName.toUpperCase()] = item;
-              }
-              
-              // Sort years descending
-              final sortedYears = groupedData.keys.toList()..sort((a, b) => b.compareTo(a));
-              
-              final months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
-              final shortMonths = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-
-              return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Left Scroll Button
-                    Padding(
-                      padding: const EdgeInsets.only(top: 40.0), // Align with first row approx
-                      child: IconButton(
-                          icon: const Icon(Icons.arrow_back_ios, color: Colors.white54),
-                          onPressed: () => _scroll(-300),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 800;
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                   Expanded(
+                    child: Text(
+                      'Historical Monthly Performance (10 Years)',
+                      style: AmTextStyles.h6.copyWith(
+                        color: AppColors.textPrimaryDark,
+                        fontSize: isMobile ? 16 : 18,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    Expanded(
-                      child: Scrollbar(
-                        controller: _scrollController,
-                        thumbVisibility: true,
-                        trackVisibility: true,
-                        child: SingleChildScrollView(
-                          controller: _scrollController,
-                          scrollDirection: Axis.horizontal,
-                          child: SizedBox(
-                            width: 2400, // Wide width for table
-                            child: Column(
-                              children: [
-                                // Header Row
-                                Row(
+                  ),
+                  // Hint text (Hide on very small screens)
+                  if (!isMobile)
+                  const Text(
+                    'Scroll to view more months  ➡',
+                    style: TextStyle(color: Colors.white24, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+              FutureBuilder<IndicesHistoricalPerformanceResponse>(
+                future: _future,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Padding(padding: EdgeInsets.all(20), child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent))));
+                  }
+                  if (!snapshot.hasData || snapshot.data!.monthlyPerformance.isEmpty) {
+                    return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No data available', style: TextStyle(color: Colors.white54))));
+                  }
+
+                  final data = snapshot.data!.monthlyPerformance;
+                  
+                  // Group data by Year
+                  final Map<int, Map<String, MonthlyIndicesPerformance>> groupedData = {};
+                  for (var item in data) {
+                    if (!groupedData.containsKey(item.year)) {
+                      groupedData[item.year] = {};
+                    }
+                    groupedData[item.year]![item.monthName.toUpperCase()] = item;
+                  }
+                  
+                  // Sort years descending
+                  final sortedYears = groupedData.keys.toList()..sort((a, b) => b.compareTo(a));
+                  
+                  final months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+                  final shortMonths = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+                  // Dimensions
+                  final double yearColWidth = isMobile ? 40.0 : 60.0;
+                  final double cellWidth = isMobile ? 140.0 : 180.0; // Slightly smaller on mobile
+                  final double totalWidth = yearColWidth + (cellWidth * 12);
+
+                  return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left Scroll Button (Hide on Mobile)
+                        if (!isMobile)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 40.0), 
+                          child: IconButton(
+                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white54),
+                              onPressed: () => _scroll(-300),
+                          ),
+                        ),
+                        Expanded(
+                          child: Scrollbar(
+                            controller: _scrollController,
+                            thumbVisibility: true,
+                            trackVisibility: true,
+                            child: SingleChildScrollView(
+                              controller: _scrollController,
+                              scrollDirection: Axis.horizontal,
+                              child: SizedBox(
+                                width: totalWidth,
+                                child: Column(
                                   children: [
-                                    const SizedBox(width: 60), // Space for Year column
-                                    ...shortMonths.map((m) => Expanded(
-                                      child: Center(
-                                        child: Text(
-                                          m,
-                                          style: const TextStyle(color: Colors.white54, fontWeight: FontWeight.bold),
-                                        ),
-                                      ),
-                                    )),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                
-                                // Year Rows
-                                ...sortedYears.map((year) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: IntrinsicHeight(
-                                      child: Row(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [
-                                          // Year Label
-                                          SizedBox(
-                                            width: 60,
-                                            child: Center(
-                                              child: Text(
-                                                '$year',
-                                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                                              ),
+                                    // Header Row
+                                    Row(
+                                      children: [
+                                        SizedBox(width: yearColWidth), 
+                                        ...shortMonths.map((m) => SizedBox(
+                                          width: cellWidth,
+                                          child: Center(
+                                            child: Text(
+                                              m,
+                                              style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: isMobile ? 10 : 12),
                                             ),
                                           ),
-                                          // Month Cells
-                                          ...months.map((month) {
-                                            final item = groupedData[year]?[month];
-                                            return Expanded(
-                                              child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                                child: item != null 
-                                                  ? MonthlyPerformanceCard(data: item, isCompactTable: true)
-                                                  : Container(decoration: BoxDecoration(color: Colors.white.withOpacity(0.02), borderRadius: BorderRadius.circular(8))),
-                                              ),
-                                            );
-                                          }),
-                                        ],
-                                      ),
+                                        )),
+                                      ],
                                     ),
-                                  );
-                                }).toList(),
-                              ],
+                                    const SizedBox(height: 8),
+                                    
+                                    // Year Rows
+                                    ...sortedYears.map((year) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 8.0),
+                                        child: IntrinsicHeight(
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                                            children: [
+                                              // Year Label
+                                              SizedBox(
+                                                width: yearColWidth,
+                                                child: Center(
+                                                  child: Text(
+                                                    '$year',
+                                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: isMobile ? 12 : 16),
+                                                  ),
+                                                ),
+                                              ),
+                                              // Month Cells
+                                              ...months.map((month) {
+                                                final item = groupedData[year]?[month];
+                                                return SizedBox(
+                                                  width: cellWidth,
+                                                  child: Padding(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                                    child: item != null 
+                                                      ? MonthlyPerformanceCard(data: item, isCompactTable: true)
+                                                      : Container(decoration: BoxDecoration(color: Colors.white.withOpacity(0.02), borderRadius: BorderRadius.circular(8))),
+                                                  ),
+                                                );
+                                              }),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                    // Right Scroll Button
-                    Padding(
-                      padding: const EdgeInsets.only(top: 40.0),
-                      child: IconButton(
-                          icon: const Icon(Icons.arrow_forward_ios, color: Colors.white54),
-                          onPressed: () => _scroll(300),
-                      ),
-                    ),
-                  ],
-                );
-            },
-          ),
-      ],
+                        // Right Scroll Button (Hide on Mobile)
+                        if (!isMobile)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 40.0),
+                          child: IconButton(
+                              icon: const Icon(Icons.arrow_forward_ios, color: Colors.white54),
+                              onPressed: () => _scroll(300),
+                          ),
+                        ),
+                      ],
+                    );
+                },
+              ),
+          ],
+        );
+      }
     );
   }
 }

@@ -34,6 +34,7 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
   bool _showingIndices = true; // Use separate state for Heatmap section drill-down
   bool _isHeatmapExpanded = true; // Control visibility of the heatmap grid
 
+
   // _selectedSymbol is used for General Analysis (Seasonality/Historical)
   // For Heatmap, we use _showingIndices to determine if showing "List of Indices" or "Constituents of _selectedSymbol"
   // Wait, if _showingIndices is false, we show constituents of _selectedSymbol. 
@@ -253,84 +254,106 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
                                          ),
                                        ),
           
-                                     // Fixed Header Row (Months)
-                                     Row(
-                                       children: [
-                                         const SizedBox(width: 60), // Year column width
-                                         ..._shortMonths.map((m) => Expanded(
-                                           child: Center(
-                                             child: Text(
-                                               m,
-                                               style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold),
+                                     // Responsive Table with Horizontal Scroll
+                                     LayoutBuilder(
+                                       builder: (context, constraints) {
+                                         // On Desktop, use full available width.
+                                         // On Mobile, force a minimum width (e.g., 900) to prevent squashing, enabling scrolling.
+                                         const double minTableWidth = 900.0;
+                                         final double effectiveWidth = constraints.maxWidth < minTableWidth 
+                                             ? minTableWidth 
+                                             : constraints.maxWidth;
+
+                                         return SingleChildScrollView(
+                                           scrollDirection: Axis.horizontal,
+                                           child: SizedBox(
+                                             width: effectiveWidth,
+                                             child: Column(
+                                               children: [
+                                                  // Header Row
+                                                  Row(
+                                                    children: [
+                                                      const SizedBox(width: 60), // Year column width
+                                                      ..._shortMonths.map((m) => Expanded(
+                                                        child: Center(
+                                                          child: Text(
+                                                            m,
+                                                            style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+                                                          ),
+                                                        ),
+                                                      )),
+                                                      const SizedBox(width: 60), // Yearly Total width
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Divider(color: Colors.white.withOpacity(0.1), height: 1),
+                                                  const SizedBox(height: 8),
+
+                                                  // Data Rows
+                                                  ...data.yearlyPerformance.map((yearly) {
+                                                      return Padding(
+                                                        padding: const EdgeInsets.symmetric(vertical: 6.0),
+                                                        child: Row(
+                                                          children: [
+                                                            // Year Label
+                                                            SizedBox(
+                                                              width: 60,
+                                                              child: Text(
+                                                                '${yearly.year}',
+                                                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                                              ),
+                                                            ),
+                                                            
+                                                            // Monthly Cells
+                                                            ..._months.map((monthKey) {
+                                                                final val = yearly.monthlyReturns[monthKey];
+                                                                return Expanded(
+                                                                  child: Container(
+                                                                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                                                                    height: 32,
+                                                                    decoration: BoxDecoration(
+                                                                      color: val != null ? _getColorForChange(val).withOpacity(0.8) : Colors.white.withOpacity(0.05),
+                                                                      borderRadius: BorderRadius.circular(6),
+                                                                    ),
+                                                                    child: Center(
+                                                                      child: Text(
+                                                                        val != null ? val.toStringAsFixed(1) : '-',
+                                                                        style: TextStyle(
+                                                                          color: Colors.white, 
+                                                                          fontSize: 11,
+                                                                          fontWeight: val != null ? FontWeight.w600 : FontWeight.normal
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                );
+                                                            }).toList(),
+
+                                                            // Yearly Total
+                                                            SizedBox(
+                                                              width: 60,
+                                                              child: Center(
+                                                                child: Text(
+                                                                  yearly.yearlyReturn != null ? '${yearly.yearlyReturn}%' : '-',
+                                                                    style: TextStyle(
+                                                                      color: _getColorForChange(yearly.yearlyReturn ?? 0),
+                                                                      fontSize: 12,
+                                                                      fontWeight: FontWeight.bold
+                                                                    ),
+                                                                    textAlign: TextAlign.end,
+                                                                ),
+                                                              ),
+                                                            )
+                                                          ],
+                                                        ),
+                                                      );
+                                                  }).toList(),
+                                               ],
                                              ),
                                            ),
-                                         )),
-                                         const SizedBox(width: 50), // Yearly Total width
-                                       ],
+                                         );
+                                       }
                                      ),
-                                     const SizedBox(height: 8),
-                                     Divider(color: Colors.white.withOpacity(0.1), height: 1),
-                                     const SizedBox(height: 8),
-          
-                                     // Year Rows
-                                     ...data.yearlyPerformance.map((yearly) {
-                                        return Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                          child: Row(
-                                            children: [
-                                              // Year Label
-                                              SizedBox(
-                                                width: 60,
-                                                child: Text(
-                                                  '${yearly.year}',
-                                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                                ),
-                                              ),
-                                              
-                                              // Monthly Cells
-                                              ..._months.map((monthKey) {
-                                                 final val = yearly.monthlyReturns[monthKey];
-                                                 return Expanded(
-                                                   child: Container(
-                                                     margin: const EdgeInsets.symmetric(horizontal: 2),
-                                                     height: 30,
-                                                     decoration: BoxDecoration(
-                                                       color: val != null ? _getColorForChange(val).withOpacity(0.8) : Colors.white.withOpacity(0.05),
-                                                       borderRadius: BorderRadius.circular(4),
-                                                     ),
-                                                     child: Center(
-                                                       child: Text(
-                                                         val != null ? val.toStringAsFixed(1) : '-',
-                                                         style: TextStyle(
-                                                           color: Colors.white, 
-                                                           fontSize: 10,
-                                                           fontWeight: val != null ? FontWeight.w500 : FontWeight.normal
-                                                         ),
-                                                       ),
-                                                     ),
-                                                   ),
-                                                 );
-                                              }).toList(),
-          
-                                              // Yearly Total
-                                              SizedBox(
-                                                width: 50,
-                                                child: Center(
-                                                  child: Text(
-                                                    yearly.yearlyReturn != null ? '${yearly.yearlyReturn}%' : '-',
-                                                     style: TextStyle(
-                                                       color: _getColorForChange(yearly.yearlyReturn ?? 0),
-                                                       fontSize: 11,
-                                                       fontWeight: FontWeight.bold
-                                                     ),
-                                                     textAlign: TextAlign.end,
-                                                  ),
-                                                ),
-                                              )
-                                            ],
-                                          ),
-                                        );
-                                     }).toList(),
                                   ],
                                 ),
                             ),
@@ -385,91 +408,179 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Day of Week Analysis
-              Expanded(
-                flex: 2,
-                child: Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 600;
+              if (isMobile) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Day of Week', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
-                    ...dayOfWeekData.map((e) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 6.0),
-                        child: Row(
-                          children: [
-                            SizedBox(width: 80, child: Text(e.key, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500))),
-                            Expanded(
-                              child: Stack(
-                                children: [
-                                  Container(height: 4, decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(2))),
-                                  FractionallySizedBox(
-                                    widthFactor: (e.value.abs() / 1.0).clamp(0.0, 1.0), // Normalize
-                                    child: Container(
-                                      height: 4, 
-                                      decoration: BoxDecoration(
-                                        color: _getColorForChange(e.value),
-                                        borderRadius: BorderRadius.circular(2),
+                    // Day of Week Analysis
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Day of Week', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        ...dayOfWeekData.map((e) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 6.0),
+                            child: Row(
+                              children: [
+                                SizedBox(width: 80, child: Text(e.key, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500))),
+                                Expanded(
+                                  child: Stack(
+                                    children: [
+                                      Container(height: 4, decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(2))),
+                                      FractionallySizedBox(
+                                        widthFactor: (e.value.abs() / 1.0).clamp(0.0, 1.0), // Normalize
+                                        child: Container(
+                                          height: 4, 
+                                          decoration: BoxDecoration(
+                                            color: _getColorForChange(e.value),
+                                            borderRadius: BorderRadius.circular(2),
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(width: 45, child: Text('${e.value.toStringAsFixed(2)}%', textAlign: TextAlign.end, style: TextStyle(color: _getColorForChange(e.value), fontSize: 11, fontWeight: FontWeight.bold))),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            SizedBox(width: 45, child: Text('${e.value.toStringAsFixed(2)}%', textAlign: TextAlign.end, style: TextStyle(color: _getColorForChange(e.value), fontSize: 11, fontWeight: FontWeight.bold))),
-                          ],
-                        ),
-                      );
-                    }).toList(),
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    // Monthly Analysis
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Monthly', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                         ...seasonality.monthlyReturns.entries.map((e) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 6.0),
+                            child: Row(
+                              children: [
+                                SizedBox(width: 80, child: Text(e.key, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500))),
+                                Expanded(
+                                  child: Stack(
+                                    children: [
+                                      Container(height: 4, decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(2))),
+                                      FractionallySizedBox(
+                                        widthFactor: (e.value.abs() / 5.0).clamp(0.0, 1.0), // Normalize
+                                        child: Container(
+                                          height: 4, 
+                                          decoration: BoxDecoration(
+                                            color: _getColorForChange(e.value),
+                                            borderRadius: BorderRadius.circular(2),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(width: 45, child: Text('${e.value.toStringAsFixed(2)}%', textAlign: TextAlign.end, style: TextStyle(color: _getColorForChange(e.value), fontSize: 11, fontWeight: FontWeight.bold))),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    ),
                   ],
-                ),
-              ),
-              const SizedBox(width: 24),
-              // Monthly Analysis
-              Expanded(
-                flex: 3,
-                child: Column(
+                );
+              } else {
+                return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Monthly', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
-                     ...seasonality.monthlyReturns.entries.map((e) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 6.0),
-                        child: Row(
-                          children: [
-                            SizedBox(width: 80, child: Text(e.key, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500))),
-                            Expanded(
-                              child: Stack(
+                    // Day of Week Analysis
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Day of Week', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 8),
+                          ...dayOfWeekData.map((e) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6.0),
+                              child: Row(
                                 children: [
-                                  Container(height: 4, decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(2))),
-                                  FractionallySizedBox(
-                                    widthFactor: (e.value.abs() / 5.0).clamp(0.0, 1.0), // Normalize
-                                    child: Container(
-                                      height: 4, 
-                                      decoration: BoxDecoration(
-                                        color: _getColorForChange(e.value),
-                                        borderRadius: BorderRadius.circular(2),
-                                      ),
+                                  SizedBox(width: 80, child: Text(e.key, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500))),
+                                  Expanded(
+                                    child: Stack(
+                                      children: [
+                                        Container(height: 4, decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(2))),
+                                        FractionallySizedBox(
+                                          widthFactor: (e.value.abs() / 1.0).clamp(0.0, 1.0), // Normalize
+                                          child: Container(
+                                            height: 4, 
+                                            decoration: BoxDecoration(
+                                              color: _getColorForChange(e.value),
+                                              borderRadius: BorderRadius.circular(2),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
+                                  SizedBox(width: 45, child: Text('${e.value.toStringAsFixed(2)}%', textAlign: TextAlign.end, style: TextStyle(color: _getColorForChange(e.value), fontSize: 11, fontWeight: FontWeight.bold))),
                                 ],
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(width: 45, child: Text('${e.value.toStringAsFixed(2)}%', textAlign: TextAlign.end, style: TextStyle(color: _getColorForChange(e.value), fontSize: 11, fontWeight: FontWeight.bold))),
-                          ],
-                        ),
-                      );
-                    }).toList(),
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    // Monthly Analysis
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Monthly', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 8),
+                           ...seasonality.monthlyReturns.entries.map((e) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6.0),
+                              child: Row(
+                                children: [
+                                  SizedBox(width: 80, child: Text(e.key, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500))),
+                                  Expanded(
+                                    child: Stack(
+                                      children: [
+                                        Container(height: 4, decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(2))),
+                                        FractionallySizedBox(
+                                          widthFactor: (e.value.abs() / 5.0).clamp(0.0, 1.0), // Normalize
+                                          child: Container(
+                                            height: 4, 
+                                            decoration: BoxDecoration(
+                                              color: _getColorForChange(e.value),
+                                              borderRadius: BorderRadius.circular(2),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  SizedBox(width: 45, child: Text('${e.value.toStringAsFixed(2)}%', textAlign: TextAlign.end, style: TextStyle(color: _getColorForChange(e.value), fontSize: 11, fontWeight: FontWeight.bold))),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                    ),
                   ],
-                ),
-              ),
-            ],
+                );
+              }
+            }
           ),
         ],
       ),
@@ -502,10 +613,14 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                  Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8.0,
+                      runSpacing: 8.0,
                       children: [
                           Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                   if (!_showingIndices)
                                     IconButton(
@@ -515,7 +630,8 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
                                         onPressed: _onBackToIndices,
                                     ),
                                   if (!_showingIndices) const SizedBox(width: 8),
-                                  Text(
+                                  Flexible(
+                                    child: Text(
                                       title,
                                       style: const TextStyle(
                                           color: Colors.white,
@@ -523,6 +639,8 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
                                           fontWeight: FontWeight.bold,
                                           letterSpacing: 0.5
                                       ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                   const SizedBox(width: 12),
                                   IconButton(
@@ -537,6 +655,7 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
                           SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: ['1D', '1W', '1M', '3M', '6M', '1Y', '5Y'].map((tf) {
                                       final isSelected = _heatmapTimeframe == tf;
                                       return Padding(
@@ -580,7 +699,7 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
           _showingIndices = true;
           _selectedSymbol = ""; 
           _searchController.clear();
-          _isHeatmapExpanded = true; // Auto-expand when going back to list
+          _isHeatmapExpanded = true; // Reset expansion when going back
       });
       _fetchData();
   }
@@ -598,7 +717,7 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
           setState(() {
               _showingIndices = false;
               _selectedSymbol = symbol;
-              _isHeatmapExpanded = true; // Keep expanded when exploring new index
+              _isHeatmapExpanded = true; // Keep expanded to show constituents
           });
           _fetchData();
       } else {
@@ -606,7 +725,7 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
           // Just update generalized view
           setState(() {
               _selectedSymbol = symbol;
-              _isHeatmapExpanded = false; // Auto-minimize to show details below
+              _isHeatmapExpanded = false; // Minimize heatmap to show details below
           });
           // Also fetch history/seasonality for this stock
           context.read<MarketProvider>().loadHistoricalPerformance(symbol);
