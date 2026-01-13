@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:am_design_system/am_design_system.dart';
 import 'package:am_market_ui/models/indices_performance_model.dart';
-import 'package:am_market_ui/features/market/presentation/widgets/performance_ranking_dialog.dart';
+import 'package:am_market_ui/features/user/market/presentation/widgets/performance_ranking_dialog.dart';
 import 'package:am_market_ui/core/styles/am_text_styles.dart';
 
 class MonthlyPerformanceCard extends StatelessWidget {

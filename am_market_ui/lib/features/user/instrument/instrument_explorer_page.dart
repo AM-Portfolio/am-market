@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
+import 'package:am_market_ui/services/api_service.dart';
 
 class InstrumentExplorerPage extends StatefulWidget {
   const InstrumentExplorerPage({super.key});

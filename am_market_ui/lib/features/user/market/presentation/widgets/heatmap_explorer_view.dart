@@ -4,9 +4,9 @@ import 'package:am_design_system/core/theme/app_colors.dart';
 import 'package:am_market_ui/providers/market_provider.dart';
 import 'package:am_market_ui/widgets/glass_container.dart';
 import 'package:intl/intl.dart';
-import '../../../../models/historical_performance_model.dart';
-import '../../../../models/seasonality_model.dart';
-import 'package:am_market_ui/features/market/presentation/widgets/historical_performance_section.dart';
+import '../../../../../models/historical_performance_model.dart';
+import '../../../../../models/seasonality_model.dart';
+import 'package:am_market_ui/features/user/market/presentation/widgets/historical_performance_section.dart';
 
 class HeatmapExplorerView extends StatefulWidget {
   const HeatmapExplorerView({super.key});
@@ -32,6 +32,8 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
   // Heatmap State
   String _heatmapTimeframe = '1D';
   bool _showingIndices = true; // Use separate state for Heatmap section drill-down
+  bool _isHeatmapExpanded = true; // Control visibility of the heatmap grid
+
   // _selectedSymbol is used for General Analysis (Seasonality/Historical)
   // For Heatmap, we use _showingIndices to determine if showing "List of Indices" or "Constituents of _selectedSymbol"
   // Wait, if _showingIndices is false, we show constituents of _selectedSymbol. 
@@ -522,9 +524,16 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
                                           letterSpacing: 0.5
                                       ),
                                   ),
+                                  const SizedBox(width: 12),
+                                  IconButton(
+                                      icon: Icon(_isHeatmapExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.white70),
+                                      onPressed: () => setState(() => _isHeatmapExpanded = !_isHeatmapExpanded),
+                                      tooltip: _isHeatmapExpanded ? "Minimize Section" : "Expand Section",
+                                  ),
                               ],
                           ),
                           // Timeframe Selector
+                          if (_isHeatmapExpanded)
                           SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Row(
@@ -557,8 +566,10 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
                           ),
                       ],
                   ),
-                  const SizedBox(height: 20),
-                  _buildHeatmapGrid(),
+                  if (_isHeatmapExpanded) ...[
+                      const SizedBox(height: 20),
+                      _buildHeatmapGrid(),
+                  ]
               ],
           ),
       );
@@ -569,6 +580,7 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
           _showingIndices = true;
           _selectedSymbol = ""; 
           _searchController.clear();
+          _isHeatmapExpanded = true; // Auto-expand when going back to list
       });
       _fetchData();
   }
@@ -586,6 +598,7 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
           setState(() {
               _showingIndices = false;
               _selectedSymbol = symbol;
+              _isHeatmapExpanded = true; // Keep expanded when exploring new index
           });
           _fetchData();
       } else {
@@ -593,6 +606,7 @@ class _HeatmapExplorerViewState extends State<HeatmapExplorerView> {
           // Just update generalized view
           setState(() {
               _selectedSymbol = symbol;
+              _isHeatmapExpanded = false; // Auto-minimize to show details below
           });
           // Also fetch history/seasonality for this stock
           context.read<MarketProvider>().loadHistoricalPerformance(symbol);

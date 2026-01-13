@@ -4,18 +4,19 @@ import '../../providers/market_provider.dart';
 
 
 // Import actual screens/widgets
-import '../../widgets/indices_performance_view_v2.dart';
-import '../../screens/streamer_page.dart';
-import '../../screens/instrument_explorer_page.dart';
-import '../../screens/security_explorer_page.dart';
-import '../../screens/price_test_page.dart';
-import '../../screens/etf_explorer_page.dart';
-import '../../features/analysis/analysis_page.dart';
-import '../../screens/admin/historical_sync_page.dart';
-import '../../widgets/constituents_table.dart';
-import '../../widgets/heatmap_view.dart';
-import '../../features/market/presentation/widgets/heatmap_explorer_view.dart';
-import '../../screens/market_analytics_page.dart';
+// Import actual screens/widgets
+import '../features/user/market/presentation/widgets/indices_performance_view_v2.dart';
+import '../features/developer/streamer_page.dart';
+import '../features/user/instrument/instrument_explorer_page.dart';
+import '../features/user/security/security_explorer_page.dart';
+import '../features/developer/price_test_page.dart';
+import '../features/user/etf/etf_explorer_page.dart';
+import '../features/user/analysis/analysis_page.dart';
+import '../features/developer/admin/historical_sync_page.dart';
+import '../features/user/market/presentation/widgets/constituents_table.dart';
+import '../widgets/heatmap_view.dart';
+import '../features/user/market/presentation/widgets/heatmap_explorer_view.dart';
+import '../features/user/analysis/market_analytics_page.dart';
 
 /// Market main content area - RESTORED FULL VERSION
 class MarketMainContent extends StatefulWidget {

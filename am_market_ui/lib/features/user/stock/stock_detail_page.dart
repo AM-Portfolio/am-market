@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import '../widgets/stock_chart.dart';
-import '../widgets/time_range_selector.dart';
+import 'package:am_market_ui/widgets/stock_chart.dart';
+import 'package:am_market_ui/widgets/time_range_selector.dart';
 import 'package:intl/intl.dart';
-import '../services/api_service.dart';
+import 'package:am_market_ui/services/api_service.dart';
 
 import 'package:provider/provider.dart';
-import '../providers/market_provider.dart';
+import 'package:am_market_ui/providers/market_provider.dart';
 
 class StockDetailPage extends StatefulWidget {
   final String symbol;

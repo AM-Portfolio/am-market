@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../services/api_service.dart';
+import 'package:am_market_ui/services/api_service.dart';
 
 class SecurityExplorerPage extends StatefulWidget {
   const SecurityExplorerPage({super.key});

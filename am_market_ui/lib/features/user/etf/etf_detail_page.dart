@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../models/etf.dart';
-import '../services/etf_service.dart';
+import 'package:am_market_ui/models/etf.dart';
+import 'package:am_market_ui/services/etf_service.dart';
 
 class EtfDetailPage extends StatefulWidget {
   final String symbol;

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../services/market_analysis_service.dart';
+import 'package:am_market_ui/services/market_analysis_service.dart';
 
 class AnalysisPage extends StatefulWidget {
   final String? initialSymbol;

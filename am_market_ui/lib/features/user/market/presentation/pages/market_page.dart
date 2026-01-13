@@ -1,24 +1,24 @@
 import 'package:am_design_system/am_design_system.dart';
 import 'package:flutter/material.dart';
-import 'package:am_market_ui/features/analysis/analysis_page.dart';
+import 'package:am_market_ui/features/user/analysis/analysis_page.dart';
 import 'package:am_market_ui/providers/market_provider.dart';
-import 'package:am_market_ui/screens/admin/historical_sync_page.dart';
-import 'package:am_market_ui/screens/admin_dashboard_page.dart';
-import 'package:am_market_ui/screens/etf_explorer_page.dart';
-import 'package:am_market_ui/screens/instrument_explorer_page.dart';
-import 'package:am_market_ui/screens/price_test_page.dart';
-import 'package:am_market_ui/screens/security_explorer_page.dart';
-import 'package:am_market_ui/screens/streamer_page.dart';
+import 'package:am_market_ui/features/developer/admin/historical_sync_page.dart';
+import 'package:am_market_ui/features/developer/admin_dashboard_page.dart';
+import 'package:am_market_ui/features/user/etf/etf_explorer_page.dart';
+import 'package:am_market_ui/features/user/instrument/instrument_explorer_page.dart';
+import 'package:am_market_ui/features/developer/price_test_page.dart';
+import 'package:am_market_ui/features/user/security/security_explorer_page.dart';
+import 'package:am_market_ui/features/developer/streamer_page.dart';
 import 'package:am_market_ui/widgets/indices_performance_view_v2.dart';
 import 'package:provider/provider.dart';
 
 import 'package:am_common/core/utils/logger.dart';
 import 'package:am_market_ui/widgets/market_index_detail_view.dart';
-import 'package:am_market_ui/developer/screens/developer_dashboard.dart';
+import 'package:am_market_ui/features/developer/screens/developer_dashboard.dart';
 import 'package:am_market_ui/providers/view_mode_provider.dart';
 import 'package:am_market_ui/widgets/mode_toggle_widget.dart';
-import 'package:am_market_ui/features/market/presentation/pages/user_dashboard_page.dart';
-import 'package:am_market_ui/features/market/presentation/widgets/heatmap_explorer_view.dart';
+import 'package:am_market_ui/features/user/market/presentation/pages/user_dashboard_page.dart';
+import 'package:am_market_ui/features/user/market/presentation/widgets/heatmap_explorer_view.dart';
 
 /// Market feature page with Swipe Navigation
 class MarketPage extends StatelessWidget {

@@ -2,13 +2,13 @@ import 'package:am_design_system/am_design_system.dart';
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
-import '../services/stream_service.dart';
+import 'package:am_market_ui/services/api_service.dart';
+import 'package:am_market_ui/services/stream_service.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:provider/provider.dart';
-import '../providers/market_provider.dart';
+import 'package:am_market_ui/providers/market_provider.dart';
 
 
 class StreamerPage extends StatefulWidget {
