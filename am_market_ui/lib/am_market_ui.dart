@@ -6,5 +6,5 @@ export 'features/user/market/presentation/pages/market_page.dart';
 
 // Widgets
 export 'features/user/market/presentation/widgets/sidebar/market_sidebar.dart';
-export 'features/market/presentation/widgets/trading_view_chart_widget.dart';
-export 'features/market/providers/market_analysis_providers.dart';
+export 'features/user/market/presentation/widgets/trading_view_chart_widget.dart';
+export 'features/user/market/providers/market_analysis_providers.dart';

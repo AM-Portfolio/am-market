@@ -19,7 +19,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
 
       # MongoDB Configuration
-      - MONGODB_URL=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@am_mongodb:27017/market_data?authSource=admin
+      - MONGODB_URL=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@${INFRA_HOST}:27017/market_data?authSource=admin
       - MONGODB_DATABASE=${MONGODB_DATABASE}
       - MONGODB_USERNAME=${MONGODB_USERNAME}
       - MONGODB_PASSWORD=${MONGODB_PASSWORD}
@@ -32,12 +32,12 @@ services:
       - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
 
       # Kafka Configuration
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
       - SPRING_KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID}
       - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
 
       # Redis Configuration
-      - REDIS_HOSTNAME=am_redis
+      - REDIS_HOSTNAME=${REDIS_HOSTNAME}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_PORT=${REDIS_PORT}
 
@@ -122,7 +122,7 @@ services:
     container_name: market-data-web
     build:
       context: ../
-      dockerfile: am-market/am-market-web/Dockerfile
+      dockerfile: am-market/am_market_ui/live/Dockerfile
     ports:
       - "9002:80"
     labels:

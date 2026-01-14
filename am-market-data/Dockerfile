@@ -42,6 +42,8 @@ COPY am-market-data/market-data-api/pom.xml market-data-api/
 COPY am-market-data/market-data-app/pom.xml market-data-app/
 COPY am-market-data/market-data-redis/pom.xml market-data-redis/
 COPY am-market-data/market-data-internal/pom.xml market-data-internal/
+COPY am-market-data/market-data-analysis/pom.xml market-data-analysis/
+COPY am-market-data/market-data-watchlist/pom.xml market-data-watchlist/
 
 # Copy source code
 COPY am-market-data/market-data-common/ market-data-common/
@@ -54,6 +56,8 @@ COPY am-market-data/market-data-api/ market-data-api/
 COPY am-market-data/market-data-app/ market-data-app/
 COPY am-market-data/market-data-redis/ market-data-redis/
 COPY am-market-data/market-data-internal/ market-data-internal/
+COPY am-market-data/market-data-analysis/ market-data-analysis/
+COPY am-market-data/market-data-watchlist/ market-data-watchlist/
 
 # Build the application
 RUN mvn clean package -DskipTests -B

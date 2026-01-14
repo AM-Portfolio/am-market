@@ -217,9 +217,9 @@ public class MarketDataOrchestrator {
     }
 
     /**
-     * Daily Market Analysis: Runs at 1:00 AM
+     * Daily Market Analysis: Runs at 7:15 AM
      */
-    @Scheduled(cron = "${scheduler.analysis.daily:0 0 1 * * *}", zone = "Asia/Kolkata")
+    @Scheduled(cron = "${scheduler.analysis.daily:0 15 7 * * *}", zone = "Asia/Kolkata")
     public void triggerDailyAnalysis() {
         log.info("Orchestrator: Triggering Daily Market Analysis");
         if (marketAnalysisSchedulerService.isPresent()) {
