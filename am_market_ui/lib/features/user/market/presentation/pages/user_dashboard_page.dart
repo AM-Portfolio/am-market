@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:am_design_system/am_design_system.dart';
-import 'package:am_market_ui/providers/market_provider.dart';
-import 'package:am_market_ui/models/market_data.dart';
-import 'package:am_market_ui/models/top_mover_stock.dart';
+import 'package:am_market_common/providers/market_provider.dart';
+import 'package:am_market_common/models/market_data.dart';
+import 'package:am_market_common/models/top_mover_stock.dart';
 import 'package:am_market_ui/widgets/index_card.dart';
 import 'package:am_market_ui/widgets/top_movers_widget_v2.dart';
 import 'package:am_market_ui/widgets/multi_index_chart.dart';
-import 'package:am_market_ui/services/api_service.dart';
+import 'package:am_market_common/services/api_service.dart';
 
 /// User Dashboard page with API-driven features
 class UserDashboardPage extends StatefulWidget {

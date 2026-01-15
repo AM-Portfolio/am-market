@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
-import 'services/api_service.dart';
+import 'package:am_market_common/services/api_service.dart';
 import 'package:am_market_ui/am_market_ui.dart';
 import 'package:am_design_system/am_design_system.dart';
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:am_market_ui/models/top_mover_stock.dart';
+import 'package:am_market_common/models/top_mover_stock.dart';
 import 'package:intl/intl.dart';
 
 /// Widget showing top gainers or losers (API-driven)

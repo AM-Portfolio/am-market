@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:am_market_ui/services/api_service.dart';
+import 'package:am_market_common/services/api_service.dart';
 import 'package:am_market_ui/widgets/market_movers_view.dart';
 import 'package:am_market_ui/widgets/sector_performance_view.dart';
 import 'package:am_market_ui/widgets/heatmap_view.dart';
 import 'package:am_market_ui/features/user/market/presentation/widgets/historical_performance_section.dart';
 import 'package:provider/provider.dart';
-import 'package:am_market_ui/providers/market_provider.dart';
+import 'package:am_market_common/providers/market_provider.dart';
 
 class MarketAnalyticsPage extends StatefulWidget {
   final String indexSymbol;

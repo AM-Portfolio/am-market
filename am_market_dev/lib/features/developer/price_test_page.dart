@@ -5,9 +5,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:get_it/get_it.dart';
-import 'package:am_market_ui/providers/market_provider.dart';
+import 'package:am_market_common/providers/market_provider.dart';
 import 'package:am_design_system/am_design_system.dart';
-import 'package:am_market_ui/services/api_service.dart';
+import 'package:am_market_common/services/api_service.dart';
 import 'package:http/http.dart' as http;
 
 class PriceTestPage extends StatefulWidget {

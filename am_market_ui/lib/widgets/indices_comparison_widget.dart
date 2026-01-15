@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:am_design_system/am_design_system.dart';
-import 'package:am_market_ui/models/market_data.dart';
+import 'package:am_market_common/models/market_data.dart';
 
 /// Simple indices comparison widget showing 3 indices side-by-side
 class IndicesComparisonWidget extends StatelessWidget {

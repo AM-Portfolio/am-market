@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:am_market_ui/providers/market_provider.dart';
-import 'package:am_market_ui/models/ingestion_log.dart';
-import 'package:am_market_ui/services/admin_service.dart';
+import 'package:am_market_common/providers/market_provider.dart';
+import 'package:am_market_common/models/ingestion_log.dart';
+import 'package:am_market_dev/features/developer/services/admin_service.dart';
 
 import 'package:am_design_system/am_design_system.dart';
 

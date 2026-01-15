@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:am_design_system/am_design_system.dart';
 import 'package:am_market_ui/core/styles/am_text_styles.dart';
-import 'package:am_market_ui/models/indices_performance_model.dart';
+import 'package:am_market_common/models/indices_performance_model.dart';
 import 'package:am_market_ui/services/market_analysis_service.dart';
 import 'package:am_market_ui/features/user/market/presentation/widgets/monthly_performance_card.dart';
 import 'package:get_it/get_it.dart';

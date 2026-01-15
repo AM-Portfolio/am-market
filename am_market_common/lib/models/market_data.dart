@@ -77,4 +77,11 @@ class StockData {
   }
 }
 
+class MarketData {
+  final List<StockIndicesMarketData> indices;
+  final List<StockIndicesMarketData> globalIndices;
+
+  MarketData({required this.indices, required this.globalIndices});
+}
+
 

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:am_design_system/core/theme/app_colors.dart';
-import 'package:am_market_ui/providers/market_provider.dart';
+import 'package:am_market_common/providers/market_provider.dart';
 import 'package:am_market_ui/widgets/glass_container.dart';
 import 'package:intl/intl.dart';
-import '../../../../../models/historical_performance_model.dart';
-import '../../../../../models/seasonality_model.dart';
+import 'package:am_market_common/models/historical_performance_model.dart';
+import 'package:am_market_common/models/seasonality_model.dart';
 import 'package:am_market_ui/features/user/market/presentation/widgets/historical_performance_section.dart';
 
 class HeatmapExplorerView extends StatefulWidget {

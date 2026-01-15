@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../providers/market_provider.dart';
+import 'package:am_market_common/providers/market_provider.dart';
 import '../features/user/stock/stock_detail_page.dart';
 
 class HeatmapGrid extends StatelessWidget {

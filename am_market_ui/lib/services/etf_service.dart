@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:am_design_system/am_design_system.dart';
 import 'package:get_it/get_it.dart';
-import '../models/etf.dart';
+import 'package:am_market_common/models/etf.dart';
 
 
 class EtfService {

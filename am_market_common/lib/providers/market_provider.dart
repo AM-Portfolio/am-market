@@ -9,6 +9,8 @@ import '../services/api_service.dart';
 import '../data/repositories/market_data_repository.dart';
 
 
+import 'package:am_common/core/services/price_service.dart';
+
 class MarketProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   final MarketDataRepository? _repository;
@@ -27,14 +29,72 @@ class MarketProvider with ChangeNotifier {
 
   // Theme Management removed - moved to am_common_ui ThemeCubit
 
-  Map<String, Map<String, dynamic>> _livePrices = {}; // Global live price cache
+  // PriceService Integration
+  PriceService? _priceService;
+  
+  void setPriceService(PriceService service) {
+    _priceService = service;
+    CommonLogger.info("PriceService delegated to MarketProvider", tag: "MarketProvider");
+    
+    // Sync initial cache if available
+    _syncWithPriceService();
+    
+    // Subscribe to price stream to sync internal state (allIndicesData)
+    // We use priceStream (full map) or updateStream (event).
+    // updateStream is better for individual processing logic we already have.
+    _priceService!.updateStream.listen((update) {
+       if (update.quotes != null) {
+          // Convert QuoteChange to Map<String, dynamic>
+          update.quotes!.forEach((symbol, quote) {
+             final data = quote.toJson();
+             data['symbol'] = symbol; // Ensure symbol is present
+             _processSingleUpdate(symbol, data);
+          });
+       }
+    });
+  }
+
+  // Legacy Store Support (if needed, or just defer to PriceService)
+  // We keep _livePrices as a local cache only if PriceService is null (fallback)
+  // But ideally we read from PriceService.
+  
+  // Stream is now from PriceService
+  Stream<Map<String, dynamic>> get livePriceStream {
+    if (_priceService != null) {
+      return _priceService!.priceStream.map((quotes) {
+        return quotes.map((key, value) => MapEntry(key, value.toJson()));
+      });
+    }
+    return _livePriceController.stream;
+  }
+  
+  // Internal Fallback State (initialized if PriceService unavailable)
+  final Map<String, Map<String, dynamic>> _internalLivePrices = {}; 
   final StreamController<Map<String, dynamic>> _livePriceController = StreamController<Map<String, dynamic>>.broadcast();
 
+  // Legacy Store Support
+  Map<String, Map<String, dynamic>> get livePrices {
+      if (_priceService != null) {
+          return {}; // UI should use QuoteChange, ignoring legacy map for PriceService path
+      }
+      return _internalLivePrices; 
+  }
+
+  // Unified Price Getter
+  Map<String, dynamic>? getPrice(String symbol) {
+      if (_priceService != null) {
+          final quote = _priceService!.getQuote(symbol);
+          if (quote != null) {
+              return quote.toJson()..['symbol'] = symbol;
+          }
+      }
+      return _internalLivePrices[symbol];
+  }
+
+  // Restored Getters
   AvailableIndices? get availableIndices => _availableIndices;
   StockIndicesMarketData? get currentIndexData => _currentIndexData;
   List<StockIndicesMarketData> get allIndicesData => _allIndicesData;
-  Map<String, Map<String, dynamic>> get livePrices => _livePrices;
-  Stream<Map<String, dynamic>> get livePriceStream => _livePriceController.stream;
   
   // Cache for specific index constituents (used by Heatmap/Explorers)
   Map<String, List<StockData>> _indexConstituents = {};
@@ -76,56 +136,95 @@ class MarketProvider with ChangeNotifier {
     }
   }
 
-  void updateLivePrice(Map<String, dynamic> data) {
-    if (data.containsKey('symbol')) {
-      final String rawSymbol = data['symbol'];
-      
-      // 1. Store with raw key (e.g., "NSE_EQ:TCS")
-      _livePrices[rawSymbol] = data;
+  void updateLivePriceBatch(Map<String, dynamic> quotes) {
+     // No-op if using PriceService as it handles its own updates
+     if (_priceService != null) return;
+     
+     // Fallback for legacy
+    if (quotes.isEmpty) return;
 
-      // 2. Store with base key (e.g., "TCS") if a prefix exists
+    // 1. Summary Log (Once per batch)
+    final count = quotes.length;
+    final firstKey = quotes.keys.first;
+    final firstVal = quotes[firstKey] as Map;
+    
+    String logMsg = "Received update for optimized batch: $count symbols. Sample: $firstKey -> Price: ${firstVal['lastPrice']}";
+    if (count > 1) {
+      logMsg += " and ${count - 1} others.";
+    }
+    CommonLogger.info(logMsg, tag: "MarketUI");
+
+    // 2. Process all
+    quotes.forEach((symbol, data) {
+      if (data is Map<String, dynamic>) {
+         _processSingleUpdate(symbol, data);
+      }
+    });
+  }
+
+  void updateLivePrice(Map<String, dynamic> data) {
+    if (_priceService != null) return;
+    if (data.containsKey('symbol')) {
+      _processSingleUpdate(data['symbol'], data);
+    }
+  }
+
+  void _processSingleUpdate(String rawSymbol, Map<String, dynamic> data) {
+      // 1. Store with raw key
+      _internalLivePrices[rawSymbol] = data;
+
+      // 2. Store with base key
       if (rawSymbol.contains(':')) {
         final baseSymbol = rawSymbol.split(':').last;
-        _livePrices[baseSymbol] = data;
+        _internalLivePrices[baseSymbol] = data;
       }
       
-      // 3. Update allIndicesData if symbol matches
-      // Indices standard format in UI "NIFTY 50", but update might come as "NSE_INDEX|Nifty 50"
-      // Need to handle partial match or exact match.
-      // Upstox sends "NSE_INDEX|Nifty 50". UI uses "NIFTY 50".
-      // We should normalize.
-      
-      // Try to find matching index in _allIndicesData
-      int indexToUpdate = -1;
-      // Extract base symbol from update (e.g. "Nifty 50" from "NSE_INDEX|Nifty 50")
+      // 3. Update allIndicesData
       String updateSymbolBase = rawSymbol.contains('|') ? rawSymbol.split('|').last : rawSymbol;
       
       for (int i = 0; i < _allIndicesData.length; i++) {
-        // Case insensitive comparison
         if (_allIndicesData[i].indexSymbol.toUpperCase() == updateSymbolBase.toUpperCase()) {
-             indexToUpdate = i;
-             break;
+             final current = _allIndicesData[i];
+             final double? newLtp = data['lastPrice']?.toDouble();
+             final double? newPChange = data['changePercent']?.toDouble(); 
+             
+             if (newLtp != null) {
+                 _allIndicesData[i] = current.copyWith(
+                     lastPrice: newLtp,
+                     pChange: newPChange ?? current.pChange 
+                 );
+                 notifyListeners();
+             }
+             break; 
         }
       }
-      
-      if (indexToUpdate != -1) {
-          final current = _allIndicesData[indexToUpdate];
-          // Extract new price
-          final double? newLtp = data['lastPrice']?.toDouble();
-          final double? newPChange = data['changePercent']?.toDouble(); // might be null if not calc
-          
-          if (newLtp != null) {
-              _allIndicesData[indexToUpdate] = current.copyWith(
-                  lastPrice: newLtp,
-                  // If pChange is not provided in stream, keep old, or calculate if we have close
-                  pChange: newPChange ?? current.pChange 
-              );
-              notifyListeners();
-          }
-      }
 
-      // Emit event to stream instead of global notifyListeners (kept for other consumers)
+      // Emit event
       _livePriceController.add(data);
+  }
+
+  void _syncWithPriceService() {
+    if (_priceService == null) {
+        CommonLogger.warning("Skipping sync - PriceService is null", tag: "MarketProvider._syncWithPriceService");
+        return;
+    }
+    
+    if (_allIndicesData.isEmpty) {
+        CommonLogger.warning("Skipping sync - No indices loaded", tag: "MarketProvider._syncWithPriceService");
+        return; 
+    }
+
+    final symbols = _allIndicesData.map((e) => e.indexSymbol).toList();
+    final quotes = _priceService!.getQuotes(symbols);
+    
+    CommonLogger.info("Attempting to sync prices for ${symbols.length} symbols. Found ${quotes.length} in PriceService cache.", tag: "MarketProvider._syncWithPriceService");
+
+    if (quotes.isNotEmpty) {
+       quotes.forEach((symbol, quote) {
+          final data = quote.toJson();
+          data['symbol'] = symbol; 
+          _processSingleUpdate(symbol, data);
+       });
     }
   }
 
@@ -251,6 +350,14 @@ class MarketProvider with ChangeNotifier {
       
       CommonLogger.info("Successfully loaded ${_allIndicesData.length} indices", tag: "MarketProvider.loadAllIndicesData");
 
+      // STEP 4: Initiate Stream - REMOVED per user request
+      // Global PriceService is relied upon. No explicit connect call.
+      
+      // Attempt to sync from PriceService Cache if available
+      _syncWithPriceService();
+      
+      // Explicit subscription removed per user request (expecting firehose)
+
     } catch (e) {
       CommonLogger.error("Error loading all indices data", tag: "MarketProvider.loadAllIndicesData", error: e);
 
@@ -351,4 +458,3 @@ class MarketProvider with ChangeNotifier {
       }
   }
 }
-

@@ -79,9 +79,8 @@ class _IndicesPerformanceViewState extends State<IndicesPerformanceView> {
         final provider = context.read<MarketProvider>();
         final newQuotes = message['quotes'] as Map<String, dynamic>;
 
-        newQuotes.forEach((symbol, quoteData) {
-          provider.updateLivePrice(quoteData);
-        });
+        // Use batch update to reduce logging noise
+        provider.updateLivePriceBatch(newQuotes);
       }
     });
   }

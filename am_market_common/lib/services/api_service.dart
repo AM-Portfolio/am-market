@@ -7,11 +7,11 @@ import 'package:get_it/get_it.dart';
 import '../models/market_data.dart';
 import '../models/available_indices.dart';
 import '../models/historical_performance_model.dart';
+import '../models/seasonality_model.dart';
 
 import 'package:am_market_sdk/market/api.dart' as sdk;
 
-import 'package:am_market_ui/core/constants/market_endpoints.dart';
-import '../models/seasonality_model.dart';
+import 'package:am_market_common/core/constants/market_endpoints.dart';
 
 class ApiService {
   static const String baseUrl = MarketEndpoints.baseUrl; 
@@ -310,13 +310,14 @@ class ApiService {
     return null;
   }
 
-  Future<bool> connectStream(List<String> symbols, String provider, {bool isIndexSymbol = false}) async {
+  Future<bool> connectStream(List<String> symbols, String provider, {bool isIndexSymbol = false, bool forcePolling = false}) async {
     try {
       final payload = {
         'instrumentKeys': symbols,
         'mode': 'FULL',
         'provider': provider,
-        'isIndexSymbol': isIndexSymbol
+        'isIndexSymbol': isIndexSymbol,
+        'forcePolling': forcePolling,
       };
       
       final headers = await _getHeaders();
@@ -654,7 +655,7 @@ class ApiService {
         throw Exception('Failed to search securities');
       }
     } catch (e) {
-      CommonLogger.error("Error searching securities", tag: "ApiService.searchSecuritiesAdvanced", error: e);
+      CommonLogger.error("Error searching instruments", tag: "ApiService.advancedSearchInstruments", error: e);
 
       return [];
     }

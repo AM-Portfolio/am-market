@@ -18,6 +18,10 @@ dependencies:
     path: ../../../AM-Portfolio-grp/am-modern-ui/am_common
   am_auth_ui:
     path: ../../../AM-Portfolio-grp/am-modern-ui/am_auth_ui
+  am_market_common:
+    path: ../am_market_common
+  am_market_dev:
+    path: ../am_market_dev
   
   # Unified Market SDK
   am_market_sdk:

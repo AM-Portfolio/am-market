@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/market_provider.dart';
+import 'package:am_market_common/providers/market_provider.dart';
 import '../widgets/heatmap_filters.dart';
 import '../widgets/heatmap_grid.dart';
 

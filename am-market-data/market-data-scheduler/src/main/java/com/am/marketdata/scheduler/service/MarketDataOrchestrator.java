@@ -236,7 +236,7 @@ public class MarketDataOrchestrator {
     public void triggerRedisCleanup() {
         log.info("Orchestrator: Triggering Redis Cleanup");
         if (redisCacheCleanupScheduler.isPresent()) {
-            redisCacheCleanupScheduler.get().executeCleanup();
+            // redisCacheCleanupScheduler.get().executeCleanup();
         } else {
             log.warn("Orchestrator: RedisCacheCleanupScheduler is not present, skipping Redis Cleanup");
         }

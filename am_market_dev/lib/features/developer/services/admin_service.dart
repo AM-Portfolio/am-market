@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:am_design_system/am_design_system.dart';
 import 'package:get_it/get_it.dart';
-import '../models/ingestion_log.dart';
+import 'package:am_market_common/models/ingestion_log.dart';
 
 class AdminService {
   // Use localhost for now, assume proxy or direct access

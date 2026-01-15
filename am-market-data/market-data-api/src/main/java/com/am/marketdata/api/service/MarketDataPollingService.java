@@ -103,6 +103,13 @@ public class MarketDataPollingService {
         // Orchestration Step 1: Resolve Symbols
         java.util.Set<String> resolvedSymbols = resolveSymbols(request.getInstrumentKeys(), expandIndices);
 
+        // FIX: Ensure the Index itself is included in the stream, even if
+        // resolvedSymbols expanded to constituents.
+        // The UI requires the Index value (e.g. "NIFTY 50") to update the cards.
+        if (Boolean.TRUE.equals(request.getIsIndexSymbol())) {
+            resolvedSymbols.addAll(request.getInstrumentKeys());
+        }
+
         log.info("Resolved {} symbols to {} for stream initiation",
                 request.getInstrumentKeys().size(), resolvedSymbols.size());
 
@@ -120,17 +127,22 @@ public class MarketDataPollingService {
         // polling)
         boolean streamRequested = request.getStream() == null || request.getStream(); // Default to true if null
         boolean isUpstox = "UPSTOX".equalsIgnoreCase(provider);
+        boolean forcePolling = Boolean.TRUE.equals(request.getForcePolling());
 
-        boolean shouldStartStream = streamRequested && isUpstox && isMarketOpen;
+        // Decision Logic
+        boolean shouldStartLiveStream = streamRequested && isUpstox && isMarketOpen && !forcePolling;
+        boolean shouldStartPollingStream = streamRequested && (forcePolling || !isUpstox);
 
         // Logic for streaming vs fallback
-        if (shouldStartStream) {
+        if (shouldStartLiveStream) {
             log.info("Market is OPEN - Initiating WebSocket stream via StreamerManager.");
             streamerManager.subscribe(new java.util.HashSet<>(resolvedSymbols));
-        } else if (streamRequested && isUpstox && !isMarketOpen) {
-            log.info("Market is CLOSED - Skipping WebSocket stream. Will fetch data from cache.");
-        } else if (streamRequested && !isUpstox) {
-            // Non-Upstox providers use polling simulation
+        } else if (shouldStartPollingStream) {
+            // Simulated Stream (Polling)
+            log.info("Starting Polling Stream. Condition: ForcePolling={}, IsUpstox={}, MarketOpen={}", forcePolling,
+                    isUpstox, isMarketOpen);
+            // Polling uses cache by default (forceRefresh=false) unless configured
+            // otherwise
             connectStream(
                     new ArrayList<>(resolvedSymbols),
                     request.getMode(),
@@ -138,11 +150,11 @@ public class MarketDataPollingService {
                     timeFrame,
                     request.getIsIndexSymbol() != null ? request.getIsIndexSymbol() : false);
         } else {
-            log.info("Stream flag is false or conditions not met. Skipping background stream initiation.");
+            log.info(
+                    "Stream flag is false or Market Closed (Upstox) without ForcePolling. Skipping background stream.");
         }
 
         // Fetch initial data synchronously to return in response
-        // Force refresh should be FALSE during non-market hours (fetch from cache)
         boolean forceRefresh = false;
 
         MarketDataUpdate initialData = fetchMarketDataUpdate(
@@ -153,12 +165,12 @@ public class MarketDataPollingService {
                 forceRefresh);
 
         String message;
-        if (shouldStartStream) {
+        if (shouldStartLiveStream) {
             message = "Stream connection initiated successfully (Live Market Framework).";
-        } else if (!isMarketOpen) {
-            message = "Market Closed. Fetched latest available data from cache.";
+        } else if (shouldStartPollingStream) {
+            message = "Stream connection initiated successfully (Simulated/Polling Framework).";
         } else {
-            message = "Stream connection initiated successfully (Polling Framework).";
+            message = "Market Closed. Fetched latest available data snapshot.";
         }
 
         return StreamConnectResponse.builder()

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:am_design_system/am_design_system.dart';
-import 'package:am_market_ui/services/api_service.dart';
+import 'package:am_market_common/services/api_service.dart';
 
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});

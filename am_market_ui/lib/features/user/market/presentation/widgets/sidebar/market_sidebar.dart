@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:am_design_system/shared/widgets/navigation/secondary_sidebar.dart';
 import 'package:am_design_system/core/theme/app_colors.dart';
-import 'package:am_market_ui/providers/market_provider.dart';
+import 'package:am_market_common/providers/market_provider.dart';
 
 /// Market-specific sidebar using shared SecondarySidebar component
 class MarketSidebar extends StatelessWidget {

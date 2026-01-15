@@ -1,5 +1,5 @@
 import 'package:am_auth_ui/core/services/secure_storage_service.dart';
-import 'package:am_market_ui/models/indices_performance_model.dart';
+import 'package:am_market_common/models/indices_performance_model.dart';
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;

@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../internal/domain/models/chart_config.dart';
 import '../services/real_time_market_service.dart';
-import '../../../../models/market_data_update.dart';
+import 'package:am_market_common/models/market_data_update.dart';
 
 final realTimeMarketServiceProvider = Provider<RealTimeMarketService>((ref) {
   final service = RealTimeMarketService();

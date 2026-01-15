@@ -1,18 +1,14 @@
 import 'package:am_design_system/am_design_system.dart';
-
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:am_market_ui/services/api_service.dart';
-// import 'package:am_market_ui/services/stream_service.dart'; // Removed
+import 'package:am_market_common/services/api_service.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:am_common/core/di/price_providers.dart';
 import 'package:am_common/core/models/price_update_model.dart';
-import 'package:provider/provider.dart' as legacy_provider; // Rename provider to avoid conflict if needed, or just use generic Provider
-import 'package:am_market_ui/providers/market_provider.dart';
-
+import 'package:provider/provider.dart' as legacy_provider;
+import 'package:am_market_common/providers/market_provider.dart';
 
 class StreamerPage extends ConsumerStatefulWidget {
   const StreamerPage({super.key});
@@ -23,7 +19,6 @@ class StreamerPage extends ConsumerStatefulWidget {
 
 class _StreamerPageState extends ConsumerState<StreamerPage> {
   final ApiService _apiService = ApiService();
-  // final StreamService _streamService = StreamService(); // Removed
   
   // Config State
   String _provider = 'UPSTOX'; // UPSTOX, ZERODHA
@@ -64,8 +59,6 @@ class _StreamerPageState extends ConsumerState<StreamerPage> {
   @override
   void initState() {
     super.initState();
-    // _streamService.connect(); // Handled by PriceService singleton
-    // Subscription handled via ref.listen in build
   }
 
   void _handleUpdate(MarketDataUpdate update) {
@@ -76,30 +69,32 @@ class _StreamerPageState extends ConsumerState<StreamerPage> {
 
            setState(() {
              final now = DateTime.now(); 
+             final Map<String, dynamic> batchUpdates = {};
+
              if (update.quotes != null) {
                 update.quotes!.forEach((key, quote) {
                    final val = quote.toJson();
-                   // Ensure JSON has values expected by UI (keys might differ if toJson uses camelCase vs whatever)
-                   // QuoteChange uses camelCase. UI likely expects it.
-                   // Previous UI code: val['symbol'] = key;
                    val['timestamp'] = now;
                    val['symbol'] = key;
                    
                    _feedHistory.insert(0, val);
                    _quotes[key] = val; 
                    
-                   if (mounted && hasProvider) {
-                      try {
-                        provider!.updateLivePrice(val);
-                      } catch (e) {
-                        // Suppress
-                      }
-                   }
+                   batchUpdates[key] = val;
                 });
              }
               
              if (_feedHistory.length > 500) {
                _feedHistory = _feedHistory.sublist(0, 500);
+             }
+
+             // Batch update provider
+             if (mounted && hasProvider && batchUpdates.isNotEmpty) {
+                 try {
+                   provider!.updateLivePriceBatch(batchUpdates);
+                 } catch (e) {
+                   // Suppress
+                 }
              }
            });
        } catch (e) {
@@ -110,7 +105,6 @@ class _StreamerPageState extends ConsumerState<StreamerPage> {
   @override
   void dispose() {
     _subscription?.cancel();
-    // _streamService.dispose();
     _symbolsController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -135,6 +129,7 @@ class _StreamerPageState extends ConsumerState<StreamerPage> {
         break;
       case LogLevel.info:
       default:
+        // Optional: comment out to reduce even more logs from streamer page itself
         CommonLogger.info(msg, tag: method);
         break;
     }
@@ -157,7 +152,6 @@ class _StreamerPageState extends ConsumerState<StreamerPage> {
           _log("Opened login URL in new tab");
         } else {
           _log("Could not launch URL", method: "StreamerPage._getLoginUrl", level: LogLevel.error);
-          // Fallback to showing dialog
           showDialog(
             context: context,
             builder: (ctx) => AlertDialog(
@@ -169,7 +163,6 @@ class _StreamerPageState extends ConsumerState<StreamerPage> {
         }
       } catch (e) {
         _log("Error opening URL: $e", method: "StreamerPage._getLoginUrl", level: LogLevel.error);
-        // Fallback to showing dialog
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -211,19 +204,26 @@ class _StreamerPageState extends ConsumerState<StreamerPage> {
       await priceService.subscribe(symbols, provider: _provider);
       setState(() => _isStreaming = true);
       _log("Stream Subscription Sent via PriceService: OK", method: "StreamerPage._startStream");
+      
+      // _log("Explicit Stream Subscription DISABLED. Monitoring global stream for ${symbols.join(',')}", method: "StreamerPage._startStream", level: LogLevel.warning);
+      // setState(() => _isStreaming = true); // Just pretend to start so UI updates (monitoring mode)
+
     } catch (e) {
       _log("Stream Subscription Failed: $e", method: "StreamerPage._startStream", level: LogLevel.error);
     }
   }
 
   Future<void> _stopStream() async {
-    final success = await _apiService.disconnectStream(_provider);
-    if (success) {
-       setState(() => _isStreaming = false);
-       _log("Stream Stop Request Sent", method: "StreamerPage._stopStream");
-    } else {
-      _log("Stop Stream Failed", method: "StreamerPage._stopStream", level: LogLevel.error);
-    }
+    // final success = await _apiService.disconnectStream(_provider);
+    // if (success) {
+    //    setState(() => _isStreaming = false);
+    //    _log("Stream Stop Request Sent", method: "StreamerPage._stopStream");
+    // } else {
+    //   _log("Stop Stream Failed", method: "StreamerPage._stopStream", level: LogLevel.error);
+    // }
+    
+    setState(() => _isStreaming = false);
+    _log("Stopped Monitoring (Explicit disconnect disabled)", method: "StreamerPage._stopStream");
   }
 
   Future<void> _search() async {
@@ -283,8 +283,6 @@ class _StreamerPageState extends ConsumerState<StreamerPage> {
         ),
       );
   }
-
-  // --- UI Helper Methods ---
 
   Widget _buildConfigPanel(BuildContext context) {
     final theme = Theme.of(context);
@@ -585,11 +583,16 @@ class _StreamerPageState extends ConsumerState<StreamerPage> {
   Widget _buildLiveFeedSection(BuildContext context) {
     final theme = Theme.of(context);
     final startIndex = _currentPage * _itemsPerPage;
-    final endIndex = (startIndex + _itemsPerPage < _feedHistory.length) 
-        ? startIndex + _itemsPerPage 
-        : _feedHistory.length;
+    final calculateEndIndex = startIndex + _itemsPerPage;
+    final endIndex = calculateEndIndex < _feedHistory.length ? calculateEndIndex : _feedHistory.length;
     
-    final currentItems = _feedHistory.sublist(startIndex, endIndex);
+    // Safety check for empty history
+    if (_feedHistory.isEmpty) return Container();
+    if (startIndex >= _feedHistory.length) return Container();
+    
+    final currentItems = _feedHistory.sublist(startIndex, 
+        endIndex > _feedHistory.length ? _feedHistory.length : endIndex);
+        
     final totalPages = (_feedHistory.length / _itemsPerPage).ceil();
 
     return Column(

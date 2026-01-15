@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:am_market_ui/providers/market_provider.dart';
+import 'package:am_market_common/providers/market_provider.dart';
 import 'package:am_market_ui/features/user/analysis/market_analytics_page.dart';
 import 'package:am_market_ui/widgets/constituents_table.dart';
 import 'package:am_market_ui/widgets/heatmap_view.dart';

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:am_design_system/am_design_system.dart';
-import '../providers/market_provider.dart';
+import 'package:am_market_common/providers/market_provider.dart';
 import 'package:am_market_ui/features/user/stock/stock_detail_page.dart';
-import '../models/market_data.dart';
+import 'package:am_market_common/models/market_data.dart';
 
 class ConstituentsTable extends StatelessWidget {
   const ConstituentsTable({super.key});

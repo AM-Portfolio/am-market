@@ -1,20 +1,22 @@
 import 'package:am_design_system/am_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:am_market_ui/features/user/analysis/analysis_page.dart';
-import 'package:am_market_ui/providers/market_provider.dart';
-import 'package:am_market_ui/features/developer/admin/historical_sync_page.dart';
-import 'package:am_market_ui/features/developer/admin_dashboard_page.dart';
+import 'package:am_market_common/providers/market_provider.dart';
+
+
 import 'package:am_market_ui/features/user/etf/etf_explorer_page.dart';
 import 'package:am_market_ui/features/user/instrument/instrument_explorer_page.dart';
-import 'package:am_market_ui/features/developer/price_test_page.dart';
+
 import 'package:am_market_ui/features/user/security/security_explorer_page.dart';
-import 'package:am_market_ui/features/developer/streamer_page.dart';
+import 'package:am_market_dev/am_market_dev.dart';
 import 'package:am_market_ui/widgets/indices_performance_view_v2.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' hide Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
+import 'package:am_common/core/di/price_providers.dart';
 
 import 'package:am_common/core/utils/logger.dart';
 import 'package:am_market_ui/widgets/market_index_detail_view.dart';
-import 'package:am_market_ui/features/developer/screens/developer_dashboard.dart';
+
 import 'package:am_market_ui/providers/view_mode_provider.dart';
 import 'package:am_market_ui/widgets/mode_toggle_widget.dart';
 import 'package:am_market_ui/features/user/market/presentation/pages/user_dashboard_page.dart';
@@ -54,7 +56,20 @@ class MarketPage extends StatelessWidget {
           create: (_) => ViewModeProvider(),
         ),
       ],
-      child: MarketContent(userId: userId, onBack: onBack),
+      child: Consumer(
+        builder: (context, ref, child) {
+           final priceServiceAsync = ref.watch(priceServiceProvider);
+           
+           // Inject PriceService into MarketProvider when available
+           priceServiceAsync.whenData((service) {
+              CommonLogger.info("Injecting PriceService into MarketProvider", tag: "MarketPage");
+              final marketProvider = Provider.of<MarketProvider>(context, listen: false);
+              marketProvider.setPriceService(service);
+           });
+           
+           return MarketContent(userId: userId, onBack: onBack);
+        },
+      ),
     );
   }
 }

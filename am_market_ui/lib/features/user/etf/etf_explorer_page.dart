@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:am_market_ui/models/etf.dart';
+import 'package:am_market_common/models/etf.dart';
 import 'package:am_market_ui/services/etf_service.dart';
 import 'etf_detail_page.dart';
 

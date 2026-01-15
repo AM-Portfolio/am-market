@@ -1,8 +1,8 @@
 
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import '../../../../core/constants/market_endpoints.dart';
-import '../../../../models/market_data_update.dart';
+import 'package:am_market_common/core/constants/market_endpoints.dart';
+import 'package:am_market_common/models/market_data_update.dart';
 
 class RealTimeMarketService {
   WebSocketChannel? _channel;
