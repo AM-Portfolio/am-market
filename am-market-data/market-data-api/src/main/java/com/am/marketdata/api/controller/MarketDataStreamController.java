@@ -17,13 +17,19 @@ import org.springframework.web.bind.annotation.*;
 public class MarketDataStreamController {
 
     private final MarketDataPollingService pollingService;
+    private final com.am.marketdata.service.websocket.service.StreamerManager streamerManager;
 
     @PostMapping("/connect")
     @Operation(summary = "Connect to market data stream", description = "Initiates a WebSocket connection for the specified provider and instruments")
     public ResponseEntity<String> connect(@RequestBody StreamConnectRequest request) {
         try {
-            log.info("Received stream connection request for timeFrame: {}",
-                    request.getTimeFrame());
+            log.info("Received stream connection request | Provider: {} | Instruments: {} | TimeFrame: {}",
+                    request.getProvider(), request.getInstrumentKeys(), request.getTimeFrame());
+
+            if ("UPSTOX".equalsIgnoreCase(request.getProvider()) && Boolean.TRUE.equals(request.getStream())) {
+                streamerManager.subscribe(new java.util.HashSet<>(request.getInstrumentKeys()));
+                return ResponseEntity.ok("Stream connection initiated via StreamerManager (Upstox).");
+            }
 
             // Delegate to service for resolution and connection
             pollingService.initiateStream(request);

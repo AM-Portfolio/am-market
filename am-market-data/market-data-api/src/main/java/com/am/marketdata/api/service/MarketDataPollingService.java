@@ -4,12 +4,11 @@ import com.am.marketdata.api.websocket.MarketDataWebSocketHandler;
 import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
-import com.am.marketdata.api.model.MarketDataUpdate;
+import com.am.marketdata.common.model.MarketDataUpdate;
 import com.am.marketdata.api.model.StreamConnectRequest;
 import com.am.marketdata.api.model.StreamConnectResponse;
 import com.am.marketdata.api.util.InstrumentUtils;
 import com.am.marketdata.api.model.HistoricalDataResponseV1;
-import com.am.marketdata.api.model.HistoricalDataMetadata;
 import com.am.common.investment.model.historical.HistoricalData;
 
 import lombok.RequiredArgsConstructor;
@@ -64,6 +63,7 @@ public class MarketDataPollingService {
 
         Runnable pollingTask = () -> {
             try {
+                log.debug("Polling cycle executing for provider: {}", providerKey);
                 // Orchestration delegated to fetchMarketDataUpdate
                 MarketDataUpdate update = fetchMarketDataUpdate(
                         resolvedSymbols,
@@ -72,7 +72,11 @@ public class MarketDataPollingService {
                         providerKey);
 
                 if (update != null) {
+                    log.debug("Broadcasting update via WebSocket handler. Quote count: {}",
+                            update.getQuotes() != null ? update.getQuotes().size() : 0);
                     webSocketHandler.broadcast(update);
+                } else {
+                    log.warn("Fetched market data update is null for provider: {}", providerKey);
                 }
             } catch (Exception e) {
                 log.error("Error during polling stream execution for provider {}", providerKey, e);
@@ -99,9 +103,11 @@ public class MarketDataPollingService {
 
         // Get active provider from factory
         String provider = marketDataProviderFactory.getProvider().getProviderName().toUpperCase();
+        log.info("Active Provider resolved from Factory: {}", provider);
+
         String timeFrame = request.getTimeFrame() != null ? request.getTimeFrame() : "1D";
 
-        boolean shouldStream = request.getStream() == null || request.getStream();
+        boolean shouldStream = request.getStream() == null || request.getStream(); // Default to true if null
 
         // Start the background stream ONLY if requested
         if (shouldStream) {
@@ -320,7 +326,7 @@ public class MarketDataPollingService {
      * Builds QuoteChange objects from OHLC quotes
      * Separated for better maintainability
      */
-    private Map<String, com.am.marketdata.api.model.MarketDataUpdate.QuoteChange> buildQuoteUpdates(
+    private Map<String, MarketDataUpdate.QuoteChange> buildQuoteUpdates(
             Map<String, OHLCQuote> ohlcQuotes) {
 
         Map<String, MarketDataUpdate.QuoteChange> quoteUpdates = new HashMap<>();

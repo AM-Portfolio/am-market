@@ -3,7 +3,7 @@ package com.am.marketdata.internal.service;
 import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
-import com.am.marketdata.api.model.MarketDataUpdate;
+import com.am.marketdata.common.model.MarketDataUpdate;
 import com.am.marketdata.api.util.InstrumentUtils;
 import com.am.marketdata.api.model.HistoricalDataResponseV1;
 import com.am.marketdata.api.service.MarketDataFetchService;
@@ -250,7 +250,7 @@ public class MarketDataIngestionService {
         return enrichedData;
     }
 
-    private Map<String, com.am.marketdata.api.model.MarketDataUpdate.QuoteChange> buildQuoteUpdates(
+    private Map<String, MarketDataUpdate.QuoteChange> buildQuoteUpdates(
             Map<String, OHLCQuote> ohlcQuotes) {
 
         Map<String, MarketDataUpdate.QuoteChange> quoteUpdates = new HashMap<>();

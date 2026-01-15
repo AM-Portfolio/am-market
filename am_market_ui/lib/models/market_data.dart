@@ -27,6 +27,22 @@ class StockIndicesMarketData {
       stocks: stocksList,
     );
   }
+
+  StockIndicesMarketData copyWith({
+    String? indexSymbol,
+    double? lastPrice,
+    double? change,
+    double? pChange,
+    List<StockData>? stocks,
+  }) {
+    return StockIndicesMarketData(
+      indexSymbol: indexSymbol ?? this.indexSymbol,
+      lastPrice: lastPrice ?? this.lastPrice,
+      change: change ?? this.change,
+      pChange: pChange ?? this.pChange,
+      stocks: stocks ?? this.stocks,
+    );
+  }
 }
 
 class StockData {

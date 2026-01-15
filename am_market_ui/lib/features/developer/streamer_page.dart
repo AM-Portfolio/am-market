@@ -3,24 +3,27 @@ import 'package:am_design_system/am_design_system.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:am_market_ui/services/api_service.dart';
-import 'package:am_market_ui/services/stream_service.dart';
+// import 'package:am_market_ui/services/stream_service.dart'; // Removed
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:am_common/core/di/price_providers.dart';
+import 'package:am_common/core/models/price_update_model.dart';
+import 'package:provider/provider.dart' as legacy_provider; // Rename provider to avoid conflict if needed, or just use generic Provider
 import 'package:am_market_ui/providers/market_provider.dart';
 
 
-class StreamerPage extends StatefulWidget {
+class StreamerPage extends ConsumerStatefulWidget {
   const StreamerPage({super.key});
 
   @override
-  State<StreamerPage> createState() => _StreamerPageState();
+  ConsumerState<StreamerPage> createState() => _StreamerPageState();
 }
 
-class _StreamerPageState extends State<StreamerPage> {
+class _StreamerPageState extends ConsumerState<StreamerPage> {
   final ApiService _apiService = ApiService();
-  final StreamService _streamService = StreamService();
+  // final StreamService _streamService = StreamService(); // Removed
   
   // Config State
   String _provider = 'UPSTOX'; // UPSTOX, ZERODHA
@@ -50,8 +53,9 @@ class _StreamerPageState extends State<StreamerPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
     try {
-      _marketProvider = Provider.of<MarketProvider>(context, listen: false);
+      _marketProvider = legacy_provider.Provider.of<MarketProvider>(context, listen: false);
     } catch (e) {
       _log("didChangeDependencies Error: $e", method: "StreamerPage.didChangeDependencies", level: LogLevel.error);
     }
@@ -60,52 +64,53 @@ class _StreamerPageState extends State<StreamerPage> {
   @override
   void initState() {
     super.initState();
-    _streamService.connect();
-    
-    // Listen to stream
-    _subscription = _streamService.stream.listen((message) {
-       if (!mounted) return; 
-       
-       if (message.containsKey('quotes')) {
-         try {
+    // _streamService.connect(); // Handled by PriceService singleton
+    // Subscription handled via ref.listen in build
+  }
+
+  void _handleUpdate(MarketDataUpdate update) {
+       if (!mounted) return;
+       try {
            final provider = _marketProvider;
            final bool hasProvider = provider != null;
 
            setState(() {
-             final newQuotes = message['quotes'] as Map<String, dynamic>;
              final now = DateTime.now(); 
-           
-             newQuotes.forEach((key, val) {
-               val['timestamp'] = now;
-               val['symbol'] = key; 
-               
-               _feedHistory.insert(0, val);
-               _quotes[key] = val; 
-               
-               if (mounted && hasProvider) {
-                  try {
-                    provider!.updateLivePrice(val);
-                  } catch (e) {
-                    // Suppress
-                  }
-               }
-             });
+             if (update.quotes != null) {
+                update.quotes!.forEach((key, quote) {
+                   final val = quote.toJson();
+                   // Ensure JSON has values expected by UI (keys might differ if toJson uses camelCase vs whatever)
+                   // QuoteChange uses camelCase. UI likely expects it.
+                   // Previous UI code: val['symbol'] = key;
+                   val['timestamp'] = now;
+                   val['symbol'] = key;
+                   
+                   _feedHistory.insert(0, val);
+                   _quotes[key] = val; 
+                   
+                   if (mounted && hasProvider) {
+                      try {
+                        provider!.updateLivePrice(val);
+                      } catch (e) {
+                        // Suppress
+                      }
+                   }
+                });
+             }
               
              if (_feedHistory.length > 500) {
                _feedHistory = _feedHistory.sublist(0, 500);
              }
            });
-         } catch (e) {
-           _log("Error processing update: $e", method: "StreamerPage.streamListener", level: LogLevel.error);
-         }
+       } catch (e) {
+           _log("Error processing update: $e", method: "StreamerPage._handleUpdate", level: LogLevel.error);
        }
-    });
   }
 
   @override
   void dispose() {
     _subscription?.cancel();
-    _streamService.dispose();
+    // _streamService.dispose();
     _symbolsController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -196,12 +201,18 @@ class _StreamerPageState extends State<StreamerPage> {
       }).toList();
     }
 
-    final success = await _apiService.connectStream(symbols, _provider, isIndexSymbol: _isIndexSymbol);
-    if (success) {
+    final priceService = ref.read(priceServiceProvider).value;
+    if (priceService == null) {
+       _log("PriceService not ready", method: "StreamerPage._startStream", level: LogLevel.error);
+       return;
+    }
+
+    try {
+      await priceService.subscribe(symbols, provider: _provider);
       setState(() => _isStreaming = true);
-      _log("Stream Connect Request Sent: OK", method: "StreamerPage._startStream");
-    } else {
-      _log("Stream Connect Failed", method: "StreamerPage._startStream", level: LogLevel.error);
+      _log("Stream Subscription Sent via PriceService: OK", method: "StreamerPage._startStream");
+    } catch (e) {
+      _log("Stream Subscription Failed: $e", method: "StreamerPage._startStream", level: LogLevel.error);
     }
   }
 
@@ -240,6 +251,15 @@ class _StreamerPageState extends State<StreamerPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen to Riverpod stream
+    ref.listen(priceUpdatesStreamProvider, (previous, next) {
+       next.whenData((update) {
+          if (update.quotes != null) {
+             _handleUpdate(update);
+          }
+       });
+    });
+
     final theme = Theme.of(context);
     
     return Scaffold(

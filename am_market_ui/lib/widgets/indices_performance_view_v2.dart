@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider_pkg; // Aliased to avoid conflict
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:am_design_system/am_design_system.dart';
 import '../providers/market_provider.dart';
 import '../models/market_data.dart';
+import '../features/user/market/providers/market_analysis_providers.dart';
 
 /// V2 Glassmorphic Indices Performance View with Architecture Cards
-class IndicesPerformanceViewV2 extends StatelessWidget {
+class IndicesPerformanceViewV2 extends ConsumerStatefulWidget {
   const IndicesPerformanceViewV2({Key? key}) : super(key: key);
+
+  @override
+  ConsumerState<IndicesPerformanceViewV2> createState() => _IndicesPerformanceViewV2State();
+}
+
+class _IndicesPerformanceViewV2State extends ConsumerState<IndicesPerformanceViewV2> {
 
   Color _getColorSchemeForChange(double pChange) {
     if (pChange >= 2.0) return const Color(0xFF00B894); // Strong Green
@@ -15,16 +23,29 @@ class IndicesPerformanceViewV2 extends StatelessWidget {
     return const Color(0xFFFF6B6B); // Red
   }
 
-  String _getColorSchemeName(double pChange) {
-    if (pChange >= 2.0) return 'success';
-    if (pChange >= 0) return 'info';
-    if (pChange >= -2.0) return 'accent';
-    return 'neutral';
-  }
+  // String _getColorSchemeName(double pChange) ... (Not used in build? kept if needed or removed if unused)
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MarketProvider>(
+    // Listen to real-time updates and bridge to MarketProvider
+    ref.listen(marketDataStreamProvider, (previous, next) {
+        next.whenData((update) {
+            final mp = provider_pkg.Provider.of<MarketProvider>(context, listen: false);
+            update.quotes.forEach((symbol, quote) {
+                // Construct map for MarketProvider
+                final map = {
+                    'symbol': symbol,
+                    'lastPrice': quote.lastPrice,
+                    'change': quote.change,
+                    'changePercent': quote.changePercent,
+                    'timestamp': update.timestamp
+                };
+                mp.updateLivePrice(map);
+            });
+        });
+    });
+
+    return provider_pkg.Consumer<MarketProvider>(
       builder: (context, provider, child) {
         if (provider.isLoading) {
           return const Center(child: CircularProgressIndicator());

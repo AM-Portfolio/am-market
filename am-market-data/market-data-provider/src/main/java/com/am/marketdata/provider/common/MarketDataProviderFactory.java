@@ -17,7 +17,7 @@ public class MarketDataProviderFactory {
 
     private final ApplicationContext applicationContext;
 
-    @Value("${market-data.provider:zerodha}")
+    @Value("${market-data.provider:upstox}")
     private String activeProvider;
 
     public MarketDataProviderFactory(ApplicationContext applicationContext) {

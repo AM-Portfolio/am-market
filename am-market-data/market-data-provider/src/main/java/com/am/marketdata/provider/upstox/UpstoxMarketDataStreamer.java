@@ -14,9 +14,12 @@ import com.upstox.feeder.listener.OnErrorListener;
 import com.upstox.feeder.listener.OnMarketUpdateV3Listener;
 import com.upstox.feeder.listener.OnOpenListener;
 import com.upstox.auth.OAuth;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -28,60 +31,96 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
     private final AppLogger log = AppLogger.getLogger();
     private final UpstoxConfig upstoxConfig;
+    private final StringRedisTemplate redisTemplate;
+    private final com.am.marketdata.provider.upstox.converter.UpstoxV3FeedConverter v3Converter;
+
+    private static final String REDIS_KEY_ACCESS_TOKEN = "market_data:upstox:access_token";
 
     private MarketDataStreamerV3 streamer;
     private StreamerListener listener;
     private boolean isConnected = false;
 
-    public UpstoxMarketDataStreamer(UpstoxConfig upstoxConfig) {
+    @Autowired
+    public UpstoxMarketDataStreamer(UpstoxConfig upstoxConfig, StringRedisTemplate redisTemplate,
+            com.am.marketdata.provider.upstox.converter.UpstoxV3FeedConverter v3Converter) {
         this.upstoxConfig = upstoxConfig;
+        this.redisTemplate = redisTemplate;
+        this.v3Converter = v3Converter;
     }
 
     @Override
     public void connect() {
         try {
-            log.info("UpstoxStreamer", "Initializing Upstox Market Data Streamer connection...");
+            log.info("UpstoxStreamer", "=== STARTING Upstox Market Data Streamer connection ===");
 
-            // Get Access Token
-            String accessToken = upstoxConfig.getAccessToken();
+            // Get Access Token - Try Redis cache first, then config
+            log.info("UpstoxStreamer", "Step 1: Fetching access token...");
+            String accessToken = getAccessTokenFromCacheOrConfig();
             if (accessToken == null || accessToken.isEmpty()) {
                 log.error("UpstoxStreamer", "Cannot connect: Access Token is missing in configuration.");
                 if (listener != null)
                     listener.onError(new IllegalStateException("Missing Access Token"));
                 return;
             }
+            log.info("UpstoxStreamer",
+                    "Step 1: Access token retrieved successfully (length: " + accessToken.length() + ")");
 
             // Configure ApiClient
+            log.info("UpstoxStreamer", "Step 2: Configuring ApiClient...");
             ApiClient apiClient = Configuration.getDefaultApiClient();
             OAuth oAuth = (OAuth) apiClient.getAuthentication("OAUTH2");
             oAuth.setAccessToken(accessToken);
+            log.info("UpstoxStreamer", "Step 2: ApiClient configured successfully");
 
             // Initialize Streamer
+            log.info("UpstoxStreamer", "Step 3: Initializing MarketDataStreamerV3...");
             streamer = new MarketDataStreamerV3(apiClient);
+            log.info("UpstoxStreamer", "Step 3: Streamer initialized successfully");
 
             // Set Listeners
+            log.info("UpstoxStreamer", "Step 4: Setting up listeners...");
             streamer.setOnOpenListener(new OnOpenListener() {
                 @Override
                 public void onOpen() {
-                    log.info("UpstoxStreamer", "Connection Established");
+                    log.info("UpstoxStreamer", "✅ *** CONNECTION ESTABLISHED *** ✅");
                     isConnected = true;
-                    if (listener != null)
+                    if (listener != null) {
+                        log.info("UpstoxStreamer", "Notifying listener of connection open");
                         listener.onOpen();
+                    } else {
+                        log.warn("UpstoxStreamer", "No listener set - onOpen notification skipped");
+                    }
                 }
             });
 
             streamer.setOnMarketUpdateListener(new OnMarketUpdateV3Listener() {
                 @Override
                 public void onUpdate(MarketUpdateV3 marketUpdate) {
-                    if (listener != null)
-                        listener.onMessage(marketUpdate);
+                    log.debug("UpstoxStreamer", "📊 Received market update");
+                    if (listener != null) {
+                        // Convert proto to common DTO (Map<String, OHLCQuote>) before passing to
+                        // listener
+                        // Service layer should ONLY receive org-level common models
+                        Map<String, com.am.marketdata.common.model.OHLCQuote> commonQuotes = v3Converter
+                                .convert(marketUpdate);
+                        if (commonQuotes != null && !commonQuotes.isEmpty()) {
+                            log.debug("UpstoxStreamer",
+                                    "Converted " + commonQuotes.size() + " quotes, sending to listener");
+                            listener.onMessage(commonQuotes);
+                        } else {
+                            log.debug("UpstoxStreamer",
+                                    "Converter returned empty/null quotes (markets closed or LTP=0)");
+                        }
+                    } else {
+                        log.warn("UpstoxStreamer", "No listener set - market update dropped");
+                    }
                 }
             });
 
             streamer.setOnErrorListener(new OnErrorListener() {
                 @Override
                 public void onError(Throwable error) {
-                    log.error("UpstoxStreamer", "Error in streamer: " + error.getMessage(), error);
+                    log.error("UpstoxStreamer", "❌ ERROR in streamer: " + error.getMessage(), error);
                     if (listener != null)
                         listener.onError(error);
                 }
@@ -90,18 +129,21 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
             streamer.setOnCloseListener(new OnCloseListener() {
                 @Override
                 public void onClose(int code, String reason) {
-                    log.info("UpstoxStreamer", "Connection Closed: " + code + " " + reason);
+                    log.info("UpstoxStreamer", "Connection Closed: " + code + " | Reason: " + reason);
                     isConnected = false;
                     if (listener != null)
                         listener.onClose();
                 }
             });
+            log.info("UpstoxStreamer", "Step 4: All listeners set successfully");
 
             // Connect
+            log.info("UpstoxStreamer", "Step 5: Calling streamer.connect()...");
             streamer.connect();
+            log.info("UpstoxStreamer", "Step 5: streamer.connect() called - waiting for onOpen callback...");
 
         } catch (Exception e) {
-            log.error("UpstoxStreamer", "Failed to connect: " + e.getMessage(), e);
+            log.error("UpstoxStreamer", "❌ FATAL: Failed to connect: " + e.getMessage(), e);
             isConnected = false;
             if (listener != null)
                 listener.onError(e);
@@ -168,5 +210,27 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
             default:
                 return Mode.FULL;
         }
+    }
+
+    private String getAccessTokenFromCacheOrConfig() {
+        try {
+            // Try Redis cache first
+            String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
+            if (cachedToken != null && !cachedToken.isEmpty()) {
+                log.info("UpstoxStreamer", "Using cached Access Token from Redis");
+                return cachedToken;
+            }
+        } catch (Exception e) {
+            log.warn("UpstoxStreamer", "Failed to load token from Redis: " + e.getMessage());
+        }
+
+        // Fallback to configuration
+        String configToken = upstoxConfig.getAccessToken();
+        if (configToken != null && !configToken.isEmpty()) {
+            log.info("UpstoxStreamer", "Using Access Token from configuration");
+            return configToken;
+        }
+
+        return null;
     }
 }

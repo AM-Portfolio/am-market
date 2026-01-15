@@ -1,5 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../internal/domain/models/chart_config.dart';
+import '../services/real_time_market_service.dart';
+import '../../../../models/market_data_update.dart';
+
+final realTimeMarketServiceProvider = Provider<RealTimeMarketService>((ref) {
+  final service = RealTimeMarketService();
+  ref.onDispose(() => service.disconnect());
+  service.connect();
+  return service;
+});
+
+final marketDataStreamProvider = StreamProvider<MarketDataUpdate>((ref) {
+  final service = ref.watch(realTimeMarketServiceProvider);
+  return service.stream ?? const Stream.empty();
+});
+
 
 final marketAnalysisSymbolProvider =
     NotifierProvider<MarketAnalysisSymbolNotifier, String>(

@@ -88,8 +88,43 @@ class MarketProvider with ChangeNotifier {
         final baseSymbol = rawSymbol.split(':').last;
         _livePrices[baseSymbol] = data;
       }
+      
+      // 3. Update allIndicesData if symbol matches
+      // Indices standard format in UI "NIFTY 50", but update might come as "NSE_INDEX|Nifty 50"
+      // Need to handle partial match or exact match.
+      // Upstox sends "NSE_INDEX|Nifty 50". UI uses "NIFTY 50".
+      // We should normalize.
+      
+      // Try to find matching index in _allIndicesData
+      int indexToUpdate = -1;
+      // Extract base symbol from update (e.g. "Nifty 50" from "NSE_INDEX|Nifty 50")
+      String updateSymbolBase = rawSymbol.contains('|') ? rawSymbol.split('|').last : rawSymbol;
+      
+      for (int i = 0; i < _allIndicesData.length; i++) {
+        // Case insensitive comparison
+        if (_allIndicesData[i].indexSymbol.toUpperCase() == updateSymbolBase.toUpperCase()) {
+             indexToUpdate = i;
+             break;
+        }
+      }
+      
+      if (indexToUpdate != -1) {
+          final current = _allIndicesData[indexToUpdate];
+          // Extract new price
+          final double? newLtp = data['lastPrice']?.toDouble();
+          final double? newPChange = data['changePercent']?.toDouble(); // might be null if not calc
+          
+          if (newLtp != null) {
+              _allIndicesData[indexToUpdate] = current.copyWith(
+                  lastPrice: newLtp,
+                  // If pChange is not provided in stream, keep old, or calculate if we have close
+                  pChange: newPChange ?? current.pChange 
+              );
+              notifyListeners();
+          }
+      }
 
-      // Emit event to stream instead of global notifyListeners
+      // Emit event to stream instead of global notifyListeners (kept for other consumers)
       _livePriceController.add(data);
     }
   }
