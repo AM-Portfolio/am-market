@@ -10,6 +10,8 @@ import com.am.marketdata.api.model.StreamConnectResponse;
 import com.am.marketdata.api.util.InstrumentUtils;
 import com.am.marketdata.api.model.HistoricalDataResponseV1;
 import com.am.common.investment.model.historical.HistoricalData;
+import com.am.marketdata.service.MarketHoursService;
+import com.am.marketdata.service.websocket.service.StreamerManager;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +33,8 @@ public class MarketDataPollingService {
     private final MarketDataWebSocketHandler webSocketHandler;
     private final InstrumentUtils instrumentUtils;
     private final MarketDataProviderFactory marketDataProviderFactory;
+    private final MarketHoursService marketHoursService;
+    private final StreamerManager streamerManager;
 
     // Scheduler for polling
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
@@ -69,7 +73,8 @@ public class MarketDataPollingService {
                         resolvedSymbols,
                         finalTimeFrame,
                         isIndexSymbol,
-                        providerKey);
+                        providerKey,
+                        false); // Standard polling uses configured forceRefresh or default (false usually)
 
                 if (update != null) {
                     log.debug("Broadcasting update via WebSocket handler. Quote count: {}",
@@ -107,10 +112,25 @@ public class MarketDataPollingService {
 
         String timeFrame = request.getTimeFrame() != null ? request.getTimeFrame() : "1D";
 
-        boolean shouldStream = request.getStream() == null || request.getStream(); // Default to true if null
+        // Check Market status
+        boolean isMarketOpen = marketHoursService.isMarketOpen();
 
-        // Start the background stream ONLY if requested
-        if (shouldStream) {
+        // Check if we should stream
+        // Stream requested AND Market is Open AND Upstox provider (since others use
+        // polling)
+        boolean streamRequested = request.getStream() == null || request.getStream(); // Default to true if null
+        boolean isUpstox = "UPSTOX".equalsIgnoreCase(provider);
+
+        boolean shouldStartStream = streamRequested && isUpstox && isMarketOpen;
+
+        // Logic for streaming vs fallback
+        if (shouldStartStream) {
+            log.info("Market is OPEN - Initiating WebSocket stream via StreamerManager.");
+            streamerManager.subscribe(new java.util.HashSet<>(resolvedSymbols));
+        } else if (streamRequested && isUpstox && !isMarketOpen) {
+            log.info("Market is CLOSED - Skipping WebSocket stream. Will fetch data from cache.");
+        } else if (streamRequested && !isUpstox) {
+            // Non-Upstox providers use polling simulation
             connectStream(
                     new ArrayList<>(resolvedSymbols),
                     request.getMode(),
@@ -118,19 +138,28 @@ public class MarketDataPollingService {
                     timeFrame,
                     request.getIsIndexSymbol() != null ? request.getIsIndexSymbol() : false);
         } else {
-            log.info("Stream flag is false. Skipping background stream initiation for symbols: {}", resolvedSymbols);
+            log.info("Stream flag is false or conditions not met. Skipping background stream initiation.");
         }
 
         // Fetch initial data synchronously to return in response
+        // Force refresh should be FALSE during non-market hours (fetch from cache)
+        boolean forceRefresh = false;
+
         MarketDataUpdate initialData = fetchMarketDataUpdate(
                 resolvedSymbols,
                 timeFrame,
                 request.getIsIndexSymbol(),
-                provider);
+                provider,
+                forceRefresh);
 
-        String message = shouldStream
-                ? "Stream connection initiated successfully with timeFrame: " + timeFrame
-                : "One-time data fetch successful with timeFrame: " + timeFrame;
+        String message;
+        if (shouldStartStream) {
+            message = "Stream connection initiated successfully (Live Market Framework).";
+        } else if (!isMarketOpen) {
+            message = "Market Closed. Fetched latest available data from cache.";
+        } else {
+            message = "Stream connection initiated successfully (Polling Framework).";
+        }
 
         return StreamConnectResponse.builder()
                 .status("SUCCESS")
@@ -141,13 +170,20 @@ public class MarketDataPollingService {
 
     public MarketDataUpdate fetchMarketDataUpdate(
             Set<String> keys, String timeFrame, Boolean isIndexSymbol, String providerKey) {
+        // Backward compatibility
+        return fetchMarketDataUpdate(keys, timeFrame, isIndexSymbol, providerKey, false);
+    }
+
+    public MarketDataUpdate fetchMarketDataUpdate(
+            Set<String> keys, String timeFrame, Boolean isIndexSymbol, String providerKey, boolean forceRefresh) {
         try {
             // Orchestration Step 2 & 3: Parallel Execution of Data Fetching
 
             // Task 1: Fetch Live OHLC Data
             CompletableFuture<Map<String, OHLCQuote>> liveDataFuture = CompletableFuture.supplyAsync(() -> {
                 try {
-                    return marketDataFetchService.getOHLC(keys, false, TimeFrame.DAY, false);
+                    // Pass forceRefresh parameter
+                    return marketDataFetchService.getOHLC(keys, forceRefresh, TimeFrame.DAY, false);
                 } catch (Exception e) {
                     log.error("Error fetching live OHLC data", e);
                     return new HashMap<>();
@@ -209,11 +245,12 @@ public class MarketDataPollingService {
             activeStreams.remove(key);
             log.info("Polling stream stopped for provider: {}", provider);
         }
+        // Also ensure streamer manager disconnects if it's the active one
+        if ("UPSTOX".equalsIgnoreCase(key)) {
+            streamerManager.stopStreaming();
+        }
     }
 
-    /**
-     * Fetches historical data based on timeFrame
-     */
     /**
      * Fetches historical data based on timeFrame
      */
