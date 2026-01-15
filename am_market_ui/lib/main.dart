@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:am_market_common/services/api_service.dart';
-import 'package:am_market_ui/am_market_ui.dart';
+import 'package:am_market_ui/features/dashboard/presentation/pages/dashboard_page.dart';
 import 'package:am_design_system/am_design_system.dart';
 
 import 'package:get_it/get_it.dart';
 import 'package:am_auth_ui/am_auth_ui.dart';
-import 'package:am_market_ui/services/market_analysis_service.dart';
+import 'package:am_market_ui/features/market_analysis/services/market_analysis_service.dart';
 
 void main() {
   // Initialize Bundle/DI
