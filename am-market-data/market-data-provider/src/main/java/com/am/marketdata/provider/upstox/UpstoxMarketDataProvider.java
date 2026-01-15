@@ -32,18 +32,16 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     private final AppLogger log = AppLogger.getLogger();
 
     private final UpstoxApiService upstoxApiService;
-    private final com.am.marketdata.common.provider.InstrumentDataProvider instrumentDataProvider;
     private final UpstoxSdkService upstoxSdkService;
-    private final UpstoxIndexIdentifier indexIdentifier;
+    private final com.am.marketdata.provider.upstox.resolver.UpstoxSymbolResolver symbolResolver;
 
-    public UpstoxMarketDataProvider(UpstoxApiService upstoxApiService,
-            @Qualifier("upstoxInstrumentService") com.am.marketdata.common.provider.InstrumentDataProvider instrumentDataProvider,
+    public UpstoxMarketDataProvider(
+            UpstoxApiService upstoxApiService,
             UpstoxSdkService upstoxSdkService,
-            UpstoxIndexIdentifier indexIdentifier) {
+            com.am.marketdata.provider.upstox.resolver.UpstoxSymbolResolver symbolResolver) {
         this.upstoxApiService = upstoxApiService;
-        this.instrumentDataProvider = instrumentDataProvider;
         this.upstoxSdkService = upstoxSdkService;
-        this.indexIdentifier = indexIdentifier;
+        this.symbolResolver = symbolResolver;
     }
 
     // ... (initialize, cleanup, setAccessToken, getLoginUrl, generateSession,
@@ -79,95 +77,14 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
         return new HashMap<>();
     }
 
-    private List<com.am.marketdata.common.model.UpstoxInstrument> resolveInstruments(List<String> symbols) {
-        if (symbols == null || symbols.isEmpty())
-            return new ArrayList<>();
-
-        // Strip exchange prefix if present (e.g., NSE:RELIANCE -> RELIANCE)
-        List<String> cleanedSymbols = symbols.stream()
-                .map(s -> {
-                    if (s.startsWith("NSE:") || s.startsWith("BSE:")) {
-                        return s.substring(4);
-                    }
-                    return s;
-                })
-                .collect(Collectors.toList());
-
-        com.am.marketdata.common.dto.InstrumentSearchCriteria criteria = new com.am.marketdata.common.dto.InstrumentSearchCriteria();
-        criteria.setTradingSymbols(cleanedSymbols);
-        criteria.setProvider("UPSTOX");
-
-        return (List<com.am.marketdata.common.model.UpstoxInstrument>) instrumentDataProvider
-                .searchInstruments(criteria);
-    }
-
-    private static class InstrumentContext {
-        final List<String> instrumentKeys;
-        final Map<String, String> keyToSymbolMap;
-
-        InstrumentContext(List<com.am.marketdata.common.model.UpstoxInstrument> instruments,
-                Map<String, String> mappedIndices) {
-            this.instrumentKeys = new ArrayList<>();
-            this.keyToSymbolMap = new HashMap<>();
-
-            // Add DB Instruments
-            if (instruments != null) {
-                this.instrumentKeys.addAll(instruments.stream()
-                        .map(com.am.marketdata.common.model.UpstoxInstrument::getInstrumentKey)
-                        .collect(Collectors.toList()));
-
-                this.keyToSymbolMap.putAll(instruments.stream()
-                        .collect(Collectors.toMap(
-                                com.am.marketdata.common.model.UpstoxInstrument::getInstrumentKey,
-                                com.am.marketdata.common.model.UpstoxInstrument::getTradingSymbol,
-                                (existing, replacement) -> existing)));
-            }
-
-            // Add Mapped Indices
-            if (mappedIndices != null) {
-                for (Map.Entry<String, String> entry : mappedIndices.entrySet()) {
-                    // Symbol -> Key map from identifier
-                    String symbol = entry.getKey();
-                    String key = entry.getValue();
-
-                    if (!this.instrumentKeys.contains(key)) {
-                        this.instrumentKeys.add(key);
-                        // Map Key -> Symbol for reverse lookup
-                        this.keyToSymbolMap.put(key, symbol);
-                    }
-                }
-            }
-        }
-    }
-
-    private InstrumentContext resolveContext(List<String> symbols) {
-        // 1. Identify and resolve known Indices
-        Map<String, String> resolvedIndices = indexIdentifier.resolveIndices(symbols); // Symbol -> Key
-
-        // 2. Identify remaining symbols to lookup in DB
-        List<String> symbolsForDb = symbols.stream()
-                .filter(s -> !resolvedIndices.containsKey(s))
-                .collect(Collectors.toList());
-
-        if (!symbolsForDb.isEmpty()) {
-            log.info("resolveContext", "Symbols not resolved as indices (will lookup in DB): " + symbolsForDb);
-        }
-
-        // 3. Lookup remaining symbols
-        List<com.am.marketdata.common.model.UpstoxInstrument> dbInstruments = resolveInstruments(symbolsForDb);
-
-        // 4. Combine
-        return new InstrumentContext(dbInstruments, resolvedIndices);
-    }
-
     @Override
     public Map<String, OHLCQuote> getOHLC(List<String> symbols, TimeFrame timeFrame) {
         try {
-            InstrumentContext context = resolveContext(symbols);
+            com.am.marketdata.provider.common.InstrumentContext context = symbolResolver.resolveContext(symbols);
 
             log.info("getOHLC",
                     String.format("Resolved %d instruments for symbols: %s", context.instrumentKeys.size(), symbols));
-            if (context.instrumentKeys.isEmpty()) {
+            if (context.getInstrumentKeys().isEmpty()) {
                 log.warn("getOHLC", "No instrument keys resolved for symbols: " + symbols);
                 return new HashMap<>();
             }
@@ -245,7 +162,8 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     @Override
     public Map<String, LTPQuote> getLTP(String[] symbols) {
         try {
-            InstrumentContext context = resolveContext(Arrays.asList(symbols));
+            com.am.marketdata.provider.common.InstrumentContext context = symbolResolver
+                    .resolveContext(Arrays.asList(symbols));
 
             if (context.instrumentKeys.isEmpty()) {
                 return new HashMap<>();
@@ -304,7 +222,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
             // Resolve instrument key first as SDK works with keys
             List<String> symbolsList = Collections.singletonList(symbol);
-            InstrumentContext context = resolveContext(symbolsList);
+            com.am.marketdata.provider.common.InstrumentContext context = symbolResolver.resolveContext(symbolsList);
             String instrumentKey = null;
             if (!context.instrumentKeys.isEmpty()) {
                 instrumentKey = context.instrumentKeys.get(0);

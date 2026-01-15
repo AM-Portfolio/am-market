@@ -13,6 +13,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -174,7 +175,7 @@ public abstract class AbstractMarketDataScheduler<T> {
      * @return List of symbols to process
      */
     protected List<String> getSymbolsToProcess() {
-        return symbolService.findDistinctIsins();
+        return new ArrayList<>(symbolService.findDistinctSymbols());
     }
 
     /**

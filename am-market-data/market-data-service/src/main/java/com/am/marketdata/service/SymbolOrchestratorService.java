@@ -71,22 +71,21 @@ public class SymbolOrchestratorService {
     }
 
     /**
-     * Find all distinct symbols for processing.
-     * Aggregates symbols from various sources.
-     * Uses caching to prevent repeated calls to external services.
+     * Find all distinct symbols from all sources (default, Nifty 500, ETFs).
+     * Uses caching for performance.
      * 
-     * @return List of all symbols
+     * @return Set of all symbols
      */
-    public synchronized List<String> findDistinctIsins() {
+    public synchronized Set<String> findDistinctSymbols() {
         if (cachedSymbols != null && !cachedSymbols.isEmpty()) {
             log.info("Returning cached symbols. Count: {}", cachedSymbols.size());
-            return cachedSymbols;
+            return new HashSet<>(cachedSymbols); // Convert List to Set
         }
 
-        log.info("Cache miss. Fetching and aggregating symbols...");
+        log.info("Fetching distinct symbols from all sources...");
+        List<String> combinedSymbols = new ArrayList<>();
 
         // 1. Start with default symbols from config
-        List<String> combinedSymbols = new ArrayList<>();
         if (defaultSymbols != null && !defaultSymbols.isEmpty()) {
             combinedSymbols.addAll(List.of(defaultSymbols.split(",")));
         }
@@ -100,23 +99,23 @@ public class SymbolOrchestratorService {
         // Test
         // combinedSymbols.addAll(List.of("RELIANCE"));
 
-        // 5. Deduplicate and return
+        // 4. Deduplicate and store in cache
         cachedSymbols = combinedSymbols.stream()
                 .distinct()
                 .filter(s -> s != null && !s.trim().isEmpty())
                 .collect(Collectors.toList());
 
         log.info("Symbol aggregation complete. Total unique symbols: {}", cachedSymbols.size());
-        return cachedSymbols;
+        return new HashSet<>(cachedSymbols); // Convert List to Set
     }
 
     /**
      * Refresh the symbol cache
      * Forces a re-fetch of symbols from all sources
      */
-    public synchronized void refreshSymbolCache() {
+    public synchronized void refreshCache() {
         log.info("Refreshing symbol cache...");
         cachedSymbols = null;
-        findDistinctIsins();
+        findDistinctSymbols();
     }
 }

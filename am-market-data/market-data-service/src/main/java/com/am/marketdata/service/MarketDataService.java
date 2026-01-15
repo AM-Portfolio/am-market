@@ -178,8 +178,8 @@ public class MarketDataService {
 
             providerName = resolveProviderName(providerName);
             log.info(
-                    "[INTERVAL_TRACE] MarketDataService.getOHLC → OHLCDataRetriever: Creating retriever with timeFrame: {} (apiValue: {})",
-                    timeFrame, tfValue);
+                    "[INTERVAL_TRACE] MarketDataService.getOHLC → OHLCDataRetriever: Creating retriever with timeFrame: {} (apiValue: {}), forceRefresh: {}",
+                    timeFrame, tfValue, forceRefresh);
 
             OHLCDataRetriever retriever = createOHLCDataRetriever(providerName, forceRefresh);
             Map<String, OHLCQuote> result = retriever.retrieveData(tradingSymbols, timeFrame, forceRefresh);

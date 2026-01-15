@@ -3,10 +3,14 @@ package com.am.marketdata.provider.upstox;
 import com.am.marketdata.common.MarketDataStreamer;
 import com.am.marketdata.common.StreamerListener;
 import com.am.marketdata.common.log.AppLogger;
+import com.am.marketdata.provider.common.InstrumentContext;
 import com.am.marketdata.provider.upstox.config.UpstoxConfig;
+import com.am.marketdata.provider.upstox.converter.UpstoxV3FeedConverter;
+import com.am.marketdata.provider.upstox.resolver.UpstoxSymbolResolver;
 import com.upstox.ApiClient;
 import com.upstox.Configuration;
 import com.upstox.feeder.MarketDataStreamerV3;
+import com.upstox.feeder.MarketUpdate;
 import com.upstox.feeder.MarketUpdateV3;
 import com.upstox.feeder.constants.Mode;
 import com.upstox.feeder.listener.OnCloseListener;
@@ -32,7 +36,8 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
     private final AppLogger log = AppLogger.getLogger();
     private final UpstoxConfig upstoxConfig;
     private final StringRedisTemplate redisTemplate;
-    private final com.am.marketdata.provider.upstox.converter.UpstoxV3FeedConverter v3Converter;
+    private final UpstoxV3FeedConverter v3Converter;
+    private final UpstoxSymbolResolver symbolResolver;
 
     private static final String REDIS_KEY_ACCESS_TOKEN = "market_data:upstox:access_token";
 
@@ -41,11 +46,15 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
     private boolean isConnected = false;
 
     @Autowired
-    public UpstoxMarketDataStreamer(UpstoxConfig upstoxConfig, StringRedisTemplate redisTemplate,
-            com.am.marketdata.provider.upstox.converter.UpstoxV3FeedConverter v3Converter) {
+    public UpstoxMarketDataStreamer(
+            UpstoxConfig upstoxConfig,
+            StringRedisTemplate redisTemplate,
+            UpstoxV3FeedConverter v3Converter,
+            UpstoxSymbolResolver symbolResolver) {
         this.upstoxConfig = upstoxConfig;
         this.redisTemplate = redisTemplate;
         this.v3Converter = v3Converter;
+        this.symbolResolver = symbolResolver;
     }
 
     @Override
@@ -160,15 +169,37 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
     }
 
     @Override
-    public void subscribe(Set<String> instrumentKeys, String mode) {
+    public void subscribe(Set<String> rawSymbols, String mode) {
         if (streamer == null) {
             log.warn("UpstoxStreamer", "Streamer not initialized. Cannot subscribe.");
             return;
         }
 
+        if (rawSymbols == null || rawSymbols.isEmpty()) {
+            log.warn("UpstoxStreamer", "No symbols provided for subscription");
+            return;
+        }
+
+        log.info("UpstoxStreamer", "Subscribing to " + rawSymbols.size() + " raw symbols");
+
+        // NEW: Resolve raw symbols to Upstox instrument keys using resolver
+        InstrumentContext context = symbolResolver.resolveContext(new java.util.ArrayList<>(rawSymbols));
+
+        Set<String> instrumentKeys = new HashSet<>(context.getInstrumentKeys());
+
+        if (instrumentKeys.isEmpty()) {
+            log.warn("UpstoxStreamer", "Symbol resolution returned no instrument keys for symbols: " + rawSymbols);
+            return;
+        }
+
+        log.info("UpstoxStreamer",
+                String.format("Resolved %d symbols to %d instrument keys", rawSymbols.size(), instrumentKeys.size()));
+
         Mode sdkMode = parseMode(mode);
-        log.info("UpstoxStreamer", "Subscribing to " + instrumentKeys.size() + " keys in " + sdkMode + " mode.");
-        streamer.subscribe(new HashSet<>(instrumentKeys), sdkMode);
+
+        log.info("UpstoxStreamer", "Subscribing to instrument keys: " + instrumentKeys);
+        streamer.subscribe(instrumentKeys, sdkMode);
+        log.info("UpstoxStreamer", "Subscription successful for " + instrumentKeys.size() + " instruments");
     }
 
     @Override

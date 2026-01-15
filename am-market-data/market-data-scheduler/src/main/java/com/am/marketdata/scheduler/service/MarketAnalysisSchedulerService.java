@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -33,7 +34,7 @@ public class MarketAnalysisSchedulerService {
 
         try {
             // 1. Fetch all distinct symbols
-            List<String> allSymbols = symbolOrchestratorService.findDistinctIsins();
+            List<String> allSymbols = new ArrayList<>(symbolOrchestratorService.findDistinctSymbols());
             log.info("Found {} symbols for analysis.", allSymbols.size());
 
             // 2. Process in Batches

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 
 import jakarta.annotation.PostConstruct;
+import java.util.ArrayList;
 import java.util.List;
 import java.time.LocalTime;
 
@@ -102,7 +103,7 @@ public class MarketDataIngestionScheduler {
     }
 
     protected List<String> getSymbolsToProcess() {
-        return symbolService.findDistinctIsins();
+        return new ArrayList<>(symbolService.findDistinctSymbols());
     }
 
     private void startIngestion() {
