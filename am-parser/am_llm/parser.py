@@ -82,7 +82,8 @@ class OpenAIClient(LLMClient):
 
 
 def get_llm_client(provider: Optional[str], model: Optional[str]) -> LLMClient:
-    prov = (provider or os.getenv("LLM_PROVIDER") or "").lower()
+    from am_configs.settings import settings
+    prov = (provider or settings.llm_provider or "").lower()
     if prov == "openai":
         return OpenAIClient(model=model)
     return LLMClient()

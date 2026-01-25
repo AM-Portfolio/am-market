@@ -27,7 +27,7 @@ public class StreamerScheduler {
      * Start the streamer (Scheduled at 9:00 AM Monday-Friday)
      * Auto-connects WebSocket and subscribes to all symbols
      */
-    @Scheduled(cron = "0 0 9 ? * MON-FRI", zone = "Asia/Kolkata")
+    @Scheduled(cron = "0 0 12 ? * MON-FRI", zone = "Asia/Kolkata")
     public void executeStartStreaming() {
         log.info("⏰ Triggering scheduled Streamer start at 9:00 AM...");
 

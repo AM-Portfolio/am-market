@@ -17,10 +17,14 @@ class ETFHoldingsService:
     
     def __init__(self, mongo_uri: str = None, db_name: str = None):
         # Use environment variables or defaults
+        # Use environment variables or defaults
         if mongo_uri is None:
-            mongo_uri = os.getenv("MONGO_URI", "mongodb://admin:password123@localhost:27017")
+            mongo_uri = os.getenv("MONGO_URI") or os.getenv("MONGODB_CONNECTION_URL") or os.getenv("MONGODB_URL") or "mongodb://admin:password123@localhost:27017"
+            
         if db_name is None:
-            db_name = os.getenv("MONGO_DB", "etf_data")
+            # Use configured DB or default
+            db_name = os.getenv("ETF_DB_NAME") or os.getenv("MONGO_DB") or "mutual_funds"
+
         self.mongo_uri = mongo_uri
         self.db_name = db_name
         self._client = None
@@ -169,5 +173,6 @@ class ETFHoldingsService:
             self._client.close()
 
 
-def create_etf_holdings_service(mongo_uri: str = "mongodb://admin:password123@localhost:27017", db_name: str = "etf_data") -> ETFHoldingsService:
+def create_etf_holdings_service(mongo_uri: str = None, db_name: str = None) -> ETFHoldingsService:
+    """Factory function for ETF holdings service (defaults to settings)"""
     return ETFHoldingsService(mongo_uri, db_name)

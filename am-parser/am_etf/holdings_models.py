@@ -12,6 +12,12 @@ class ETFHoldingRecord(BaseModel):
     market_value: Optional[float] = None
     quantity: Optional[int] = None
     raw_data: Optional[Dict[str, Any]] = None
+    
+    # Enrichment fields
+    matched_isin: Optional[str] = None
+    matched_symbol: Optional[str] = None
+    match_score: Optional[float] = None
+    enrichment_status: str = Field(default="PENDING", description="PENDING, MATCHED, NO_MATCH, FAILED")
 
 
 class ETFHoldingsData(BaseModel):

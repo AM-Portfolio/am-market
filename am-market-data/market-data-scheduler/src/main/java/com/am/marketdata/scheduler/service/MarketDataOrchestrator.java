@@ -38,7 +38,7 @@ public class MarketDataOrchestrator {
     public void triggerIndicesDataProcessing() {
         log.info("Orchestrator: Triggering Indices Data Processing");
         if (cookieScheduler.isPresent()) {
-            cookieScheduler.get().executeIndicesDataProcessing();
+            // cookieScheduler.get().executeIndicesDataProcessing();
         } else {
             log.warn("Orchestrator: CookieScheduler is not present, skipping Indices Data Processing");
         }
@@ -54,7 +54,7 @@ public class MarketDataOrchestrator {
     public void triggerStockIndicesRetry() {
         log.info("Orchestrator: Triggering Stock Indices Retry Check");
         if (stockIndicesSchedulerService.isPresent()) {
-            stockIndicesSchedulerService.get().executeRetryJob();
+            // stockIndicesSchedulerService.get().executeRetryJob();
         } else {
             log.warn("Orchestrator: StockIndicesSchedulerService is not present, skipping Stock Indices Retry");
         }
@@ -74,7 +74,7 @@ public class MarketDataOrchestrator {
     public void triggerCookieRefresh() {
         log.info("Orchestrator: Triggering Cookie Refresh (Market Hours)");
         if (cookieScheduler.isPresent()) {
-            cookieScheduler.get().executeCookieRefresh();
+            // cookieScheduler.get().executeCookieRefresh();
         } else {
             log.warn("Orchestrator: CookieScheduler is not present, skipping Cookie Refresh");
         }
@@ -110,16 +110,16 @@ public class MarketDataOrchestrator {
     public void triggerMarketOpenJobs() {
         log.info("Orchestrator: Triggering Market Open Jobs");
         if (ingestionScheduler.isPresent()) {
-            ingestionScheduler.get().startIngestionJob();
+            // ingestionScheduler.get().startIngestionJob();
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Market Open Jobs");
         }
     }
 
     /**
-     * Streamer Start (e.g., 8:00 AM)
+     * Streamer Start (e.g., 2:15 PM)
      */
-    @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
+    @Scheduled(cron = "0 15 14 ? * MON-FRI", zone = "Asia/Kolkata")
     public void triggerStreamerStart() {
         log.info("Orchestrator: Triggering Streamer Start");
         if (streamerScheduler.isPresent()) {
@@ -137,7 +137,7 @@ public class MarketDataOrchestrator {
     public void triggerIngestionStop() {
         log.info("Orchestrator: Triggering Ingestion Stop");
         if (ingestionScheduler.isPresent()) {
-            ingestionScheduler.get().stopIngestionJob();
+            // ingestionScheduler.get().stopIngestionJob();
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Ingestion Stop");
         }
@@ -166,7 +166,7 @@ public class MarketDataOrchestrator {
     public void triggerMorningStockIndicesFetch() {
         log.info("Orchestrator: Triggering Morning Stock Indices Fetch");
         if (stockIndicesSchedulerService.isPresent()) {
-            stockIndicesSchedulerService.get().executeMorningStockIndicesFetch();
+            // stockIndicesSchedulerService.get().executeMorningStockIndicesFetch();
         } else {
             log.warn("Orchestrator: StockIndicesSchedulerService is not present, skipping Morning Stock Indices Fetch");
         }
@@ -182,7 +182,7 @@ public class MarketDataOrchestrator {
     public void triggerEveningStockIndicesFetch() {
         log.info("Orchestrator: Triggering Evening Stock Indices Fetch");
         if (stockIndicesSchedulerService.isPresent()) {
-            stockIndicesSchedulerService.get().executeEveningStockIndicesFetch();
+            // stockIndicesSchedulerService.get().executeEveningStockIndicesFetch();
         } else {
             log.warn("Orchestrator: StockIndicesSchedulerService is not present, skipping Evening Stock Indices Fetch");
         }
@@ -197,7 +197,8 @@ public class MarketDataOrchestrator {
         log.info("Orchestrator: Triggering Manual Historical Data Sync for {}, Duration: {}, Force: {}", symbol,
                 duration, forceRefresh);
         if (ingestionScheduler.isPresent()) {
-            ingestionScheduler.get().executeManualHistoricalSync(symbol, duration, forceRefresh);
+            // ingestionScheduler.get().executeManualHistoricalSync(symbol, duration,
+            // forceRefresh);
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Manual Historical Data Sync");
         }
@@ -210,7 +211,7 @@ public class MarketDataOrchestrator {
     public void triggerHistoricalSync() {
         log.info("Orchestrator: Triggering Historical Data Sync");
         if (ingestionScheduler.isPresent()) {
-            ingestionScheduler.get().executeHistoricalSync();
+            // ingestionScheduler.get().executeHistoricalSync();
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Historical Data Sync");
         }
@@ -223,7 +224,7 @@ public class MarketDataOrchestrator {
     public void triggerDailyAnalysis() {
         log.info("Orchestrator: Triggering Daily Market Analysis");
         if (marketAnalysisSchedulerService.isPresent()) {
-            marketAnalysisSchedulerService.get().executeDailyAnalysis();
+            // marketAnalysisSchedulerService.get().executeDailyAnalysis();
         } else {
             log.warn("Orchestrator: MarketAnalysisSchedulerService is not present, skipping Analysis");
         }

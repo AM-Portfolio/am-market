@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,9 +26,12 @@ public class SecurityController {
 
     private final SecurityService securityService;
     private final StockIndicesService stockIndicesService;
+    private final com.am.marketdata.service.SecurityBulkUpdateService securityBulkUpdateService;
 
     @GetMapping("/search")
-    @Operation(summary = "Search securities by symbol or ISIN")
+    @Operation(summary = "Fuzzy search securities by symbol, ISIN, or company name", description = "Search across symbol, ISIN, and company name using case-insensitive fuzzy matching. "
+            +
+            "Returns all securities that partially match the query in any of these fields.")
     public ResponseEntity<List<SecurityDocument>> search(@RequestParam String query) {
         return ResponseEntity.ok(securityService.search(query));
     }
@@ -64,5 +68,27 @@ public class SecurityController {
         }
 
         return ResponseEntity.ok(securityService.search(request));
+    }
+
+    @PostMapping(value = "/bulk-update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Bulk update securities from CSV or Excel file", description = "Upload a CSV or Excel file to update security metadata. "
+            +
+            "Supports selective field updates and matching strategies.")
+    public ResponseEntity<com.am.marketdata.common.dto.BulkUpdateResponse> bulkUpdate(
+            @RequestPart("file") @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "CSV or Excel file containing security data", content = @io.swagger.v3.oas.annotations.media.Content(mediaType = MediaType.MULTIPART_FORM_DATA_VALUE)) org.springframework.web.multipart.MultipartFile file,
+            @RequestParam(required = false) java.util.Set<String> fieldsToUpdate,
+            @RequestParam(defaultValue = "STRICT_SYMBOL") com.am.marketdata.common.dto.BulkUpdateRequest.MatchingStrategy matchingStrategy,
+            @RequestParam(defaultValue = "false") boolean dryRun) {
+        com.am.marketdata.common.dto.BulkUpdateResponse response = securityBulkUpdateService.processBulkUpdate(file,
+                fieldsToUpdate, matchingStrategy, dryRun);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/batch-search")
+    @Operation(summary = "Batch search securities", description = "Search for multiple securities at once. Useful for enriching ETF holdings data with ISINs.")
+    public ResponseEntity<com.am.marketdata.common.dto.BatchSearchResponse> batchSearch(
+            @RequestBody com.am.marketdata.common.dto.BatchSearchRequest request) {
+        com.am.marketdata.common.dto.BatchSearchResponse response = securityService.batchSearch(request);
+        return ResponseEntity.ok(response);
     }
 }

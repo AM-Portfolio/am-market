@@ -592,8 +592,9 @@ async def get_job_queue() -> JobQueue:
     if job_queue is None:
         import os
         # Initialize with MongoDB connection from environment or default
-        mongodb_uri = os.getenv("MONGO_URI", "mongodb://admin:password123@localhost:27017")
-        db_name = os.getenv("MONGO_DB", "mutual_funds")
+        from am_configs.settings import settings
+        mongodb_uri = settings.mongo_uri
+        db_name = settings.mongo_db
         job_queue = JobQueue(mongodb_uri, db_name)
         
         # Recover any stuck jobs from server restarts

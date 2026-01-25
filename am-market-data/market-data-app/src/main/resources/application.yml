@@ -15,7 +15,6 @@ INFLUXDB_ORG: am-portfolio
 INFLUXDB_BUCKET: market-data
 INFLUXDB_URL: http://${INFRA_HOST}:8086
 
-
 # Redis Configuration
 REDIS_HOSTNAME: ${INFRA_HOST}
 REDIS_PASSWORD: password123
@@ -24,7 +23,6 @@ REDIS_PORT: 6379
 # Grafana Configuration
 GRAFANA_ADMIN_USER: 1109403
 GRAFANA_ADMIN_PASSWORD: XXXXXXXXXX
-
 
 # Application Configuration
 STOKUPATE_TOPIC_NAME: am-stock-price-update
@@ -48,8 +46,7 @@ MARKET_DATA_MAX_AGE_MINUTES: 15
 UPSTOX_ACCESS_TOKEN: eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiIyWENSTjgiLCJqdGkiOiI2OTYwYjQzYzNhZDg4NTIyOGYyZGVmZTMiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc2Nzk0NTI3NiwiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzY3OTk2MDAwfQ.37NDvLehb2sf-TNogAFmYAyMbjyFD1ZJ7cMWQsHUKB4
 UPSTOX_API_KEY: 48d1e335-09ad-4dc0-b955-4505c350d10b
 UPSTOX_SECRET_KEY: jqre481zf0
-UPSTOX_CODE: rNLu2Q 
-
+UPSTOX_CODE: rNLu2Q
 
 app:
   kafka:
@@ -76,11 +73,18 @@ spring:
       database: ${MONGODB_DATABASE}
       username: ${MONGODB_USERNAME}
       password: ${MONGODB_PASSWORD}
-
-      
       authentication-database: admin
+
+  # Multipart file upload configuration (for bulk security updates)
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB # Maximum file size (CSV/Excel files)
+      max-request-size: 10MB # Maximum request size
+      file-size-threshold: 2KB # Threshold for writing to disk
+
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:${INFRA_HOST}:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092} #${KAFKA_BOOTSTRAP_SERVERS:${INFRA_HOST}:9092}
     consumer:
       group-id: ${KAFKA_CONSUMER_GROUP_ID:market-data-group}
       auto-offset-reset: ${KAFKA_CONSUMER_AUTO_OFFSET_RESET:earliest}
@@ -91,7 +95,7 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-  
+
   # InfluxDB Configuration
   influx:
     url: ${INFLUXDB_URL}
@@ -99,7 +103,7 @@ spring:
     org: ${INFLUXDB_ORG}
     bucket: ${INFLUXDB_BUCKET}
 
-# Management and Metrics Configuration
+  # Management and Metrics Configuration
 
   config:
     import:
@@ -121,7 +125,7 @@ market-data:
 # Logging Configuration
 logging:
   file:
-    name: ./logs/market-data-app.log  # Log file in current directory
+    name: ./logs/market-data-app.log # Log file in current directory
   logback:
     rollingpolicy:
       max-file-size: 10MB
@@ -129,19 +133,19 @@ logging:
       total-size-cap: 1GB
       clean-history-on-start: false
   pattern:
-    file: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%class{0}.%method] - %msg%n'
-    console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%class{0}.%method] - %msg%n'
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%class{0}.%method] - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%class{0}.%method] - %msg%n"
   level:
     root: WARN
-    '[com.am.marketdata]': INFO
-    '[com.am.marketdata.scheduler]': INFO
-    '[com.am.marketdata.service]': INFO
-    '[com.am.marketdata.redis]': INFO
-    '[com.am.marketdata.external.api]': WARN
-    '[com.am.common.investment.service]': INFO
-    '[org.springframework]': WARN
-    '[org.apache.kafka]': WARN
-    '[org.springframework.data.redis]': WARN  # Reduce Redis connection logging
+    "[com.am.marketdata]": INFO
+    "[com.am.marketdata.scheduler]": INFO
+    "[com.am.marketdata.service]": INFO
+    "[com.am.marketdata.redis]": INFO
+    "[com.am.marketdata.external.api]": WARN
+    "[com.am.common.investment.service]": INFO
+    "[org.springframework]": WARN
+    "[org.apache.kafka]": WARN
+    "[org.springframework.data.redis]": WARN # Reduce Redis connection logging
 
 upstox:
   interval: I1
@@ -175,29 +179,29 @@ scheduler:
     symbols: "NIFTY 50,NIFTY BANK"
     provider: UPSTOX
     force: true
-    start-cron: "0 15 9 * * MON-FRI"  # 9:15 AM weekdays
-    stop-cron: "0 30 15 * * MON-FRI"   # 3:30 PM weekdays
+    start-cron: "0 15 9 * * MON-FRI" # 9:15 AM weekdays
+    stop-cron: "0 30 15 * * MON-FRI" # 3:30 PM weekdays
   historical:
-    sync-cron: "0 15 7 * * *"          # 7:15 AM daily
+    sync-cron: "0 15 7 * * *" # 7:15 AM daily
   redis:
     cleanup:
       enabled: true
-      cron: "0 0 2 * * *"              # 2:00 AM daily
+      cron: "0 0 2 * * *" # 2:00 AM daily
 
 redis:
   cleanup:
     retention:
-      days: 7       # Keep last 7 days in Redis
+      days: 7 # Keep last 7 days in Redis
     batch:
-      size: 1000    # Process 1000 keys at a time
+      size: 1000 # Process 1000 keys at a time
   cache:
     ttl:
-      historical: 2592000    # 30 days
-      analysis: 2592000    # 30 days for historical analysis data
+      historical: 2592000 # 30 days
+      analysis: 2592000 # 30 days for historical analysis data
       intraday:
-        past: 14400        # 4 hours for past dates
-        future: 86400      # 24 hours for future dates
-        buffer: 14400      # 4 hour buffer after EOD
+        past: 14400 # 4 hours for past dates
+        future: 86400 # 24 hours for future dates
+        buffer: 14400 # 4 hour buffer after EOD
 
 # Management/Actuator Configuration
 management:
@@ -230,7 +234,6 @@ management:
 jwt:
   secret: ${JWT_SECRET:internal-service-super-secret-key-32chars-minimum-change-in-prod}
 
-
   # Security Configuration
 security:
-  enabled: ${SECURITY_ENABLED:false}  # Disabled by default for development. Set SECURITY_ENABLED=true in production.
+  enabled: ${SECURITY_ENABLED:false} # Disabled by default for development. Set SECURITY_ENABLED=true in production.

@@ -210,6 +210,77 @@ async def search_etfs(
         )
 
 
+@router.get("/holdings/bulk")
+async def bulk_fetch_etf_holdings(
+    limit: int = Query(default=None, description="Limit number of ETFs to process")
+):
+    """
+    Get Valid ETF Holdings in Bulk
+    Returns a map of {ISIN: {symbol, holdings_list}} for efficient Java syncing.
+    Only returns ETFs that actually have holdings data.
+    """
+    try:
+        etf_service = ETFService()
+        holdings_service = ETFHoldingsService()
+        
+        # 1. Fetch all ETFs that have an ISIN
+        all_etfs = await etf_service.list(limit=5000)
+        etfs_with_isin = [etf for etf in all_etfs if etf.isin]
+        
+        # 2. Fetch all Holdings Docs (Optimized: Projection only needed fields)
+        # Using a specialized bulk method if available, or list_all_holdings
+        all_holdings_docs = await holdings_service.list_all_holdings(limit=5000)
+        
+        # 3. Create a Map for O(1) Access
+        # Map: ETF_ISIN -> Holdings Object
+        holdings_map = {doc.isin: doc for doc in all_holdings_docs}
+        
+        await etf_service.close()
+        await holdings_service.close()
+        
+        result_map = {}
+        count = 0
+        
+        for etf in etfs_with_isin:
+            if limit and count >= limit:
+                break
+                
+                
+            if etf.isin in holdings_map:
+                doc = holdings_map[etf.isin]
+                
+                # Compress the holdings list to minimal required fields
+                # We need ISIN, Symbol, and Sector for the matching logic
+                compressed_holdings = []
+                if doc.holdings:
+                    for h in doc.holdings:
+                        compressed_holdings.append({
+                            "isin": h.isin_code,
+                            "symbol": h.stock_name, # Using stock_name as symbol proxy if symbol missing
+                            "sector": hasattr(h, 'sector') and h.sector or "Unknown",
+                            "weight": h.percentage
+                        })
+                
+                result_map[etf.isin] = {
+                    "symbol": etf.symbol,
+                    "name": etf.name,
+                    "holdings": compressed_holdings
+                }
+                count += 1
+                
+        return {
+            "total_etfs": len(result_map),
+            "data": result_map
+        }
+
+    except Exception as e:
+        print(f"❌ Bulk fetch error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to bulk fetch ETF holdings: {str(e)}"
+        )
+
+
 @router.post("/fetch-holdings/{symbol}")
 async def fetch_holdings_for_etf(
     symbol: str,
@@ -299,21 +370,33 @@ async def fetch_holdings_for_etf(
         )
 
 
-@router.get("/holdings/{symbol}")
-async def get_etf_holdings(symbol: str):
+@router.get("/holdings/{symbol_or_isin}")
+async def get_etf_holdings(symbol_or_isin: str):
     """
-    Get stored holdings for a specific ETF
+    Get stored holdings for a specific ETF (by Symbol or ISIN)
     """
     try:
+        print(f"🔍 [DEBUG] Request received for ETF holdings: '{symbol_or_isin}'")
+        
         # First get ETF info
         etf_service = ETFService()
-        etf = await etf_service.get_by_symbol(symbol)
+        
+        # Try by symbol first
+        etf = await etf_service.get_by_symbol(symbol_or_isin)
+        
+        # If not found, try by ISIN
+        if not etf:
+             print(f"DEBUG: Symbol lookup failed, trying ISIN: {symbol_or_isin}")
+             etf = await etf_service.get_by_isin(symbol_or_isin)
+        
+        print(f"🔍 [DEBUG] ETF Service returned: {etf} for input: '{symbol_or_isin}'")
         
         if not etf:
+            print(f"❌ [DEBUG] ETF not found in database for input: '{symbol_or_isin}'")
             await etf_service.close()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"ETF not found: {symbol}"
+                detail=f"ETF not found: {symbol_or_isin}"
             )
         
         # Then get holdings from dedicated collection
@@ -500,3 +583,5 @@ async def load_etfs_from_json(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to load ETFs: {str(e)}"
         )
+
+

@@ -1,0 +1,125 @@
+[
+    {
+        "symbol": "NIFTYIT",
+        "name": "Nifty IT ETF",
+        "isin": "INF20220202",
+        "asset_class": "Equity",
+        "market_cap_category": "Large Cap",
+        "holdings": [
+            {
+                "stock_name": "TCS",
+                "isin_code": "INE467B01029",
+                "percentage": 25.0,
+                "market_value": 250000.0,
+                "quantity": 100
+            },
+            {
+                "stock_name": "Infosys",
+                "isin_code": "INE009A01021",
+                "percentage": 25.0,
+                "market_value": 250000.0,
+                "quantity": 150
+            },
+            {
+                "stock_name": "HCL Tech",
+                "isin_code": "INE860A01027",
+                "percentage": 10.0,
+                "market_value": 100000.0,
+                "quantity": 80
+            },
+            {
+                "stock_name": "Wipro",
+                "isin_code": "INE075A01022",
+                "percentage": 10.0,
+                "market_value": 100000.0,
+                "quantity": 200
+            },
+            {
+                "stock_name": "Tech Mahindra",
+                "isin_code": "INE669C01036",
+                "percentage": 10.0,
+                "market_value": 100000.0,
+                "quantity": 90
+            },
+            {
+                "stock_name": "LTIMindtree",
+                "isin_code": "INE214T01019",
+                "percentage": 5.0,
+                "market_value": 50000.0,
+                "quantity": 10
+            },
+            {
+                "stock_name": "Persistent Systems",
+                "isin_code": "INE262H01013",
+                "percentage": 5.0,
+                "market_value": 50000.0,
+                "quantity": 15
+            },
+            {
+                "stock_name": "Coforge",
+                "isin_code": "INE591G01017",
+                "percentage": 5.0,
+                "market_value": 50000.0,
+                "quantity": 20
+            },
+            {
+                "stock_name": "Mphasis",
+                "isin_code": "INE356A01018",
+                "percentage": 2.5,
+                "market_value": 25000.0,
+                "quantity": 12
+            },
+            {
+                "stock_name": "Tata Elxsi",
+                "isin_code": "INE670A01012",
+                "percentage": 2.5,
+                "market_value": 25000.0,
+                "quantity": 5
+            }
+        ]
+    },
+    {
+        "symbol": "NIFTY50",
+        "name": "Nifty 50 ETF",
+        "isin": "INF20220203",
+        "asset_class": "Equity",
+        "market_cap_category": "Large Cap",
+        "holdings": [
+            {
+                "stock_name": "HDFC Bank",
+                "isin_code": "INE040A01034",
+                "percentage": 13.5,
+                "market_value": 135000.0,
+                "quantity": 80
+            },
+            {
+                "stock_name": "Reliance Industries",
+                "isin_code": "INE002A01018",
+                "percentage": 10.2,
+                "market_value": 102000.0,
+                "quantity": 40
+            },
+            {
+                "stock_name": "ICICI Bank",
+                "isin_code": "INE090A01021",
+                "percentage": 7.8,
+                "market_value": 78000.0,
+                "quantity": 70
+            },
+            {
+                "stock_name": "Infosys",
+                "isin_code": "INE009A01021",
+                "percentage": 5.9,
+                "market_value": 59000.0,
+                "quantity": 40
+            },
+            {
+                "stock_name": "ITC",
+                "isin_code": "INE154A01025",
+                "percentage": 4.5,
+                "market_value": 45000.0,
+                "quantity": 100
+            }
+        ]
+    }
+]

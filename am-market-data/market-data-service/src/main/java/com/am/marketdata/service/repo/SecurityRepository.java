@@ -17,7 +17,25 @@ public interface SecurityRepository extends MongoRepository<SecurityDocument, St
     @Query("{ 'key.isin' : ?0 }")
     SecurityDocument findByIsin(String isin);
 
-    // Search by symbol or isin containing text (for advanced search later)
-    @Query("{ $or: [ { 'key.symbol': { $regex: ?0, $options: 'i' } }, { 'key.isin': { $regex: ?0, $options: 'i' } } ] }")
+    // Enhanced fuzzy search by symbol, ISIN, or company name (case-insensitive)
+    @Query("{ $or: [ { 'key.symbol': { $regex: ?0, $options: 'i' } }, { 'key.isin': { $regex: ?0, $options: 'i' } }, { 'metadata.company_name': { $regex: ?0, $options: 'i' } } ] }")
     List<SecurityDocument> search(String text);
+
+    // Bulk update matching methods - return List to handle potential duplicates
+
+    @Query("{ 'key.symbol' : ?0 }")
+    List<SecurityDocument> findByKeySymbol(String symbol);
+
+    @Query("{ 'key.isin' : ?0 }")
+    List<SecurityDocument> findByKeyIsin(String isin);
+
+    @Query("{ 'key.symbol' : ?0, 'key.isin' : ?1 }")
+    List<SecurityDocument> findByKeySymbolAndKeyIsin(String symbol, String isin);
+
+    // Loose matching (case-insensitive)
+    @Query("{ 'key.symbol' : { $regex: ?0, $options: 'i' } }")
+    List<SecurityDocument> findByKeySymbolIgnoreCase(String symbol);
+
+    @Query("{ 'key.isin' : { $regex: ?0, $options: 'i' } }")
+    List<SecurityDocument> findByKeyIsinIgnoreCase(String isin);
 }

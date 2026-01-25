@@ -1,4 +1,4 @@
-# Pre-production Environment Configuration
+# Pre-production Environment Configuration (Kind Cluster)
 environment: preprod
 
 # Application Configuration
@@ -15,12 +15,12 @@ service:
   type: ClusterIP
   port: 8080
 
-# Ingress Configuration
+# Ingress Configuration (disabled for Kind)
 ingress:
-  enabled: true
-  ipAddress: 20.59.109.241
+  enabled: false
+  ipAddress: 127.0.0.1
 
-# Resource Configuration
+# Resource Configuration (reduced for Kind)
 resources:
   limits:
     cpu: 500m
@@ -29,25 +29,29 @@ resources:
     cpu: 250m
     memory: 256Mi
 
+# PostgreSQL Configuration (deployed in am-np-west namespace)
 postgresql:
-  enabled: true
-  fullname: host.docker.internal
+  enabled: false
+  fullname: postgresql.am-np-west.svc.cluster.local
   auth:
-    database: portfolio
+    database: marketdata
     username: postgres
-    password: password
+    password: postgres123
   primary:
     service:
-      port: 5456
-
+      port: 5432
 
 # Vault Configuration
 vault:
   enabled: true
   secretPaths:
-    database: "vault:kv/data/preprod/database"
-    api: "vault:kv/data/preprod/api"
-    basepath: "vault:kv/data/preprod"
+    postgres: "kv/preprod/database/postgres"
+    mongodb: "kv/preprod/database/mongo"
+    redis: "kv/preprod/database/redis"
+    influxdb: "kv/preprod/database/influxdb"
+    kafka: "kv/preprod/kafka"
+    upstock: "kv/preprod/api/upstock"
+    zerodha: "kv/preprod/api/zerodha"
 
 # Monitoring Configuration
 monitoring:

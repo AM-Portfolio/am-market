@@ -117,11 +117,129 @@ class SmartETFHoldingsService:
                             raw_data=holding_data
                         )
                         holdings.append(holding)
+                
+                # Enrich holdings with ISINs from market-data
+                if holdings:
+                    await self.enrich_holdings_with_isins(holdings)
                         
                 return holdings
                 
         except Exception as e:
+            # log error but return what we have or None
+            print(f"Error fetching holdings: {e}") 
             return None
+
+    async def enrich_holdings_with_isins(self, holdings: List[ETFHoldingRecord]):
+        """
+        Enrich holdings with ISINs using market-data batch search
+        """
+        try:
+            import httpx
+            import os
+            
+            # Filter holdings that need enrichment (missing ISIN or basic check)
+            # We enrich everything to ensure we have the correct ISIN/Symbol mapping
+            stock_names = [h.stock_name for h in holdings if h.stock_name]
+            
+            if not stock_names:
+                return
+
+            market_data_url = os.getenv("MARKET_DATA_URL", "http://localhost:8093")
+            api_url = f"{market_data_url}/v1/securities/batch-search"
+            
+            # Process in chunks if needed, but market-data handles 1000, so we likely send all
+            # Just in case, let's limit to 500 per call to be safe
+            chunk_size = 500
+            
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                for i in range(0, len(stock_names), chunk_size):
+                    chunk_names = stock_names[i:i + chunk_size]
+                    
+                    payload = {
+                        "queries": chunk_names,
+                        "limit": 3,  # Get top 3 matches to pick best
+                        "minMatchScore": 0.7  # Fairly loose to catch variations, we filter better locally
+                    }
+                    
+                    try:
+                        response = await client.post(api_url, json=payload)
+                        response.raise_for_status()
+                        result_data = response.json()
+                        
+                        # Process results and map back to holdings
+                        self._process_enrichment_results(holdings, result_data)
+                        
+                    except Exception as req_err:
+                        print(f"Error in batch search request: {req_err}")
+                        
+        except Exception as e:
+            print(f"Enrichment failed: {e}")
+            # We don't fail the whole fetch if enrichment fails, just log it
+
+    def _process_enrichment_results(self, holdings: List[ETFHoldingRecord], api_response: dict):
+        """Map API results back to holdings records"""
+        if not api_response or 'results' not in api_response:
+            return
+
+        # Create a map of query -> valid matches for quick lookup
+        # The API preserves order usually, but let's be safe. 
+        # API returns: results: [{query: "Reliance", matches: [...]}, ...]
+        
+        results_map = {r.get('query'): r.get('matches', []) for r in api_response.get('results', [])}
+        
+        # DEBUG LOGGING for enrichment
+        print(f"Batch Search: Sent {len(holdings)} queries. Received {len(results_map)} results.")
+        # Debug "Reliance" specifically
+        reliance_keys = [k for k in results_map.keys() if "Reliance" in k]
+        if reliance_keys:
+             print(f"DEBUG keys for Reliance: {reliance_keys}")
+             # Print matches for first reliance
+             print(f"DEBUG matches for {reliance_keys[0]}: {results_map[reliance_keys[0]]}")
+        
+        for holding in holdings:
+            matches = results_map.get(holding.stock_name)
+            
+            if matches:
+                # Logic to pick the best match
+                # 1. Exact ISIN match (if holding already had one) - unlikely if we are here to enrich
+                # 2. Highest match Score
+                # 3. Preference for 'COMPANY_NAME' or 'SYMBOL' match
+                
+                best_match = None
+                
+                # Sort matches by score descending
+                sorted_matches = sorted(matches, key=lambda x: x.get('matchScore', 0), reverse=True)
+                
+                # Simply pick the top one for now if score is decent
+                if sorted_matches:
+                    for match in sorted_matches:
+                        if match.get('matchScore', 0) < 0.6:
+                            break # Score too low, stop looking
+                            
+                        candidate_isin = match.get('isin')
+                        # Filter invalid ISINs
+                        if not candidate_isin or candidate_isin == "-" or len(candidate_isin) < 10:
+                            continue
+                            
+                        # Valid match found
+                        best_match = match
+                        break
+                
+                if best_match:
+                    # found valid enriched ISIN
+                    # Update primary fields directly as requested
+                    enriched_isin = best_match.get('isin')
+                    
+                    # Store enrichment metadata but update primary ISIN
+                    holding.isin_code = enriched_isin
+                    holding.matched_isin = enriched_isin # Keep for provenance/debugging if needed, or remove if strict
+                    holding.matched_symbol = best_match.get('symbol')
+                    holding.match_score = best_match.get('matchScore')
+                    holding.enrichment_status = "MATCHED"
+                else:
+                    holding.enrichment_status = "NO_MATCH"
+            else:
+                holding.enrichment_status = "NO_MATCH"
     
     def _safe_float(self, value) -> Optional[float]:
         """Safely convert to float"""
@@ -300,5 +418,6 @@ class SmartETFHoldingsService:
             self._client.close()
 
 
-def create_smart_etf_holdings_service(mongo_uri: str = "mongodb://admin:password123@localhost:27017", db_name: str = "etf_data") -> SmartETFHoldingsService:
+def create_smart_etf_holdings_service(mongo_uri: str = None, db_name: str = None) -> SmartETFHoldingsService:
+    """Factory function for smart ETF holdings service (defaults to settings)"""
     return SmartETFHoldingsService(mongo_uri, db_name)

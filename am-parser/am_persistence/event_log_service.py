@@ -12,9 +12,17 @@ from am_common.event_models import ProcessingEvent
 
 
 class EventLogService:
-    def __init__(self, mongo_uri: str = "mongodb://localhost:27017", db_name: str = "am_logs"):
-        self.mongo_uri = mongo_uri
-        self.db_name = db_name
+    def __init__(self, mongo_uri: str = None, db_name: str = None):
+        """Initialize EventLogService
+        
+        Args:
+            mongo_uri: MongoDB connection URI (defaults to settings.mongo_uri)
+            db_name: Database name (defaults to 'am_logs')
+        """
+        from am_configs.settings import settings
+        
+        self.mongo_uri = mongo_uri or settings.mongo_uri
+        self.db_name = db_name or "am_logs"
         self._client = None
         self._db = None
         self._collection = None
@@ -49,5 +57,6 @@ class EventLogService:
             self._client.close()
 
 
-def create_event_log_service(mongo_uri: str = "mongodb://localhost:27017", db_name: str = "am_logs") -> EventLogService:
+def create_event_log_service(mongo_uri: str = None, db_name: str = None) -> EventLogService:
+    """Factory function to create EventLogService instance"""
     return EventLogService(mongo_uri, db_name)

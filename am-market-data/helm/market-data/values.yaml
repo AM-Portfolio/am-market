@@ -37,14 +37,18 @@ securityContext: {}
 service:
   type: ClusterIP
   port: 8080
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/actuator/prometheus"
+    prometheus.io/port: "8080"
 
 ingress:
-  enabled: true
+  enabled: false
   className: "nginx"
   annotations:
     kubernetes.io/ingress.class: nginx
   hosts:
-    - host: market-data.INGRESS_IP.nip.io
+    - host: market-data.local
       paths:
         - path: /
           pathType: Prefix
@@ -100,12 +104,15 @@ config:
   marketData:
     maxRetries: 3
     retryDelayMs: 1000
-    threadPoolSize: 10
-    threadQueueCapacity: 100
-    maxAgeMinutes: 60
+    threadPoolSize: 5
+    threadQueueCapacity: 10
+    maxAgeMinutes: 15
 
-# Monitoring configuration
+# Monitoring configuration (Prometheus auto-discovery)
 monitoring:
   enabled: true
   prometheus:
     enabled: true
+    scrape: "true"
+    path: "/actuator/prometheus"
+    port: "8080"

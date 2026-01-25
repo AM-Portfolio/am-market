@@ -46,15 +46,14 @@ async def lifespan(app: FastAPI):
     
     # Startup: Initialize services
     try:
-        # Get MongoDB connection details from environment variables
-        mongo_uri = os.getenv("MONGO_URI", "mongodb://admin:password123@localhost:27017")
-        mongo_db = os.getenv("MONGO_DB", "mutual_funds")
+        # Import centralized configuration
+        from am_configs.settings import settings
         
-        print(f"🔌 Connecting to MongoDB: {mongo_uri}")
+        print(f"🔌 Connecting to MongoDB: {settings.mongo_uri}")
         
         service_instance = create_mutual_fund_service(
-            mongo_uri=mongo_uri,
-            db_name=mongo_db
+            mongo_uri=settings.mongo_uri,
+            db_name=settings.mongo_db
         )
         
         # Initialize file upload services
@@ -105,7 +104,12 @@ app.add_middleware(
 
 # Include routers
 app.include_router(job_router, prefix="/v1")
-app.include_router(etf_router, prefix="/v1")
+app.include_router(etf_router, prefix="/v1/etf")
+
+# Debug: Print all registered routes
+for route in app.routes:
+    if hasattr(route, "methods"):
+        print(f"🛣️  Route: {route.methods} {route.path}")
 
 
 
@@ -346,6 +350,29 @@ async def search_portfolios(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to search portfolios: {str(e)}"
+        )
+
+
+
+@mutual_fund_router.get("/holdings/bulk", response_model=dict)
+async def get_bulk_holdings(
+    limit: int = 100,
+    service: MutualFundService = Depends(get_service)
+):
+    """
+    Get all portfolios with full holdings data
+    """
+    try:
+        portfolios = await service.get_all_portfolios(limit=limit)
+        return {
+            "status": "success",
+            "count": len(portfolios),
+            "data": [p.model_dump() for p in portfolios]
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get bulk holdings: {str(e)}"
         )
 
 

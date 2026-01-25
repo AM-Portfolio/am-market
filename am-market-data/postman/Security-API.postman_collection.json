@@ -1,0 +1,510 @@
+{
+    "info": {
+        "name": "Market Data - Security API",
+        "description": "Postman collection for testing Security endpoints including bulk update functionality",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8093",
+            "type": "string"
+        },
+        {
+            "key": "apiPrefix",
+            "value": "/v1/securities",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "Search Securities (Simple)",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/search?query=ABB",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "search"
+                    ],
+                    "query": [
+                        {
+                            "key": "query",
+                            "value": "ABB",
+                            "description": "Search by symbol or ISIN"
+                        }
+                    ]
+                },
+                "description": "Simple text search for securities by symbol or ISIN"
+            }
+        },
+        {
+            "name": "Search Securities (Advanced - POST)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"symbols\": [\"RELIANCE\", \"TCS\", \"INFY\"],\n  \"sector\": \"Technology\",\n  \"industry\": \"IT Services\",\n  \"query\": \"INFY\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/search",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "search"
+                    ]
+                },
+                "description": "Advanced search with filters for sector, industry, and specific symbols. This is a POST to /search with request body."
+            }
+        },
+        {
+            "name": "Search by Index",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"index\": \"NIFTY 50\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/search",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "search"
+                    ]
+                },
+                "description": "Search securities by index name. Controller will fetch index constituents automatically."
+            }
+        },
+        {
+            "name": "Bulk Update - Dry Run (Preview)",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": "a:/InfraCode/AM-Portfolio-grp/am-market/am-market-data/data/Equity.csv",
+                            "description": "CSV or Excel file with security data"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "companyName",
+                            "type": "text",
+                            "description": "Fields to update"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "sector",
+                            "type": "text"
+                        },
+                        {
+                            "key": "matchingStrategy",
+                            "value": "STRICT_SYMBOL",
+                            "type": "text",
+                            "description": "STRICT_ISIN, STRICT_SYMBOL, STRICT_BOTH, LOOSE_ISIN, LOOSE_SYMBOL"
+                        },
+                        {
+                            "key": "dryRun",
+                            "value": "true",
+                            "type": "text",
+                            "description": "Preview changes without saving"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/bulk-update",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "bulk-update"
+                    ]
+                },
+                "description": "Preview bulk updates without saving changes. Returns what would be updated."
+            }
+        },
+        {
+            "name": "Bulk Update - Company Name Only",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": "a:/InfraCode/AM-Portfolio-grp/am-market/am-market-data/data/Equity.csv"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "companyName",
+                            "type": "text"
+                        },
+                        {
+                            "key": "matchingStrategy",
+                            "value": "STRICT_SYMBOL",
+                            "type": "text"
+                        },
+                        {
+                            "key": "dryRun",
+                            "value": "false",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/bulk-update",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "bulk-update"
+                    ]
+                },
+                "description": "Update only companyName field from the uploaded file"
+            }
+        },
+        {
+            "name": "Bulk Update - All Metadata Fields",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": "a:/InfraCode/AM-Portfolio-grp/am-market/am-market-data/data/Equity.csv"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "companyName",
+                            "type": "text"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "sector",
+                            "type": "text"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "industry",
+                            "type": "text"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "status",
+                            "type": "text"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "group",
+                            "type": "text"
+                        },
+                        {
+                            "key": "matchingStrategy",
+                            "value": "STRICT_SYMBOL",
+                            "type": "text"
+                        },
+                        {
+                            "key": "dryRun",
+                            "value": "false",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/bulk-update",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "bulk-update"
+                    ]
+                },
+                "description": "Update all available metadata fields"
+            }
+        },
+        {
+            "name": "Bulk Update - ISIN Matching",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": "a:/InfraCode/AM-Portfolio-grp/am-market/am-market-data/data/Equity.csv"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "companyName",
+                            "type": "text"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "sector",
+                            "type": "text"
+                        },
+                        {
+                            "key": "matchingStrategy",
+                            "value": "STRICT_ISIN",
+                            "type": "text",
+                            "description": "Match by ISIN instead of Symbol"
+                        },
+                        {
+                            "key": "dryRun",
+                            "value": "false",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/bulk-update",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "bulk-update"
+                    ]
+                },
+                "description": "Use ISIN for matching securities instead of Symbol"
+            }
+        },
+        {
+            "name": "Bulk Update - Loose Symbol Matching",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": "a:/InfraCode/AM-Portfolio-grp/am-market/am-market-data/data/Equity.csv"
+                        },
+                        {
+                            "key": "fieldsToUpdate",
+                            "value": "companyName",
+                            "type": "text"
+                        },
+                        {
+                            "key": "matchingStrategy",
+                            "value": "LOOSE_SYMBOL",
+                            "type": "text",
+                            "description": "Case-insensitive symbol matching"
+                        },
+                        {
+                            "key": "dryRun",
+                            "value": "true",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/bulk-update",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "bulk-update"
+                    ]
+                },
+                "description": "Use case-insensitive symbol matching (e.g., 'abb' matches 'ABB')"
+            }
+        },
+        {
+            "name": "Bulk Update - No Fields (Validation Only)",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": "a:/InfraCode/AM-Portfolio-grp/am-market/am-market-data/data/Equity.csv"
+                        },
+                        {
+                            "key": "matchingStrategy",
+                            "value": "STRICT_SYMBOL",
+                            "type": "text"
+                        },
+                        {
+                            "key": "dryRun",
+                            "value": "false",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/bulk-update",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "bulk-update"
+                    ]
+                },
+                "description": "Validate file and matching without updating any fields. Use to check data quality."
+            }
+        },
+        {
+            "name": "Batch Search - Small (3 queries)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"queries\": [\n    \"Reliance Industries\",\n    \"INFY\",\n    \"INE040A01034\"\n  ],\n  \"limit\": 3,\n  \"minMatchScore\": 0.7\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/batch-search",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "batch-search"
+                    ]
+                },
+                "description": "Batch search for multiple securities at once. Returns ISIN, symbol, company name with match scores."
+            }
+        },
+        {
+            "name": "Batch Search - Nifty 50 Holdings (Cached 24hr)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"queries\": [\n    \"Reliance Industries Ltd\",\n    \"HDFC Bank Ltd\",\n    \"Infosys Ltd\",\n    \"ICICI Bank Ltd\",\n    \"Hindustan Unilever Ltd\",\n    \"ITC Ltd\",\n    \"Bharti Airtel Ltd\",\n    \"State Bank of India\",\n    \"Tata Consultancy Services Ltd\",\n    \"Kotak Mahindra Bank Ltd\"\n  ],\n  \"limit\": 1,\n  \"minMatchScore\": 0.8\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/batch-search",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "batch-search"
+                    ]
+                },
+                "description": "Search index holdings - 24hr cache for better performance. Use for ETF holdings enrichment."
+            }
+        },
+        {
+            "name": "Batch Search - Large Batch (50 queries)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"queries\": [\n    \"Reliance\", \"Infosys\", \"TCS\", \"HDFC\", \"ICICI\",\n    \"Wipro\", \"HUL\", \"ITC\", \"SBI\", \"Airtel\",\n    \"Kotak\", \"Axis Bank\", \"Asian Paints\", \"Bajaj\", \"Sun Pharma\",\n    \"Maruti\", \"Tech Mahindra\", \"UltraTech\", \"Titan\", \"Nestle\",\n    \"PowerGrid\", \"NTPC\", \"ONGC\", \"Coal India\", \"Grasim\",\n    \"HCL Tech\", \"Adani Ports\", \"JSW Steel\", \"Tata Steel\", \"IndusInd\",\n    \"Bajaj Auto\", \"Eicher Motors\", \"Britannia\", \"Shree Cem\", \"Cipla\",\n    \"Dr Reddy\", \"Divis Lab\", \"Hindalco\", \"Tata Motors\", \"M&M\",\n    \"Vedanta\", \"Adani Ent\", \"Apollo Hosp\", \"BPCL\", \"IOC\",\n    \"Larsen\", \"HDFC Life\", \"SBI Life\", \"Bajaj Finserv\", \"UPL\"\n  ],\n  \"limit\": 2,\n  \"minMatchScore\": 0.7\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/batch-search",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "batch-search"
+                    ]
+                },
+                "description": "Test large batch processing (50 queries). Supports up to 1000 queries with internal batching."
+            }
+        },
+        {
+            "name": "Batch Search - High Confidence Only",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"queries\": [\n    \"Aegis Logistics\",\n    \"Reliance\",\n    \"Some Invalid Company Name XYZ\"\n  ],\n  \"limit\": 1,\n  \"minMatchScore\": 0.9\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}{{apiPrefix}}/batch-search",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "v1",
+                        "securities",
+                        "batch-search"
+                    ]
+                },
+                "description": "Filter by minimum match score (0.9 = 90% confidence). Use for automatic ISIN enrichment where accuracy is critical."
+            }
+        }
+    ]
+}

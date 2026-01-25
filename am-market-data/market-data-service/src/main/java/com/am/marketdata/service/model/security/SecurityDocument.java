@@ -42,6 +42,9 @@ public class SecurityDocument implements Serializable {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class SecurityMetadata implements Serializable {
+        @Field("company_name")
+        private String companyName;
+
         private String sector;
         private String industry;
 
@@ -50,6 +53,9 @@ public class SecurityDocument implements Serializable {
 
         @Field("market_cap_type")
         private String marketCapType;
+
+        private String status; // Active, Delisted, Suspended, etc.
+        private String group; // A, B, T, X, etc. (BSE/NSE classification)
     }
 
     @Data

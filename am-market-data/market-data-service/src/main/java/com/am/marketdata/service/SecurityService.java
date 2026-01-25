@@ -168,6 +168,306 @@ public class SecurityService {
         return securityRepository.search(query);
     }
 
+    /**
+     * Batch search - process multiple queries at once (supports up to 1000 queries)
+     * Uses internal batching and caching for optimal performance
+     */
+    public com.am.marketdata.common.dto.BatchSearchResponse batchSearch(
+            com.am.marketdata.common.dto.BatchSearchRequest request) {
+
+        log.info("batchSearch", "Processing " + request.getQueries().size() + " queries");
+
+        List<com.am.marketdata.common.dto.BatchSearchResponse.QueryResult> results = new ArrayList<>();
+        int totalMatches = 0;
+        int queriesWithNoMatches = 0;
+        int cacheHits = 0;
+
+        // Process in internal batches of 100 for memory efficiency
+        int internalBatchSize = 100;
+        List<String> queries = request.getQueries();
+
+        for (int batchStart = 0; batchStart < queries.size(); batchStart += internalBatchSize) {
+            int batchEnd = Math.min(batchStart + internalBatchSize, queries.size());
+            List<String> batchQueries = queries.subList(batchStart, batchEnd);
+
+            log.info("batchSearch", String.format("Processing internal batch %d-%d of %d",
+                    batchStart, batchEnd, queries.size()));
+
+            // Check cache first for this batch
+            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> cachedResults = checkBatchCache(
+                    batchQueries);
+            cacheHits += cachedResults.size();
+
+            // Separate cached vs uncached queries
+            List<String> uncachedQueries = batchQueries.stream()
+                    .filter(q -> !cachedResults.containsKey(q))
+                    .collect(Collectors.toList());
+
+            // Process uncached queries in bulk
+            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> freshResults = new HashMap<>();
+
+            if (!uncachedQueries.isEmpty()) {
+                // Bulk search using repository for all uncached queries at once
+                for (String query : uncachedQueries) {
+                    // Normalize query for better matching
+                    String normalizedQuery = normalizeQuery(query);
+                    log.info("Batch Search: Query='{}', Normalized='{}'", query, normalizedQuery);
+
+                    // Try both original and normalized queries
+                    List<SecurityDocument> matches = securityRepository.search(query);
+                    log.info("Batch Search: Original query matches={}", matches.size());
+
+                    if (matches.isEmpty() && !normalizedQuery.equals(query)) {
+                        matches = securityRepository.search(normalizedQuery);
+                        log.info("Batch Search: Normalized query matches={}", matches.size());
+                    }
+
+                    int limit = request.getLimit() != null ? request.getLimit() : 3;
+                    List<SecurityDocument> limitedMatches = matches.stream()
+                            .limit(limit)
+                            .collect(Collectors.toList());
+
+                    List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches = convertToSecurityMatches(
+                            query, limitedMatches, request.getMinMatchScore());
+
+                    freshResults.put(query, securityMatches);
+                }
+
+                // Cache fresh results
+                cacheBatchResults(freshResults);
+            }
+
+            // Combine cached and fresh results
+            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> allResults = new HashMap<>();
+            allResults.putAll(cachedResults);
+            allResults.putAll(freshResults);
+
+            // Build query results
+            for (String query : batchQueries) {
+                List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> matches = allResults
+                        .getOrDefault(query, List.of());
+
+                if (matches.isEmpty()) {
+                    queriesWithNoMatches++;
+                } else {
+                    totalMatches += matches.size();
+                }
+
+                results.add(com.am.marketdata.common.dto.BatchSearchResponse.QueryResult.builder()
+                        .query(query)
+                        .matches(matches)
+                        .matchCount(matches.size())
+                        .build());
+            }
+        }
+
+        log.info("batchSearch", String.format("Completed: %d total, %d cache hits, %d matches",
+                queries.size(), cacheHits, totalMatches));
+
+        return com.am.marketdata.common.dto.BatchSearchResponse.builder()
+                .results(results)
+                .totalQueries(request.getQueries().size())
+                .totalMatches(totalMatches)
+                .queriesWithNoMatches(queriesWithNoMatches)
+                .build();
+    }
+
+    /**
+     * Check Redis cache for batch queries
+     */
+    private Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> checkBatchCache(
+            List<String> queries) {
+        Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> cached = new HashMap<>();
+
+        try {
+            List<String> cacheKeys = queries.stream()
+                    .map(q -> "batch_search:" + q.toLowerCase().trim())
+                    .collect(Collectors.toList());
+
+            List<Object> cachedObjects = redisTemplate.opsForValue().multiGet(cacheKeys);
+
+            for (int i = 0; i < queries.size(); i++) {
+                Object obj = (cachedObjects != null && cachedObjects.size() > i) ? cachedObjects.get(i) : null;
+                if (obj != null) {
+                    try {
+                        @SuppressWarnings("unchecked")
+                        List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> matches = (List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>) obj;
+                        cached.put(queries.get(i), matches);
+                    } catch (Exception e) {
+                        log.error("checkBatchCache", "Error deserializing cached result for query: " + queries.get(i),
+                                e);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("checkBatchCache", "Error checking batch cache", e);
+        }
+
+        return cached;
+    }
+
+    /**
+     * Cache batch search results (TTL: 1 hour for regular queries, 24 hours for
+     * index searches)
+     */
+    private void cacheBatchResults(
+            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> results) {
+        try {
+            Map<String, Object> cacheUpdates = new HashMap<>();
+
+            for (Map.Entry<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> entry : results
+                    .entrySet()) {
+                String cacheKey = "batch_search:" + entry.getKey().toLowerCase().trim();
+                cacheUpdates.put(cacheKey, entry.getValue());
+            }
+
+            if (!cacheUpdates.isEmpty()) {
+                redisTemplate.opsForValue().multiSet(cacheUpdates);
+
+                // Set expiry - longer for index searches
+                for (String key : cacheUpdates.keySet()) {
+                    Duration ttl = isIndexQuery(key) ? Duration.ofHours(24) : Duration.ofHours(1);
+                    redisTemplate.expire(key, ttl);
+                }
+            }
+        } catch (Exception e) {
+            log.error("cacheBatchResults", "Error caching batch results", e);
+        }
+    }
+
+    /**
+     * Normalize query string for better matching
+     * Removes common company suffixes and trailing punctuation
+     */
+    private String normalizeQuery(String query) {
+        if (query == null || query.isEmpty()) {
+            return query;
+        }
+
+        String normalized = query.trim();
+
+        // Remove trailing periods and commas
+        normalized = normalized.replaceAll("[.,;]+$", "");
+
+        // Remove common company suffixes (case-insensitive)
+        // Ltd, Limited, Inc, Incorporated, Corp, Corporation, Plc, LLC, LLP
+        normalized = normalized
+                .replaceAll("(?i)\\s+(Ltd\\.?|Limited|Inc\\.?|Incorporated|Corp\\.?|Corporation|Plc|LLC|LLP)$", "");
+
+        // Remove trailing periods again (in case suffix had one)
+        normalized = normalized.replaceAll("[.,;]+$", "");
+
+        return normalized.trim();
+    }
+
+    /**
+     * Check if query is for an index (Nifty 50, Nifty Bank, etc.)
+     */
+    private boolean isIndexQuery(String cacheKey) {
+        String keyLower = cacheKey.toLowerCase();
+        return keyLower.contains("nifty") || keyLower.contains("sensex") ||
+                keyLower.contains("bank") || keyLower.contains("index");
+    }
+
+    /**
+     * Convert SecurityDocuments to SecurityMatches with scoring
+     */
+    private List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> convertToSecurityMatches(
+            String query,
+            List<SecurityDocument> documents,
+            Double minMatchScore) {
+
+        List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> matches = new ArrayList<>();
+
+        for (SecurityDocument doc : documents) {
+            double matchScore = calculateMatchScore(query, doc);
+
+            // Filter by minimum score
+            if (minMatchScore != null && matchScore < minMatchScore) {
+                continue;
+            }
+
+            String matchedField = determineMatchedField(query, doc);
+
+            matches.add(com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch.builder()
+                    .symbol(doc.getKey() != null ? doc.getKey().getSymbol() : null)
+                    .isin(doc.getKey() != null ? doc.getKey().getIsin() : null)
+                    .companyName(doc.getMetadata() != null ? doc.getMetadata().getCompanyName() : null)
+                    .sector(doc.getMetadata() != null ? doc.getMetadata().getSector() : null)
+                    .industry(doc.getMetadata() != null ? doc.getMetadata().getIndustry() : null)
+                    .matchScore(matchScore)
+                    .matchedField(matchedField)
+                    .build());
+        }
+
+        return matches;
+    }
+
+    /**
+     * Calculate simple match score based on text similarity
+     */
+    private double calculateMatchScore(String query, SecurityDocument doc) {
+        String queryLower = query.toLowerCase().trim();
+
+        // Exact matches
+        if (doc.getKey() != null && doc.getKey().getSymbol() != null) {
+            if (queryLower.equals(doc.getKey().getSymbol().toLowerCase())) {
+                return 1.0;
+            }
+        }
+
+        if (doc.getKey() != null && doc.getKey().getIsin() != null) {
+            if (queryLower.equals(doc.getKey().getIsin().toLowerCase())) {
+                return 1.0;
+            }
+        }
+
+        if (doc.getMetadata() != null && doc.getMetadata().getCompanyName() != null) {
+            String companyNameLower = doc.getMetadata().getCompanyName().toLowerCase();
+            if (queryLower.equals(companyNameLower)) {
+                return 1.0;
+            }
+
+            // Partial match - contains
+            if (companyNameLower.contains(queryLower)) {
+                return 0.9;
+            }
+
+            // Reverse - query contains company name
+            if (queryLower.contains(companyNameLower)) {
+                return 0.85;
+            }
+        }
+
+        // Default fuzzy match score
+        return 0.7;
+    }
+
+    /**
+     * Determine which field was matched
+     */
+    private String determineMatchedField(String query, SecurityDocument doc) {
+        String queryLower = query.toLowerCase().trim();
+
+        if (doc.getKey() != null) {
+            if (doc.getKey().getSymbol() != null &&
+                    doc.getKey().getSymbol().toLowerCase().contains(queryLower)) {
+                return "SYMBOL";
+            }
+            if (doc.getKey().getIsin() != null &&
+                    doc.getKey().getIsin().toLowerCase().contains(queryLower)) {
+                return "ISIN";
+            }
+        }
+
+        if (doc.getMetadata() != null && doc.getMetadata().getCompanyName() != null &&
+                doc.getMetadata().getCompanyName().toLowerCase().contains(queryLower)) {
+            return "COMPANY_NAME";
+        }
+
+        return "FUZZY";
+    }
+
     public List<SecurityDocument> search(SecuritySearchRequest request) {
         // Optimization: If symbols are known (e.g. from Index lookup), use cached
         // finder

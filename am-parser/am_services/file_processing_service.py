@@ -44,7 +44,8 @@ class FileProcessingService:
         self.am_app = AMApp()
         # Initialize event logger (separate DB). Reuse main Mongo URI if available.
         try:
-            mongo_uri = getattr(mutual_fund_service, 'mongo_uri', "mongodb://localhost:27017")
+            from am_configs.settings import settings
+            mongo_uri = getattr(mutual_fund_service, 'mongo_uri', settings.mongo_uri)
             self.event_logger = EventLogger(mongo_uri=mongo_uri, db_name="am_logs")
         except Exception:
             self.event_logger = None
@@ -214,7 +215,8 @@ class FileProcessingService:
         try:
             # Get default method from environment or use "together"
             if method is None:
-                method = os.getenv("DEFAULT_PARSE_METHOD", "together")
+                from am_configs.settings import settings
+                method = settings.default_parse_method
                 print(f"🔧 Using default parse method from environment: {method}")
             
             print(f"🔄 Parse method: {method}")

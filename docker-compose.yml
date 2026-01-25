@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   # --- Market Data Backend (Spring Boot) ---
+
   market-data-service:
     container_name: market-data-service
     build:
@@ -81,7 +82,7 @@ services:
       context: ./am-parser
       dockerfile: Dockerfile
     environment:
-      - MONGO_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@am_mongodb:27017/admin?authSource=admin&uuidRepresentation=standard
+      - MONGO_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@${INFRA_HOST}:27017/admin?authSource=admin&uuidRepresentation=standard
       - MONGO_DB=${PARSER_MONGO_DB:-mutual_funds}
       - PORT=${PARSER_PORT:-8000}
     ports:
@@ -93,7 +94,7 @@ services:
       - am-infra_am-net
     restart: unless-stopped
 
-  # --- Market Data Analysis (Python/FastAPI) ---
+  # --- Market Data Analysis (Python/FastAPI) --- Ah
   market-data-analysis-service:
     container_name: market-data-analysis-service
     build:
