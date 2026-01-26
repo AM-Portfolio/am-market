@@ -223,12 +223,29 @@ public class SecurityService {
                     }
 
                     int limit = request.getLimit() != null ? request.getLimit() : 3;
-                    List<SecurityDocument> limitedMatches = matches.stream()
-                            .limit(limit)
+
+                    // Optimization: limit processing to top 100 matches from DB to ensure we have
+                    // enough candidates
+                    // to sort by relevance (Score) and importance (Market Cap)
+                    List<SecurityDocument> candidateMatches = matches.stream()
+                            .limit(100)
                             .collect(Collectors.toList());
 
                     List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches = convertToSecurityMatches(
-                            query, limitedMatches, request.getMinMatchScore());
+                            query, candidateMatches, request.getMinMatchScore());
+
+                    // Sort by Match Score (desc) -> Market Cap (desc) to prioritize major companies
+                    securityMatches.sort(java.util.Comparator
+                            .comparingDouble(
+                                    com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch::getMatchScore)
+                            .reversed()
+                            .thenComparing(m -> m.getMarketCapValue() == null ? 0L : m.getMarketCapValue(),
+                                    java.util.Comparator.reverseOrder()));
+
+                    // Apply the final user requested limit
+                    if (securityMatches.size() > limit) {
+                        securityMatches = securityMatches.subList(0, limit);
+                    }
 
                     freshResults.put(query, securityMatches);
                 }
@@ -397,6 +414,8 @@ public class SecurityService {
                     .industry(doc.getMetadata() != null ? doc.getMetadata().getIndustry() : null)
                     .matchScore(matchScore)
                     .matchedField(matchedField)
+                    .marketCapValue(doc.getMetadata() != null ? doc.getMetadata().getMarketCapValue() : null)
+                    .marketCapType(doc.getMetadata() != null ? doc.getMetadata().getMarketCapType() : null)
                     .build());
         }
 

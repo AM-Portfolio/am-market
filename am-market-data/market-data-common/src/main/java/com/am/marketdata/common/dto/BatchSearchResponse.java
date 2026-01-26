@@ -99,6 +99,9 @@ public class BatchSearchResponse {
          */
         private Double matchScore;
 
+        private Long marketCapValue;
+        private String marketCapType;
+
         /**
          * Field that was matched (SYMBOL, ISIN, COMPANY_NAME)
          */
