@@ -374,8 +374,76 @@ async def fetch_holdings_for_etf(
 async def get_etf_holdings(symbol_or_isin: str):
     """
     Get stored holdings for a specific ETF (by Symbol or ISIN)
+    Supports comma-separated list of symbols/ISINs.
     """
     try:
+        # Check for multiple inputs
+        if "," in symbol_or_isin:
+            # Deduplicate inputs while preserving order
+            inputs = list(dict.fromkeys([s.strip() for s in symbol_or_isin.split(",") if s.strip()]))
+            results = []
+            
+            # Helper to fetch single (could be extracted, but inline is fine for now)
+            # We reuse the same services for efficiency
+            etf_service = ETFService()
+            holdings_service = ETFHoldingsService()
+            
+            try:
+                for inp in inputs:
+                    try:
+                        # Logic duplication (simplified version of below)
+                        etf = await etf_service.get_by_symbol(inp)
+                        if not etf:
+                            etf = await etf_service.get_by_isin(inp)
+                        
+                        if etf:
+                            h_data = await holdings_service.get_holdings_by_isin(etf.isin) if etf.isin else None
+                            
+                            res = {
+                                "symbol": etf.symbol,
+                                "name": etf.name,
+                                "isin": etf.isin,
+                                "asset_class": etf.asset_class,
+                                "market_cap_category": etf.market_cap_category
+                            }
+                            
+                            if h_data:
+                                res.update({
+                                    "holdings_count": h_data.total_holdings,
+                                    "holdings_fetched_at": h_data.fetched_at.isoformat() if h_data.fetched_at else None,
+                                    "holdings": [
+                                        {
+                                            "stock_name": h.stock_name,
+                                            "isin_code": h.isin_code,
+                                            "percentage": h.percentage,
+                                            "market_value": h.market_value,
+                                            "quantity": h.quantity
+                                        } for h in h_data.holdings
+                                    ]
+                                })
+                            else:
+                                res["holdings"] = None
+                                res["message"] = "No holdings data available"
+                            
+                            results.append(res)
+                        else:
+                            results.append({
+                                "input": inp,
+                                "error": "ETF not found"
+                            })
+                            
+                    except Exception as e:
+                        results.append({
+                            "input": inp,
+                            "error": str(e)
+                        })
+            finally:
+                await etf_service.close()
+                await holdings_service.close()
+            
+            return results
+
+        # --- Original Logic for Single Item ---
         print(f"🔍 [DEBUG] Request received for ETF holdings: '{symbol_or_isin}'")
         
         # First get ETF info
@@ -434,6 +502,8 @@ async def get_etf_holdings(symbol_or_isin: str):
         
         return response
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Get ETF holdings error: {e}")
         raise HTTPException(

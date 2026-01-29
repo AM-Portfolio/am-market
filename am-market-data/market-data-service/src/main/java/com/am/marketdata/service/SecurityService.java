@@ -12,7 +12,11 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.core.type.TypeReference;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.RedisTemplate;
+import javax.annotation.PostConstruct;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -30,15 +34,55 @@ public class SecurityService {
     private final MongoTemplate mongoTemplate;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
+    private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService;
 
     public SecurityService(SecurityRepository securityRepository, MongoTemplate mongoTemplate,
-            RedisTemplate<String, Object> redisTemplate) {
+            RedisTemplate<String, Object> redisTemplate,
+            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService) {
         this.securityRepository = securityRepository;
         this.mongoTemplate = mongoTemplate;
         this.redisTemplate = redisTemplate;
+        this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    }
+
+    private List<ManualSecurityUpdate> manualSecurityUpdates = new ArrayList<>();
+
+    @PostConstruct
+    public void loadManualUpdates() {
+        try {
+            ClassPathResource resource = new ClassPathResource("manual_isin_updates.json");
+            if (resource.exists()) {
+                try (InputStream inputStream = resource.getInputStream()) {
+                    manualSecurityUpdates = objectMapper.readValue(inputStream,
+                            new TypeReference<List<ManualSecurityUpdate>>() {
+                            });
+                    log.info("loadManualUpdates",
+                            "Loaded " + manualSecurityUpdates.size() + " manual security updates.");
+                }
+            } else {
+                log.warn("loadManualUpdates", "manual_isin_updates.json not found in classpath.");
+            }
+        } catch (Exception e) {
+            log.error("loadManualUpdates", "Error loading manual_isin_updates.json", e);
+        }
+    }
+
+    @lombok.Data
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
+    private static class ManualSecurityUpdate {
+        @com.fasterxml.jackson.annotation.JsonProperty("company_name")
+        private String companyName;
+        private String isin;
+        @com.fasterxml.jackson.annotation.JsonProperty("market_cap_category")
+        private String marketCapCategory;
+        @com.fasterxml.jackson.annotation.JsonProperty("market_cap_value")
+        private Long marketCapValue;
+        @com.fasterxml.jackson.annotation.JsonProperty("market_cap_type")
+        private String marketCapType;
     }
 
     private static final String CACHE_PREFIX = "security:metadata:";
@@ -194,8 +238,9 @@ public class SecurityService {
                     batchStart, batchEnd, queries.size()));
 
             // Check cache first for this batch
-            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> cachedResults = checkBatchCache(
-                    batchQueries);
+            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> cachedResults = new HashMap<>();
+            // checkBatchCache(batchQueries); // DISABLED per user request to force real
+            // logic
             cacheHits += cachedResults.size();
 
             // Separate cached vs uncached queries
@@ -207,34 +252,45 @@ public class SecurityService {
             Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> freshResults = new HashMap<>();
 
             if (!uncachedQueries.isEmpty()) {
-                // Bulk search using repository for all uncached queries at once
                 for (String query : uncachedQueries) {
-                    // Normalize query for better matching
-                    String normalizedQuery = normalizeQuery(query);
-                    log.info("Batch Search: Query='{}', Normalized='{}'", query, normalizedQuery);
+                    // Try DB Search first (Regex based)
+                    List<SecurityDocument> matches = new ArrayList<>(securityRepository.search(query));
+                    if (matches != null) {
+                        matches.removeIf(doc -> !isValidDocument(doc));
+                    }
 
-                    // Try both original and normalized queries
-                    List<SecurityDocument> matches = securityRepository.search(query);
-                    log.info("Batch Search: Original query matches={}", matches.size());
+                    String normalizedQuery = normalizeQuery(query);
 
                     if (matches.isEmpty() && !normalizedQuery.equals(query)) {
-                        matches = securityRepository.search(normalizedQuery);
-                        log.info("Batch Search: Normalized query matches={}", matches.size());
+                        List<SecurityDocument> normMatches = securityRepository.search(normalizedQuery);
+                        if (normMatches != null) {
+                            normMatches.removeIf(doc -> !isValidDocument(doc));
+                            matches.addAll(normMatches);
+                        }
+                    }
+
+                    // FALLBACK: In-Memory Fuzzy Search if DB returned nothing (or only garbage)
+                    if (matches.isEmpty()) {
+                        log.info("Batch Search: No DB match for '{}', trying in-memory fuzzy fallback...", query);
+                        List<SecurityDocument> fuzzyMatches = performInMemoryFuzzySearch(query);
+                        matches.addAll(fuzzyMatches); // performInMemoryFuzzySearch already filters ISINs
+                        if (!matches.isEmpty()) {
+                            log.info("Batch Search: Found {} matches via in-memory fuzzy search", matches.size());
+                        }
                     }
 
                     int limit = request.getLimit() != null ? request.getLimit() : 3;
 
-                    // Optimization: limit processing to top 100 matches from DB to ensure we have
-                    // enough candidates
-                    // to sort by relevance (Score) and importance (Market Cap)
+                    // Optimization: limit processing to top 100 matches
                     List<SecurityDocument> candidateMatches = matches.stream()
+                            .distinct() // Ensure no duplicates from multiple strategies
                             .limit(100)
                             .collect(Collectors.toList());
 
                     List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches = convertToSecurityMatches(
                             query, candidateMatches, request.getMinMatchScore());
 
-                    // Sort by Match Score (desc) -> Market Cap (desc) to prioritize major companies
+                    // Sort by Match Score (desc) -> Market Cap (desc)
                     securityMatches.sort(java.util.Comparator
                             .comparingDouble(
                                     com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch::getMatchScore)
@@ -251,7 +307,7 @@ public class SecurityService {
                 }
 
                 // Cache fresh results
-                cacheBatchResults(freshResults);
+                // cacheBatchResults(freshResults); // DISABLED per user request
             }
 
             // Combine cached and fresh results
@@ -337,7 +393,6 @@ public class SecurityService {
                 String cacheKey = "batch_search:" + entry.getKey().toLowerCase().trim();
                 cacheUpdates.put(cacheKey, entry.getValue());
             }
-
             if (!cacheUpdates.isEmpty()) {
                 redisTemplate.opsForValue().multiSet(cacheUpdates);
 
@@ -355,6 +410,7 @@ public class SecurityService {
     /**
      * Normalize query string for better matching
      * Removes common company suffixes and trailing punctuation
+     * Converts to lenient regex pattern
      */
     private String normalizeQuery(String query) {
         if (query == null || query.isEmpty()) {
@@ -363,18 +419,27 @@ public class SecurityService {
 
         String normalized = query.trim();
 
+        // Handle Ampersand
+        normalized = normalized.replace("&", ".*");
+
         // Remove trailing periods and commas
         normalized = normalized.replaceAll("[.,;]+$", "");
 
         // Remove common company suffixes (case-insensitive)
-        // Ltd, Limited, Inc, Incorporated, Corp, Corporation, Plc, LLC, LLP
         normalized = normalized
                 .replaceAll("(?i)\\s+(Ltd\\.?|Limited|Inc\\.?|Incorporated|Corp\\.?|Corporation|Plc|LLC|LLP)$", "");
 
-        // Remove trailing periods again (in case suffix had one)
-        normalized = normalized.replaceAll("[.,;]+$", "");
+        // Remove trailing periods again
+        normalized = normalized.replaceAll("[.,;]+$", "").trim();
 
-        return normalized.trim();
+        // Make punctuation optional or wildcard
+        // Replace ' with .? (optional character)
+        normalized = normalized.replace("'", ".?");
+
+        // Replace spaces with .* to allow for missing/extra spaces
+        normalized = normalized.replaceAll("\\s+", ".*");
+
+        return normalized;
     }
 
     /**
@@ -547,5 +612,179 @@ public class SecurityService {
         }
 
         return mongoTemplate.find(query, SecurityDocument.class);
+    }
+
+    // In-Memory Search Fallback
+
+    // Cache for all securities
+    private java.util.concurrent.atomic.AtomicReference<List<SecurityDocument>> cachedAllSecurities = new java.util.concurrent.atomic.AtomicReference<>();
+    private long lastCacheTime = 0;
+
+    private void refreshSecurityCache() {
+        long now = System.currentTimeMillis();
+        // Refresh if empty or older than 24 hours
+        if (cachedAllSecurities.get() == null || (now - lastCacheTime > 86400000L)) {
+            synchronized (this) {
+                if (cachedAllSecurities.get() == null || (now - lastCacheTime > 86400000L)) {
+                    log.info("refreshSecurityCache", "Loading all securities for in-memory fallback...");
+                    List<SecurityDocument> all = securityRepository.findAll();
+                    cachedAllSecurities.set(all);
+                    lastCacheTime = now;
+                    log.info("refreshSecurityCache", "Loaded " + all.size() + " securities.");
+                }
+            }
+        }
+    }
+
+    private boolean isValidDocument(SecurityDocument doc) {
+        if (doc == null || doc.getKey() == null)
+            return false;
+
+        String isin = doc.getKey().getIsin();
+        String symbol = doc.getKey().getSymbol();
+
+        // Filter out invalid ISINs
+        if (isin == null || isin.trim().isEmpty() || "-".equals(isin.trim()) || "NA".equalsIgnoreCase(isin.trim())) {
+            return false;
+        }
+
+        // Filter out invalid Symbols
+        if (symbol == null || symbol.trim().isEmpty() || "-".equals(symbol.trim())
+                || "NA".equalsIgnoreCase(symbol.trim())) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private List<SecurityDocument> performInMemoryFuzzySearch(String query) {
+        List<SecurityDocument> matches = new ArrayList<>();
+        String normalizedQuery = cleanString(query);
+
+        if (normalizedQuery.length() < 3)
+            return Collections.emptyList();
+
+        log.info("performInMemoryFuzzySearch", "Fetching NIFTY 500 data for fuzzy matching...");
+        // 1. Fetch NIFTY 500 Data
+        try {
+            List<com.am.common.investment.model.stockindice.StockIndicesMarketData> indicesData = stockIndicesMarketDataService
+                    .findByIndexSymbols(java.util.Collections.singleton("NIFTY 500"));
+
+            if (!indicesData.isEmpty() && indicesData.get(0).getData() != null) {
+                List<com.am.common.investment.model.stockindice.StockData> stockDataList = indicesData.get(0).getData();
+                log.info("performInMemoryFuzzySearch",
+                        "Comparing against " + stockDataList.size() + " NIFTY 500 stocks.");
+
+                for (com.am.common.investment.model.stockindice.StockData stock : stockDataList) {
+                    // Filter out if ISIN is null (as per requirement)
+                    if (stock.getIsin() == null || stock.getIsin().isEmpty())
+                        continue;
+
+                    String stockName = cleanString(stock.getCompanyName());
+                    if (stockName.isEmpty())
+                        continue;
+
+                    // Fuzzy Match Logic
+                    if (stockName.contains(normalizedQuery) || normalizedQuery.contains(stockName)) {
+                        // Build SecurityDocument from StockData
+                        SecurityDocument doc = new SecurityDocument();
+
+                        SecurityDocument.SecurityKey key = new SecurityDocument.SecurityKey();
+                        key.setSymbol(stock.getSymbol());
+                        key.setIsin(stock.getIsin());
+                        doc.setKey(key);
+
+                        SecurityDocument.SecurityMetadata metadata = new SecurityDocument.SecurityMetadata();
+                        metadata.setCompanyName(stock.getCompanyName());
+                        // metadata.setSector(stock.getSector()); // StockData does not have sector
+                        metadata.setIndustry(stock.getIndustry());
+                        doc.setMetadata(metadata);
+
+                        matches.add(doc);
+                    }
+                }
+
+                if (!matches.isEmpty()) {
+                    log.info("performInMemoryFuzzySearch", "Found " + matches.size() + " matches in NIFTY 500.");
+                    return matches;
+                }
+            }
+        } catch (Exception e) {
+            log.error("performInMemoryFuzzySearch", "Error fetching NIFTY 500 data", e);
+        }
+
+        // 2. Fallback to All Cached Securities (if enabled/populated)
+        refreshSecurityCache();
+        List<SecurityDocument> all = cachedAllSecurities.get();
+        if (all == null || all.isEmpty())
+            return Collections.emptyList();
+
+        return all.stream()
+                .filter(doc -> {
+                    if (doc.getKey() == null || doc.getKey().getIsin() == null)
+                        return false; // Filter null ISIN
+                    if (doc.getMetadata() == null || doc.getMetadata().getCompanyName() == null)
+                        return false;
+                    String companyName = cleanString(doc.getMetadata().getCompanyName());
+
+                    return companyName.contains(normalizedQuery) || normalizedQuery.contains(companyName);
+                })
+                .limit(20)
+                .collect(Collectors.toList());
+
+        if (!cachedMatches.isEmpty()) {
+            return cachedMatches;
+        }
+
+        // 3. Fallback to Manual JSON Update List
+        return performManualSearch(normalizedQuery);
+    }
+
+    private List<SecurityDocument> performManualSearch(String query) {
+        if (manualSecurityUpdates.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<SecurityDocument> matches = new ArrayList<>();
+        String normalizedQuery = cleanString(query);
+
+        for (ManualSecurityUpdate update : manualSecurityUpdates) {
+            if (update.getCompanyName() == null)
+                continue;
+
+            String updateName = cleanString(update.getCompanyName());
+            // Exact or very close match preferred for manual list
+            if (updateName.contains(normalizedQuery) || normalizedQuery.contains(updateName)) {
+                SecurityDocument doc = new SecurityDocument();
+
+                SecurityDocument.SecurityKey key = new SecurityDocument.SecurityKey();
+                key.setIsin(update.getIsin());
+                // Symbol might be unknown, but we need ISIN mostly
+                key.setSymbol("MANUAL-" + (update.getIsin() != null ? update.getIsin() : "UNKNOWN"));
+                doc.setKey(key);
+
+                SecurityDocument.SecurityMetadata metadata = new SecurityDocument.SecurityMetadata();
+                metadata.setCompanyName(update.getCompanyName());
+                metadata.setMarketCapType(update.getMarketCapType());
+                metadata.setMarketCapValue(update.getMarketCapValue());
+
+                doc.setMetadata(metadata);
+                matches.add(doc);
+            }
+        }
+
+        if (!matches.isEmpty()) {
+            log.info("performManualSearch",
+                    "Found " + matches.size() + " matches in manual updates for query: " + query);
+        }
+
+        return matches;
+    }
+
+    private String cleanString(String s) {
+        if (s == null)
+            return "";
+        // Lowercase, remove all non-alphanumeric characters
+        return s.toLowerCase().replaceAll("[^a-z0-9]", "");
     }
 }
