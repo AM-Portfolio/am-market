@@ -1,0 +1,148 @@
+services:
+  # Base Images (Building locally)
+  am-java-maven-base:
+    build:
+      context: .
+      dockerfile: Dockerfile.base-java-maven
+    image: am-java-maven-base:latest
+
+  am-python-base:
+    build:
+      context: .
+      dockerfile: Dockerfile.base-python
+    image: am-python-base:latest
+
+  am-flutter-base:
+    build:
+      context: .
+      dockerfile: Dockerfile.base-flutter
+    image: am-flutter-base:latest
+
+  # Market Data Backend
+  market-data-service:
+    container_name: market-data-service
+    build:
+      context: .
+      dockerfile: am-market-data/Dockerfile
+      args:
+        - GITHUB_PACKAGES_USERNAME=${GITHUB_PACKAGES_USERNAME}
+        - GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN}
+    depends_on:
+      - am-java-maven-base
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      
+      # Database Configuration
+      - SPRING_DATASOURCE_URL=${POSTGRES_URL}
+      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+      
+      # MongoDB Configuration
+      - MONGODB_URL=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@${INFRA_HOST}:27017/market_data?authSource=admin
+      - MONGODB_DATABASE=${MONGODB_DATABASE}
+      - MONGODB_USERNAME=${MONGODB_USERNAME}
+      - MONGODB_PASSWORD=${MONGODB_PASSWORD}
+      - MONGODB_AUTHENTICATION_DATABASE=admin
+      
+      # InfluxDB Configuration
+      - INFLUXDB_URL=${INFLUXDB_URL}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+      
+      # Kafka Configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - SPRING_KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID}
+      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
+      
+      # Redis Configuration
+      - REDIS_HOSTNAME=${REDIS_HOSTNAME}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=${REDIS_PORT}
+      
+      # Application Topics
+      - APP_KAFKA_STOCK_PRICE_TOPIC=${STOKUPATE_TOPIC_NAME}
+      - APP_KAFKA_NSE_INDICES_TOPIC=${NSE_INDICES_TOPIC_NAME}
+      - APP_KAFKA_NSE_ETF_TOPIC=${NSE_ETF_TOPIC_NAME}
+      
+      # JWT Configuration
+      - JWT_SECRET=${JWT_SECRET}
+      - INTERNAL_JWT_SECRET=${INTERNAL_JWT_SECRET}
+      
+      # API Keys
+      - UPSTOX_API_KEY=${UPSTOX_API_KEY}
+      - UPSTOX_SECRET_KEY=${UPSTOX_SECRET_KEY}
+      - UPSTOX_CODE=${UPSTOX_CODE}
+      - UPSTOX_ACCESS_TOKEN=${UPSTOX_ACCESS_TOKEN}
+      - ZERODHA_API_KEY=${ZERODHA_API_KEY}
+      - ZERODHA_API_SECRET=${ZERODHA_API_SECRET}
+    ports:
+      - "8092:8092"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - am-network
+      - am-infra_am-net
+    restart: unless-stopped
+
+  # Market Data Parser
+  am-parser-service:
+    container_name: am-parser-service
+    build:
+      context: ./am-parser
+      dockerfile: Dockerfile
+    depends_on:
+      - am-python-base
+    environment:
+      - MONGO_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@${INFRA_HOST}:27017/admin?authSource=admin&uuidRepresentation=standard
+      - MONGO_DB=${PARSER_MONGO_DB:-mutual_funds}
+      - PORT=${PARSER_PORT:-8000}
+    ports:
+      - "8022:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - am-network
+      - am-infra_am-net
+    restart: unless-stopped
+
+  # Market Data Analysis
+  market-data-analysis-service:
+    container_name: market-data-analysis-service
+    build:
+      context: ./market-data-analysis-py
+      dockerfile: Dockerfile
+    depends_on:
+      - am-python-base
+    environment:
+      - MARKET_DATA_SERVICE_URL=http://market-data-service:8092/api/v1/market-data
+      - AUTH_SERVICE_URL=http://auth-tokens:8001/auth/token/v1/internal
+      - PORT=8010
+      - INTERNAL_JWT_SECRET=${INTERNAL_JWT_SECRET}
+    ports:
+      - "8010:8010"
+    networks:
+      - am-network
+      - am-infra_am-net
+    restart: unless-stopped
+
+  # Market Data Web (Dev)
+  market-data-web:
+    container_name: market-data-web
+    build:
+      context: ../
+      dockerfile: am-market/am_market_ui/live/Dockerfile.dev
+    depends_on:
+      - am-flutter-base
+    ports:
+      - "9002:80"
+    networks:
+      - am-network
+    restart: unless-stopped
+
+
+networks:
+  am-network:
+    external: true
+  am-infra_am-net:
+    external: true

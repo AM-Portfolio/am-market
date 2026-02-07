@@ -1,0 +1,27 @@
+{
+    "name": "Java 17 & Maven (Market Data)",
+    "image": "mcr.microsoft.com/devcontainers/java:1-17-bullseye",
+    "features": {
+        "ghcr.io/devcontainers/features/java:1": {
+            "version": "17",
+            "installMaven": "true",
+            "installGradle": "false"
+        },
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {
+            "version": "latest",
+            "enableNonRootDocker": "true",
+            "moby": "true"
+        },
+        "ghcr.io/devcontainers/features/git:1": {}
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack",
+                "gabrielbb.vscode-lombok",
+                "Pivotal.vscode-boot-dev-pack"
+            ]
+        }
+    },
+    "remoteUser": "vscode"
+}

@@ -1,0 +1,45 @@
+# Multi-stage Flutter web build for DEV environment
+# Use official Flutter image
+FROM am-flutter-base:latest AS build-env
+
+# Create app directory
+WORKDIR /app
+
+# Copy dependencies from am-modern-ui (sibling of am-market)
+# Usage: build context must be external (e.g. Group Root)
+COPY --chown=flutter:flutter am-modern-ui/am_design_system ./ui/am_modern_ui/am_design_system
+COPY --chown=flutter:flutter am-modern-ui/am_common ./ui/am_modern_ui/am_common
+COPY --chown=flutter:flutter am-modern-ui/am_auth_ui ./ui/am_modern_ui/am_auth_ui
+
+# Copy external SDK dependency
+# Mapping: am-market/am-market-sdk/flutter-sdk -> backend/am-market/am_market_sdk_flutter
+COPY --chown=flutter:flutter am-market/am-market-sdk/flutter-sdk ./backend/am-market/am_market_sdk_flutter
+
+# Copy complete module (includes lib/ and live/)
+# Mapping: am-market/am_market_ui -> ui/am_modern_ui/am_market_ui
+COPY --chown=flutter:flutter am-market/am_market_ui ./ui/am_modern_ui/am_market_ui
+
+WORKDIR /app/ui/am_modern_ui/am_market_ui/live
+
+# Switch to non-root user for safety and to match base image
+USER flutter
+
+# Remove local pubspec.lock files to force fresh resolution
+RUN find . -name "pubspec.lock" -delete
+
+# Get dependencies
+RUN flutter pub get
+
+# Build web app
+RUN flutter build web --release
+
+# Runtime stage
+FROM nginx:alpine
+
+# Copy built files
+COPY --from=build-env /app/ui/am_modern_ui/am_market_ui/live/build/web /usr/share/nginx/html
+
+# Expose port
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

@@ -719,7 +719,7 @@ public class SecurityService {
         if (all == null || all.isEmpty())
             return Collections.emptyList();
 
-        return all.stream()
+        List<SecurityDocument> cachedMatches = all.stream()
                 .filter(doc -> {
                     if (doc.getKey() == null || doc.getKey().getIsin() == null)
                         return false; // Filter null ISIN

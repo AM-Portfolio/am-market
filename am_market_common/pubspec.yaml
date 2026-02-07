@@ -1,16 +1,15 @@
 name: am_market_common
 description: "A new Flutter package project."
 version: 0.0.1
-homepage:
 
 environment:
-  sdk: ^3.10.4
+  sdk: ^3.1.0
   flutter: ">=1.17.0"
 
 dependencies:
   flutter:
     sdk: flutter
-    
+
   # Internal Dependencies
   am_design_system:
     path: ../../am-modern-ui/am_design_system
@@ -20,13 +19,13 @@ dependencies:
     path: ../../am-modern-ui/am_auth_ui
   am_market_sdk:
     path: ../am-market-sdk/flutter-sdk
-    
+
   # Third Party
   flutter_riverpod: ^3.0.3
   riverpod_annotation: ^3.0.3
   http: ^1.1.2
   rxdart: ^0.27.7
-  web_socket_channel: ^3.0.0
+  web_socket_channel: ^2.4.0
   get_it: ^9.1.1
   intl: ^0.20.2
   json_annotation: ^4.9.0
@@ -35,7 +34,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ^4.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
