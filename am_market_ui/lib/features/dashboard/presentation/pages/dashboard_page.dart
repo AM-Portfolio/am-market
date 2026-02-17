@@ -22,7 +22,7 @@ import 'package:am_market_ui/core/providers/view_mode_provider.dart';
 import 'package:am_market_ui/shared/widgets/mode_toggle_widget.dart';
 import 'user_dashboard_page.dart';
 import 'package:am_market_ui/features/market_analysis/presentation/widgets/heatmap_explorer_view.dart';
-import 'package:am_market_ui/shared/widgets/vertical_scroll_navigator.dart';
+import 'package:am_common/am_common.dart';
 
 /// Market feature page with Swipe Navigation
 class MarketPage extends StatelessWidget {

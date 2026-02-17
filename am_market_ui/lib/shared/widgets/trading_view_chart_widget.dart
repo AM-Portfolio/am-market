@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import '../../internal/domain/models/chart_config.dart';
+import '../../features/market_analysis/internal/domain/models/chart_config.dart';
 
 class TradingViewChartWidget extends StatefulWidget {
   const TradingViewChartWidget({
