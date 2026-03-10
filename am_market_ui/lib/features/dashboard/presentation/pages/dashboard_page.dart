@@ -15,7 +15,6 @@ import 'package:provider/provider.dart' hide Consumer;
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:am_common/core/di/price_providers.dart';
 
-import 'package:am_common/core/utils/logger.dart';
 import 'package:am_market_ui/features/market_analysis/presentation/widgets/market_index_detail_view.dart';
 
 import 'package:am_market_ui/core/providers/view_mode_provider.dart';

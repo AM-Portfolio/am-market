@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:am_common/core/utils/logger.dart';
+import 'package:am_design_system/am_design_system.dart';
 
 /// Service for market analytics API calls (top movers, historical data)
 class MarketAnalyticsService {
