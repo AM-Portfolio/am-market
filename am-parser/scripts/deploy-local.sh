@@ -1,10 +1,13 @@
 #!/bin/bash
 
-APP_NAME="am-market-data"
+APP_NAME="am-parser"
 echo "Deploying $APP_NAME to local Kubernetes..."
 
+# Change context to the helm directory where values files live
+cd "$(dirname "$0")/../helm" || exit 1
+
 # Try to find the universal chart natively if the developer checked it out side-by-side
-CHART_PATH="../../../am-cicd/helm/universal-chart"
+CHART_PATH="../../../../am-cicd/helm/universal-chart"
 TMP_DIR=".tmp_cicd"
 
 if [ -d "$CHART_PATH" ]; then
