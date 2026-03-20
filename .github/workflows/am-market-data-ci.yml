@@ -12,7 +12,7 @@ on:
 
 jobs:
   build_and_publish:
-    uses: ./.github/workflows/central-build-publish.yml
+    uses: AM-Portfolio/am-cicd/.github/workflows/central-build-publish.yml@main
     with:
       language: 'java'
       working_directory: 'am-market-data'
