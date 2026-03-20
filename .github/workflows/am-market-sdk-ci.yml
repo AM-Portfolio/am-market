@@ -1,0 +1,33 @@
+name: am-market-sdk CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'am-market/am-market-sdk/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'am-market/am-market-sdk/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: am-market/am-market-sdk
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup environment
+      run: echo "Setup environment specific to the SDK language (TS/Python/Java)..."
+      
+    - name: Build SDK
+      run: |
+        echo "Building the SDK module"
+        
+    - name: Publish SDK
+      run: |
+        echo "Publishing SDK artifact to registry"
