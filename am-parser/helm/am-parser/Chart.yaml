@@ -1,0 +1,6 @@
+apiVersion: v2
+name: am-parser
+description: Auto-generated Helm chart for am-parser with environment targeting
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

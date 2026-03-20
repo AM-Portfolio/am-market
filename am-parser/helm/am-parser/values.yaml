@@ -1,0 +1,18 @@
+global:
+  image:
+    registry: ghcr.io/am-portfolio
+    tag: latest
+
+replicaCount: 1
+
+image:
+  repository: am-parser
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources: {}
+
+environment: default
