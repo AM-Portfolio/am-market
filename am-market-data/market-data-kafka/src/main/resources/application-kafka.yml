@@ -2,19 +2,16 @@ INFRA_HOST: 100.72.208.15
 
 # Kafka Configuration
 KAFKA_BOOTSTRAP_SERVERS: localhost:9092 #${INFRA_HOST}:9092
-KAFKA_SECURITY_PROTOCOL: SASL_PLAINTEXT
-KAFKA_SASL_MECHANISM: PLAIN
-KAFKA_SASL_JAAS_CONFIG:
 
-# Application-specific Kafka properties
+# Application-specific Kafka properties Here you can there you go
 app:
   kafka:
     enabled: true
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     properties:
-      security-protocol: ${KAFKA_SECURITY_PROTOCOL}
-      sasl-mechanism: ${KAFKA_SASL_MECHANISM}
-      sasl-jaas-config: ${KAFKA_SASL_JAAS_CONFIG}
+      securityProtocol: ${KAFKA_SECURITY_PROTOCOL:SASL_PLAINTEXT}
+      saslMechanism: ${KAFKA_SASL_MECHANISM:SCRAM-SHA-256}
+      saslJaasConfig: org.apache.kafka.common.security.scram.ScramLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}";
 
     # Topic configuration
     topics:
@@ -30,7 +27,7 @@ app:
       stock-profit-and-loss-financials: ${STOCK_PROFIT_AND_LOSS_FINANCIALS_TOPIC_NAME:stock-profit-and-loss-financials}
       stock-results-financials: ${STOCK_RESULTS_FINANCIALS_TOPIC_NAME:stock-results-financials}
       stock-factsheet-dividend-financials: ${STOCK_FACT_SHEET_DIVIDEND_FINANCIALS_TOPIC_NAME:stock-fact-sheet-dividend-financials}
-    
+
     # Producer configuration
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer

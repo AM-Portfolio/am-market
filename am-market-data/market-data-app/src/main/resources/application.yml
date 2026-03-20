@@ -3,21 +3,21 @@
 # POSTGRES_USERNAME: postgres
 # POSTGRES_URL: jdbc:postgresql://localhost:5456
 # POSTGRES_DATABASE: portfolio
-INFRA_HOST: 100.72.208.15
+INFRA_HOST: ${INFRA_HOST:localhost}
 #mongoDB Configuration
-MONGODB_DATABASE: market_data
-MONGODB_USERNAME: admin
-MONGODB_PASSWORD: password123
+MONGODB_DATABASE: ${MONGODB_DATABASE:market_data}
+MONGODB_USERNAME: ${MONGODB_USERNAME:admin}
+MONGODB_PASSWORD: ${MONGODB_PASSWORD:password123}
 
 # InfluxDB Configuration
-INFLUXDB_TOKEN: my-super-secret-auth-token
-INFLUXDB_ORG: am-portfolio
-INFLUXDB_BUCKET: market-data
+INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:my-super-secret-auth-token}
+INFLUXDB_ORG: ${INFLUXDB_ORG:am-portfolio}
+INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:market-data}
 INFLUXDB_URL: http://${INFRA_HOST}:8086
 
 # Redis Configuration
 REDIS_HOSTNAME: ${INFRA_HOST}
-REDIS_PASSWORD: password123
+REDIS_PASSWORD: ${REDIS_PASSWORD:password123}
 REDIS_PORT: 6379
 
 # Grafana Configuration
@@ -43,9 +43,9 @@ MARKET_DATA_THREAD_QUEUE_CAPACITY: 10
 MARKET_DATA_MAX_AGE_MINUTES: 15
 
 # Upstox Configuration
-UPSTOX_ACCESS_TOKEN: eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiIyWENSTjgiLCJqdGkiOiI2OTg3ODY3ZDM1ZTRiZTMxNDcwYzZlM2IiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc3MDQ4OTQ2OSwiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzcwNTAxNjAwfQ.Fog-4Ju3R8n6AbOmec1bOUXgDSB5BTaqF0Q1TIitEFQ
-UPSTOX_SECRET_KEY: jqre481zf0
-UPSTOX_CODE: rNLu2Q
+UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
+UPSTOX_SECRET_KEY: ${UPSTOX_SECRET_KEY}
+UPSTOX_CODE: ${UPSTOX_CODE}
 
 app:
   kafka:
@@ -81,19 +81,6 @@ spring:
       max-file-size: 10MB # Maximum file size (CSV/Excel files)
       max-request-size: 10MB # Maximum request size
       file-size-threshold: 2KB # Threshold for writing to disk
-
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092} #${KAFKA_BOOTSTRAP_SERVERS:${INFRA_HOST}:9092}
-    consumer:
-      group-id: ${KAFKA_CONSUMER_GROUP_ID:market-data-group}
-      auto-offset-reset: ${KAFKA_CONSUMER_AUTO_OFFSET_RESET:earliest}
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-    listener:
-      auto-startup: false
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
   # InfluxDB Configuration
   influx:
@@ -143,7 +130,7 @@ logging:
     "[com.am.marketdata.external.api]": WARN
     "[com.am.common.investment.service]": INFO
     "[org.springframework]": WARN
-    "[org.apache.kafka]": WARN
+    "[org.apache.kafka]": INFO
     "[org.springframework.data.redis]": WARN # Reduce Redis connection logging
 
 upstox:
@@ -166,7 +153,7 @@ scraper:
 
 # Server Configuration
 server:
-  port: 8092
+  port: ${SERVER_PORT:8092}
 
 scheduler:
   cookie:

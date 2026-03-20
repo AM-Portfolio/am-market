@@ -58,6 +58,9 @@ public class MarketDataService {
     @Value("${market.data.retry.delay.ms:1000}")
     private int retryDelayMs;
 
+    @Value("${market-data.provider:upstox}")
+    private String defaultProvider;
+
     private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService;
 
     public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
@@ -93,7 +96,7 @@ public class MarketDataService {
             providerName = persistenceService.getMarketDataCacheService().getActiveProvider();
         }
         if (providerName == null) {
-            providerName = "zerodha";
+            providerName = defaultProvider;
         }
         return providerName;
     }

@@ -1,0 +1,39 @@
+{
+  "project_name": "am-market",
+  "namespace_prefix": "am",
+  "helm_chart_name": "am-market",
+  "services": [
+    {
+      "name": "am-market-data",
+      "path": "am-market-data",
+      "type": "maven",
+      "port_env": "PORT_AM_MARKET_DATA",
+      "container_port": 8092,
+      "host_port": 6004
+    },
+    {
+      "name": "am-parser",
+      "path": "am-parser",
+      "type": "python",
+      "port_env": "PARSER_PORT",
+      "container_port": 8000,
+      "host_port": 8022
+    },
+    {
+      "name": "market-data-analysis",
+      "path": "market-data-analysis-py",
+      "type": "python",
+      "port_env": "ANALYSIS_PORT",
+      "container_port": 8010,
+      "host_port": 8010
+    },
+    {
+      "name": "market-data-web",
+      "path": "am_market_ui/live",
+      "type": "flutter",
+      "port_env": "WEB_PORT",
+      "container_port": 80,
+      "host_port": 9002
+    }
+  ]
+}

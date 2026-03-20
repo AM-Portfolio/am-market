@@ -45,6 +45,36 @@ The repository is structured into three main microservices:
 
 ---
 
+## 🛠️ Local Development
+
+For faster iteration during development, you can run services locally using **Poetry** scripts defined in `pyproject.toml`.
+
+### 📦 Build Commands
+
+| Command | Description | Example |
+| :--- | :--- | :--- |
+| `poetry run build` | Builds **all submodules** in `am-market-data`. | `poetry run build` |
+| `poetry run build <alias>` | Builds **specific submodule** (e.g., `api`, `common`). | `poetry run build api` |
+| `poetry run build data` | Builds the `am-common-investment-data` submodule. | `poetry run build data` |
+
+> [!TIP]
+> **Short Module Aliases Inside Build**: You can provide shorthand names (like `api`, `common`, `provider`, `scraper`) and it will automatically translate them into full Maven `-pl :market-data-<alias>` parameters!
+> 
+> *Example:* `poetry run build api common`
+
+### 🚀 Run Commands
+
+| Command | Description | Example |
+| :--- | :--- | :--- |
+| **`poetry run market`** | Builds and runs the **Market Data App** on port 8092. | `poetry run market` |
+| `poetry run market --run` | **Skip Build**: Runs the pre-built `.jar` instantly (Instant Start). | `poetry run market --run` |
+| `poetry run parser` | Runs the **Parser API** on port 8022. | `poetry run parser` |
+| `poetry run analysis` | Runs the **Analysis API** on port 8010. | `poetry run analysis` |
+| `poetry run ui` | Runs the **Market UI** locally with Flutter. | `poetry run ui` |
+| `poetry run all` | Starts **all services** concurrently. | `poetry run all` |
+
+---
+
 ## 📂 Repository Structure
 
 ```
