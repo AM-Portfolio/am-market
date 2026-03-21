@@ -1,6 +1,12 @@
 name: am-parser CI
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - 'am-parser/**'
+  pull_request:
+    paths:
+      - 'am-parser/**'
 
 jobs:
   build_and_publish:

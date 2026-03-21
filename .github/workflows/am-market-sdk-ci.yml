@@ -2,18 +2,16 @@ name: am-market-sdk CI
 
 on:
   push:
-    branches: [ "main" ]
     paths:
-      - 'am-market-sdk/**'
+      - 'am-market-sdk/java-sdk/**'
   pull_request:
-    branches: [ "main" ]
     paths:
-      - 'am-market-sdk/**'
+      - 'am-market-sdk/java-sdk/**'
 
 jobs:
-  build_and_publish:
+  build_and_publish_java:
     uses: AM-Portfolio/am-cicd/.github/workflows/central-build-publish.yml@main
     with:
       language: 'java'
-      working_directory: 'am-market-sdk'
+      working_directory: 'am-market-sdk/java-sdk'
       image_name: 'am-market-sdk'

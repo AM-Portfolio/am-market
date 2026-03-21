@@ -1,0 +1,17 @@
+name: am-market-sdk-python CI
+
+on:
+  push:
+    paths:
+      - 'am-market-sdk/python-sdk/**'
+  pull_request:
+    paths:
+      - 'am-market-sdk/python-sdk/**'
+
+jobs:
+  build_and_publish_python:
+    uses: AM-Portfolio/am-cicd/.github/workflows/central-build-publish.yml@main
+    with:
+      language: 'python'
+      working_directory: 'am-market-sdk/python-sdk'
+      image_name: 'am-market-sdk-python'

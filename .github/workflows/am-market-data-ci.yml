@@ -1,6 +1,14 @@
 name: am-market-data CI
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - 'am-market-data/**'
+      - 'am-common-investment-data/**'
+  pull_request:
+    paths:
+      - 'am-market-data/**'
+      - 'am-common-investment-data/**'
 
 jobs:
   build_and_publish:
