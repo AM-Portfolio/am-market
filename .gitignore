@@ -10,6 +10,7 @@ market-data-analysis-py/.git/
 __pycache__/
 *.py[cod]
 *$py.class
+.venv/
 
 # Distribution / packaging
 .Python

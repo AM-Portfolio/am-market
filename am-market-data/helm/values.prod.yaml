@@ -51,7 +51,7 @@ vault:
 
 # Monitoring Configuration
 monitoring:
-  enabled: true
+  enabled: false
   prometheus:
     scrape: true
     port: "8080"

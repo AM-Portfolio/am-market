@@ -1,0 +1,16 @@
+{
+  "name": "am-market",
+  "version": "1.0.0",
+  "description": "AM Market Orchestrator Root",
+  "scripts": {
+    "run:parser": "cd am-parser && am run",
+    "run:data": "cd am-market-data && am run",
+    "run:analysis": "cd market-data-analysis-py && am run",
+    "run:ui": "cd am_market_ui && am run",
+    "run": "npx -y concurrently -n \"parser,data,analysis,ui\" -c \"magenta,blue,green,yellow\" \"npm run run:parser\" \"npm run run:data\" \"npm run run:analysis\" \"npm run run:ui\"",
+    "deploy:parser": "cd am-parser && am deploy",
+    "deploy:data": "cd am-market-data && am deploy",
+    "deploy": "npx -y concurrently -n \"parser,data\" -c \"magenta,blue\" \"npm run deploy:parser\" \"npm run deploy:data\"",
+    "test": "npx -y concurrently \"cd am-parser && am test\" \"cd am-market-data && am test\""
+  }
+}
