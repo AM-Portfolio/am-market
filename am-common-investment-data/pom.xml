@@ -8,8 +8,6 @@
     <artifactId>am-common-investment-data-parent</artifactId>
     <version>1.6.24-SNAPSHOT</version>
     <packaging>pom</packaging>
-
-
     <modules>
         <module>am-common-investment-model</module>
         <module>am-common-investment-persistence</module>
