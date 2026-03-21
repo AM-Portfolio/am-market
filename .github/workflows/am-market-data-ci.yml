@@ -2,11 +2,9 @@ name: am-market-data CI
 
 on:
   push:
-    branches: [ "main" ]
     paths:
       - 'am-market-data/**'
   pull_request:
-    branches: [ "main" ]
     paths:
       - 'am-market-data/**'
 
