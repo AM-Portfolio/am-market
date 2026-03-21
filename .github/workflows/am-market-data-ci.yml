@@ -1,16 +1,10 @@
 name: am-market-data CI
 
-on:
-  push:
-    paths:
-      - 'am-market-data/**'
-  pull_request:
-    paths:
-      - 'am-market-data/**'
+on: [push, pull_request]
 
 jobs:
   build_and_publish:
-    uses: AM-Portfolio/am-cicd/.github/workflows/central-build-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
     with:
       language: 'java'
       working_directory: 'am-market-data'

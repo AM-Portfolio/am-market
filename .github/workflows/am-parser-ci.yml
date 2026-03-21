@@ -1,16 +1,10 @@
 name: am-parser CI
 
-on:
-  push:
-    paths:
-      - 'am-parser/**'
-  pull_request:
-    paths:
-      - 'am-parser/**'
+on: [push, pull_request]
 
 jobs:
   build_and_publish:
-    uses: AM-Portfolio/am-cicd/.github/workflows/central-build-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
     with:
       language: 'python'
       working_directory: 'am-parser'
