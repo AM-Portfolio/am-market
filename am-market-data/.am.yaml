@@ -1,0 +1,7 @@
+runtime: java_spring
+port: 8092
+dir: "market-data-app"
+dockerfile: "Dockerfile"
+context: ".."
+env:
+  MONGODB_DATABASE: "market_data"

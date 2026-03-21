@@ -1,0 +1,3 @@
+runtime: "python"
+entrypoint: "am_api.api:app"
+port: 8022

@@ -1,0 +1,3 @@
+runtime: python
+port: 8010
+dockerfile: "Dockerfile"
