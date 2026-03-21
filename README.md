@@ -2,6 +2,7 @@
 
 This repository contains the market data management ecosystem for the Asset Management (AM) platform. It orchestrates three key services responsible for fetching, processing, parsing, and visualizing financial market data.
 
+
 ## 🏗️ Architecture Overview
 
 The repository is structured into three main microservices:
