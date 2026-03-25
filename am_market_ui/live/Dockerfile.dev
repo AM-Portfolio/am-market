@@ -1,6 +1,7 @@
 # Multi-stage Flutter web build for DEV environment
 # Use official Flutter image
-FROM am-flutter-base:latest AS build-env
+ARG BASE_REGISTRY=""
+FROM ${BASE_REGISTRY}am-flutter-base:latest AS build-env
 
 # Create app directory
 WORKDIR /app
