@@ -17,3 +17,4 @@ jobs:
       language: 'java'
       working_directory: 'am-market-data'
       image_name: 'am-market-data'
+      build_context: '..'
