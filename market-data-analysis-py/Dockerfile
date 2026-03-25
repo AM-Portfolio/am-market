@@ -1,6 +1,7 @@
 # Market Data Analysis Service
 # Using Python base image for faster builds
-FROM am-python-base:latest
+ARG BASE_REGISTRY=""
+FROM ${BASE_REGISTRY}am-python-base:latest
 
 WORKDIR /code
 
