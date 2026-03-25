@@ -4,7 +4,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/am-portfolio/am-market-data/market-data-service
+  repository: ghcr.io/AM-Portfolio/am-market-data/market-data-service
   pullPolicy: Always
   tag: "latest"
 
