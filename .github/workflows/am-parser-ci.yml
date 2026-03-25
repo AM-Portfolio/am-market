@@ -10,8 +10,4 @@ on:
 
 jobs:
   build_and_publish:
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
-    with:
-      language: 'python'
-      working_directory: 'am-parser'
-      image_name: 'am-parser'
+    uses: AM-Portfolio/am-pipelines/.github/workflows/test.yml@main
