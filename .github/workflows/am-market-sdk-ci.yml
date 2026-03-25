@@ -10,8 +10,9 @@ on:
 
 jobs:
   build_and_publish_java:
-    uses: AM-Portfolio/am-cicd/.github/workflows/central-build-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
     with:
       language: 'java'
       working_directory: 'am-market-sdk/java-sdk'
       image_name: 'am-market-sdk'
+      build_context: '../..'
