@@ -4,8 +4,6 @@ on:
   push:
     paths:
       - 'Dockerfile.base-*'
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
