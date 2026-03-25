@@ -1,5 +1,6 @@
 # Multi-Stage Build for Flutter Web
-FROM am-flutter-base:latest AS build
+ARG BASE_REGISTRY=""
+FROM ${BASE_REGISTRY}am-flutter-base:latest AS build
 
 WORKDIR /app
 

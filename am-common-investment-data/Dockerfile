@@ -1,6 +1,6 @@
-# Multi-stage build for Common Investment Data Service
 # Stage 1: Build with Maven base image
-FROM am-java-maven-base:latest AS build
+ARG BASE_REGISTRY=""
+FROM ${BASE_REGISTRY}am-java-maven-base:latest AS build
 
 # Build arguments for GitHub authentication
 ARG GITHUB_PACKAGES_USERNAME
