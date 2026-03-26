@@ -13,9 +13,9 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
     with:
       language: 'python'
       working_directory: 'am-market-sdk/python-sdk'
-      image_name: 'am-market-sdk-python'
-      build_context: '../..'
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,21 +1,21 @@
-name: am-market-sdk CI
+name: am-market-sdk-flutter CI
 
 on:
   push:
     paths:
-      - 'am-market-sdk/java-sdk/**'
+      - 'am-market-sdk/flutter-sdk/**'
   pull_request:
     paths:
-      - 'am-market-sdk/java-sdk/**'
+      - 'am-market-sdk/flutter-sdk/**'
 
 jobs:
-  build_and_publish_java:
+  build_and_verify_flutter:
     permissions:
       contents: read
       packages: write
     uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
     with:
-      language: 'java'
-      working_directory: 'am-market-sdk/java-sdk'
+      language: 'flutter'
+      working_directory: 'am-market-sdk/flutter-sdk'
     secrets:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
