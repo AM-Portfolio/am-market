@@ -12,6 +12,9 @@ on:
 
 jobs:
   build_and_publish:
+    permissions:
+      contents: read
+      packages: write
     uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
     with:
       language: 'java'
