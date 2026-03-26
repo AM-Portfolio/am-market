@@ -4,7 +4,7 @@ Mutual Fund Portfolio API
 
 - API version: 1.0.0
 
-- Build date: 2026-03-27T02:29:52.562478600+05:30[Asia/Calcutta]
+- Build date: 2026-03-27T02:38:35.395601500+05:30[Asia/Calcutta]
 
 - Generator version: 7.18.0
 

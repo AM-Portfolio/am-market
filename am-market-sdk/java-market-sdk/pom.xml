@@ -5,7 +5,7 @@
     <artifactId>am-market-client</artifactId>
     <packaging>jar</packaging>
     <name>am-market-client</name>
-    <version>1.0.0</version>
+    <version>1.0.0-SNAPSHOT</version>
     <description>AM Market Data API Java Client</description>
     <distributionManagement>
         <repository>

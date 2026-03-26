@@ -25,14 +25,19 @@ function Invoke-PythonGen {
     # Write pyproject.toml
     $pyproject = @"
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "$ProjectName"
 version = "1.0.0"
 description = "$PyDesc"
+readme = "README.md"
 requires-python = ">=3.7"
+authors = [
+    { name = "OpenAPI Generator community" }
+]
+keywords = ["OpenAPI", "OpenAPI-Generator", "$ProjectName"]
 dependencies = [
     "urllib3 >= 1.25.3",
     "python-dateutil",

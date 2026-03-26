@@ -136,8 +136,8 @@ function Invoke-JavaGen {
     # Call core generator
     Invoke-OpenApiGen -Spec $Spec -OutDir $OutDir -Generator "java" -Config $fullConfig -Label $Label
 
-    # Write pom.xml
-    Write-Pom -OutputDir $OutDir -ArtifactId $ArtifactId -Description $Description
+    # Write pom.xml (using SNAPSHOT to avoid 409 Conflict in CI)
+    Write-Pom -OutputDir $OutDir -ArtifactId $ArtifactId -Description $Description -Version "1.0.0-SNAPSHOT"
 }
 
 # End of Java.ps1
