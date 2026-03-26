@@ -48,7 +48,7 @@ import com.am.portfolio.client.market.invoker.ApiClient;
   HistoricalData.JSON_PROPERTY_CURRENCY,
   HistoricalData.JSON_PROPERTY_RETRIEVAL_TIME
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T01:58:01.787863300+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T02:29:36.319987700+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
 public class HistoricalData {
   public static final String JSON_PROPERTY_TRADING_SYMBOL = "tradingSymbol";
   @javax.annotation.Nullable

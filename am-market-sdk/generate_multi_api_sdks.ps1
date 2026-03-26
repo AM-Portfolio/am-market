@@ -137,6 +137,8 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " SDK Generation Complete! " -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
+
+Write-Host ""
 Write-Host "Packages generated (in am-market-sdk/):"
 Write-Host "  [Java]    java-market-sdk/"
 Write-Host "  [Java]    java-parser-sdk/"

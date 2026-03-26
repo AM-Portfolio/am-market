@@ -15,12 +15,23 @@ function Invoke-OpenApiGen {
         [Parameter(Mandatory=$true)][string]$Generator,
         [Parameter(Mandatory=$true)][hashtable]$Config,
         [Parameter(Mandatory=$true)][string]$Label,
-        [string]$SdkRoot = $PSScriptRoot
+        [string]$SdkRoot = $PSScriptRoot,
+        [string[]]$AdditionalArgs = @()
     )
 
     # 1. Clean and Prepare Output Directory
-    if (Test-Path $OutDir) { Remove-Item -Recurse -Force $OutDir }
-    New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
+    if (Test-Path $OutDir) {
+        # Try to remove the whole directory, ignore errors if some files are locked
+        Remove-Item -Recurse -Force $OutDir -ErrorAction SilentlyContinue
+        
+        # If it still exists (due to locks), at least try to clean what we can
+        if (Test-Path $OutDir) {
+            Get-ChildItem -Path $OutDir -Recurse | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+        }
+    }
+    if (-not (Test-Path $OutDir)) {
+        New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
+    }
 
     Write-Host "  [$Label] Generating SDK at $OutDir..." -ForegroundColor Yellow
     
@@ -31,20 +42,29 @@ function Invoke-OpenApiGen {
     # 3. Run Generator
     $genArgs = @(
         "generate",
-        "-i", $Spec,
+        "-i", "`"$Spec`"",
         "-g", $Generator,
-        "-o", $OutDir,
-        "-c", $configPath,
+        "-o", "`"$OutDir`"",
+        "-c", "`"$configPath`"",
         "--skip-validate-spec"
     )
+
+    if ($AdditionalArgs.Count -gt 0) {
+        $genArgs += $AdditionalArgs
+    }
+
+    Write-Host "    [DEBUG] Running: npx.cmd --yes @openapitools/openapi-generator-cli $($genArgs -join ' ')" -ForegroundColor Gray
     
-    # Use npx with splatting
-    npx --yes @openapitools/openapi-generator-cli @genArgs
+    # Use absolute path to npx.cmd
+    & "C:\Program Files\nodejs\npx.cmd" --yes @openapitools/openapi-generator-cli @genArgs
     
-    Check-LastExit "$Label Generation Failed"
+    if ($LASTEXITCODE -ne 0) {
+        Check-LastExit "$Label Generation Failed"
+    }
 
     # 4. Write CI Trigger
-    Set-Content -Path (Join-Path $OutDir "ci-trigger.txt") -Value $Label
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    "Update: $timestamp ($Label)" | Set-Content -Path (Join-Path $OutDir "ci-trigger.txt")
     
     # 5. Cleanup Config
     if (Test-Path $configPath) { Remove-Item -Force $configPath }

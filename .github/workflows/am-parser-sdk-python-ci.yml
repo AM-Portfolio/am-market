@@ -4,9 +4,11 @@ on:
   push:
     paths:
       - 'am-market-sdk/python-parser-sdk/**'
+      - 'am-market-sdk/python-parser-sdk/ci-trigger.txt'
   pull_request:
     paths:
       - 'am-market-sdk/python-parser-sdk/**'
+      - 'am-market-sdk/python-parser-sdk/ci-trigger.txt'
 
 jobs:
   build_and_publish_python_parser:

@@ -46,7 +46,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T01:58:01.787863300+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T02:29:36.319987700+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
 public class MarginCalculatorApi {
   /**
    * Utility class for extending HttpRequest.Builder functionality.
