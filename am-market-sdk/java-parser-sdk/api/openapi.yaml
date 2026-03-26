@@ -1,0 +1,1394 @@
+openapi: 3.1.0
+info:
+  description: REST API for managing mutual fund portfolio data
+  title: Mutual Fund Portfolio API
+  version: 1.0.0
+servers:
+- url: /
+paths:
+  /v1/upload-excel-async:
+    post:
+      description: |-
+        Upload Excel file for async background processing
+        Returns immediately with job ID, processes in background
+      operationId: upload_excel_async_v1_upload_excel_async_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Body_upload_excel_async_v1_upload_excel_async_post"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobResponse"
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Upload Excel Async
+      tags:
+      - Background Jobs
+      x-content-type: multipart/form-data
+      x-accepts:
+      - application/json
+  /v1/{job_id}/status:
+    get:
+      description: Get the current status of a background job
+      operationId: get_job_status_v1__job_id__status_get
+      parameters:
+      - explode: false
+        in: path
+        name: job_id
+        required: true
+        schema:
+          title: Job Id
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatusResponse"
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Get Job Status
+      tags:
+      - Background Jobs
+      x-accepts:
+      - application/json
+  /v1/{job_id}/result:
+    get:
+      description: Get the result of a completed job
+      operationId: get_job_result_v1__job_id__result_get
+      parameters:
+      - explode: false
+        in: path
+        name: job_id
+        required: true
+        schema:
+          title: Job Id
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Get Job Result
+      tags:
+      - Background Jobs
+      x-accepts:
+      - application/json
+  /v1/{job_id}:
+    delete:
+      description: Cancel a pending or running job
+      operationId: cancel_job_v1__job_id__delete
+      parameters:
+      - explode: false
+        in: path
+        name: job_id
+        required: true
+        schema:
+          title: Job Id
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Cancel Job
+      tags:
+      - Background Jobs
+      x-accepts:
+      - application/json
+  /v1/:
+    get:
+      description: List background jobs with optional filtering
+      operationId: list_jobs_v1__get
+      parameters:
+      - explode: true
+        in: query
+        name: job_status
+        required: false
+        schema:
+          allOf:
+          - $ref: "#/components/schemas/JobStatus"
+          nullable: true
+        style: form
+      - explode: true
+        in: query
+        name: user_id
+        required: false
+        schema:
+          nullable: true
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          title: Limit
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: List Jobs
+      tags:
+      - Background Jobs
+      x-accepts:
+      - application/json
+  /v1/admin/fix-stuck-job/{job_id}:
+    post:
+      description: |-
+        Admin endpoint to fix stuck jobs
+        Used when jobs get stuck due to server restarts
+      operationId: fix_stuck_job_v1_admin_fix_stuck_job__job_id__post
+      parameters:
+      - explode: false
+        in: path
+        name: job_id
+        required: true
+        schema:
+          title: Job Id
+          type: string
+        style: simple
+      - explode: true
+        in: query
+        name: mark_as_failed
+        required: false
+        schema:
+          default: true
+          title: Mark As Failed
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Fix Stuck Job
+      tags:
+      - Background Jobs
+      x-accepts:
+      - application/json
+  /v1/admin/recover-stuck-jobs:
+    post:
+      description: |-
+        Admin endpoint to recover all stuck jobs
+        Useful after server restarts
+      operationId: recover_all_stuck_jobs_v1_admin_recover_stuck_jobs_post
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Recover All Stuck Jobs
+      tags:
+      - Background Jobs
+      x-accepts:
+      - application/json
+  /v1/fetch-all-holdings:
+    post:
+      description: |-
+        Fetch holdings for all ETFs with ISINs from moneycontrol API
+        Returns immediately with job ID, processes in background
+        Smart caching: Only fetches if data is missing or stale
+      operationId: fetch_all_etf_holdings_v1_fetch_all_holdings_post
+      parameters:
+      - explode: true
+        in: query
+        name: callback_url
+        required: false
+        schema:
+          nullable: true
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: user_id
+        required: false
+        schema:
+          nullable: true
+          type: string
+        style: form
+      - description: Limit number of ETFs to process
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          nullable: true
+          type: integer
+        style: form
+      - description: Force refresh even if data exists for today
+        explode: true
+        in: query
+        name: force_refresh
+        required: false
+        schema:
+          default: false
+          description: Force refresh even if data exists for today
+          title: Force Refresh
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobResponse"
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Fetch All Etf Holdings
+      tags:
+      - ETF Holdings
+      x-accepts:
+      - application/json
+  /v1/search:
+    get:
+      description: "Search ETFs by symbol, name, or ISIN"
+      operationId: search_etfs_v1_search_get
+      parameters:
+      - description: "Search by symbol, name, or ISIN"
+        explode: true
+        in: query
+        name: query
+        required: true
+        schema:
+          description: "Search by symbol, name, or ISIN"
+          title: Query
+          type: string
+        style: form
+      - description: Maximum results to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 10
+          description: Maximum results to return
+          title: Limit
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Search Etfs
+      tags:
+      - ETF Holdings
+      x-accepts:
+      - application/json
+  /v1/fetch-holdings/{symbol}:
+    post:
+      description: |-
+        Fetch holdings for a specific ETF by symbol
+        Returns immediately with job ID, processes in background
+      operationId: fetch_holdings_for_etf_v1_fetch_holdings__symbol__post
+      parameters:
+      - explode: false
+        in: path
+        name: symbol
+        required: true
+        schema:
+          title: Symbol
+          type: string
+        style: simple
+      - explode: true
+        in: query
+        name: callback_url
+        required: false
+        schema:
+          nullable: true
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: user_id
+        required: false
+        schema:
+          nullable: true
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Fetch Holdings For Etf
+      tags:
+      - ETF Holdings
+      x-accepts:
+      - application/json
+  /v1/holdings/{symbol}:
+    get:
+      description: Get stored holdings for a specific ETF
+      operationId: get_etf_holdings_v1_holdings__symbol__get
+      parameters:
+      - explode: false
+        in: path
+        name: symbol
+        required: true
+        schema:
+          title: Symbol
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Get Etf Holdings
+      tags:
+      - ETF Holdings
+      x-accepts:
+      - application/json
+  /v1/cache-stats:
+    get:
+      description: Get ETF holdings cache statistics
+      operationId: get_cache_statistics_v1_cache_stats_get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Get Cache Statistics
+      tags:
+      - ETF Holdings
+      x-accepts:
+      - application/json
+  /v1/stats:
+    get:
+      description: Get ETF database statistics
+      operationId: get_etf_stats_v1_stats_get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Get Etf Stats
+      tags:
+      - ETF Holdings
+      x-accepts:
+      - application/json
+  /v1/load-from-json:
+    post:
+      description: |-
+        Load ETF data from JSON file
+        Accepts etf_details.json and loads all ETFs into database
+      operationId: load_etfs_from_json_v1_load_from_json_post
+      parameters:
+      - description: "Validate only, don't persist"
+        explode: true
+        in: query
+        name: dry_run
+        required: false
+        schema:
+          default: false
+          description: "Validate only, don't persist"
+          title: Dry Run
+          type: boolean
+        style: form
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Body_load_etfs_from_json_v1_load_from_json_post"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Load Etfs From Json
+      tags:
+      - ETF Holdings
+      x-content-type: multipart/form-data
+      x-accepts:
+      - application/json
+  /:
+    get:
+      description: Root endpoint with API information
+      operationId: root__get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                title: Response Root  Get
+                type: object
+          description: Successful Response
+      summary: Root
+      x-accepts:
+      - application/json
+  /health:
+    get:
+      description: Health check endpoint
+      operationId: health_check_health_get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                title: Response Health Check Health Get
+                type: object
+          description: Successful Response
+      summary: Health Check
+      x-accepts:
+      - application/json
+  /v1/portfolios:
+    get:
+      description: "List all portfolios or filter by fund name\n\nArgs:\n    fund_name:\
+        \ Optional fund name to filter by\n    limit: Maximum number of portfolios\
+        \ to return (default: 50)\n    \nReturns:\n    List of portfolio summaries"
+      operationId: list_portfolios_v1_portfolios_get
+      parameters:
+      - explode: true
+        in: query
+        name: fund_name
+        required: false
+        schema:
+          nullable: true
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          title: Limit
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                title: Response List Portfolios V1 Portfolios Get
+                type: object
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: List Portfolios
+      tags:
+      - Mutual Funds
+      x-accepts:
+      - application/json
+    post:
+      description: "Save a mutual fund portfolio to the database\n\nArgs:\n    portfolio_data:\
+        \ JSON data containing mutual fund portfolio information\n    \nReturns:\n\
+        \    Saved portfolio data with database ID"
+      operationId: save_portfolio_v1_portfolios_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              title: Portfolio Data
+              type: object
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                title: Response Save Portfolio V1 Portfolios Post
+                type: object
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Save Portfolio
+      tags:
+      - Mutual Funds
+      x-content-type: application/json
+      x-accepts:
+      - application/json
+  /v1/portfolios/{portfolio_id}:
+    get:
+      description: "Get a specific portfolio by ID\n\nArgs:\n    portfolio_id: MongoDB\
+        \ ObjectId of the portfolio\n    \nReturns:\n    Portfolio data if found"
+      operationId: get_portfolio_v1_portfolios__portfolio_id__get
+      parameters:
+      - explode: false
+        in: path
+        name: portfolio_id
+        required: true
+        schema:
+          title: Portfolio Id
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                title: Response Get Portfolio V1 Portfolios  Portfolio Id  Get
+                type: object
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Get Portfolio
+      tags:
+      - Mutual Funds
+      x-accepts:
+      - application/json
+  /v1/portfolios/search:
+    get:
+      description: "Search portfolios by fund name\n\nArgs:\n    fund_name: Fund name\
+        \ to search for\n    \nReturns:\n    List of matching portfolio summaries"
+      operationId: search_portfolios_v1_portfolios_search_get
+      parameters:
+      - explode: true
+        in: query
+        name: fund_name
+        required: true
+        schema:
+          title: Fund Name
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                title: Response Search Portfolios V1 Portfolios Search Get
+                type: object
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Search Portfolios
+      tags:
+      - Mutual Funds
+      x-accepts:
+      - application/json
+  /v1/holdings/{isin_code}:
+    get:
+      description: "Get all holdings with specific ISIN code\n\nArgs:\n    isin_code:\
+        \ ISIN code to search for\n    \nReturns:\n    List of holdings with the specified\
+        \ ISIN"
+      operationId: get_holdings_by_isin_v1_holdings__isin_code__get
+      parameters:
+      - explode: false
+        in: path
+        name: isin_code
+        required: true
+        schema:
+          title: Isin Code
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                title: Response Get Holdings By Isin V1 Holdings  Isin Code  Get
+                type: object
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Get Holdings By Isin
+      tags:
+      - Mutual Funds
+      x-accepts:
+      - application/json
+  /v1/funds/{fund_name}/statistics:
+    get:
+      description: "Get statistics for a specific fund\n\nArgs:\n    fund_name: Name\
+        \ of the mutual fund\n    \nReturns:\n    Fund statistics"
+      operationId: get_fund_statistics_v1_funds__fund_name__statistics_get
+      parameters:
+      - explode: false
+        in: path
+        name: fund_name
+        required: true
+        schema:
+          title: Fund Name
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                title: Response Get Fund Statistics V1 Funds  Fund Name  Statistics
+                  Get
+                type: object
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Get Fund Statistics
+      tags:
+      - Mutual Funds
+      x-accepts:
+      - application/json
+  /v1/upload:
+    post:
+      description: "Upload an Excel file and do ALL the work automatically:\n1. Upload\
+        \ and persist main file to database\n2. Split Excel into individual sheet\
+        \ files  \n3. Persist all sheet files to database\n4. Parse each sheet and\
+        \ save portfolios to database\n\n- **file**: Excel file to upload (.xlsx,\
+        \ .xls)\n- **parse_method**: Parsing method (\"manual\" or \"together\") -\
+        \ defaults to \"together\"\n\nReturns complete processing results with all\
+        \ parsed portfolios"
+      operationId: upload_file_v1_upload_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Body_upload_file_v1_upload_post"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                title: Response Upload File V1 Upload Post
+                type: object
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Upload File
+      tags:
+      - Mutual Funds
+      x-content-type: multipart/form-data
+      x-accepts:
+      - application/json
+  /v1/upload/excel:
+    post:
+      description: "🚀 Complete Excel Upload Workflow - Does EVERYTHING automatically!\n\
+        \nThis endpoint handles the complete workflow:\n1. ✅ Upload Excel file\n2.\
+        \ ✅ Persist main file to database  \n3. ✅ Split Excel into individual sheet\
+        \ files\n4. ✅ Persist all sheet files to database\n5. ✅ Parse each sheet using\
+        \ manual or LLM parsing\n6. ✅ Save all parsed portfolios to database\n\n-\
+        \ **file**: Excel file to upload (.xlsx, .xls)\n- **parse_method**: \"together\"\
+        \ (default) or \"manual\"\n\nReturns: Complete results with all parsed portfolios"
+      operationId: upload_excel_complete_v1_upload_excel_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Body_upload_excel_complete_v1_upload_excel_post"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                title: Response Upload Excel Complete V1 Upload Excel Post
+                type: object
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Upload Excel Complete
+      tags:
+      - Mutual Funds
+      x-content-type: multipart/form-data
+      x-accepts:
+      - application/json
+  /v1/process/{file_id}:
+    post:
+      description: |-
+        Process an uploaded Excel file by splitting it into individual sheet files
+
+        - **file_id**: ID of the uploaded Excel file
+
+        This endpoint splits the Excel file into individual sheet files and stores them
+      operationId: process_file_v1_process__file_id__post
+      parameters:
+      - explode: false
+        in: path
+        name: file_id
+        required: true
+        schema:
+          title: File Id
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Process File
+      tags:
+      - Mutual Funds
+      x-accepts:
+      - application/json
+  /v1/parse/{sheet_id}:
+    post:
+      description: |-
+        Parse an individual sheet file to extract portfolio data
+
+        - **sheet_id**: ID of the sheet file to parse
+        - **method**: Parsing method (manual, llm, together)
+        - **api_key**: API key for LLM parsing (required for 'together' method)
+      operationId: parse_sheet_v1_parse__sheet_id__post
+      parameters:
+      - explode: false
+        in: path
+        name: sheet_id
+        required: true
+        schema:
+          title: Sheet Id
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              allOf:
+              - $ref: "#/components/schemas/Body_parse_sheet_v1_parse__sheet_id__post"
+              title: Body
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Parse Sheet
+      tags:
+      - Mutual Funds
+      x-content-type: application/x-www-form-urlencoded
+      x-accepts:
+      - application/json
+  /v1/files:
+    get:
+      description: |-
+        List uploaded files with optional filtering
+
+        - **skip**: Number of records to skip (for pagination)
+        - **limit**: Maximum number of records to return
+        - **status_filter**: Filter by processing status
+      operationId: list_files_v1_files_get
+      parameters:
+      - explode: true
+        in: query
+        name: skip
+        required: false
+        schema:
+          default: 0
+          title: Skip
+          type: integer
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          title: Limit
+          type: integer
+        style: form
+      - explode: true
+        in: query
+        name: status_filter
+        required: false
+        schema:
+          nullable: true
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileListResponse"
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: List Files
+      tags:
+      - Mutual Funds
+      x-accepts:
+      - application/json
+  /v1/files/{file_id}:
+    get:
+      description: |-
+        Get detailed status information for a file and its sheets
+
+        - **file_id**: ID of the file to check
+      operationId: get_file_status_v1_files__file_id__get
+      parameters:
+      - explode: false
+        in: path
+        name: file_id
+        required: true
+        schema:
+          title: File Id
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Get File Status
+      tags:
+      - Mutual Funds
+      x-accepts:
+      - application/json
+  /v1/parse-all/{file_id}:
+    post:
+      description: |-
+        Parse all sheets for a given Excel file
+
+        - **file_id**: ID of the Excel file
+        - **method**: Parsing method (manual, llm, together)
+        - **api_key**: API key for LLM parsing
+      operationId: parse_all_sheets_v1_parse_all__file_id__post
+      parameters:
+      - explode: false
+        in: path
+        name: file_id
+        required: true
+        schema:
+          title: File Id
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              allOf:
+              - $ref: "#/components/schemas/Body_parse_all_sheets_v1_parse_all__file_id__post"
+              title: Body
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+          description: Validation Error
+      summary: Parse All Sheets
+      tags:
+      - Mutual Funds
+      x-content-type: application/x-www-form-urlencoded
+      x-accepts:
+      - application/json
+components:
+  schemas:
+    Body_load_etfs_from_json_v1_load_from_json_post:
+      properties:
+        file:
+          description: ETF details JSON file
+          format: binary
+          title: File
+          type: string
+      required:
+      - file
+      title: Body_load_etfs_from_json_v1_load_from_json_post
+    Body_parse_all_sheets_v1_parse_all__file_id__post:
+      properties:
+        method:
+          default: manual
+          title: Method
+          type: string
+        api_key:
+          nullable: true
+          type: string
+      title: Body_parse_all_sheets_v1_parse_all__file_id__post
+    Body_parse_sheet_v1_parse__sheet_id__post:
+      properties:
+        method:
+          default: manual
+          title: Method
+          type: string
+        api_key:
+          nullable: true
+          type: string
+      title: Body_parse_sheet_v1_parse__sheet_id__post
+    Body_upload_excel_async_v1_upload_excel_async_post:
+      properties:
+        file:
+          format: binary
+          title: File
+          type: string
+        parse_method:
+          default: together
+          title: Parse Method
+          type: string
+        callback_url:
+          nullable: true
+          type: string
+        user_id:
+          nullable: true
+          type: string
+      required:
+      - file
+      title: Body_upload_excel_async_v1_upload_excel_async_post
+    Body_upload_excel_complete_v1_upload_excel_post:
+      properties:
+        file:
+          format: binary
+          title: File
+          type: string
+        parse_method:
+          default: together
+          title: Parse Method
+          type: string
+      required:
+      - file
+      title: Body_upload_excel_complete_v1_upload_excel_post
+    Body_upload_file_v1_upload_post:
+      properties:
+        file:
+          format: binary
+          title: File
+          type: string
+        parse_method:
+          default: together
+          title: Parse Method
+          type: string
+      required:
+      - file
+      title: Body_upload_file_v1_upload_post
+    FileListResponse:
+      description: Response model for listing files
+      example:
+        total_count: 6
+        files:
+        - error_message: error_message
+          file_path: file_path
+          created_at: 2000-01-23T04:56:07.000+00:00
+          file_size: 0
+          original_filename: original_filename
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          file_type: ""
+          parent_id: parent_id
+          file_id: file_id
+          _id: _id
+          processing_metadata: "{}"
+          stored_filename: stored_filename
+          sheet_name: sheet_name
+          status: ""
+        - error_message: error_message
+          file_path: file_path
+          created_at: 2000-01-23T04:56:07.000+00:00
+          file_size: 0
+          original_filename: original_filename
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          file_type: ""
+          parent_id: parent_id
+          file_id: file_id
+          _id: _id
+          processing_metadata: "{}"
+          stored_filename: stored_filename
+          sheet_name: sheet_name
+          status: ""
+      properties:
+        files:
+          items:
+            $ref: "#/components/schemas/FileUpload"
+          type: array
+        total_count:
+          title: Total Count
+          type: integer
+      required:
+      - files
+      - total_count
+      title: FileListResponse
+    FileType:
+      description: Type of uploaded file
+      enum:
+      - excel
+      - sheet
+      - csv
+      title: FileType
+      type: string
+    FileUpload:
+      description: Model for uploaded files and their processing status
+      example:
+        error_message: error_message
+        file_path: file_path
+        created_at: 2000-01-23T04:56:07.000+00:00
+        file_size: 0
+        original_filename: original_filename
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        file_type: ""
+        parent_id: parent_id
+        file_id: file_id
+        _id: _id
+        processing_metadata: "{}"
+        stored_filename: stored_filename
+        sheet_name: sheet_name
+        status: ""
+      properties:
+        _id:
+          nullable: true
+          type: string
+        file_id:
+          description: Unique identifier for the file
+          title: File Id
+          type: string
+        original_filename:
+          description: Original filename uploaded by user
+          title: Original Filename
+          type: string
+        stored_filename:
+          description: Filename as stored in the system
+          title: Stored Filename
+          type: string
+        file_type:
+          allOf:
+          - $ref: "#/components/schemas/FileType"
+          description: "Type of file (excel, sheet, csv)"
+        file_path:
+          description: Full path to stored file
+          title: File Path
+          type: string
+        parent_id:
+          nullable: true
+          type: string
+        sheet_name:
+          nullable: true
+          type: string
+        status:
+          allOf:
+          - $ref: "#/components/schemas/ProcessingStatus"
+          default: uploaded
+          description: Current processing status
+        file_size:
+          description: File size in bytes
+          title: File Size
+          type: integer
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+        error_message:
+          nullable: true
+          type: string
+        processing_metadata:
+          nullable: true
+          type: object
+      required:
+      - file_id
+      - file_path
+      - file_size
+      - file_type
+      - original_filename
+      - stored_filename
+      title: FileUpload
+    HTTPValidationError:
+      example:
+        detail:
+        - msg: msg
+          loc:
+          - ValidationError_loc_inner
+          - ValidationError_loc_inner
+          type: type
+        - msg: msg
+          loc:
+          - ValidationError_loc_inner
+          - ValidationError_loc_inner
+          type: type
+      properties:
+        detail:
+          items:
+            $ref: "#/components/schemas/ValidationError"
+          type: array
+      title: HTTPValidationError
+    JobProgress:
+      description: Job progress tracking
+      example:
+        current_item: current_item
+        completed_items: 6
+        failed_items: 1
+        total_items: 0
+      properties:
+        total_items:
+          default: 0
+          title: Total Items
+          type: integer
+        completed_items:
+          default: 0
+          title: Completed Items
+          type: integer
+        failed_items:
+          default: 0
+          title: Failed Items
+          type: integer
+        current_item:
+          nullable: true
+          type: string
+      title: JobProgress
+    JobResponse:
+      description: API response for job creation
+      example:
+        estimated_completion_time: estimated_completion_time
+        webhook_url: webhook_url
+        job_id: job_id
+        message: message
+        status: pending
+        status_url: status_url
+      properties:
+        job_id:
+          title: Job Id
+          type: string
+        status:
+          $ref: "#/components/schemas/JobStatus"
+        message:
+          title: Message
+          type: string
+        estimated_completion_time:
+          nullable: true
+          type: string
+        status_url:
+          title: Status Url
+          type: string
+        webhook_url:
+          nullable: true
+          type: string
+      required:
+      - job_id
+      - message
+      - status
+      - status_url
+      title: JobResponse
+    JobStatus:
+      description: Job processing status
+      enum:
+      - pending
+      - running
+      - completed
+      - failed
+      - cancelled
+      title: JobStatus
+      type: string
+    JobStatusResponse:
+      description: API response for job status check
+      example:
+        result: "{}"
+        error_message: error_message
+        completed_at: 2000-01-23T04:56:07.000+00:00
+        estimated_remaining_time: estimated_remaining_time
+        job_id: job_id
+        progress:
+          current_item: current_item
+          completed_items: 6
+          failed_items: 1
+          total_items: 0
+        created_at: 2000-01-23T04:56:07.000+00:00
+        started_at: 2000-01-23T04:56:07.000+00:00
+        status: pending
+      properties:
+        job_id:
+          title: Job Id
+          type: string
+        status:
+          $ref: "#/components/schemas/JobStatus"
+        progress:
+          $ref: "#/components/schemas/JobProgress"
+        result:
+          nullable: true
+          type: object
+        error_message:
+          nullable: true
+          type: string
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        started_at:
+          format: date-time
+          nullable: true
+          type: string
+        completed_at:
+          format: date-time
+          nullable: true
+          type: string
+        estimated_remaining_time:
+          nullable: true
+          type: string
+      required:
+      - created_at
+      - job_id
+      - progress
+      - status
+      title: JobStatusResponse
+    ProcessingStatus:
+      description: Status of file processing
+      enum:
+      - uploaded
+      - processing
+      - splitting
+      - completed
+      - failed
+      - parsed
+      title: ProcessingStatus
+      type: string
+    ValidationError:
+      example:
+        msg: msg
+        loc:
+        - ValidationError_loc_inner
+        - ValidationError_loc_inner
+        type: type
+      properties:
+        loc:
+          items:
+            $ref: "#/components/schemas/ValidationError_loc_inner"
+          type: array
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ValidationError_loc_inner:
+      anyOf:
+      - type: string
+      - type: integer
+

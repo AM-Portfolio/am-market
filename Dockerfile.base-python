@@ -1,4 +1,4 @@
-﻿# Base Image for Python Projects
+# Base Image for Python Projects
 # Pre-installs common FastAPI/pandas dependencies to speed up builds
 FROM python:3.11-slim
 
