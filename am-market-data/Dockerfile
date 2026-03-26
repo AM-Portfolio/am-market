@@ -10,17 +10,13 @@ FROM ${BASE_REGISTRY}am-java-maven-base:latest AS build
 ARG GITHUB_PACKAGES_USERNAME
 ARG GITHUB_PACKAGES_TOKEN
 
-# Set environment variables for Maven to pick up from settings.xml
-ENV GITHUB_PACKAGES_USERNAME=${GITHUB_PACKAGES_USERNAME}
-ENV GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN}
-
 WORKDIR /build
 
 # Build common investment data first (from root context)
 # This fulfills the requirement: "first check in local if not then github"
 COPY am-common-investment-data/ am-common-investment-data/
 RUN cd am-common-investment-data && \
-  mvn clean install -DskipTests -B
+  GITHUB_PACKAGES_USERNAME=${GITHUB_PACKAGES_USERNAME} GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN} mvn clean install -DskipTests -B
 
 # Now build Market Data modules
 WORKDIR /build/am-market-data
@@ -61,7 +57,7 @@ COPY am-market-data/market-data-analysis/ market-data-analysis/
 COPY am-market-data/market-data-watchlist/ market-data-watchlist/
 
 # Build the application
-RUN mvn clean package -DskipTests -B
+RUN GITHUB_PACKAGES_USERNAME=${GITHUB_PACKAGES_USERNAME} GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN} mvn clean package -DskipTests -B
 
 # Stage 2: Runtime with JRE
 FROM eclipse-temurin:17-jre-jammy
