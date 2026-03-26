@@ -17,5 +17,4 @@ jobs:
     with:
       language: 'flutter'
       working_directory: 'am-market-sdk/flutter-sdk'
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    secrets: inherit

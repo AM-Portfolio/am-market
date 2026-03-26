@@ -17,5 +17,4 @@ jobs:
     with:
       language: 'java'
       working_directory: 'am-market-sdk/java-sdk'
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    secrets: inherit

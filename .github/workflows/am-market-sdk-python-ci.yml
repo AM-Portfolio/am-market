@@ -17,5 +17,4 @@ jobs:
     with:
       language: 'python'
       working_directory: 'am-market-sdk/python-sdk'
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    secrets: inherit
