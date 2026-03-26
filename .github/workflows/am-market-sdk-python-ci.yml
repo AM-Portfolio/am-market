@@ -3,10 +3,10 @@ name: am-market-sdk-python CI
 on:
   push:
     paths:
-      - 'am-market-sdk/python-sdk/**'
+      - "am-market-sdk/python-sdk/**"
   pull_request:
     paths:
-      - 'am-market-sdk/python-sdk/**'
+      - "am-market-sdk/python-sdk/**"
 
 jobs:
   build_and_publish_python:
@@ -15,6 +15,6 @@ jobs:
       packages: write
     uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
     with:
-      language: 'python'
-      working_directory: 'am-market-sdk/python-sdk'
+      language: "python"
+      working_directory: "am-market-sdk/python-sdk"
     secrets: inherit

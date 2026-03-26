@@ -43,7 +43,6 @@ part 'model/job_status.dart';
 part 'model/job_status_response.dart';
 part 'model/processing_status.dart';
 part 'model/validation_error.dart';
-part 'model/validation_error_loc_inner.dart';
 
 
 /// An [ApiClient] instance that uses the default values obtained from

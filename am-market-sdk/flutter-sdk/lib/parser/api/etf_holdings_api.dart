@@ -356,13 +356,10 @@ class ETFHoldingsApi {
 
     const contentTypes = <String>['multipart/form-data'];
 
-    bool hasFields = false;
+    bool hasFields = true;
     final mp = MultipartRequest('POST', Uri.parse(path));
-    if (file != null) {
-      hasFields = true;
-      mp.fields[r'file'] = file.field;
-      mp.files.add(file);
-    }
+    mp.fields[r'file'] = file.field;
+    mp.files.add(file);
     if (hasFields) {
       postBody = mp;
     }

@@ -18,7 +18,7 @@ class ValidationError {
     required this.type,
   });
 
-  List<ValidationErrorLocInner> loc;
+  List<dynamic> loc;
 
   String msg;
 
@@ -67,7 +67,7 @@ class ValidationError {
       }());
 
       return ValidationError(
-        loc: ValidationErrorLocInner.listFromJson(json[r'loc']),
+        loc: json[r'loc'] is List ? json[r'loc'] : const [],
         msg: mapValueOfType<String>(json, r'msg')!,
         type: mapValueOfType<String>(json, r'type')!,
       );
