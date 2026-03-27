@@ -39,7 +39,7 @@ import com.am.portfolio.client.parser.invoker.ApiClient;
   FileListResponse.JSON_PROPERTY_FILES,
   FileListResponse.JSON_PROPERTY_TOTAL_COUNT
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T02:38:35.395601500+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T09:34:32.125497100+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
 public class FileListResponse {
   public static final String JSON_PROPERTY_FILES = "files";
   @javax.annotation.Nonnull

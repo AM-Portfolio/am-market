@@ -1,12 +1,8 @@
+// ignore_for_file: unnecessary_null_comparison, parameter_assignments, unused_import, unused_element, always_put_required_named_parameters_first, constant_identifier_names, lines_longer_than_80_chars, avoid_dynamic_calls, invalid_assignment, undefined_method, undefined_getter, for_in_of_invalid_type, case_expression_type_is_not_switch_expression_subtype, deprecated_member_use_from_same_package
 //
 // AUTO-GENERATED FILE, DO NOT MODIFY!
 //
 // @dart=2.18
-
-// ignore_for_file: unused_element, unused_import
-// ignore_for_file: always_put_required_named_parameters_first
-// ignore_for_file: constant_identifier_names
-// ignore_for_file: lines_longer_than_80_chars
 
 part of openapi.api;
 
@@ -26,11 +22,8 @@ class BackgroundJobsApi {
   ///
   /// * [String] jobId (required):
   Future<Response> cancelJobV1JobIdDeleteWithHttpInfo(String jobId,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/{job_id}'
       .replaceAll('{job_id}', jobId);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -85,11 +78,8 @@ class BackgroundJobsApi {
   ///
   /// * [bool] markAsFailed:
   Future<Response> fixStuckJobV1AdminFixStuckJobJobIdPostWithHttpInfo(String jobId, { bool? markAsFailed, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/admin/fix-stuck-job/{job_id}'
       .replaceAll('{job_id}', jobId);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -148,11 +138,8 @@ class BackgroundJobsApi {
   ///
   /// * [String] jobId (required):
   Future<Response> getJobResultV1JobIdResultGetWithHttpInfo(String jobId,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/{job_id}/result'
       .replaceAll('{job_id}', jobId);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -205,11 +192,8 @@ class BackgroundJobsApi {
   ///
   /// * [String] jobId (required):
   Future<Response> getJobStatusV1JobIdStatusGetWithHttpInfo(String jobId,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/{job_id}/status'
       .replaceAll('{job_id}', jobId);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -266,10 +250,7 @@ class BackgroundJobsApi {
   ///
   /// * [int] limit:
   Future<Response> listJobsV1GetWithHttpInfo({ JobStatus? jobStatus, String? userId, int? limit, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -332,10 +313,7 @@ class BackgroundJobsApi {
   ///
   /// Note: This method returns the HTTP [Response].
   Future<Response> recoverAllStuckJobsV1AdminRecoverStuckJobsPostWithHttpInfo() async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/admin/recover-stuck-jobs';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -390,10 +368,7 @@ class BackgroundJobsApi {
   ///
   /// * [String] userId:
   Future<Response> uploadExcelAsyncV1UploadExcelAsyncPostWithHttpInfo(MultipartFile file, { String? parseMethod, String? callbackUrl, String? userId, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/upload-excel-async';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];

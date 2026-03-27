@@ -40,7 +40,7 @@ import com.am.portfolio.client.market.invoker.ApiClient;
   MarginCalculationRequest.JSON_PROPERTY_ORDER_TYPE,
   MarginCalculationRequest.JSON_PROPERTY_EXCHANGE
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T02:38:11.838038900+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T09:34:10.222147200+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
 public class MarginCalculationRequest {
   public static final String JSON_PROPERTY_POSITIONS = "positions";
   @javax.annotation.Nullable

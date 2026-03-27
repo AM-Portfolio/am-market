@@ -1,12 +1,8 @@
+// ignore_for_file: unnecessary_null_comparison, parameter_assignments, unused_import, unused_element, always_put_required_named_parameters_first, constant_identifier_names, lines_longer_than_80_chars, avoid_dynamic_calls, invalid_assignment, undefined_method, undefined_getter, for_in_of_invalid_type, case_expression_type_is_not_switch_expression_subtype, deprecated_member_use_from_same_package
 //
 // AUTO-GENERATED FILE, DO NOT MODIFY!
 //
 // @dart=2.18
-
-// ignore_for_file: unused_element, unused_import
-// ignore_for_file: always_put_required_named_parameters_first
-// ignore_for_file: constant_identifier_names
-// ignore_for_file: lines_longer_than_80_chars
 
 part of openapi.api;
 
@@ -28,11 +24,8 @@ class MarketAnalyticsApi {
   ///
   /// * [String] range:
   Future<Response> getHistoricalChartsWithHttpInfo(String symbol, { String? range, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-analytics/historical-charts/{symbol}'
       .replaceAll('{symbol}', symbol);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -99,10 +92,7 @@ class MarketAnalyticsApi {
   ///
   /// * [bool] expandIndices:
   Future<Response> getMoversWithHttpInfo({ String? type, int? limit, String? indexSymbol, String? timeFrame, bool? expandIndices, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-analytics/movers';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -165,7 +155,7 @@ class MarketAnalyticsApi {
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       final responseBody = await _decodeBodyBytes(response);
       return (await apiClient.deserializeAsync(responseBody, 'List<Map<String, Object>>') as List)
-        .cast<Map>()
+        .cast<Map<String, Object>>()
         .toList(growable: false);
 
     }
@@ -186,10 +176,7 @@ class MarketAnalyticsApi {
   ///
   /// * [bool] expandIndices:
   Future<Response> getSectorPerformanceWithHttpInfo({ String? indexSymbol, String? timeFrame, bool? expandIndices, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-analytics/sectors';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -242,7 +229,7 @@ class MarketAnalyticsApi {
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       final responseBody = await _decodeBodyBytes(response);
       return (await apiClient.deserializeAsync(responseBody, 'List<Map<String, Object>>') as List)
-        .cast<Map>()
+        .cast<Map<String, Object>>()
         .toList(growable: false);
 
     }

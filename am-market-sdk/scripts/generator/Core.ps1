@@ -1,6 +1,6 @@
 # Core.ps1 - Common SDK Generation Utilities
 
-function Check-LastExit {
+function Assert-LastExit {
     param([string]$Message)
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERROR] $Message (Exit Code: $LASTEXITCODE)" -ForegroundColor Red
@@ -37,15 +37,21 @@ function Invoke-OpenApiGen {
     
     # 2. Write Temporary JSON Config
     $configPath = Join-Path $SdkRoot "gen-config-$Label.json"
-    $Config | ConvertTo-Json | Set-Content -Path $configPath
+    $Config | ConvertTo-Json | Set-Content -Path $configPath -Encoding UTF8
+
+    # Verify config file exists and is not empty
+    if (-not (Test-Path $configPath)) {
+        Write-Host "[ERROR] Failed to create config file at $configPath" -ForegroundColor Red
+        exit 1
+    }
 
     # 3. Run Generator
     $genArgs = @(
         "generate",
-        "-i", "`"$Spec`"",
+        "-i", $Spec,
         "-g", $Generator,
-        "-o", "`"$OutDir`"",
-        "-c", "`"$configPath`"",
+        "-o", $OutDir,
+        "-c", $configPath,
         "--skip-validate-spec"
     )
 
@@ -59,7 +65,7 @@ function Invoke-OpenApiGen {
     & "C:\Program Files\nodejs\npx.cmd" --yes @openapitools/openapi-generator-cli @genArgs
     
     if ($LASTEXITCODE -ne 0) {
-        Check-LastExit "$Label Generation Failed"
+        Assert-LastExit "$Label Generation Failed"
     }
 
     # 4. Write CI Trigger

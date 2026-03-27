@@ -55,7 +55,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T02:38:35.395601500+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T09:34:32.125497100+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
 public class BackgroundJobsApi {
   /**
    * Utility class for extending HttpRequest.Builder functionality.

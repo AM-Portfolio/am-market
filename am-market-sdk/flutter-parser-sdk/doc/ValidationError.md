@@ -8,7 +8,7 @@ import 'package:am_parser_client/api.dart';
 ## Properties
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**loc** | [**List<ValidationErrorLocInner>**](ValidationErrorLocInner.md) |  | [default to const []]
+**loc** | [**List<dynamic>**](dynamic.md) |  | [default to const []]
 **msg** | **String** |  | 
 **type** | **String** |  | 
 

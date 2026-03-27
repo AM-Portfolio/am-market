@@ -1,12 +1,8 @@
+// ignore_for_file: unnecessary_null_comparison, parameter_assignments, unused_import, unused_element, always_put_required_named_parameters_first, constant_identifier_names, lines_longer_than_80_chars, avoid_dynamic_calls, invalid_assignment, undefined_method, undefined_getter, for_in_of_invalid_type, case_expression_type_is_not_switch_expression_subtype, deprecated_member_use_from_same_package
 //
 // AUTO-GENERATED FILE, DO NOT MODIFY!
 //
 // @dart=2.18
-
-// ignore_for_file: unused_element, unused_import
-// ignore_for_file: always_put_required_named_parameters_first
-// ignore_for_file: constant_identifier_names
-// ignore_for_file: lines_longer_than_80_chars
 
 part of openapi.api;
 
@@ -21,11 +17,8 @@ class MarketDataAdminControllerApi {
   ///
   /// * [String] jobId (required):
   Future<Response> getJobDetailsWithHttpInfo(String jobId,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/admin/logs/{jobId}'
       .replaceAll('{jobId}', jobId);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -75,10 +68,7 @@ class MarketDataAdminControllerApi {
   ///
   /// * [DateTime] endDate:
   Future<Response> getLogsWithHttpInfo({ int? page, int? size, DateTime? startDate, DateTime? endDate, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/admin/logs';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -146,10 +136,7 @@ class MarketDataAdminControllerApi {
   ///
   /// * [List<String>] symbols:
   Future<Response> startIngestionWithHttpInfo({ String? provider, List<String>? symbols, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/admin/ingestion/start';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -202,10 +189,7 @@ class MarketDataAdminControllerApi {
   ///
   /// * [String] provider (required):
   Future<Response> stopIngestionWithHttpInfo(String provider,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/admin/ingestion/stop';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -255,10 +239,7 @@ class MarketDataAdminControllerApi {
   ///
   /// * [bool] fetchIndexStocks:
   Future<Response> triggerHistoricalSyncWithHttpInfo({ String? symbol, bool? forceRefresh, bool? fetchIndexStocks, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/admin/sync/historical';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];

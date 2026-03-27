@@ -44,7 +44,7 @@ import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.am.portfolio.client.parser.invoker.ApiClient;
 import com.am.portfolio.client.parser.invoker.JSON;
 
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T02:38:35.395601500+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-27T09:34:32.125497100+05:30[Asia/Calcutta]", comments = "Generator version: 7.18.0")
 @JsonDeserialize(using=ValidationErrorLocInner.ValidationErrorLocInnerDeserializer.class)
 @JsonSerialize(using = ValidationErrorLocInner.ValidationErrorLocInnerSerializer.class)
 public class ValidationErrorLocInner extends AbstractOpenApiSchema {

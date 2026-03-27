@@ -1,12 +1,8 @@
+// ignore_for_file: unnecessary_null_comparison, parameter_assignments, unused_import, unused_element, always_put_required_named_parameters_first, constant_identifier_names, lines_longer_than_80_chars, avoid_dynamic_calls, invalid_assignment, undefined_method, undefined_getter, for_in_of_invalid_type, case_expression_type_is_not_switch_expression_subtype, deprecated_member_use_from_same_package
 //
 // AUTO-GENERATED FILE, DO NOT MODIFY!
 //
 // @dart=2.18
-
-// ignore_for_file: unused_element, unused_import
-// ignore_for_file: always_put_required_named_parameters_first
-// ignore_for_file: constant_identifier_names
-// ignore_for_file: lines_longer_than_80_chars
 
 part of openapi.api;
 
@@ -32,10 +28,7 @@ class MarketDataApi {
   ///
   /// * [String] status:
   Future<Response> generateSessionWithHttpInfo({ String? requestToken, String? requestToken2, String? code, String? status, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/auth/session';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -107,10 +100,7 @@ class MarketDataApi {
   ///
   /// * [HistoricalDataRequest] historicalDataRequest (required):
   Future<Response> getHistoricalDataWithHttpInfo(HistoricalDataRequest historicalDataRequest,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/historical-data';
-
-    // ignore: prefer_final_locals
     Object? postBody = historicalDataRequest;
 
     final queryParams = <QueryParam>[];
@@ -169,10 +159,7 @@ class MarketDataApi {
   ///
   /// * [bool] refresh:
   Future<Response> getLiveLTPWithHttpInfo(String symbols, { String? timeframe, bool? isIndexSymbol, bool? refresh, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/live-ltp';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -246,10 +233,7 @@ class MarketDataApi {
   ///
   /// * [bool] refresh:
   Future<Response> getLivePricesWithHttpInfo({ String? symbols, bool? isIndexSymbol, bool? refresh, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/live-prices';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -316,10 +300,7 @@ class MarketDataApi {
   ///
   /// * [String] provider:
   Future<Response> getLoginUrlWithHttpInfo({ String? provider, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/auth/login-url';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -378,11 +359,8 @@ class MarketDataApi {
   ///
   /// * [bool] refresh:
   Future<Response> getMutualFundDetailsWithHttpInfo(String schemeCode, { bool? refresh, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/mutual-fund/{schemeCode}'
       .replaceAll('{schemeCode}', schemeCode);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -447,11 +425,8 @@ class MarketDataApi {
   ///
   /// * [bool] refresh:
   Future<Response> getMutualFundNavHistoryWithHttpInfo(String schemeCode, String from, String to, { bool? refresh, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/mutual-fund/{schemeCode}/history'
       .replaceAll('{schemeCode}', schemeCode);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -516,10 +491,7 @@ class MarketDataApi {
   ///
   /// * [OHLCRequest] oHLCRequest (required):
   Future<Response> getOHLCWithHttpInfo(OHLCRequest oHLCRequest,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/ohlc';
-
-    // ignore: prefer_final_locals
     Object? postBody = oHLCRequest;
 
     final queryParams = <QueryParam>[];
@@ -576,10 +548,7 @@ class MarketDataApi {
   ///
   /// * [bool] refresh:
   Future<Response> getOptionChainWithHttpInfo(String symbol, { String? expiryDate, bool? refresh, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/option-chain';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -648,10 +617,7 @@ class MarketDataApi {
   ///
   /// * [bool] refresh:
   Future<Response> getQuotesWithHttpInfo(String symbols, { String? timeFrame, bool? refresh, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/quotes';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -716,10 +682,7 @@ class MarketDataApi {
   ///
   /// * [QuotesRequest] quotesRequest (required):
   Future<Response> getQuotesPostWithHttpInfo(QuotesRequest quotesRequest,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/quotes';
-
-    // ignore: prefer_final_locals
     Object? postBody = quotesRequest;
 
     final queryParams = <QueryParam>[];
@@ -772,11 +735,8 @@ class MarketDataApi {
   ///
   /// * [String] exchange (required):
   Future<Response> getSymbolsForExchangeWithHttpInfo(String exchange,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/symbols/{exchange}'
       .replaceAll('{exchange}', exchange);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -828,10 +788,7 @@ class MarketDataApi {
   ///
   /// Note: This method returns the HTTP [Response].
   Future<Response> logoutWithHttpInfo() async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/market-data/auth/logout';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];

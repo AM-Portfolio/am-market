@@ -1,12 +1,8 @@
+// ignore_for_file: unnecessary_null_comparison, parameter_assignments, unused_import, unused_element, always_put_required_named_parameters_first, constant_identifier_names, lines_longer_than_80_chars, avoid_dynamic_calls, invalid_assignment, undefined_method, undefined_getter, for_in_of_invalid_type, case_expression_type_is_not_switch_expression_subtype, deprecated_member_use_from_same_package
 //
 // AUTO-GENERATED FILE, DO NOT MODIFY!
 //
 // @dart=2.18
-
-// ignore_for_file: unused_element, unused_import
-// ignore_for_file: always_put_required_named_parameters_first
-// ignore_for_file: constant_identifier_names
-// ignore_for_file: lines_longer_than_80_chars
 
 part of openapi.api;
 
@@ -26,11 +22,8 @@ class MutualFundsApi {
   ///
   /// * [String] fileId (required):
   Future<Response> getFileStatusV1FilesFileIdGetWithHttpInfo(String fileId,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/files/{file_id}'
       .replaceAll('{file_id}', fileId);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -83,11 +76,8 @@ class MutualFundsApi {
   ///
   /// * [String] fundName (required):
   Future<Response> getFundStatisticsV1FundsFundNameStatisticsGetWithHttpInfo(String fundName,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/funds/{fund_name}/statistics'
       .replaceAll('{fund_name}', fundName);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -140,11 +130,8 @@ class MutualFundsApi {
   ///
   /// * [String] isinCode (required):
   Future<Response> getHoldingsByIsinV1HoldingsIsinCodeGetWithHttpInfo(String isinCode,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/holdings/{isin_code}'
       .replaceAll('{isin_code}', isinCode);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -197,11 +184,8 @@ class MutualFundsApi {
   ///
   /// * [String] portfolioId (required):
   Future<Response> getPortfolioV1PortfoliosPortfolioIdGetWithHttpInfo(String portfolioId,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/portfolios/{portfolio_id}'
       .replaceAll('{portfolio_id}', portfolioId);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -258,10 +242,7 @@ class MutualFundsApi {
   ///
   /// * [String] statusFilter:
   Future<Response> listFilesV1FilesGetWithHttpInfo({ int? skip, int? limit, String? statusFilter, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/files';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -330,10 +311,7 @@ class MutualFundsApi {
   ///
   /// * [int] limit:
   Future<Response> listPortfoliosV1PortfoliosGetWithHttpInfo({ String? fundName, int? limit, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/portfolios';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -399,11 +377,8 @@ class MutualFundsApi {
   ///
   /// * [String] apiKey:
   Future<Response> parseAllSheetsV1ParseAllFileIdPostWithHttpInfo(String fileId, { String? method, String? apiKey, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/parse-all/{file_id}'
       .replaceAll('{file_id}', fileId);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -470,11 +445,8 @@ class MutualFundsApi {
   ///
   /// * [String] apiKey:
   Future<Response> parseSheetV1ParseSheetIdPostWithHttpInfo(String sheetId, { String? method, String? apiKey, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/parse/{sheet_id}'
       .replaceAll('{sheet_id}', sheetId);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -537,11 +509,8 @@ class MutualFundsApi {
   ///
   /// * [String] fileId (required):
   Future<Response> processFileV1ProcessFileIdPostWithHttpInfo(String fileId,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/process/{file_id}'
       .replaceAll('{file_id}', fileId);
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -594,10 +563,7 @@ class MutualFundsApi {
   ///
   /// * [Object] body (required):
   Future<Response> savePortfolioV1PortfoliosPostWithHttpInfo(Object body,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/portfolios';
-
-    // ignore: prefer_final_locals
     Object? postBody = body;
 
     final queryParams = <QueryParam>[];
@@ -650,10 +616,7 @@ class MutualFundsApi {
   ///
   /// * [String] fundName (required):
   Future<Response> searchPortfoliosV1PortfoliosSearchGetWithHttpInfo(String fundName,) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/portfolios/search';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -700,7 +663,7 @@ class MutualFundsApi {
 
   /// Upload Excel Complete
   ///
-  /// 🚀 Complete Excel Upload Workflow - Does EVERYTHING automatically!  This endpoint handles the complete workflow: 1. ✅ Upload Excel file 2. ✅ Persist main file to database   3. ✅ Split Excel into individual sheet files 4. ✅ Persist all sheet files to database 5. ✅ Parse each sheet using manual or LLM parsing 6. ✅ Save all parsed portfolios to database  - **file**: Excel file to upload (.xlsx, .xls) - **parse_method**: \"together\" (default) or \"manual\"  Returns: Complete results with all parsed portfolios
+  /// ðŸš€ Complete Excel Upload Workflow - Does EVERYTHING automatically!  This endpoint handles the complete workflow: 1. âœ… Upload Excel file 2. âœ… Persist main file to database   3. âœ… Split Excel into individual sheet files 4. âœ… Persist all sheet files to database 5. âœ… Parse each sheet using manual or LLM parsing 6. âœ… Save all parsed portfolios to database  - **file**: Excel file to upload (.xlsx, .xls) - **parse_method**: \"together\" (default) or \"manual\"  Returns: Complete results with all parsed portfolios
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -710,10 +673,7 @@ class MutualFundsApi {
   ///
   /// * [String] parseMethod:
   Future<Response> uploadExcelCompleteV1UploadExcelPostWithHttpInfo(MultipartFile file, { String? parseMethod, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/upload/excel';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];
@@ -750,7 +710,7 @@ class MutualFundsApi {
 
   /// Upload Excel Complete
   ///
-  /// 🚀 Complete Excel Upload Workflow - Does EVERYTHING automatically!  This endpoint handles the complete workflow: 1. ✅ Upload Excel file 2. ✅ Persist main file to database   3. ✅ Split Excel into individual sheet files 4. ✅ Persist all sheet files to database 5. ✅ Parse each sheet using manual or LLM parsing 6. ✅ Save all parsed portfolios to database  - **file**: Excel file to upload (.xlsx, .xls) - **parse_method**: \"together\" (default) or \"manual\"  Returns: Complete results with all parsed portfolios
+  /// ðŸš€ Complete Excel Upload Workflow - Does EVERYTHING automatically!  This endpoint handles the complete workflow: 1. âœ… Upload Excel file 2. âœ… Persist main file to database   3. âœ… Split Excel into individual sheet files 4. âœ… Persist all sheet files to database 5. âœ… Parse each sheet using manual or LLM parsing 6. âœ… Save all parsed portfolios to database  - **file**: Excel file to upload (.xlsx, .xls) - **parse_method**: \"together\" (default) or \"manual\"  Returns: Complete results with all parsed portfolios
   ///
   /// Parameters:
   ///
@@ -784,10 +744,7 @@ class MutualFundsApi {
   ///
   /// * [String] parseMethod:
   Future<Response> uploadFileV1UploadPostWithHttpInfo(MultipartFile file, { String? parseMethod, }) async {
-    // ignore: prefer_const_declarations
     final path = r'/v1/upload';
-
-    // ignore: prefer_final_locals
     Object? postBody;
 
     final queryParams = <QueryParam>[];

@@ -4,7 +4,7 @@ Market Data API Documentation
 
 - API version: 1.0.0
 
-- Build date: 2026-03-27T02:38:11.838038900+05:30[Asia/Calcutta]
+- Build date: 2026-03-27T09:34:10.222147200+05:30[Asia/Calcutta]
 
 - Generator version: 7.18.0
 

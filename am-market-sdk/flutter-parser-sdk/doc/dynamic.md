@@ -1,4 +1,4 @@
-# am_parser_client.model.ValidationErrorLocInner
+# am_parser_client.model.dynamic
 
 ## Load the model package
 ```dart
