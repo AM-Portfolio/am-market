@@ -42,7 +42,10 @@ function Invoke-FlutterGen {
         # 3. Fix switch(dynamic) issues: switch (data) -> switch (data as Object?)
         $newContent = $newContent -replace 'switch \(data\) \{', 'switch (data as Object?) {'
 
-        # 4. Add global ignores for common lint issues safely
+        # 4. Fix dynamic.fromJson(value) -> value
+        $newContent = $newContent -replace 'return dynamic\.fromJson\(value\);', 'return value;'
+
+        # 5. Add global ignores for common lint issues safely
         $ignores = @(
             "unnecessary_null_comparison", 
             "parameter_assignments", 
@@ -96,6 +99,18 @@ function Invoke-FlutterGen {
             $newContent = $content -replace "(?m)^part 'model/dynamic\.dart';\r?\n?", ""
             [System.IO.File]::WriteAllText($apiFile.FullName, $newContent)
         }
+    }
+
+    # 6. Modernize pubspec.yaml for Dart 3 compatibility
+    $pubspecFile = Join-Path $OutDir "pubspec.yaml"
+    if (Test-Path $pubspecFile) {
+        Write-Host "  [INFO] Modernizing $pubspecFile for Dart 3..." -ForegroundColor Cyan
+        $pubContent = [System.IO.File]::ReadAllText($pubspecFile)
+        # Update dependencies to more modern versions
+        $pubContent = $pubContent -replace "collection: '>=1.17.0 <2.0.0'", "collection: ^1.18.0"
+        $pubContent = $pubContent -replace "http: '>=0.13.0 <2.0.0'", "http: ^1.1.0"
+        $pubContent = $pubContent -replace "test: '>=1.21.6 <1.22.0'", "test: ^1.24.9"
+        [System.IO.File]::WriteAllText($pubspecFile, $pubContent)
     }
 
     # Verify lib directory
