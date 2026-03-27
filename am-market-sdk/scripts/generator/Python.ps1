@@ -22,7 +22,17 @@ function Invoke-PythonGen {
     # Call core generator
     Invoke-OpenApiGen -Spec $Spec -OutDir $OutDir -Generator "python" -Config $fullConfig -Label $Label
 
-    # Write pyproject.toml
+    # Remove redundant/conflicting files produced by the generator
+    $redundantFiles = @("setup.py", "setup.cfg", "requirements.txt", "test-requirements.txt", "tox.ini", ".travis.yml", ".gitlab-ci.yml", "git_push.sh")
+    foreach ($f in $redundantFiles) {
+        $path = Join-Path $OutDir $f
+        if (Test-Path $path) { 
+            Write-Host "  [INFO] Removing redundant file: $f" -ForegroundColor Yellow
+            Remove-Item -Force $path 
+        }
+    }
+
+    # Write modernized pyproject.toml
     $pyproject = @"
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -35,9 +45,9 @@ description = "$PyDesc"
 readme = "README.md"
 requires-python = ">=3.7"
 authors = [
-    { name = "OpenAPI Generator community" }
+    { name = "AM Portfolio Team", email = "support@amportfolio.com" }
 ]
-keywords = ["OpenAPI", "OpenAPI-Generator", "$ProjectName"]
+keywords = ["OpenAPI", "OpenAPI-Generator", "$ProjectName", "AM-Portfolio"]
 dependencies = [
     "urllib3 >= 1.25.3",
     "python-dateutil",
