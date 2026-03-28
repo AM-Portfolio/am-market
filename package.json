@@ -11,6 +11,17 @@
     "deploy:parser": "cd am-parser && am deploy",
     "deploy:data": "cd am-market-data && am deploy",
     "deploy": "npx -y concurrently -n \"parser,data\" -c \"magenta,blue\" \"npm run deploy:parser\" \"npm run deploy:data\"",
-    "test": "npx -y concurrently \"cd am-parser && am test\" \"cd am-market-data && am test\""
+    "test": "npx -y concurrently \"cd am-parser && am test\" \"cd am-market-data && am test\"",
+    "publish:test": "python3 scripts/test_publish.py",
+    "publish:dry": "python3 scripts/test_publish.py --dry-run",
+    "publish:info": "python3 scripts/test_publish.py --info",
+    "sdk:market:python": "python3 scripts/test_publish.py --sdk sdk:market:python",
+    "sdk:market:java": "python3 scripts/test_publish.py --sdk sdk:market:java",
+    "sdk:market:flutter": "python3 scripts/test_publish.py --sdk sdk:market:flutter",
+    "sdk:parser:python": "python3 scripts/test_publish.py --sdk sdk:parser:python",
+    "sdk:parser:java": "python3 scripts/test_publish.py --sdk sdk:parser:java",
+    "sdk:parser:flutter": "python3 scripts/test_publish.py --sdk sdk:parser:flutter",
+    "common:data:java": "python3 scripts/test_publish.py --sdk module:common:java",
+    "am-common-investment-data:publish": "python3 scripts/test_publish.py --sdk module:common:java"
   }
 }

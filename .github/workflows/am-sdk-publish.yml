@@ -49,12 +49,13 @@ jobs:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.java-market == 'true' }}
     permissions:
-      contents: read
+      contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
     with:
       language: 'java'
       working_directory: 'am-market-sdk/java-market-sdk'
+      sdk_name: 'java-market-sdk'
     secrets: inherit
 
   publish-python-market:
@@ -62,12 +63,13 @@ jobs:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.python-market == 'true' }}
     permissions:
-      contents: read
+      contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
     with:
       language: 'python'
       working_directory: 'am-market-sdk/python-market-sdk'
+      sdk_name: 'python-market-sdk'
     secrets: inherit
 
   publish-flutter-market:
@@ -75,12 +77,13 @@ jobs:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.flutter-market == 'true' }}
     permissions:
-      contents: read
+      contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
     with:
       language: 'flutter'
       working_directory: 'am-market-sdk/flutter-market-sdk'
+      sdk_name: 'flutter-market-sdk'
     secrets: inherit
 
   # --- Parser SDKs ---
@@ -89,12 +92,13 @@ jobs:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.java-parser == 'true' }}
     permissions:
-      contents: read
+      contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
     with:
       language: 'java'
       working_directory: 'am-market-sdk/java-parser-sdk'
+      sdk_name: 'java-parser-sdk'
     secrets: inherit
 
   publish-python-parser:
@@ -102,12 +106,13 @@ jobs:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.python-parser == 'true' }}
     permissions:
-      contents: read
+      contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
     with:
       language: 'python'
       working_directory: 'am-market-sdk/python-parser-sdk'
+      sdk_name: 'python-parser-sdk'
     secrets: inherit
 
   publish-flutter-parser:
@@ -115,10 +120,11 @@ jobs:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.flutter-parser == 'true' }}
     permissions:
-      contents: read
+      contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
     with:
       language: 'flutter'
       working_directory: 'am-market-sdk/flutter-parser-sdk'
+      sdk_name: 'flutter-parser-sdk'
     secrets: inherit
