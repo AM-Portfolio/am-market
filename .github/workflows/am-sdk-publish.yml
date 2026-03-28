@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2   # required: dorny/paths-filter needs HEAD~1 to diff against on push events
+          fetch-depth: 0   # full history needed: github.event.before may be many commits back if multiple commits were pushed together
       - name: Filter changed paths
         uses: dorny/paths-filter@v3
         id: filter
