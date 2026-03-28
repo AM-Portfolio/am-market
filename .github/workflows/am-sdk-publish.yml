@@ -25,6 +25,8 @@ jobs:
       flutter-parser: ${{ steps.filter.outputs.flutter-parser }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # required: dorny/paths-filter needs HEAD~1 to diff against on push events
       - name: Filter changed paths
         uses: dorny/paths-filter@v3
         id: filter
