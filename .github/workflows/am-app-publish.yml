@@ -1,0 +1,111 @@
+name: AM App Publish
+
+on:
+  push:
+    paths:
+      - 'am-market-data/**'
+      - 'am-parser/**'
+      - 'am-common-investment-data/**'
+  pull_request:
+    paths:
+      - 'am-market-data/**'
+      - 'am-parser/**'
+      - 'am-common-investment-data/**'
+
+jobs:
+  # ── Detect which App modules changed ───────────────────────────────────────
+  detect-changes:
+    name: Detect Changed Modules
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      common-data: ${{ steps.check.outputs.common-data }}
+      market-data: ${{ steps.check.outputs.market-data }}
+      parser:      ${{ steps.check.outputs.parser }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect path changes
+        id: check
+        run: |
+          BASE="${{ github.event.before }}"
+          HEAD="${{ github.sha }}"
+
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git ls-files)
+          else
+            # Get the actual diff between the push event boundaries
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          fi
+
+          echo "=== Files changed in this push ==="
+          echo "$CHANGED"
+          echo "==================================="
+
+          # Check functions
+          has_common=$(echo "$CHANGED" | grep -q "^am-common-investment-data/" && echo 'true' || echo 'false')
+          has_market=$(echo "$CHANGED" | grep -q "^am-market-data/" && echo 'true' || echo 'false')
+          has_parser=$(echo "$CHANGED" | grep -q "^am-parser/" && echo 'true' || echo 'false')
+
+          # ORCHESTRATION LOGIC:
+          # market-data depends on common-data, so it triggers if either changes.
+          if [ "$has_common" = "true" ]; then
+            echo "common-data=true" >> $GITHUB_OUTPUT
+            echo "market-data=true" >> $GITHUB_OUTPUT
+          else
+            echo "common-data=false" >> $GITHUB_OUTPUT
+            echo "market-data=$has_market" >> $GITHUB_OUTPUT
+          fi
+
+          echo "parser=$has_parser" >> $GITHUB_OUTPUT
+
+  # ── Common Investment Data (Library) ───────────────────────────────────────
+  publish-common-data:
+    name: Build Common Data
+    needs: detect-changes
+    if: needs.detect-changes.outputs.common-data == 'true'
+    permissions:
+      contents: write
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
+    with:
+      language: 'java'
+      working_directory: 'am-common-investment-data'
+      sdk_name: 'am-common-investment-data'
+      maven_repo_id: 'github'
+      maven_repo_url: 'https://maven.pkg.github.com/AM-Portfolio/am-common-investment-data'
+    secrets: inherit
+
+  # ── Market Data (Service) ──────────────────────────────────────────────────
+  publish-market-data:
+    name: Publish Market Data
+    needs: detect-changes
+    if: needs.detect-changes.outputs.market-data == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
+    with:
+      language: 'java'
+      working_directory: 'am-market-data'
+      image_name: 'am-market-data'
+      build_context: '..'
+    secrets: inherit
+
+  # ── Parser (Service) ───────────────────────────────────────────────────────
+  publish-parser:
+    name: Publish Parser
+    needs: detect-changes
+    if: needs.detect-changes.outputs.parser == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
+    with:
+      language: 'python'
+      working_directory: 'am-parser'
+      image_name: 'am-parser'
+    secrets: inherit
