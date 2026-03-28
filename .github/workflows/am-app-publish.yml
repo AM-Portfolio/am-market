@@ -46,21 +46,9 @@ jobs:
           echo "==================================="
 
           # Check functions
-          has_common=$(echo "$CHANGED" | grep -q "^am-common-investment-data/" && echo 'true' || echo 'false')
-          has_market=$(echo "$CHANGED" | grep -q "^am-market-data/" && echo 'true' || echo 'false')
-          has_parser=$(echo "$CHANGED" | grep -q "^am-parser/" && echo 'true' || echo 'false')
-
-          # ORCHESTRATION LOGIC:
-          # market-data depends on common-data, so it triggers if either changes.
-          if [ "$has_common" = "true" ]; then
-            echo "common-data=true" >> $GITHUB_OUTPUT
-            echo "market-data=true" >> $GITHUB_OUTPUT
-          else
-            echo "common-data=false" >> $GITHUB_OUTPUT
-            echo "market-data=$has_market" >> $GITHUB_OUTPUT
-          fi
-
-          echo "parser=$has_parser" >> $GITHUB_OUTPUT
+          echo "common-data=$(echo "$CHANGED" | grep -q "^am-common-investment-data/" && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+          echo "market-data=$(echo "$CHANGED" | grep -q "^am-market-data/" && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+          echo "parser=$(echo "$CHANGED" | grep -q "^am-parser/" && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
 
   # ── Common Investment Data (Library) ───────────────────────────────────────
   publish-common-data:
@@ -76,7 +64,7 @@ jobs:
       working_directory: 'am-common-investment-data'
       sdk_name: 'am-common-investment-data'
       maven_repo_id: 'github'
-      maven_repo_url: 'https://maven.pkg.github.com/AM-Portfolio/am-common-investment-data'
+      maven_repo_url: 'https://maven.pkg.github.com/AM-Portfolio/am-market'
     secrets: inherit
 
   # ── Market Data (Service) ──────────────────────────────────────────────────
