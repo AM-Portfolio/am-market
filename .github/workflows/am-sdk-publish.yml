@@ -1,0 +1,124 @@
+name: AM SDK Publish
+
+on:
+  push:
+    paths:
+      - 'am-market-sdk/**'
+  pull_request:
+    paths:
+      - 'am-market-sdk/**'
+
+jobs:
+  # Detect which SDK paths changed
+  detect-changes:
+    name: Detect Changed SDKs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      java-market: ${{ steps.filter.outputs.java-market }}
+      python-market: ${{ steps.filter.outputs.python-market }}
+      flutter-market: ${{ steps.filter.outputs.flutter-market }}
+      java-parser: ${{ steps.filter.outputs.java-parser }}
+      python-parser: ${{ steps.filter.outputs.python-parser }}
+      flutter-parser: ${{ steps.filter.outputs.flutter-parser }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Filter changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            java-market:
+              - 'am-market-sdk/java-market-sdk/**'
+            python-market:
+              - 'am-market-sdk/python-market-sdk/**'
+            flutter-market:
+              - 'am-market-sdk/flutter-market-sdk/**'
+            java-parser:
+              - 'am-market-sdk/java-parser-sdk/**'
+            python-parser:
+              - 'am-market-sdk/python-parser-sdk/**'
+            flutter-parser:
+              - 'am-market-sdk/flutter-parser-sdk/**'
+
+  # --- Market SDKs ---
+  publish-java-market:
+    name: Publish Java Market SDK
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.java-market == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    with:
+      language: 'java'
+      working_directory: 'am-market-sdk/java-market-sdk'
+    secrets: inherit
+
+  publish-python-market:
+    name: Publish Python Market SDK
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.python-market == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    with:
+      language: 'python'
+      working_directory: 'am-market-sdk/python-market-sdk'
+    secrets: inherit
+
+  publish-flutter-market:
+    name: Publish Flutter Market SDK
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.flutter-market == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    with:
+      language: 'flutter'
+      working_directory: 'am-market-sdk/flutter-market-sdk'
+    secrets: inherit
+
+  # --- Parser SDKs ---
+  publish-java-parser:
+    name: Publish Java Parser SDK
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.java-parser == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    with:
+      language: 'java'
+      working_directory: 'am-market-sdk/java-parser-sdk'
+    secrets: inherit
+
+  publish-python-parser:
+    name: Publish Python Parser SDK
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.python-parser == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    with:
+      language: 'python'
+      working_directory: 'am-market-sdk/python-parser-sdk'
+    secrets: inherit
+
+  publish-flutter-parser:
+    name: Publish Flutter Parser SDK
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.flutter-parser == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-sdk-publish.yml@main
+    with:
+      language: 'flutter'
+      working_directory: 'am-market-sdk/flutter-parser-sdk'
+    secrets: inherit
