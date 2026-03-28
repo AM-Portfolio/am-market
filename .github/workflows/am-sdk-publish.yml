@@ -15,35 +15,43 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
     outputs:
-      java-market: ${{ steps.filter.outputs.java-market }}
-      python-market: ${{ steps.filter.outputs.python-market }}
-      flutter-market: ${{ steps.filter.outputs.flutter-market }}
-      java-parser: ${{ steps.filter.outputs.java-parser }}
-      python-parser: ${{ steps.filter.outputs.python-parser }}
-      flutter-parser: ${{ steps.filter.outputs.flutter-parser }}
+      java-market:    ${{ steps.check.outputs.java-market }}
+      python-market:  ${{ steps.check.outputs.python-market }}
+      flutter-market: ${{ steps.check.outputs.flutter-market }}
+      java-parser:    ${{ steps.check.outputs.java-parser }}
+      python-parser:  ${{ steps.check.outputs.python-parser }}
+      flutter-parser: ${{ steps.check.outputs.flutter-parser }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history needed: github.event.before may be many commits back if multiple commits were pushed together
-      - name: Filter changed paths
-        uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            java-market:
-              - 'am-market-sdk/java-market-sdk/**'
-            python-market:
-              - 'am-market-sdk/python-market-sdk/**'
-            flutter-market:
-              - 'am-market-sdk/flutter-market-sdk/**'
-            java-parser:
-              - 'am-market-sdk/java-parser-sdk/**'
-            python-parser:
-              - 'am-market-sdk/python-parser-sdk/**'
-            flutter-parser:
-              - 'am-market-sdk/flutter-parser-sdk/**'
+          fetch-depth: 0
+
+      - name: Detect which SDK paths changed
+        id: check
+        run: |
+          BASE="${{ github.event.before }}"
+          HEAD="${{ github.sha }}"
+
+          # On first push to a new branch, before is all-zeros → compare only the latest commit
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git ls-files)
+          else
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          fi
+
+          echo "=== Files changed in this push ==="
+          echo "$CHANGED"
+          echo "==================================="
+
+          check() { echo "$CHANGED" | grep -q "^$1" && echo 'true' || echo 'false'; }
+
+          echo "java-market=$(check 'am-market-sdk/java-market-sdk/')"     >> $GITHUB_OUTPUT
+          echo "python-market=$(check 'am-market-sdk/python-market-sdk/')" >> $GITHUB_OUTPUT
+          echo "flutter-market=$(check 'am-market-sdk/flutter-market-sdk/')" >> $GITHUB_OUTPUT
+          echo "java-parser=$(check 'am-market-sdk/java-parser-sdk/')"     >> $GITHUB_OUTPUT
+          echo "python-parser=$(check 'am-market-sdk/python-parser-sdk/')" >> $GITHUB_OUTPUT
+          echo "flutter-parser=$(check 'am-market-sdk/flutter-parser-sdk/')" >> $GITHUB_OUTPUT
 
   # --- Market SDKs ---
   publish-java-market:
