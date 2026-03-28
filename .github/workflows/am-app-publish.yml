@@ -70,8 +70,11 @@ jobs:
   # ── Market Data (Service) ──────────────────────────────────────────────────
   publish-market-data:
     name: Publish Market Data
-    needs: detect-changes
-    if: needs.detect-changes.outputs.market-data == 'true'
+    needs: [detect-changes, publish-common-data]
+    if: |
+      always() && 
+      needs.detect-changes.outputs.market-data == 'true' &&
+      (needs.publish-common-data.result == 'success' || needs.publish-common-data.result == 'skipped')
     permissions:
       contents: read
       packages: write
