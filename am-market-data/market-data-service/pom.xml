@@ -46,7 +46,7 @@
         </dependency>
         <dependency>
             <groupId>com.am.common</groupId>
-            <artifactId>am-common-investment-service</artifactId>
+            <artifactId>am-common-investment-service-lib</artifactId>
             <version>1.6.24-SNAPSHOT</version>
         </dependency>
         <!-- <dependency>
@@ -67,7 +67,7 @@
         
         <dependency>
             <groupId>com.am.common</groupId>
-            <artifactId>am-common-investment-model</artifactId>
+            <artifactId>am-common-investment-model-lib</artifactId>
             <version>1.6.24-SNAPSHOT</version>
         </dependency>
 

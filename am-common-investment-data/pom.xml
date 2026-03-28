@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.am.common</groupId>
-    <artifactId>am-common-investment-data-parent</artifactId>
+    <artifactId>am-common-investment-data-lib</artifactId>
     <version>1.6.24-SNAPSHOT</version>
     <packaging>pom</packaging>
 

@@ -62,7 +62,7 @@ jobs:
     with:
       language: 'java'
       working_directory: 'am-common-investment-data'
-      sdk_name: 'am-common-investment-data'
+      sdk_name: 'am-common-investment-data-lib'
       maven_repo_id: 'github'
       maven_repo_url: 'https://maven.pkg.github.com/AM-Portfolio/am-market'
     secrets: inherit

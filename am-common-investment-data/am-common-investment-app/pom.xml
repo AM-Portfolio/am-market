@@ -5,11 +5,11 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.am.common</groupId>
-        <artifactId>am-common-investment-data-parent</artifactId>
+        <artifactId>am-common-investment-data-lib</artifactId>
         <version>1.6.24-SNAPSHOT</version>
     </parent>
 
-    <artifactId>am-common-investment-app</artifactId>
+    <artifactId>am-common-investment-app-lib</artifactId>
 
     <properties>
         <testcontainers.version>1.19.6</testcontainers.version>
@@ -23,18 +23,18 @@
         <!-- Internal Dependencies -->
         <dependency>
             <groupId>com.am.common</groupId>
-            <artifactId>am-common-investment-model</artifactId>
+            <artifactId>am-common-investment-model-lib</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>com.am.common</groupId>
-            <artifactId>am-common-investment-service</artifactId>
+            <artifactId>am-common-investment-service-lib</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
             <groupId>com.am.common</groupId>
-            <artifactId>am-common-investment-persistence</artifactId>
+            <artifactId>am-common-investment-persistence-lib</artifactId>
             <version>${project.version}</version>
         </dependency>
 
