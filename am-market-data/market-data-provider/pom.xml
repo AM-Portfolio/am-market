@@ -120,7 +120,7 @@
         <!-- Common Investment Service -->
         <dependency>
             <groupId>com.am.common</groupId>
-            <artifactId>am-common-investment-service</artifactId>
+            <artifactId>am-common-investment-service-lib</artifactId>
             <version>${investment-service.version}</version>
         </dependency>
 

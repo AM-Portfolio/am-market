@@ -22,7 +22,7 @@
         </dependency>
         <dependency>
             <groupId>com.am.common</groupId>
-            <artifactId>am-common-investment-model</artifactId>
+            <artifactId>am-common-investment-model-lib</artifactId>
             <version>${investment-model.version}</version>
         </dependency>
         <dependency>

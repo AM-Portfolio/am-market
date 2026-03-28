@@ -6,11 +6,11 @@
 
     <parent>
         <groupId>com.am.common</groupId>
-        <artifactId>am-common-investment-data-parent</artifactId>
+        <artifactId>am-common-investment-data-lib</artifactId>
         <version>1.6.24-SNAPSHOT</version>
     </parent>
 
-    <artifactId>am-common-investment-model</artifactId>
+    <artifactId>am-common-investment-model-lib</artifactId>
 
     <dependencies>
         <dependency>
