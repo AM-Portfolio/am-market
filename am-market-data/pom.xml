@@ -13,7 +13,6 @@
     <description>Market Data Service with REST/gRPC endpoints and Kafka integration</description>
 
     <modules>
-        
         <module>market-data-common</module>
         <module>market-data-provider</module>  <!-- NEW: Provider implementations -->
         <module>market-data-kafka</module>
