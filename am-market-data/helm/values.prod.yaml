@@ -1,5 +1,5 @@
-# Pre-production Environment Configuration
-environment: preprod
+# Production Environment Configuration
+environment: prod
 
 # Application Configuration
 config:

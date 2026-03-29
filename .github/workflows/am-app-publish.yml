@@ -31,13 +31,17 @@ jobs:
       - name: Detect path changes
         id: check
         run: |
-          BASE="${{ github.event.before }}"
-          HEAD="${{ github.sha }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
 
-          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git ls-files)
           else
-            # Get the actual diff between the push event boundaries
             CHANGED=$(git diff --name-only "$BASE" "$HEAD")
           fi
 
@@ -84,6 +88,9 @@ jobs:
       working_directory: 'am-market-data'
       image_name: 'am-market-data'
       build_context: '..'
+      preprod_namespace: 'am-apps-preprod'
+      prod_namespace: 'am-apps-prod'
+      deploy_prod: true
     secrets: inherit
 
   # ── Parser (Service) ───────────────────────────────────────────────────────
@@ -99,4 +106,7 @@ jobs:
       language: 'python'
       working_directory: 'am-parser'
       image_name: 'am-parser'
+      preprod_namespace: 'am-apps-preprod'
+      prod_namespace: 'am-apps-prod'
+      deploy_prod: true
     secrets: inherit
