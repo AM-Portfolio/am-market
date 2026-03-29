@@ -30,13 +30,20 @@ jobs:
       - name: Detect which SDK paths changed
         id: check
         run: |
-          BASE="${{ github.event.before }}"
-          HEAD="${{ github.sha }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
 
-          # On first push to a new branch, before is all-zeros → compare only the latest commit
-          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+          # Handle first push to new branch or missing BASE
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "BASE is empty or zero, comparing latest commit with HEAD"
             CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git ls-files)
           else
+            echo "Comparing $BASE with $HEAD"
             CHANGED=$(git diff --name-only "$BASE" "$HEAD")
           fi
 
