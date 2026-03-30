@@ -76,6 +76,8 @@ jobs:
     name: Publish Market Data
     needs: [detect-changes, publish-common-data]
     if: |
+      always() && !cancelled() &&
+      needs.detect-changes.result == 'success' &&
       needs.detect-changes.outputs.market-data == 'true' &&
       (needs.publish-common-data.result == 'success' || needs.publish-common-data.result == 'skipped')
     permissions:
