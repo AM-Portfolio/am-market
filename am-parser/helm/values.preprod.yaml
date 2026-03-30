@@ -9,3 +9,10 @@ resources:
   requests:
     cpu: 250m
     memory: 256Mi
+
+# Vault Configuration
+vault:
+  enabled: true
+  role: "am-parser-role"
+  secretPaths:
+    mongodb: "kv/preprod/database/mongo"
