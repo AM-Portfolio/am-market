@@ -3,8 +3,13 @@
 
 replicaCount: 1
 
+# Environment configuration
+environment: "preprod"
+
+language: java
+
 image:
-  repository: ghcr.io/AM-Portfolio/am-market-data/market-data-service
+  repository: am-market-data
   pullPolicy: Always
   tag: "latest"
 
