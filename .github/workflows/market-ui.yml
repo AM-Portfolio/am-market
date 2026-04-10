@@ -1,30 +1,27 @@
-name: Market Data Publish
+name: Market UI Publish
 
 on:
   push:
     branches: ["main", "develop", "test/**"]
     paths:
-      - 'am-market-data/**'
-      - 'am-common-investment-data/**'
+      - 'am_market_ui/**'
   pull_request:
     branches: ["main", "develop", "test/**"]
     paths:
-      - 'am-market-data/**'
-      - 'am-common-investment-data/**'
+      - 'am_market_ui/**'
   workflow_dispatch:
 
 jobs:
   publish:
-    name: Publish Market Data
+    name: Publish UI
     permissions:
       contents: read
       packages: write
     uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
     with:
-      language: 'java'
-      working_directory: 'am-market-data'
-      image_name: 'am-market-data'
-      build_context: '..'
+      language: 'flutter'
+      working_directory: 'am_market_ui/live'
+      image_name: 'am-market-ui'
       preprod_namespace: 'am-apps-preprod'
       prod_namespace: 'am-apps-prod'
       deploy_prod: true

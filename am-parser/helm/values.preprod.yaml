@@ -16,4 +16,3 @@ vault:
   role: "dev-role"
   secretPaths:
     mongodb: "kv/preprod/database/mongo"
-I

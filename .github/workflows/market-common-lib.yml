@@ -2,11 +2,11 @@ name: Market Common Lib Publish
 
 on:
   push:
-    branches: ["main", "develop"]
+    branches: ["main", "develop", "test/**"]
     paths:
       - 'am-common-investment-data/**'
   pull_request:
-    branches: ["main", "develop"]
+    branches: ["main", "develop", "test/**"]
     paths:
       - 'am-common-investment-data/**'
   workflow_dispatch:
