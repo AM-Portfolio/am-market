@@ -5,6 +5,10 @@ replicaCount: 1
 port: 8092
 language: java
 
+global:
+  vault:
+    serviceAccountName: "am-backend-sa"
+
 image:
   repository: am-market-data
   pullPolicy: Always
@@ -33,45 +37,10 @@ resources:
     cpu: 200m
     memory: 512Mi
 
-securityContext:
-  allowPrivilegeEscalation: false
-  runAsNonRoot: true
-  runAsUser: 1000
-  capabilities:
-    drop:
-      - ALL
-
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 3
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
-
-# Environment configuration
-environment: "preprod"
-
-# PostgreSQL configuration
-postgresql:
-  enabled: false
-  fullname: "postgresql"
-  primary:
-    service:
-      port: 5432
-  auth:
-    database: "marketdata"
-
 # Vault configuration
 vault:
   enabled: true
   role: "am-backend-role"
-  serviceAccountName: "am-backend-sa"
   secretPaths:
     postgres: "secret/data/preprod/infra/postgres"
     mongodb: "secret/data/preprod/infra/mongodb"
@@ -84,17 +53,5 @@ vault:
 # Application specific configuration
 config:
   marketData:
-    maxRetries: 3
-    retryDelayMs: 1000
-    threadPoolSize: 5
-    threadQueueCapacity: 10
-    maxAgeMinutes: 15
-
-# Monitoring configuration (Prometheus auto-discovery)
-monitoring:
-  enabled: true
-  prometheus:
-    enabled: true
-    scrape: "true"
-    path: "/actuator/prometheus"
-    port: "8080"
+    maxRetries: 5
+    retryDelayMs: 2000

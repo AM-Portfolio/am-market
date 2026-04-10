@@ -44,14 +44,6 @@ postgresql:
 # Vault Configuration
 vault:
   enabled: true
-  secretPaths:
-    postgres: "kv/preprod/database/postgres"
-    mongodb: "kv/preprod/database/mongo"
-    redis: "kv/preprod/database/redis"
-    influxdb: "kv/preprod/database/influxdb"
-    kafka: "kv/preprod/kafka"
-    upstock: "kv/preprod/api/upstock"
-    zerodha: "kv/preprod/api/zerodha"
 
 # Monitoring Configuration
 monitoring:
@@ -64,4 +56,4 @@ monitoring:
 # Environment Variables
 env:
   INFRA_HOST: "am-infra-mongodb.am-apps-preprod.svc.cluster.local"
-  MONGODB_DATABASE: "market_data"  # Breaks the circular reference loop in Spring Boot
+  MONGODB_DATABASE: "market_data" # Breaks the circular reference loop in Spring Boot
