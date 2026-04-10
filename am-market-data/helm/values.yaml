@@ -71,6 +71,7 @@ postgresql:
 vault:
   enabled: true
   role: "am-backend-role"
+  serviceAccountName: "am-backend-sa"
   secretPaths:
     postgres: "secret/data/preprod/infra/postgres"
     mongodb: "secret/data/preprod/infra/mongodb"

@@ -29,6 +29,7 @@ securityContext:
 vault:
   enabled: true
   role: "am-backend-role"
+  serviceAccountName: "am-backend-sa"
   secretPaths:
     mongodb: "secret/data/preprod/infra/mongodb"
     together: "secret/data/preprod/api/together"
