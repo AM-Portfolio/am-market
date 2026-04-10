@@ -1,0 +1,27 @@
+name: Market Common Lib Publish
+
+on:
+  push:
+    branches: ["main", "develop"]
+    paths:
+      - 'am-common-investment-data/**'
+  pull_request:
+    branches: ["main", "develop"]
+    paths:
+      - 'am-common-investment-data/**'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish Common Data Lib
+    permissions:
+      contents: write
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
+    with:
+      language: 'java'
+      working_directory: 'am-common-investment-data'
+      sdk_name: 'am-common-investment-data-lib'
+      maven_repo_id: 'github'
+      maven_repo_url: 'https://maven.pkg.github.com/AM-Portfolio/am-market'
+    secrets: inherit

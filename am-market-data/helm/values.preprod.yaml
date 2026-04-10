@@ -60,3 +60,8 @@ monitoring:
     scrape: true
     port: "8080"
     path: "/actuator/prometheus"
+
+# Environment Variables
+env:
+  INFRA_HOST: "am-infra-mongodb.am-apps-preprod.svc.cluster.local"
+  MONGODB_DATABASE: "market_data"  # Breaks the circular reference loop in Spring Boot

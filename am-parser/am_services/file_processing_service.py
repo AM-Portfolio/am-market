@@ -12,9 +12,9 @@ import os
 try:
     from dotenv import load_dotenv
     load_dotenv(override=True)
-    print("✅ Environment variables loaded from .env file")
+    print("SUCCESS: Environment variables loaded from .env file")
 except ImportError:
-    print("⚠️  python-dotenv not installed. Using system environment variables only.")
+    print("WARNING: python-dotenv not installed. Using system environment variables only.")
 
 from am_services.file_upload_service import FileUploadService
 from am_persistence.file_upload_repository import FileUploadRepository
@@ -28,10 +28,10 @@ from am_common.event_models import EventType
 # Import Together AI service
 try:
     from am_llm.together_service import TogetherLLMService
-    print("✅ TogetherLLMService imported successfully")
+    print("SUCCESS: TogetherLLMService imported successfully")
 except ImportError as e:
     TogetherLLMService = None
-    print(f"❌ TogetherLLMService import failed: {e}")
+    print(f"ERROR: TogetherLLMService import failed: {e}")
 
 
 class FileProcessingService:
@@ -150,7 +150,7 @@ class FileProcessingService:
                     custom_id=sheet_id  # Use sheet ID as portfolio ID
                 )
                 
-                print(f"✅ Portfolio saved with ID: {portfolio_id} (matches sheet ID: {sheet_id})")
+                print(f"SUCCESS: Portfolio saved with ID: {portfolio_id} (matches sheet ID: {sheet_id})")
                 try:
                     if self.event_logger:
                         await self.event_logger.emit(
@@ -217,9 +217,9 @@ class FileProcessingService:
             if method is None:
                 from am_configs.settings import settings
                 method = settings.default_parse_method
-                print(f"🔧 Using default parse method from environment: {method}")
+                print(f"INFO: Using default parse method from environment: {method}")
             
-            print(f"🔄 Parse method: {method}")
+            print(f"INFO: Parse method: {method}")
             
             # Use AMApp to parse the file
             result = await asyncio.get_event_loop().run_in_executor(
@@ -233,9 +233,9 @@ class FileProcessingService:
             return result
             
         except Exception as e:
-            print(f"❌ Error in _parse_sheet_file: {e}")
+            print(f"ERROR: Error in _parse_sheet_file: {e}")
             # Fallback to manual parsing if Together AI fails
-            print("🔄 Falling back to manual parsing...")
+            print("INFO: Falling back to manual parsing...")
             try:
                 result = await asyncio.get_event_loop().run_in_executor(
                     None, 
@@ -246,51 +246,51 @@ class FileProcessingService:
                 )
                 return result
             except Exception as fallback_error:
-                print(f"❌ Manual fallback also failed: {fallback_error}")
+                print(f"ERROR: Manual fallback also failed: {fallback_error}")
                 raise ValueError(f"Error parsing file: {str(e)}")
     
     def _sync_parse_file(self, file_path: str, method: str, sheet_name: Optional[str]) -> Dict[str, Any]:
         """Synchronous wrapper for parsing files"""
-        print(f"🔄 Parsing {file_path} using {method} method, sheet: {sheet_name}")
+        print(f"INFO: Parsing {file_path} using {method} method, sheet: {sheet_name}")
         
         # Debug information
-        print(f"🔍 Method: {method}, TogetherLLMService available: {TogetherLLMService is not None}")
+        print(f"INFO: Method: {method}, TogetherLLMService available: {TogetherLLMService is not None}")
         
         if method == "together" and TogetherLLMService:
             # Use Together AI service - it will get API key from environment
             try:
-                print(f"🤖 Initializing Together AI service (using environment API key)...")
+                print(f"INFO: Initializing Together AI service (using environment API key)...")
                 together_service = TogetherLLMService()  # No API key needed - uses environment
-                print(f"🧠 Calling Together AI extraction for sheet: {sheet_name}")
-                print(f"📁 File path: {file_path}")
-                print(f"📋 Sheet name: {sheet_name}")
+                print(f"INFO: Calling Together AI extraction for sheet: {sheet_name}")
+                print(f"INFO: File path: {file_path}")
+                print(f"INFO: Sheet name: {sheet_name}")
                 
                 result = together_service.extract_portfolio_from_excel(
                     excel_file=file_path,
                     sheet_name=sheet_name
                 )
-                print(f"✅ Together AI parsing successful: {result.get('mutual_fund_name', 'Unknown')}")
-                print(f"📊 Holdings count: {result.get('total_holdings', 0)}")
-                print(f"🎯 Result type: {type(result)}")
+                print(f"SUCCESS: Together AI parsing successful: {result.get('mutual_fund_name', 'Unknown')}")
+                print(f"INFO: Holdings count: {result.get('total_holdings', 0)}")
+                print(f"INFO: Result type: {type(result)}")
                 return result
             except Exception as e:
                 error_msg = str(e)
-                print(f"❌ Together AI parsing failed with error: {type(e).__name__}: {error_msg}")
+                print(f"ERROR: Together AI parsing failed with error: {type(e).__name__}: {error_msg}")
                 if "401" in error_msg or "invalid_api_key" in error_msg or "AuthenticationError" in str(type(e)):
-                    print("💡 API Key Error: The Together AI key is invalid.")
-                    print("🔗 Get a valid key at: https://api.together.ai/settings/api-keys")
-                    print("🔄 Auto-switching to manual parsing...")
+                    print("INFO: API Key Error: The Together AI key is invalid.")
+                    print("INFO: Get a valid key at: https://api.together.ai/settings/api-keys")
+                    print("INFO: Auto-switching to manual parsing...")
                     method = "manual"  # Switch to manual parsing
                 else:
                     import traceback
-                    print(f"🔍 Full traceback:\n{traceback.format_exc()}")
-                    print("🔄 Falling back to AMApp manual parsing...")
+                    print(f"INFO: Full traceback:\n{traceback.format_exc()}")
+                    print("INFO: Falling back to AMApp manual parsing...")
                     method = "manual"  # Switch to manual parsing
         elif method == "together":
-            print(f"❌ Together AI requirements not met:")
+            print(f"ERROR: Together AI requirements not met:")
             print(f"   - TogetherLLMService available: {TogetherLLMService is not None}")
             print(f"   - Method is 'together': {method == 'together'}")
-            print("🔄 Falling back to manual parsing...")
+            print("INFO: Falling back to manual parsing...")
         else:
             print(f"📝 Using manual parsing method: {method}")
         
@@ -323,7 +323,7 @@ class FileProcessingService:
                     custom_id=sheet_file.file_id  # Use sheet ID as portfolio ID
                 )
                 
-                print(f"✅ Portfolio saved with ID: {portfolio_id} (matches sheet ID: {sheet_file.file_id})")
+                print(f"SUCCESS: Portfolio saved with ID: {portfolio_id} (matches sheet ID: {sheet_file.file_id})")
                 try:
                     if self.event_logger:
                         await self.event_logger.emit(
@@ -357,7 +357,7 @@ class FileProcessingService:
                     if sheet_file.file_path and os.path.exists(sheet_file.file_path):
                         os.remove(sheet_file.file_path)
                         disk_deleted = True
-                        print(f"🧹 Deleted sheet file from disk: {sheet_file.file_path}")
+                        print(f"INFO: Deleted sheet file from disk: {sheet_file.file_path}")
                         try:
                             if self.event_logger:
                                 await self.event_logger.emit(
@@ -369,7 +369,7 @@ class FileProcessingService:
                         except Exception:
                             pass
                 except Exception as disk_err:
-                    print(f"⚠️  Could not delete sheet file {sheet_file.file_path}: {disk_err}")
+                    print(f"WARNING: Could not delete sheet file {sheet_file.file_path}: {disk_err}")
 
                 # Persist deletion flags to metadata for acknowledgement
                 try:
@@ -402,7 +402,7 @@ class FileProcessingService:
                 return None
                 
         except Exception as e:
-            print(f"❌ Error in _process_single_sheet: {e}")
+            print(f"ERROR: Error in _process_single_sheet: {e}")
             await self.file_upload_repo.update_file_status(
                 sheet_file.file_id, ProcessingStatus.FAILED, str(e)
             )
@@ -417,6 +417,8 @@ class FileProcessingService:
             except Exception:
                 pass
             return None
+            
+    async def get_file_status(self, file_id: str) -> Optional[Dict[str, Any]]:
         """Get complete status information for a file and its sheets"""
         file_upload = await self.file_upload_repo.get_file_upload(file_id)
         if not file_upload:
@@ -482,7 +484,7 @@ class FileProcessingService:
         try:
             # Check if this is already in Together AI format (has mutual_fund_name)
             if "mutual_fund_name" in parser_result and "portfolio_holdings" in parser_result:
-                print("✅ Together AI format detected - using directly")
+                print("SUCCESS: Together AI format detected - using directly")
                 # Already in correct format, just validate fields
                 transformed = {
                     "mutual_fund_name": parser_result.get("mutual_fund_name", "Unknown Mutual Fund"),

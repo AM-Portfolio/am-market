@@ -13,6 +13,7 @@ resources:
 # Vault Configuration
 vault:
   enabled: true
-  role: "am-parser-role"
+  role: "dev-role"
   secretPaths:
     mongodb: "kv/preprod/database/mongo"
+I

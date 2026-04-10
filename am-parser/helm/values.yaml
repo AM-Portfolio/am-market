@@ -4,12 +4,29 @@ language: python
 
 image:
   repository: am-parser
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
-service:
-  type: ClusterIP
-  port: 8000
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
 
-resources: {}
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
 
-environment: default
+# Vault configuration
+vault:
+  enabled: true
+  secretPaths:
+    postgres: "kv/preprod/database/postgres"
+    parser: "kv/preprod/api/openai" # Assuming it uses OpenAI or similar
+
+environment: preprod
