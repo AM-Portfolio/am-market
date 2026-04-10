@@ -2,6 +2,9 @@ replicaCount: 1
 port: 8000
 language: python
 
+security:
+  automountServiceAccountToken: true
+
 image:
   repository: am-parser
   pullPolicy: Always

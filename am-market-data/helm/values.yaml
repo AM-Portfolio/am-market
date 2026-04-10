@@ -13,6 +13,9 @@ image:
 ingress:
   enabled: false
   className: "nginx"
+
+security:
+  automountServiceAccountToken: true
   annotations:
     kubernetes.io/ingress.class: nginx
   hosts:
