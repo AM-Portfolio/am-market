@@ -25,8 +25,9 @@ securityContext:
 # Vault configuration
 vault:
   enabled: true
+  role: "am-backend-role"
   secretPaths:
-    postgres: "kv/preprod/database/postgres"
-    parser: "kv/preprod/api/openai" # Assuming it uses OpenAI or similar
+    mongodb: "secret/data/preprod/infra/mongodb"
+    together: "secret/data/preprod/api/together"
 
 environment: preprod

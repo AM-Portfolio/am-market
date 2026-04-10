@@ -67,14 +67,15 @@ postgresql:
 # Vault configuration
 vault:
   enabled: true
+  role: "am-backend-role"
   secretPaths:
-    postgres: "kv/preprod/database/postgres"
-    mongodb: "kv/preprod/database/mongo"
-    redis: "kv/preprod/database/redis"
-    influxdb: "kv/preprod/database/influxdb"
-    kafka: "kv/preprod/kafka"
-    upstock: "kv/preprod/api/upstock"
-    zerodha: "kv/preprod/api/zerodha"
+    postgres: "secret/data/preprod/infra/postgres"
+    mongodb: "secret/data/preprod/infra/mongodb"
+    redis: "secret/data/preprod/infra/redis"
+    influxdb: "secret/data/preprod/infra/influxdb"
+    kafka: "secret/data/preprod/infra/kafka"
+    zerodha: "secret/data/preprod/api/zerodha"
+    upstock: "secret/data/preprod/api/upstock"
 
 # Application specific configuration
 config:

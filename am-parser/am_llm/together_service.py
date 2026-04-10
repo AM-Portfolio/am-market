@@ -8,6 +8,7 @@ import json
 import re
 from typing import Optional, Dict, Any
 from pathlib import Path
+import os
 import sys
 
 # Add parent directory to path to find external modules
@@ -33,8 +34,11 @@ class TogetherLLMService:
         if not Together:
             raise ImportError("Together AI package not installed. Run: pip install together")
             
-        self.api_key = api_key or "bff39f38ee07df9a08ff8d2e7279b9d7223ab3f283a30bc39590d36f77dbd2fd"
-        self.client = Together(api_key=self.api_key)
+        self.api_key = api_key or os.getenv("TOGETHER_API_KEY")
+        if not self.api_key:
+             print("WARNING: TOGETHER_API_KEY not found in environment variables.")
+             
+        self.client = Together(api_key=self.api_key) if Together else None
         
         # Available models to try
         self.models = [

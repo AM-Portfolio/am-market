@@ -24,7 +24,7 @@ dependencies:
 
   # Unified Market SDK
   am_market_sdk:
-    path: ../am-market-sdk/flutter-sdk
+    path: ../am-market-sdk/flutter-market-sdk
 
   # Third Party
   provider: ^6.1.1
