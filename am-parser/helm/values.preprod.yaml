@@ -13,4 +13,3 @@ resources:
 # Vault Configuration
 vault:
   enabled: true
-  role: "dev-role"
