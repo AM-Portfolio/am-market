@@ -48,7 +48,12 @@ vault:
     influxdb: "secret/data/preprod/infra/influxdb"
     kafka: "secret/data/preprod/infra/kafka"
     zerodha: "secret/data/preprod/api/zerodha"
-    upstock: "secret/data/preprod/api/upstock"
+    upstox:
+      path: "secret/data/preprod/api/upstox"
+      template: |
+        export UPSTOX_APIKEY="{{ .Data.data.API_KEY }}"
+        export UPSTOX_ACCESSTOKEN="{{ .Data.data.ACCESS_TOKEN }}"
+        export UPSTOX_BASEURL="{{ .Data.data.BASE_URL | default "https://api.upstox.com/v2" }}"
 
 # Application specific configuration
 config:

@@ -34,7 +34,10 @@ vault:
   enabled: true
   role: "am-backend-role"
   secretPaths:
-    mongodb: "secret/data/preprod/infra/mongodb"
+    mongodb: 
+      path: "secret/data/preprod/infra/mongodb"
+      template: |
+        export MONGO_URI="mongodb://{{ .Data.data.MONGO_USER }}:{{ .Data.data.MONGO_PASSWORD }}@{{ .Data.data.MONGO_HOST }}:{{ .Data.data.MONGO_PORT }}/{{ .Data.data.MONGO_DB }}?authSource=admin"
     together: "secret/data/preprod/api/together"
 
 environment: preprod
