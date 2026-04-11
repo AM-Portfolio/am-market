@@ -84,12 +84,12 @@ vault:
     zerodha: "secret/data/preprod/api/zerodha"
     upstox:
       path: "secret/data/preprod/api/upstox"
-Put out the right of she wasn't      template: |
-  {{- with secret "secret/data/preprod/api/upstox" -}}
-  export UPSTOX_API_KEY="{{ .Data.data.API_KEY }}"
-  export UPSTOX_SECRET_KEY="{{ .Data.data.SECRET_KEY }}"
-  export UPSTOX_ACCESS_TOKEN="{{ .Data.data.ACCESS_TOKEN }}"
-  {{- end }}
+      template: |
+        {{- with secret "secret/data/preprod/api/upstox" -}}
+        export UPSTOX_API_KEY="{{ .Data.data.API_KEY }}"
+        export UPSTOX_SECRET_KEY="{{ .Data.data.SECRET_KEY }}"
+        export UPSTOX_ACCESS_TOKEN="{{ .Data.data.ACCESS_TOKEN }}"
+        {{- end }}
 
 # Application specific configuration
 config:
