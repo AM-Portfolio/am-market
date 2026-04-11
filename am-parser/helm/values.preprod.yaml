@@ -10,7 +10,7 @@ probes:
   readiness:
     path: /health
 
-replicaCount: 2
+replicaCount: 1
 
 resources:
   limits:

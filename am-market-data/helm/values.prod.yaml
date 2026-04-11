@@ -1,6 +1,8 @@
 # Production Environment Configuration
 environment: prod
 
+replicaCount: 1
+
 # Application Configuration
 config:
   marketData:
