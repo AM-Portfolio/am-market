@@ -40,7 +40,7 @@ vault:
   role: "am-backend-role"
   secretPaths:
     postgres: "secret/data/preprod/infra/postgres"
-    mongodb:
+    mongodb: 
       path: "secret/data/preprod/infra/mongodb"
       template: |
         {{- with secret "secret/data/preprod/infra/mongodb" -}}
@@ -49,21 +49,21 @@ vault:
         export MONGODB_DATABASE_NAME="{{ .Data.data.MONGODB_DATABASE }}"
         export INFRA_HOST="{{ .Data.data.MONGO_HOST }}"
         {{- end }}
-    redis:
+    redis: 
       path: "secret/data/preprod/infra/redis"
       template: |
         {{- with secret "secret/data/preprod/infra/redis" -}}
         export REDIS_PASSWORD_INTERNAL="{{ .Data.data.REDIS_PASSWORD }}"
         export REDIS_HOSTNAME="{{ .Data.data.REDIS_HOSTNAME }}"
         {{- end }}
-    influxdb:
+    influxdb: 
       path: "secret/data/preprod/infra/influxdb"
       template: |
         {{- with secret "secret/data/preprod/infra/influxdb" -}}
-        export INFLUXDB_URL_INTERNAL="{{ .Data.data.INFLUX_URL }}"
-        export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.INFLUX_TOKEN }}"
-        export INFLUXDB_ORG_INTERNAL="{{ .Data.data.INFLUX_ORG }}"
-        export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.INFLUX_BUCKET }}"
+        export INFLUXDB_URL_INTERNAL="{{ .Data.data.INFLUXDB_URL }}"
+        export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.INFLUXDB_TOKEN }}"
+        export INFLUXDB_ORG_INTERNAL="{{ .Data.data.INFLUXDB_ORG }}"
+        export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.INFLUXDB_BUCKET }}"
         {{- end }}
     jwt:
       path: "secret/data/preprod/apps/auth/jwt"
@@ -71,7 +71,7 @@ vault:
         {{- with secret "secret/data/preprod/apps/auth/jwt" -}}
         export JWT_SECRET="{{ .Data.data.JWT_SECRET }}"
         {{- end }}
-    kafka:
+    kafka: 
       path: "secret/data/preprod/infra/kafka"
       template: |
         {{- with secret "secret/data/preprod/infra/kafka" -}}
@@ -82,7 +82,7 @@ vault:
         export KAFKA_SASL_MECHANISM="{{ if index .Data.data "SASL_MECHANISM" }}{{ index .Data.data "SASL_MECHANISM" }}{{ else }}SCRAM-SHA-256{{ end }}"
         {{- end }}
     zerodha: "secret/data/preprod/api/zerodha"
-    upstox:
+    upstox: 
       path: "secret/data/preprod/api/upstox"
       template: |
         {{- with secret "secret/data/preprod/api/upstox" -}}
