@@ -1,3 +1,6 @@
+env:
+  ENVIRONMENT: "preprod"
+
 environment: preprod
 
 replicaCount: 2
