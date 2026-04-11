@@ -1,6 +1,3 @@
-## Default values for market-data service
-## This is a YAML-formatted file.
-
 replicaCount: 1
 port: 8092
 language: java
@@ -46,20 +43,35 @@ vault:
     mongodb:
       path: "secret/data/preprod/infra/mongodb"
       template: |
-        export MONGODB_DATABASE="{{ .Data.data.MONGODB_DATABASE }}"
-        export MONGODB_USERNAME="{{ .Data.data.MONGO_USER }}"
-        export MONGODB_PASSWORD="{{ .Data.data.MONGO_PASSWORD }}"
+        {{- with secret "secret/data/preprod/infra/mongodb" -}}
+        export MONGODB_USERNAME_INTERNAL="{{ .Data.data.MONGO_USER }}"
+        export MONGODB_PASSWORD_INTERNAL="{{ .Data.data.MONGO_PASSWORD }}"
+        export MONGODB_DATABASE_NAME="{{ .Data.data.MONGODB_DATABASE }}"
+        export INFRA_HOST="{{ .Data.data.MONGO_HOST }}"
+        {{- end }}
     redis:
       path: "secret/data/preprod/infra/redis"
       template: |
-        export REDIS_PASSWORD="{{ .Data.data.REDIS_PASSWORD }}"
+        {{- with secret "secret/data/preprod/infra/redis" -}}
+        export REDIS_PASSWORD_INTERNAL="{{ .Data.data.REDIS_PASSWORD }}"
         export REDIS_HOSTNAME="{{ .Data.data.REDIS_HOSTNAME }}"
-    influxdb: "secret/data/preprod/infra/influxdb"
+        {{- end }}
+    influxdb:
+      path: "secret/data/preprod/infra/influxdb"
+      template: |
+        {{- with secret "secret/data/preprod/infra/influxdb" -}}
+        export INFLUXDB_URL_INTERNAL="{{ .Data.data.INFLUX_URL }}"
+        export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.INFLUX_TOKEN }}"
+        export INFLUXDB_ORG_INTERNAL="{{ .Data.data.INFLUX_ORG }}"
+        export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.INFLUX_BUCKET }}"
+        {{- end }}
     jwt:
       path: "secret/data/preprod/apps/auth/jwt"
       template: |
+        {{- with secret "secret/data/preprod/apps/auth/jwt" -}}
         export JWT_SECRET="{{ .Data.data.JWT_SECRET }}"
-    kafka: 
+        {{- end }}
+    kafka:
       path: "secret/data/preprod/infra/kafka"
       template: |
         {{- with secret "secret/data/preprod/infra/kafka" -}}
@@ -70,17 +82,18 @@ vault:
         export KAFKA_SASL_MECHANISM="{{ if index .Data.data "SASL_MECHANISM" }}{{ index .Data.data "SASL_MECHANISM" }}{{ else }}SCRAM-SHA-256{{ end }}"
         {{- end }}
     zerodha: "secret/data/preprod/api/zerodha"
-    upstox: 
+    upstox:
       path: "secret/data/preprod/api/upstox"
-      template: |
-        {{- with secret "secret/data/preprod/api/upstox" -}}
-        export UPSTOX_API_KEY="{{ .Data.data.API_KEY }}"
-        export UPSTOX_SECRET_KEY="{{ .Data.data.SECRET_KEY }}"
-        export UPSTOX_ACCESS_TOKEN="{{ .Data.data.ACCESS_TOKEN }}"
-        {{- end }}
+Put out the right of she wasn't      template: |
+  {{- with secret "secret/data/preprod/api/upstox" -}}
+  export UPSTOX_API_KEY="{{ .Data.data.API_KEY }}"
+  export UPSTOX_SECRET_KEY="{{ .Data.data.SECRET_KEY }}"
+  export UPSTOX_ACCESS_TOKEN="{{ .Data.data.ACCESS_TOKEN }}"
+  {{- end }}
 
 # Application specific configuration
 config:
   marketData:
     maxRetries: 5
     retryDelayMs: 2000
+  env: "preprod"
