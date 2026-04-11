@@ -60,7 +60,7 @@ COPY am-market-data/market-data-watchlist/ market-data-watchlist/
 RUN GITHUB_PACKAGES_USERNAME=${GITHUB_PACKAGES_USERNAME} GITHUB_PACKAGES_TOKEN=${GITHUB_PACKAGES_TOKEN} mvn clean package -DskipTests -B
 
 # Stage 2: Runtime with JRE
-# Force Trigger: 2026-04-11T14:31:00 (Credential Alignment)
+# Absolute final lean stabilization rollout: 2026-04-11T15:45:00Z
 FROM eclipse-temurin:21-jdk-jammy
 
 WORKDIR /app

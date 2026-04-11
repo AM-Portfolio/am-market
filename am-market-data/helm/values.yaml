@@ -43,10 +43,23 @@ vault:
   role: "am-backend-role"
   secretPaths:
     postgres: "secret/data/preprod/infra/postgres"
-    mongodb: "secret/data/preprod/infra/mongodb"
-    redis: "secret/data/preprod/infra/redis"
+    mongodb:
+      path: "secret/data/preprod/infra/mongodb"
+      template: |
+        export MONGODB_DATABASE="{{ .Data.data.MONGODB_DATABASE }}"
+        export MONGODB_USERNAME="{{ .Data.data.MONGO_USER }}"
+        export MONGODB_PASSWORD="{{ .Data.data.MONGO_PASSWORD }}"
+    redis:
+      path: "secret/data/preprod/infra/redis"
+      template: |
+        export REDIS_PASSWORD="{{ .Data.data.REDIS_PASSWORD }}"
+        export REDIS_HOSTNAME="{{ .Data.data.REDIS_HOSTNAME }}"
     influxdb: "secret/data/preprod/infra/influxdb"
     kafka: "secret/data/preprod/infra/kafka"
+    jwt:
+      path: "secret/data/preprod/apps/auth/jwt"
+      template: |
+        export JWT_SECRET="{{ .Data.data.JWT_SECRET }}"
     zerodha: "secret/data/preprod/api/zerodha"
     upstox:
       path: "secret/data/preprod/api/upstox"
