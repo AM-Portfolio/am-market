@@ -29,19 +29,7 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-# PostgreSQL Configuration (deployed in am-np-west namespace)
-postgresql:
-  enabled: false
-  fullname: postgresql.am-np-west.svc.cluster.local
-  auth:
-    database: marketdata
-    username: postgres
-    password: postgres123
-  primary:
-    service:
-      port: 5432
-
-# Vault Configuration
+# Vault Configuration (Inherited from base with dynamic aliases)
 vault:
   enabled: true
 
@@ -52,8 +40,3 @@ monitoring:
     scrape: true
     port: "8080"
     path: "/actuator/prometheus"
-
-# Environment Variables
-env:
-  INFRA_HOST: "am-infra-mongodb.am-apps-preprod.svc.cluster.local"
-  MONGODB_DATABASE: "market_data" # Breaks the circular reference loop in Spring Boot

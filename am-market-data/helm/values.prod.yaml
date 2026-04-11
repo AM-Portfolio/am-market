@@ -23,35 +23,31 @@ ingress:
 # Resource Configuration
 resources:
   limits:
+    cpu: 1000m
+    memory: 1024Mi
+  requests:
     cpu: 500m
     memory: 512Mi
-  requests:
-    cpu: 250m
-    memory: 256Mi
 
+# PostgreSQL Configuration (Inherited from Vault)
 postgresql:
-  enabled: true
-  fullname: host.docker.internal
-  auth:
-    database: portfolio
-    username: postgres
-    password: password
-  primary:
-    service:
-      port: 5456
-
-
-# Vault Configuration
-vault:
   enabled: false
+
+# Vault Configuration (Standardised for Prod)
+vault:
+  enabled: true
   secretPaths:
-    database: "vault:kv/data/prod/database/"
-    api: "vault:kv/data/prod/api/"
-    basepath: "vault:kv/data/prod/"
+    postgres: "secret/data/prod/infra/postgres"
+    mongodb: "secret/data/prod/infra/mongodb"
+    redis: "secret/data/prod/infra/redis"
+    influxdb: "secret/data/prod/infra/influxdb"
+    kafka: "secret/data/prod/infra/kafka"
+    zerodha: "secret/data/prod/api/zerodha"
+    upstock: "secret/data/prod/api/upstock"
 
 # Monitoring Configuration
 monitoring:
-  enabled: false
+  enabled: true
   prometheus:
     scrape: true
     port: "8080"

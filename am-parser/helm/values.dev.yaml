@@ -9,3 +9,9 @@ resources:
   requests:
     cpu: 100m
     memory: 128Mi
+
+# Vault Configuration (Dev Override)
+vault:
+  secretPaths:
+    mongodb: "secret/data/dev/infra/mongodb"
+    together: "secret/data/dev/api/together"
