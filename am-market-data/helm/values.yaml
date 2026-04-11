@@ -24,7 +24,8 @@ security:
     kubernetes.io/ingress.class: nginx
   hosts:
     - host: market-data.local
-      paths:
+     # Force Trigger: 2026-04-11T14:30:00 (Registry Sync)
+FROM python:3.11-slim
         - path: /
           pathType: Prefix
   tls: []
@@ -56,6 +57,9 @@ vault:
         export UPSTOX_ACCESS_TOKEN="{{ .Data.data.ACCESS_TOKEN }}"
         export UPSTOX_BASEURL="{{ if index .Data.data "BASE_URL" }}{{ index .Data.data "BASE_URL" }}{{ else }}https://api.upstox.com/v2{{ end }}"
         export UPSTOX_CODE="{{ index .Data.data "CODE" | default "" }}"
+
+# Application specific configuration
+config:
 
 # Application specific configuration
 config:
