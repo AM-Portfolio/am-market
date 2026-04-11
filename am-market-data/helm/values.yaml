@@ -55,23 +55,29 @@ vault:
         export REDIS_PASSWORD="{{ .Data.data.REDIS_PASSWORD }}"
         export REDIS_HOSTNAME="{{ .Data.data.REDIS_HOSTNAME }}"
     influxdb: "secret/data/preprod/infra/influxdb"
-    kafka: "secret/data/preprod/infra/kafka"
     jwt:
       path: "secret/data/preprod/apps/auth/jwt"
       template: |
         export JWT_SECRET="{{ .Data.data.JWT_SECRET }}"
+    kafka: 
+      path: "secret/data/preprod/infra/kafka"
+      template: |
+        {{- with secret "secret/data/preprod/infra/kafka" -}}
+        export KAFKA_BOOTSTRAP_SERVERS="{{ if index .Data.data "KAFKA_BOOTSTRAP_SERVERS" }}{{ index .Data.data "KAFKA_BOOTSTRAP_SERVERS" }}{{ else if index .Data.data "BOOTSTRAP_SERVERS" }}{{ index .Data.data "BOOTSTRAP_SERVERS" }}{{ else }}kafka.infra.svc.cluster.local:9092{{ end }}"
+        export KAFKA_USERNAME="{{ if index .Data.data "KAFKA_USERNAME" }}{{ index .Data.data "KAFKA_USERNAME" }}{{ else if index .Data.data "KAFKA_USER" }}{{ index .Data.data "KAFKA_USER" }}{{ else if index .Data.data "USER" }}{{ index .Data.data "USER" }}{{ else }}{{ end }}"
+        export KAFKA_PASSWORD="{{ if index .Data.data "KAFKA_PASSWORD" }}{{ index .Data.data "KAFKA_PASSWORD" }}{{ else if index .Data.data "PASSWORD" }}{{ index .Data.data "PASSWORD" }}{{ else }}{{ end }}"
+        export KAFKA_SECURITY_PROTOCOL="{{ if index .Data.data "SECURITY_PROTOCOL" }}{{ index .Data.data "SECURITY_PROTOCOL" }}{{ else }}SASL_PLAINTEXT{{ end }}"
+        export KAFKA_SASL_MECHANISM="{{ if index .Data.data "SASL_MECHANISM" }}{{ index .Data.data "SASL_MECHANISM" }}{{ else }}SCRAM-SHA-256{{ end }}"
+        {{- end }}
     zerodha: "secret/data/preprod/api/zerodha"
-    upstox:
+    upstox: 
       path: "secret/data/preprod/api/upstox"
       template: |
+        {{- with secret "secret/data/preprod/api/upstox" -}}
         export UPSTOX_API_KEY="{{ .Data.data.API_KEY }}"
         export UPSTOX_SECRET_KEY="{{ .Data.data.SECRET_KEY }}"
         export UPSTOX_ACCESS_TOKEN="{{ .Data.data.ACCESS_TOKEN }}"
-        export UPSTOX_BASEURL="{{ if index .Data.data "BASE_URL" }}{{ index .Data.data "BASE_URL" }}{{ else }}https://api.upstox.com/v2{{ end }}"
-        export UPSTOX_CODE="{{ if index .Data.data "CODE" }}{{ index .Data.data "CODE" }}{{ end }}"
-
-# Application specific configuration
-config:
+        {{- end }}
 
 # Application specific configuration
 config:
