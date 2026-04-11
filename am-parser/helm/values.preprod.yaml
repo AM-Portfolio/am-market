@@ -3,6 +3,13 @@ env:
 
 environment: preprod
 
+probes:
+  port: 8000
+  liveness:
+    path: /health
+  readiness:
+    path: /health
+
 replicaCount: 2
 
 resources:

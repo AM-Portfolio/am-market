@@ -1,8 +1,11 @@
-env:
-  ENVIRONMENT: "preprod"
-  SPRING_PROFILES_ACTIVE: "preprod"
-  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=preprod"
 environment: preprod
+
+probes:
+  port: 8092
+  liveness:
+    path: /actuator/health/liveness
+  readiness:
+    path: /actuator/health/readiness
 
 # Application Configuration
 config:

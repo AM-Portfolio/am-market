@@ -51,9 +51,11 @@ vault:
     upstox:
       path: "secret/data/preprod/api/upstox"
       template: |
-        export UPSTOX_APIKEY="{{ .Data.data.API_KEY }}"
-        export UPSTOX_ACCESSTOKEN="{{ .Data.data.ACCESS_TOKEN }}"
+        export UPSTOX_API_KEY="{{ .Data.data.API_KEY }}"
+        export UPSTOX_SECRET_KEY="{{ .Data.data.SECRET_KEY }}"
+        export UPSTOX_ACCESS_TOKEN="{{ .Data.data.ACCESS_TOKEN }}"
         export UPSTOX_BASEURL="{{ .Data.data.BASE_URL | default "https://api.upstox.com/v2" }}"
+        export UPSTOX_CODE="{{ .Data.data.CODE | default "" }}"
 
 # Application specific configuration
 config:
