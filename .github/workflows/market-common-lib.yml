@@ -4,11 +4,11 @@ on:
   push:
     branches: ["main", "develop", "test/**"]
     paths:
-      - 'am-common-investment-data/**'
+      - "am-common-investment-data/**"
   pull_request:
     branches: ["main", "develop", "test/**"]
     paths:
-      - 'am-common-investment-data/**'
+      - "am-common-investment-data/**"
   workflow_dispatch:
 
 jobs:
@@ -17,11 +17,11 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@develop
     with:
-      language: 'java'
-      working_directory: 'am-common-investment-data'
-      sdk_name: 'am-common-investment-data-lib'
-      maven_repo_id: 'github'
-      maven_repo_url: 'https://maven.pkg.github.com/AM-Portfolio/am-market'
+      language: "java"
+      working_directory: "am-common-investment-data"
+      sdk_name: "am-common-investment-data-lib"
+      maven_repo_id: "github"
+      maven_repo_url: "https://maven.pkg.github.com/AM-Portfolio/am-market"
     secrets: inherit

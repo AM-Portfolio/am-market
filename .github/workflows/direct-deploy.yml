@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: 'Select the service to deploy'
+        description: "Select the service to deploy"
         required: true
         type: choice
         options:
@@ -13,16 +13,16 @@ on:
           - market-analytics
           - market-ui
       environment:
-        description: 'Target environment'
+        description: "Target environment"
         required: true
         type: choice
         options:
           - preprod
           - prod
       image_tag:
-        description: 'Docker Image Tag (e.g., latest or a specific run-id)'
+        description: "Docker Image Tag (e.g., latest or a specific run-id)"
         required: true
-        default: 'latest'
+        default: "latest"
         type: string
 
 jobs:
@@ -50,7 +50,7 @@ jobs:
              echo "working_directory=market-ui" >> $GITHUB_OUTPUT
              echo "language=flutter" >> $GITHUB_OUTPUT
           fi
-          
+
           # Namespace Mappings
           if [ "${{ github.event.inputs.environment }}" == "prod" ]; then
              echo "namespace=am-apps-prod" >> $GITHUB_OUTPUT
@@ -61,7 +61,7 @@ jobs:
   deploy:
     name: Execute Deploy
     needs: setup
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-deploy.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-deploy.yml@develop
     with:
       service_name: ${{ github.event.inputs.service }}
       working_directory: ${{ needs.setup.outputs.working_directory }}

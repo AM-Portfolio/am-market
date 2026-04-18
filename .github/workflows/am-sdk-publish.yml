@@ -3,10 +3,10 @@ name: AM SDK Publish
 on:
   push:
     paths:
-      - 'am-market-sdk/**'
+      - "am-market-sdk/**"
   pull_request:
     paths:
-      - 'am-market-sdk/**'
+      - "am-market-sdk/**"
 
 jobs:
   # Detect which SDK paths changed
@@ -16,11 +16,11 @@ jobs:
     permissions:
       contents: read
     outputs:
-      java-market:    ${{ steps.check.outputs.java-market }}
-      python-market:  ${{ steps.check.outputs.python-market }}
+      java-market: ${{ steps.check.outputs.java-market }}
+      python-market: ${{ steps.check.outputs.python-market }}
       flutter-market: ${{ steps.check.outputs.flutter-market }}
-      java-parser:    ${{ steps.check.outputs.java-parser }}
-      python-parser:  ${{ steps.check.outputs.python-parser }}
+      java-parser: ${{ steps.check.outputs.java-parser }}
+      python-parser: ${{ steps.check.outputs.python-parser }}
       flutter-parser: ${{ steps.check.outputs.flutter-parser }}
     steps:
       - uses: actions/checkout@v4
@@ -68,11 +68,11 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@develop
     with:
-      language: 'java'
-      working_directory: 'am-market-sdk/java-market-sdk'
-      sdk_name: 'java-market-sdk'
+      language: "java"
+      working_directory: "am-market-sdk/java-market-sdk"
+      sdk_name: "java-market-sdk"
     secrets: inherit
 
   publish-python-market:
@@ -82,11 +82,11 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@develop
     with:
-      language: 'python'
-      working_directory: 'am-market-sdk/python-market-sdk'
-      sdk_name: 'python-market-sdk'
+      language: "python"
+      working_directory: "am-market-sdk/python-market-sdk"
+      sdk_name: "python-market-sdk"
     secrets: inherit
 
   publish-flutter-market:
@@ -96,11 +96,11 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@develop
     with:
-      language: 'flutter'
-      working_directory: 'am-market-sdk/flutter-market-sdk'
-      sdk_name: 'flutter-market-sdk'
+      language: "flutter"
+      working_directory: "am-market-sdk/flutter-market-sdk"
+      sdk_name: "flutter-market-sdk"
     secrets: inherit
 
   # --- Parser SDKs ---
@@ -111,11 +111,11 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@develop
     with:
-      language: 'java'
-      working_directory: 'am-market-sdk/java-parser-sdk'
-      sdk_name: 'java-parser-sdk'
+      language: "java"
+      working_directory: "am-market-sdk/java-parser-sdk"
+      sdk_name: "java-parser-sdk"
     secrets: inherit
 
   publish-python-parser:
@@ -125,11 +125,11 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@develop
     with:
-      language: 'python'
-      working_directory: 'am-market-sdk/python-parser-sdk'
-      sdk_name: 'python-parser-sdk'
+      language: "python"
+      working_directory: "am-market-sdk/python-parser-sdk"
+      sdk_name: "python-parser-sdk"
     secrets: inherit
 
   publish-flutter-parser:
@@ -139,9 +139,9 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@develop
     with:
-      language: 'flutter'
-      working_directory: 'am-market-sdk/flutter-parser-sdk'
-      sdk_name: 'flutter-parser-sdk'
+      language: "flutter"
+      working_directory: "am-market-sdk/flutter-parser-sdk"
+      sdk_name: "flutter-parser-sdk"
     secrets: inherit

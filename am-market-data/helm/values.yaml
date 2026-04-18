@@ -38,58 +38,7 @@ resources:
 vault:
   enabled: true
   role: "am-backend-role"
-  secretPaths:
-    postgres: "secret/data/preprod/infra/postgres"
-    mongodb: 
-      path: "secret/data/preprod/infra/mongodb"
-      template: |
-        {{- with secret "secret/data/preprod/infra/mongodb" -}}
-        export MONGODB_USERNAME_INTERNAL="{{ .Data.data.MONGO_USER }}"
-        export MONGODB_PASSWORD_INTERNAL="{{ .Data.data.MONGO_PASSWORD }}"
-        export MONGODB_DATABASE_NAME="{{ .Data.data.MONGODB_DATABASE }}"
-        export INFRA_HOST="{{ .Data.data.MONGO_HOST }}"
-        {{- end }}
-    redis: 
-      path: "secret/data/preprod/infra/redis"
-      template: |
-        {{- with secret "secret/data/preprod/infra/redis" -}}
-        export REDIS_PASSWORD_INTERNAL="{{ .Data.data.REDIS_PASSWORD }}"
-        export REDIS_HOSTNAME="{{ .Data.data.REDIS_HOSTNAME }}"
-        {{- end }}
-    influxdb: 
-      path: "secret/data/preprod/infra/influxdb"
-      template: |
-        {{- with secret "secret/data/preprod/infra/influxdb" -}}
-        export INFLUXDB_URL_INTERNAL="{{ .Data.data.INFLUXDB_URL }}"
-        export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.INFLUXDB_TOKEN }}"
-        export INFLUXDB_ORG_INTERNAL="{{ .Data.data.INFLUXDB_ORG }}"
-        export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.INFLUXDB_BUCKET }}"
-        {{- end }}
-    jwt:
-      path: "secret/data/preprod/apps/auth/jwt"
-      template: |
-        {{- with secret "secret/data/preprod/apps/auth/jwt" -}}
-        export JWT_SECRET="{{ .Data.data.JWT_SECRET }}"
-        {{- end }}
-    kafka: 
-      path: "secret/data/preprod/infra/kafka"
-      template: |
-        {{- with secret "secret/data/preprod/infra/kafka" -}}
-        export KAFKA_BOOTSTRAP_SERVERS="{{ if index .Data.data "KAFKA_BOOTSTRAP_SERVERS" }}{{ index .Data.data "KAFKA_BOOTSTRAP_SERVERS" }}{{ else if index .Data.data "BOOTSTRAP_SERVERS" }}{{ index .Data.data "BOOTSTRAP_SERVERS" }}{{ else }}kafka.infra.svc.cluster.local:9092{{ end }}"
-        export KAFKA_USERNAME="{{ if index .Data.data "KAFKA_USERNAME" }}{{ index .Data.data "KAFKA_USERNAME" }}{{ else if index .Data.data "KAFKA_USER" }}{{ index .Data.data "KAFKA_USER" }}{{ else if index .Data.data "USER" }}{{ index .Data.data "USER" }}{{ else }}{{ end }}"
-        export KAFKA_PASSWORD="{{ if index .Data.data "KAFKA_PASSWORD" }}{{ index .Data.data "KAFKA_PASSWORD" }}{{ else if index .Data.data "PASSWORD" }}{{ index .Data.data "PASSWORD" }}{{ else }}{{ end }}"
-        export KAFKA_SECURITY_PROTOCOL="{{ if index .Data.data "SECURITY_PROTOCOL" }}{{ index .Data.data "SECURITY_PROTOCOL" }}{{ else }}SASL_PLAINTEXT{{ end }}"
-        export KAFKA_SASL_MECHANISM="{{ if index .Data.data "SASL_MECHANISM" }}{{ index .Data.data "SASL_MECHANISM" }}{{ else }}SCRAM-SHA-256{{ end }}"
-        {{- end }}
-    zerodha: "secret/data/preprod/api/zerodha"
-    upstox: 
-      path: "secret/data/preprod/api/upstox"
-      template: |
-        {{- with secret "secret/data/preprod/api/upstox" -}}
-        export UPSTOX_API_KEY="{{ .Data.data.API_KEY }}"
-        export UPSTOX_SECRET_KEY="{{ .Data.data.SECRET_KEY }}"
-        export UPSTOX_ACCESS_TOKEN="{{ .Data.data.ACCESS_TOKEN }}"
-        {{- end }}
+  secretPaths: {}
 
 # Application specific configuration
 config:

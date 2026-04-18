@@ -1,17 +1,13 @@
 environment: prod
+replicaCount: 2
 
-replicaCount: 1
-
-resources:
-  limits:
-    cpu: 1000m
-    memory: 1024Mi
-  requests:
-    cpu: 500m
-    memory: 512Mi
-
-# Vault Configuration (Prod Override)
 vault:
   secretPaths:
-    mongodb: "secret/data/prod/infra/mongodb"
-    together: "secret/data/prod/api/together"
+    mongodb: 
+      path: "secret/data/prod/apps/database"
+      template: |
+        export MONGO_URI="mongodb://{{ .Data.data.MONGO_USER }}:{{ .Data.data.MONGO_PASSWORD }}@mongodb.infra.svc.cluster.local:27017/am_parser?authSource=admin"
+    together: 
+      path: "secret/data/prod/apps/api"
+      template: |
+        export TOGETHER_API_KEY="{{ .Data.data.TOGETHER_API_KEY }}"
