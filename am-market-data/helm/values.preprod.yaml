@@ -4,61 +4,61 @@ replicaCount: 1
 vault:
   secretPaths:
     postgres: 
-      path: "secret/data/preprod/apps/database"
+      path: "apps/data/preprod/infra/postgres"
       template: |
-        {{- with secret "secret/data/preprod/apps/database" -}}
-        export POSTGRES_USERNAME="postgres"
-        export POSTGRES_PASSWORD="{{ .Data.data.POSTGRES_PASSWORD }}"
-        export POSTGRES_PORT="{{ .Data.data.POSTGRES_PORT }}"
-        export POSTGRES_HOST="{{ .Data.data.POSTGRES_HOST }}"
+        {{- with secret "apps/data/preprod/infra/postgres" -}}
+        export POSTGRES_USERNAME="{{ .Data.data.username }}"
+        export POSTGRES_PASSWORD="{{ .Data.data.password }}"
+        export POSTGRES_PORT="{{ .Data.data.port }}"
+        export POSTGRES_HOST="{{ .Data.data.host }}"
         export POSTGRES_DATABASE="portfolio"
-        export POSTGRES_URL="jdbc:postgresql://{{ .Data.data.POSTGRES_HOST }}:{{ .Data.data.POSTGRES_PORT }}/portfolio"
+        export POSTGRES_URL="jdbc:postgresql://{{ .Data.data.host }}:{{ .Data.data.port }}/portfolio"
         {{- end }}
     mongodb: 
-      path: "secret/data/preprod/apps/database"
+      path: "apps/data/preprod/infra/mongodb"
       template: |
-        {{- with secret "secret/data/preprod/apps/database" -}}
-        export MONGODB_USERNAME_INTERNAL="admin"
-        export MONGODB_PASSWORD_INTERNAL="{{ .Data.data.MONGODB_PASSWORD }}"
+        {{- with secret "apps/data/preprod/infra/mongodb" -}}
+        export MONGODB_USERNAME_INTERNAL="{{ .Data.data.username }}"
+        export MONGODB_PASSWORD_INTERNAL="{{ .Data.data.password }}"
         export MONGODB_DATABASE_NAME="market_data"
-        export INFRA_HOST="{{ .Data.data.MONGODB_HOST }}"
-        export MONGODB_URL="mongodb://admin:{{ .Data.data.MONGODB_PASSWORD }}@{{ .Data.data.MONGODB_HOST }}:{{ .Data.data.MONGODB_PORT }}/market_data?authSource=admin"
+        export INFRA_HOST="{{ .Data.data.host }}"
+        export MONGODB_URL="mongodb://{{ .Data.data.username }}:{{ .Data.data.password }}@{{ .Data.data.host }}:{{ .Data.data.port }}/market_data?authSource=admin"
         {{- end }}
     redis: 
-      path: "secret/data/preprod/apps/database"
+      path: "apps/data/preprod/infra/redis"
       template: |
-        {{- with secret "secret/data/preprod/apps/database" -}}
-        export REDIS_PASSWORD_INTERNAL="{{ .Data.data.REDIS_PASSWORD }}"
-        export REDIS_HOSTNAME="{{ .Data.data.REDIS_HOST }}"
-        export REDIS_PORT="{{ .Data.data.REDIS_PORT }}"
+        {{- with secret "apps/data/preprod/infra/redis" -}}
+        export REDIS_PASSWORD_INTERNAL="{{ .Data.data.password }}"
+        export REDIS_HOSTNAME="{{ .Data.data.host }}"
+        export REDIS_PORT="{{ .Data.data.port }}"
         {{- end }}
     influxdb: 
-      path: "secret/data/preprod/apps/database"
+      path: "apps/data/preprod/infra/influxdb"
       template: |
-        {{- with secret "secret/data/preprod/apps/database" -}}
-        export INFLUXDB_URL_INTERNAL="http://{{ .Data.data.INFLUX_HOST }}:{{ .Data.data.INFLUX_PORT }}"
-        export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.INFLUXDB_TOKEN }}"
-        export INFLUXDB_ORG_INTERNAL="{{ .Data.data.INFLUXDB_ORG }}"
-        export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.INFLUXDB_BUCKET }}"
+        {{- with secret "apps/data/preprod/infra/influxdb" -}}
+        export INFLUXDB_URL_INTERNAL="http://{{ .Data.data.host }}:{{ .Data.data.port }}"
+        export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.token }}"
+        export INFLUXDB_ORG_INTERNAL="{{ .Data.data.org }}"
+        export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.bucket }}"
         {{- end }}
     jwt:
-      path: "secret/data/preprod/apps/security"
+      path: "apps/data/preprod/services/am-market-data"
       template: |
-        {{- with secret "secret/data/preprod/apps/security" -}}
+        {{- with secret "apps/data/preprod/services/am-market-data" -}}
         export JWT_SECRET="{{ .Data.data.JWT_SECRET_KEY }}"
         {{- end }}
     kafka: 
-      path: "secret/data/preprod/apps/database"
+      path: "apps/data/preprod/infra/kafka"
       template: |
-        {{- with secret "secret/data/preprod/apps/database" -}}
-        export KAFKA_BOOTSTRAP_SERVERS="{{ .Data.data.KAFKA_BOOTSTRAP_SERVERS }}"
-        export KAFKA_USERNAME="{{ .Data.data.KAFKA_USERNAME }}"
-        export KAFKA_PASSWORD="{{ .Data.data.KAFKA_PASSWORD }}"
+        {{- with secret "apps/data/preprod/infra/kafka" -}}
+        export KAFKA_BOOTSTRAP_SERVERS="{{ .Data.data.bootstrap_servers }}"
+        export KAFKA_USERNAME="{{ .Data.data.username }}"
+        export KAFKA_PASSWORD="{{ .Data.data.password }}"
         {{- end }}
     upstox: 
-      path: "secret/data/preprod/apps/api"
+      path: "apps/data/preprod/services/am-market-data"
       template: |
-        {{- with secret "secret/data/preprod/apps/api" -}}
+        {{- with secret "apps/data/preprod/services/am-market-data" -}}
         export UPSTOX_API_KEY="{{ .Data.data.UPSTOX_API_KEY }}"
         export UPSTOX_SECRET_KEY="{{ .Data.data.UPSTOX_SECRET_KEY }}"
         {{- end }}

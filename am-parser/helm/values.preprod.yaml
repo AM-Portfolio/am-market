@@ -4,10 +4,14 @@ replicaCount: 1
 vault:
   secretPaths:
     mongodb: 
-      path: "secret/data/preprod/apps/database"
+      path: "apps/data/preprod/infra/mongodb"
       template: |
-        export MONGO_URI="mongodb://{{ .Data.data.MONGO_USER }}:{{ .Data.data.MONGO_PASSWORD }}@mongodb.infra.svc.cluster.local:27017/am_parser?authSource=admin"
+        {{- with secret "apps/data/preprod/infra/mongodb" -}}
+        export MONGO_URI="mongodb://{{ .Data.data.username }}:{{ .Data.data.password }}@mongodb.infra.svc.cluster.local:27017/am_parser?authSource=admin"
+        {{- end }}
     together: 
-      path: "secret/data/preprod/apps/api"
+      path: "apps/data/preprod/infra/shared-api"
       template: |
+        {{- with secret "apps/data/preprod/infra/shared-api" -}}
         export TOGETHER_API_KEY="{{ .Data.data.TOGETHER_API_KEY }}"
+        {{- end }}
