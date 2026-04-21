@@ -58,3 +58,4 @@ build_log.txt
 .env.local
 .env.deploy
 **/.env
+.env.secrets

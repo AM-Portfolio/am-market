@@ -1,17 +1,13 @@
 environment: dev
-
 replicaCount: 1
 
-resources:
-  limits:
-    cpu: 200m
-    memory: 256Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-
-# Vault Configuration (Dev Override)
 vault:
   secretPaths:
-    mongodb: "secret/data/dev/infra/mongodb"
-    together: "secret/data/dev/api/together"
+    mongodb: 
+      path: "secret/data/dev/apps/database"
+      template: |
+        export MONGO_URI="mongodb://{{ .Data.data.MONGO_USER }}:{{ .Data.data.MONGO_PASSWORD }}@mongodb.infra.svc.cluster.local:27017/am_parser?authSource=admin"
+    together: 
+      path: "secret/data/dev/apps/api"
+      template: |
+        export TOGETHER_API_KEY="{{ .Data.data.TOGETHER_API_KEY }}"

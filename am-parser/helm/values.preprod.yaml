@@ -1,25 +1,17 @@
-env:
-  ENVIRONMENT: "preprod"
-
 environment: preprod
-
-probes:
-  port: 8000
-  liveness:
-    path: /health
-  readiness:
-    path: /health
-
 replicaCount: 1
 
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 250m
-    memory: 256Mi
-
-# Vault Configuration
 vault:
-  enabled: true
+  secretPaths:
+    mongodb: 
+      path: "apps/data/preprod/infra/mongodb"
+      template: |
+        {{- with secret "apps/data/preprod/infra/mongodb" -}}
+        export MONGO_URI="mongodb://{{ .Data.data.username }}:{{ .Data.data.password }}@mongodb.infra.svc.cluster.local:27017/am_parser?authSource=admin"
+        {{- end }}
+    together: 
+      path: "apps/data/preprod/infra/shared-api"
+      template: |
+        {{- with secret "apps/data/preprod/infra/shared-api" -}}
+        export TOGETHER_API_KEY="{{ .Data.data.TOGETHER_API_KEY }}"
+        {{- end }}

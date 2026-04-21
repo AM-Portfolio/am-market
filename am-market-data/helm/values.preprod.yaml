@@ -1,51 +1,68 @@
+environment: preprod
+replicaCount: 1
+
+vault:
+  secretPaths:
+    postgres: 
+      path: "apps/data/preprod/infra/postgres"
+      template: |
+        {{- with secret "apps/data/preprod/infra/postgres" -}}
+        export POSTGRES_USERNAME="{{ .Data.data.username }}"
+        export POSTGRES_PASSWORD="{{ .Data.data.password }}"
+        export POSTGRES_PORT="{{ .Data.data.port }}"
+        export POSTGRES_HOST="{{ .Data.data.host }}"
+        export POSTGRES_DATABASE="portfolio"
+        export POSTGRES_URL="jdbc:postgresql://{{ .Data.data.host }}:{{ .Data.data.port }}/portfolio"
+        {{- end }}
+    mongodb: 
+      path: "apps/data/preprod/infra/mongodb"
+      template: |
+        {{- with secret "apps/data/preprod/infra/mongodb" -}}
+        export MONGODB_USERNAME_INTERNAL="{{ .Data.data.username }}"
+        export MONGODB_PASSWORD_INTERNAL="{{ .Data.data.password }}"
+        export MONGODB_DATABASE_NAME="market_data"
+        export INFRA_HOST="{{ .Data.data.host }}"
+        export MONGODB_URL="mongodb://{{ .Data.data.username }}:{{ .Data.data.password }}@{{ .Data.data.host }}:{{ .Data.data.port }}/market_data?authSource=admin"
+        {{- end }}
+    redis: 
+      path: "apps/data/preprod/infra/redis"
+      template: |
+        {{- with secret "apps/data/preprod/infra/redis" -}}
+        export REDIS_PASSWORD_INTERNAL="{{ .Data.data.password }}"
+        export REDIS_HOSTNAME="{{ .Data.data.host }}"
+        export REDIS_PORT="{{ .Data.data.port }}"
+        {{- end }}
+    influxdb: 
+      path: "apps/data/preprod/infra/influxdb"
+      template: |
+        {{- with secret "apps/data/preprod/infra/influxdb" -}}
+        export INFLUXDB_URL_INTERNAL="http://{{ .Data.data.host }}:{{ .Data.data.port }}"
+        export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.token }}"
+        export INFLUXDB_ORG_INTERNAL="{{ .Data.data.org }}"
+        export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.bucket }}"
+        {{- end }}
+    jwt:
+      path: "apps/data/preprod/services/am-market-data"
+      template: |
+        {{- with secret "apps/data/preprod/services/am-market-data" -}}
+        export JWT_SECRET="{{ .Data.data.JWT_SECRET_KEY }}"
+        {{- end }}
+    kafka: 
+      path: "apps/data/preprod/infra/kafka"
+      template: |
+        {{- with secret "apps/data/preprod/infra/kafka" -}}
+        export KAFKA_BOOTSTRAP_SERVERS="{{ .Data.data.bootstrap_servers }}"
+        export KAFKA_USERNAME="{{ .Data.data.username }}"
+        export KAFKA_PASSWORD="{{ .Data.data.password }}"
+        {{- end }}
+    upstox: 
+      path: "apps/data/preprod/services/am-market-data"
+      template: |
+        {{- with secret "apps/data/preprod/services/am-market-data" -}}
+        export UPSTOX_API_KEY="{{ .Data.data.UPSTOX_API_KEY }}"
+        export UPSTOX_SECRET_KEY="{{ .Data.data.UPSTOX_SECRET_KEY }}"
+        {{- end }}
+
 env:
   SPRING_PROFILES_ACTIVE: "preprod"
-  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=preprod"
-environment: preprod
-
-probes:
-  port: 8092
-  liveness:
-    path: /actuator/health/liveness
-  readiness:
-    path: /actuator/health/readiness
-
-# Application Configuration
-config:
-  marketData:
-    maxRetries: 3
-    retryDelayMs: 1000
-    threadPoolSize: 5
-    threadQueueCapacity: 10
-    maxAgeMinutes: 15
-
-# Service Configuration
-service:
-  type: ClusterIP
-  port: 8080
-
-# Ingress Configuration (disabled for Kind)
-ingress:
-  enabled: false
-  ipAddress: 127.0.0.1
-
-# Resource Configuration (reduced for Kind)
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 250m
-    memory: 256Mi
-
-# Vault Configuration (Inherited from base with dynamic aliases)
-vault:
-  enabled: true
-
-# Monitoring Configuration
-monitoring:
-  enabled: true
-  prometheus:
-    scrape: true
-    port: "8080"
-    path: "/actuator/prometheus"
+  LOG_LEVEL: "INFO"

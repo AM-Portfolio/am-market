@@ -1,12 +1,12 @@
-environment: prod
-replicaCount: 2
+environment: dev
+replicaCount: 1
 
 vault:
   secretPaths:
     postgres: 
-      path: "secret/data/prod/apps/database"
+      path: "secret/data/dev/apps/database"
       template: |
-        {{- with secret "secret/data/prod/apps/database" -}}
+        {{- with secret "secret/data/dev/apps/database" -}}
         export POSTGRES_USERNAME="postgres"
         export POSTGRES_PASSWORD="{{ .Data.data.POSTGRES_PASSWORD }}"
         export POSTGRES_PORT="{{ .Data.data.POSTGRES_PORT }}"
@@ -15,9 +15,9 @@ vault:
         export POSTGRES_URL="jdbc:postgresql://{{ .Data.data.POSTGRES_HOST }}:{{ .Data.data.POSTGRES_PORT }}/portfolio"
         {{- end }}
     mongodb: 
-      path: "secret/data/prod/apps/database"
+      path: "secret/data/dev/apps/database"
       template: |
-        {{- with secret "secret/data/prod/apps/database" -}}
+        {{- with secret "secret/data/dev/apps/database" -}}
         export MONGODB_USERNAME_INTERNAL="admin"
         export MONGODB_PASSWORD_INTERNAL="{{ .Data.data.MONGODB_PASSWORD }}"
         export MONGODB_DATABASE_NAME="market_data"
@@ -25,44 +25,44 @@ vault:
         export MONGODB_URL="mongodb://admin:{{ .Data.data.MONGODB_PASSWORD }}@{{ .Data.data.MONGODB_HOST }}:{{ .Data.data.MONGODB_PORT }}/market_data?authSource=admin"
         {{- end }}
     redis: 
-      path: "secret/data/prod/apps/database"
+      path: "secret/data/dev/apps/database"
       template: |
-        {{- with secret "secret/data/prod/apps/database" -}}
+        {{- with secret "secret/data/dev/apps/database" -}}
         export REDIS_PASSWORD_INTERNAL="{{ .Data.data.REDIS_PASSWORD }}"
         export REDIS_HOSTNAME="{{ .Data.data.REDIS_HOST }}"
         export REDIS_PORT="{{ .Data.data.REDIS_PORT }}"
         {{- end }}
     influxdb: 
-      path: "secret/data/prod/apps/database"
+      path: "secret/data/dev/apps/database"
       template: |
-        {{- with secret "secret/data/prod/apps/database" -}}
+        {{- with secret "secret/data/dev/apps/database" -}}
         export INFLUXDB_URL_INTERNAL="http://{{ .Data.data.INFLUX_HOST }}:{{ .Data.data.INFLUX_PORT }}"
         export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.INFLUXDB_TOKEN }}"
         export INFLUXDB_ORG_INTERNAL="{{ .Data.data.INFLUXDB_ORG }}"
         export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.INFLUXDB_BUCKET }}"
         {{- end }}
     jwt:
-      path: "secret/data/prod/apps/security"
+      path: "secret/data/dev/apps/security"
       template: |
-        {{- with secret "secret/data/prod/apps/security" -}}
+        {{- with secret "secret/data/dev/apps/security" -}}
         export JWT_SECRET="{{ .Data.data.JWT_SECRET_KEY }}"
         {{- end }}
     kafka: 
-      path: "secret/data/prod/apps/database"
+      path: "secret/data/dev/apps/database"
       template: |
-        {{- with secret "secret/data/prod/apps/database" -}}
+        {{- with secret "secret/data/dev/apps/database" -}}
         export KAFKA_BOOTSTRAP_SERVERS="{{ .Data.data.KAFKA_BOOTSTRAP_SERVERS }}"
         export KAFKA_USERNAME="{{ .Data.data.KAFKA_USERNAME }}"
         export KAFKA_PASSWORD="{{ .Data.data.KAFKA_PASSWORD }}"
         {{- end }}
     upstox: 
-      path: "secret/data/prod/apps/api"
+      path: "secret/data/dev/apps/api"
       template: |
-        {{- with secret "secret/data/prod/apps/api" -}}
+        {{- with secret "secret/data/dev/apps/api" -}}
         export UPSTOX_API_KEY="{{ .Data.data.UPSTOX_API_KEY }}"
         export UPSTOX_SECRET_KEY="{{ .Data.data.UPSTOX_SECRET_KEY }}"
         {{- end }}
 
 env:
-  SPRING_PROFILES_ACTIVE: "prod"
-  LOG_LEVEL: "INFO"
+  SPRING_PROFILES_ACTIVE: "dev"
+  LOG_LEVEL: "DEBUG"
