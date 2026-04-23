@@ -4,7 +4,7 @@ env:
 environment: preprod
 
 probes:
-  port: 8092
+  port: 8080
   liveness:
     path: /actuator/health/liveness
   readiness:

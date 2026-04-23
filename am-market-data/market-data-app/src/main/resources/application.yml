@@ -141,7 +141,7 @@ upstox:
     api-key: ${UPSTOX_API_KEY}
     secret-key: ${UPSTOX_SECRET_KEY}
     access-token: ${UPSTOX_ACCESS_TOKEN}
-    redirect-uri: http://localhost:8092/v1/market-data/auth/session
+    redirect-uri: http://localhost:8080/v1/market-data/auth/session
     authorization-url: https://api-v2.upstox.com/login/authorization/dialog
     token-url: https://api-v2.upstox.com/login/authorization/token
     token-refresh-interval: 3600000
@@ -153,7 +153,7 @@ scraper:
 
 # Server Configuration
 server:
-  port: ${SERVER_PORT:8092}
+  port: ${SERVER_PORT:8080}
 
 scheduler:
   cookie:
