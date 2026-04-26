@@ -2,7 +2,6 @@
 """
 Cleanup script to remove duplicate/old directories from AM Parser
 """
-
 import shutil
 from pathlib import Path
 

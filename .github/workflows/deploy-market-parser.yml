@@ -27,11 +27,11 @@ on:
 jobs:
   deploy:
     name: Deploy Market Parser to ${{ github.event.inputs.environment }}
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-deploy.yml@develop
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-deploy.yml@main
     with:
-      service_name: 'am-parser'
-      working_directory: 'am-parser'
-      language: 'python'
+      service_name: "am-parser"
+      working_directory: "am-parser"
+      language: "python"
       environment: ${{ github.event.inputs.environment }}
       image_tag: ${{ github.event.inputs.image_tag == 'custom' && github.event.inputs.custom_tag || github.event.inputs.image_tag }}
       namespace: ${{ github.event.inputs.environment == 'prod' && 'am-apps-prod' || 'am-apps-preprod' }}

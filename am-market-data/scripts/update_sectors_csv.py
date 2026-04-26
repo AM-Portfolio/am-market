@@ -3,6 +3,7 @@ import csv
 import os
 from pymongo import MongoClient, UpdateOne
 
+
 # Configuration
 MONGO_URI = 'mongodb://admin:password123@100.72.208.15:27017/market_data?authSource=admin'
 DB_NAME = 'market_data'
