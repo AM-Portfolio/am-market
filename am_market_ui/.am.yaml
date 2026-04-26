@@ -1,3 +1,0 @@
-runtime: flutter
-port: 9002
-dockerfile: "live/Dockerfile"
