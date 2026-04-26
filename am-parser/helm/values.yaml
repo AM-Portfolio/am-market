@@ -35,8 +35,8 @@ vault:
   role: "am-backend-role"
   secretPaths:
     mongodb: 
-      path: "secret/data/preprod/infra/mongodb"
+      path: "apps/data/preprod/infra/mongodb"
     together:
-      path: "secret/data/preprod/api/together"
+      path: "apps/data/preprod/infra/shared-api"
 
 environment: preprod

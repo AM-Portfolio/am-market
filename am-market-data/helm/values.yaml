@@ -40,21 +40,21 @@ vault:
   role: "am-backend-role"
   secretPaths:
     postgres:
-      path: "secret/data/preprod/infra/postgres"
+      path: "apps/data/preprod/infra/postgres"
     mongodb: 
-      path: "secret/data/preprod/infra/mongodb"
+      path: "apps/data/preprod/infra/mongodb"
     redis: 
-      path: "secret/data/preprod/infra/redis"
+      path: "apps/data/preprod/infra/redis"
     influxdb: 
-      path: "secret/data/preprod/infra/influxdb"
+      path: "apps/data/preprod/infra/influxdb"
     jwt:
-      path: "secret/data/preprod/apps/auth/jwt"
+      path: "apps/data/preprod/services/am-market-data"
     kafka: 
-      path: "secret/data/preprod/infra/kafka"
+      path: "apps/data/preprod/infra/kafka"
     zerodha:
-      path: "secret/data/preprod/api/zerodha"
+      path: "apps/data/preprod/services/am-market-data"
     upstox: 
-      path: "secret/data/preprod/api/upstox"
+      path: "apps/data/preprod/services/am-market-data"
 
 # Application specific configuration
 config:

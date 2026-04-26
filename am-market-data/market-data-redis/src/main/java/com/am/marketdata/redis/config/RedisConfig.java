@@ -39,6 +39,9 @@ public class RedisConfig {
     @Value("${spring.data.redis.password}")
     private String redisPassword;
 
+    @Value("${spring.data.redis.port:6379}")
+    private int redisPort;
+
     @Value("${market.data.cache.ttl.seconds:300}")
     private long cacheTimeToLiveSeconds;
 
@@ -49,12 +52,12 @@ public class RedisConfig {
     public RedisConnectionFactory redisConnectionFactory() {
         RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
 
-        log.info("redisConnectionFactory", "Redis connection details - Host: " + redisHost + ", Port: 6379");
+        log.info("redisConnectionFactory", "Redis connection details - Host: " + redisHost + ", Port: " + redisPort);
         log.info("redisConnectionFactory", "Redis password is "
                 + (redisPassword != null && !redisPassword.isEmpty() ? "provided" : "not provided"));
 
         redisConfig.setHostName(redisHost);
-        // redisConfig.setPort(6379);
+        redisConfig.setPort(redisPort);
 
         if (redisPassword != null && !redisPassword.isEmpty()) {
             log.info("redisConnectionFactory", "Setting Redis password for authentication");

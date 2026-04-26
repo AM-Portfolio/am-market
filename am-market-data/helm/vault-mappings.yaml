@@ -3,11 +3,15 @@ vault:
     mongodb:
       mappings:
         MONGODB_URL: "url"
+        SPRING_DATA_MONGODB_URI: "url"
     redis:
       mappings:
         REDIS_HOSTNAME: "host"
         REDIS_PASSWORD_INTERNAL: "password"
         REDIS_PORT: "port"
+        SPRING_DATA_REDIS_HOST: "host"
+        SPRING_DATA_REDIS_PASSWORD: "password"
+        SPRING_DATA_REDIS_PORT: "port"
     influxdb:
       template: |
         {{- with secret "apps/data/preprod/infra/influxdb" -}}
@@ -15,22 +19,30 @@ vault:
         export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.token }}"
         export INFLUXDB_ORG_INTERNAL="{{ .Data.data.org }}"
         export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.bucket }}"
+        export SPRING_INFLUX_URL="http://{{ .Data.data.host }}:{{ .Data.data.port }}"
+        export SPRING_INFLUX_TOKEN="{{ .Data.data.token }}"
+        export SPRING_INFLUX_ORG="{{ .Data.data.org }}"
+        export SPRING_INFLUX_BUCKET="{{ .Data.data.bucket }}"
         {{- end }}
     jwt:
       mappings:
         JWT_SECRET: "JWT_SECRET_KEY"
+        SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "JWT_SECRET_KEY"
     kafka:
       mappings:
         KAFKA_BOOTSTRAP_SERVERS: "bootstrap_servers"
-        KAFKA_JAAS_CONFIG: "__jaas__"
         KAFKA_USERNAME: "username"
         KAFKA_PASSWORD: "password"
+        SPRING_KAFKA_BOOTSTRAP_SERVERS: "bootstrap_servers"
+        KAFKA_JAAS_CONFIG: "__jaas__"
+        SPRING_KAFKA_PROPERTIES_SASL_JAAS_CONFIG: "__jaas__"
     upstox:
       mappings:
-        UPSTOX_API_KEY: "API_KEY"
-        UPSTOX_SECRET_KEY: "SECRET_KEY"
-        UPSTOX_ACCESS_TOKEN: "ACCESS_TOKEN"
+        UPSTOX_API_KEY: "UPSTOX_API_KEY"
+        UPSTOX_SECRET_KEY: "UPSTOX_SECRET_KEY"
     postgres:
       mappings:
         POSTGRES_PASSWORD: "password"
         POSTGRES_USERNAME: "username"
+        SPRING_DATASOURCE_PASSWORD: "password"
+        SPRING_DATASOURCE_USERNAME: "username"
