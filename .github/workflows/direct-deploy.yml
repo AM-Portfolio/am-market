@@ -1,0 +1,72 @@
+name: Direct Deploy (Existing Container)
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Select the service to deploy'
+        required: true
+        type: choice
+        options:
+          - am-market-data
+          - am-parser
+          - market-analytics
+          - market-ui
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - preprod
+          - prod
+      image_tag:
+        description: 'Docker Image Tag (e.g., latest or a specific run-id)'
+        required: true
+        default: 'latest'
+        type: string
+
+jobs:
+  setup:
+    name: Prepare Parameters
+    runs-on: ubuntu-latest
+    outputs:
+      working_directory: ${{ steps.vars.outputs.working_directory }}
+      language: ${{ steps.vars.outputs.language }}
+      namespace: ${{ steps.vars.outputs.namespace }}
+    steps:
+      - id: vars
+        run: |
+          # Service Mappings
+          if [ "${{ github.event.inputs.service }}" == "am-market-data" ]; then
+             echo "working_directory=am-market-data" >> $GITHUB_OUTPUT
+             echo "language=java" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.service }}" == "am-parser" ]; then
+             echo "working_directory=am-parser" >> $GITHUB_OUTPUT
+             echo "language=python" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.service }}" == "market-analytics" ]; then
+             echo "working_directory=market-analytics" >> $GITHUB_OUTPUT
+             echo "language=python" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.service }}" == "market-ui" ]; then
+             echo "working_directory=market-ui" >> $GITHUB_OUTPUT
+             echo "language=flutter" >> $GITHUB_OUTPUT
+          fi
+          
+          # Namespace Mappings
+          if [ "${{ github.event.inputs.environment }}" == "prod" ]; then
+             echo "namespace=am-apps-prod" >> $GITHUB_OUTPUT
+          else
+             echo "namespace=am-apps-preprod" >> $GITHUB_OUTPUT
+          fi
+
+  deploy:
+    name: Execute Deploy
+    needs: setup
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-deploy.yml@main
+    with:
+      service_name: ${{ github.event.inputs.service }}
+      working_directory: ${{ needs.setup.outputs.working_directory }}
+      language: ${{ needs.setup.outputs.language }}
+      environment: ${{ github.event.inputs.environment }}
+      image_tag: ${{ github.event.inputs.image_tag }}
+      namespace: ${{ needs.setup.outputs.namespace }}
+    secrets: inherit

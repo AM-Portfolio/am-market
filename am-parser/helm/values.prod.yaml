@@ -1,6 +1,6 @@
 environment: prod
 
-replicaCount: 3
+replicaCount: 1
 
 resources:
   limits:
@@ -9,3 +9,9 @@ resources:
   requests:
     cpu: 500m
     memory: 512Mi
+
+# Vault Configuration (Prod Override)
+vault:
+  secretPaths:
+    mongodb: "secret/data/prod/infra/mongodb"
+    together: "secret/data/prod/api/together"

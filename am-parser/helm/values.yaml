@@ -2,14 +2,42 @@ replicaCount: 1
 port: 8000
 language: python
 
+security:
+  automountServiceAccountToken: true
+
+global:
+  vault:
+    serviceAccountName: "am-backend-sa"
+
 image:
   repository: am-parser
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
-service:
-  type: ClusterIP
-  port: 8000
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
 
-resources: {}
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
 
-environment: default
+# Vault configuration
+vault:
+  enabled: true
+  role: "am-backend-role"
+  secretPaths:
+    mongodb: 
+      path: "secret/data/preprod/infra/mongodb"
+      template: |
+        export MONGO_URI="mongodb://{{ .Data.data.MONGO_USER }}:{{ .Data.data.MONGO_PASSWORD }}@{{ .Data.data.MONGO_HOST }}:{{ .Data.data.MONGO_PORT }}/{{ .Data.data.MONGO_DB }}?authSource=admin"
+    together: "secret/data/preprod/api/together"
+
+environment: preprod

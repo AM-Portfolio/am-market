@@ -1,6 +1,16 @@
+env:
+  ENVIRONMENT: "preprod"
+
 environment: preprod
 
-replicaCount: 2
+probes:
+  port: 8000
+  liveness:
+    path: /health
+  readiness:
+    path: /health
+
+replicaCount: 1
 
 resources:
   limits:
@@ -13,6 +23,3 @@ resources:
 # Vault Configuration
 vault:
   enabled: true
-  role: "am-parser-role"
-  secretPaths:
-    mongodb: "kv/preprod/database/mongo"

@@ -5,19 +5,19 @@
 # POSTGRES_DATABASE: portfolio
 INFRA_HOST: ${INFRA_HOST:localhost}
 #mongoDB Configuration
-MONGODB_DATABASE: ${MONGODB_DATABASE:market_data}
-MONGODB_USERNAME: ${MONGODB_USERNAME:admin}
-MONGODB_PASSWORD: ${MONGODB_PASSWORD:password123}
+MONGODB_DATABASE_NAME: ${MONGODB_DATABASE:market_data}
+MONGODB_USERNAME_INTERNAL: ${MONGODB_USERNAME:admin}
+MONGODB_PASSWORD_INTERNAL: ${MONGODB_PASSWORD:password123}
 
 # InfluxDB Configuration
-INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:my-super-secret-auth-token}
-INFLUXDB_ORG: ${INFLUXDB_ORG:am-portfolio}
-INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:market-data}
-INFLUXDB_URL: http://${INFRA_HOST}:8086
+INFLUXDB_TOKEN_INTERNAL: ${INFLUXDB_TOKEN:my-super-secret-auth-token}
+INFLUXDB_ORG_INTERNAL: ${INFLUXDB_ORG:am-portfolio}
+INFLUXDB_BUCKET_INTERNAL: ${INFLUXDB_BUCKET:market-data}
+INFLUXDB_URL_INTERNAL: http://${INFRA_HOST}:8086
 
 # Redis Configuration
 REDIS_HOSTNAME: ${INFRA_HOST}
-REDIS_PASSWORD: ${REDIS_PASSWORD:password123}
+REDIS_PASSWORD_INTERNAL: ${REDIS_PASSWORD:password123}
 REDIS_PORT: 6379
 
 # Grafana Configuration
@@ -65,13 +65,13 @@ spring:
   data:
     redis:
       host: ${REDIS_HOSTNAME}
-      password: ${REDIS_PASSWORD}
+      password: ${REDIS_PASSWORD_INTERNAL}
       port: ${REDIS_PORT:6379}
     mongodb:
-      uri: ${MONGODB_URL:mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@${INFRA_HOST}:27017/market_data?authSource=admin}
-      database: ${MONGODB_DATABASE}
-      username: ${MONGODB_USERNAME}
-      password: ${MONGODB_PASSWORD}
+      uri: ${MONGODB_URL:mongodb://${MONGODB_USERNAME_INTERNAL}:${MONGODB_PASSWORD_INTERNAL}@${INFRA_HOST}:27017/market_data?authSource=admin}
+      database: ${MONGODB_DATABASE_NAME}
+      username: ${MONGODB_USERNAME_INTERNAL}
+      password: ${MONGODB_PASSWORD_INTERNAL}
       authentication-database: admin
 
   # Multipart file upload configuration (for bulk security updates)
@@ -84,10 +84,10 @@ spring:
 
   # InfluxDB Configuration
   influx:
-    url: ${INFLUXDB_URL}
-    token: ${INFLUXDB_TOKEN}
-    org: ${INFLUXDB_ORG}
-    bucket: ${INFLUXDB_BUCKET}
+    url: ${INFLUXDB_URL_INTERNAL}
+    token: ${INFLUXDB_TOKEN_INTERNAL}
+    org: ${INFLUXDB_ORG_INTERNAL}
+    bucket: ${INFLUXDB_BUCKET_INTERNAL}
 
   # Management and Metrics Configuration
 
@@ -141,7 +141,7 @@ upstox:
     api-key: ${UPSTOX_API_KEY}
     secret-key: ${UPSTOX_SECRET_KEY}
     access-token: ${UPSTOX_ACCESS_TOKEN}
-    redirect-uri: http://localhost:8092/v1/market-data/auth/session
+    redirect-uri: http://localhost:8080/v1/market-data/auth/session
     authorization-url: https://api-v2.upstox.com/login/authorization/dialog
     token-url: https://api-v2.upstox.com/login/authorization/token
     token-refresh-interval: 3600000
@@ -153,7 +153,7 @@ scraper:
 
 # Server Configuration
 server:
-  port: ${SERVER_PORT:8092}
+  port: ${SERVER_PORT:8080}
 
 scheduler:
   cookie:

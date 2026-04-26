@@ -8,6 +8,7 @@ import json
 import re
 from typing import Optional, Dict, Any
 from pathlib import Path
+import os
 import sys
 
 # Add parent directory to path to find external modules
@@ -17,7 +18,7 @@ try:
     from together import Together
 except ImportError:
     Together = None
-    print("⚠️  Together AI not installed. Run: pip install together")
+    print("WARNING: Together AI not installed. Run: pip install together")
 
 
 class TogetherLLMService:
@@ -33,8 +34,11 @@ class TogetherLLMService:
         if not Together:
             raise ImportError("Together AI package not installed. Run: pip install together")
             
-        self.api_key = api_key or "bff39f38ee07df9a08ff8d2e7279b9d7223ab3f283a30bc39590d36f77dbd2fd"
-        self.client = Together(api_key=self.api_key)
+        self.api_key = api_key or os.getenv("TOGETHER_API_KEY")
+        if not self.api_key:
+             print("WARNING: TOGETHER_API_KEY not found in environment variables.")
+             
+        self.client = Together(api_key=self.api_key) if Together else None
         
         # Available models to try
         self.models = [
@@ -58,7 +62,7 @@ class TogetherLLMService:
             Clean text representation of the sheet or None if error
         """
         try:
-            print(f"📖 Reading sheet '{sheet_name}' from {file_path}")
+            print(f"INFO: Reading sheet '{sheet_name}' from {file_path}")
             
             # Read Excel with header detection
             df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl')
@@ -67,7 +71,7 @@ class TogetherLLMService:
             df.dropna(how='all', axis=1, inplace=True)
             df.dropna(how='all', inplace=True)
             
-            print(f"📊 Sheet dimensions: {df.shape[0]} rows x {df.shape[1]} columns")
+            print(f"INFO: Sheet dimensions: {df.shape[0]} rows x {df.shape[1]} columns")
             
             # Convert to clean markdown-style table if available, otherwise string
             if hasattr(df, 'to_markdown'):
@@ -76,7 +80,7 @@ class TogetherLLMService:
                 return str(df)
                 
         except Exception as e:
-            print(f"❌ Error reading sheet '{sheet_name}': {e}")
+            print(f"ERROR: Error reading sheet '{sheet_name}': {e}")
             return None
     
     def extract_json_from_text(self, text: str) -> Optional[str]:
@@ -165,8 +169,8 @@ Here is the equity portfolio from sheet {sheet_name}:
 Return the JSON object only.
 """
 
-        print(f"📝 Prompt length: {len(prompt)} characters")
-        print(f"🤖 Using model: {self.current_model}")
+        print(f"INFO: Prompt length: {len(prompt)} characters")
+        print(f"INFO: Using model: {self.current_model}")
         
         try:
             response = self.client.chat.completions.create(
@@ -187,21 +191,21 @@ Return the JSON object only.
             if json_str:
                 try:
                     parsed_json = json.loads(json_str)
-                    print("✅ Successfully extracted and parsed JSON")
+                    print("SUCCESS: Successfully extracted and parsed JSON")
                     return parsed_json
                 except json.JSONDecodeError as e:
-                    print(f"❌ JSON parsing failed: {e}")
-                    print("📝 Saving raw output for debugging...")
+                    print(f"ERROR: JSON parsing failed: {e}")
+                    print("INFO: Saving raw output for debugging...")
                     self._save_debug_output(raw_output, sheet_name)
                     raise
             else:
-                print("❌ No valid JSON found in LLM response")
-                print("📝 Saving raw output for debugging...")
+                print("ERROR: No valid JSON found in LLM response")
+                print("INFO: Saving raw output for debugging...")
                 self._save_debug_output(raw_output, sheet_name)
                 raise ValueError("No valid JSON found in LLM response")
                 
         except Exception as e:
-            print(f"❌ API call failed: {str(e)}")
+            print(f"ERROR: API call failed: {str(e)}")
             raise
     
     def _save_debug_output(self, raw_output: str, sheet_name: str):
@@ -209,7 +213,7 @@ Return the JSON object only.
         debug_file = f"debug_llm_output_{sheet_name}.txt"
         with open(debug_file, 'w', encoding='utf-8') as f:
             f.write(raw_output)
-        print(f"🐛 Debug output saved to {debug_file}")
+        print(f"INFO: Debug output saved to {debug_file}")
     
     def extract_portfolio_from_excel(self, excel_file: str, sheet_name: str, output_file: str = None) -> Dict[str, Any]:
         """
@@ -223,7 +227,7 @@ Return the JSON object only.
         Returns:
             Extracted portfolio data as dictionary
         """
-        print(f"🚀 Starting extraction from {excel_file}, sheet '{sheet_name}'")
+        print(f"STEP: Starting extraction from {excel_file}, sheet '{sheet_name}'")
         
         # Step 1: Read Excel sheet
         table_text = self.read_sheet_as_text(excel_file, sheet_name)
@@ -231,20 +235,20 @@ Return the JSON object only.
             raise ValueError(f"Failed to read sheet '{sheet_name}' from {excel_file}")
         
         # Step 2: Extract JSON via LLM
-        print("🧠 Sending to LLM for JSON extraction...")
+        print("INFO: Sending to LLM for JSON extraction...")
         portfolio_data = self.extract_json_from_table(table_text, sheet_name)
         
         # Step 3: Validate and save
         if portfolio_data:
-            print(f"✅ Successfully extracted portfolio: {portfolio_data.get('mutual_fund_name', 'Unknown')}")
-            print(f"📊 Total holdings: {portfolio_data.get('total_holdings', 0)}")
+            print(f"SUCCESS: Successfully extracted portfolio: {portfolio_data.get('mutual_fund_name', 'Unknown')}")
+            print(f"INFO: Total holdings: {portfolio_data.get('total_holdings', 0)}")
             
             # Save to file if specified
             if output_file:
                 output_path = Path(output_file)
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(portfolio_data, f, indent=2, ensure_ascii=False)
-                print(f"💾 Saved to {output_path}")
+                print(f"INFO: Saved to {output_path}")
             
             return portfolio_data
         else:
@@ -264,7 +268,7 @@ Return the JSON object only.
             current_idx = self.models.index(self.current_model)
             self.current_model = self.models[(current_idx + 1) % len(self.models)]
         
-        print(f"🔄 Switched to model: {self.current_model}")
+        print(f"INFO: Switched to model: {self.current_model}")
 
 
 def main():
@@ -287,12 +291,12 @@ def main():
         )
         
         # Pretty print results
-        print("\n🎉 Extraction complete!")
+        print("\nSUCCESS: Extraction complete!")
         print("=" * 50)
         print(json.dumps(portfolio_data, indent=2))
         
     except Exception as e:
-        print(f"❌ Extraction failed: {str(e)}")
+        print(f"ERROR: Extraction failed: {str(e)}")
 
 
 if __name__ == "__main__":

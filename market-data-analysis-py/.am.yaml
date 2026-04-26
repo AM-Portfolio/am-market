@@ -1,3 +1,4 @@
 runtime: python
+entrypoint: "app.main:app"
 port: 8010
 dockerfile: "Dockerfile"

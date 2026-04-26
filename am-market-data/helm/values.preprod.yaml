@@ -1,5 +1,14 @@
-# Pre-production Environment Configuration (Kind Cluster)
+env:
+  SPRING_PROFILES_ACTIVE: "preprod"
+  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=preprod"
 environment: preprod
+
+probes:
+  port: 8080
+  liveness:
+    path: /actuator/health/liveness
+  readiness:
+    path: /actuator/health/readiness
 
 # Application Configuration
 config:
@@ -29,29 +38,9 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-# PostgreSQL Configuration (deployed in am-np-west namespace)
-postgresql:
-  enabled: false
-  fullname: postgresql.am-np-west.svc.cluster.local
-  auth:
-    database: marketdata
-    username: postgres
-    password: postgres123
-  primary:
-    service:
-      port: 5432
-
-# Vault Configuration
+# Vault Configuration (Inherited from base with dynamic aliases)
 vault:
   enabled: true
-  secretPaths:
-    postgres: "kv/preprod/database/postgres"
-    mongodb: "kv/preprod/database/mongo"
-    redis: "kv/preprod/database/redis"
-    influxdb: "kv/preprod/database/influxdb"
-    kafka: "kv/preprod/kafka"
-    upstock: "kv/preprod/api/upstock"
-    zerodha: "kv/preprod/api/zerodha"
 
 # Monitoring Configuration
 monitoring:

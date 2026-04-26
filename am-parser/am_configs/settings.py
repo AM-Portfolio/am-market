@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     Default values are provided as fallbacks.
     """
     
+    # ==================== Environment Configuration ====================
+    environment: str = "local"
+    """Application environment: local, dev, preprod, prod."""
+
     # ==================== MongoDB Configuration ====================
     mongo_uri: str = "mongodb://admin:password123@localhost:27017"
     """MongoDB connection URI. Can include authentication credentials."""

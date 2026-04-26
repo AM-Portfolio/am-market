@@ -67,22 +67,22 @@ async def lifespan(app: FastAPI):
         # Start background job processor
         job_queue = await get_job_queue()
         background_processor_task = asyncio.create_task(job_queue.start_job_processor())
-        print("✅ Started background job processor")
+        print("INFO: Started background job processor")
         
-        print("✅ Connected to MongoDB")
-        print("✅ Initialized file upload services")
+        print("INFO: Connected to MongoDB")
+        print("INFO: Initialized file upload services")
         yield
     except Exception as e:
-        print(f"❌ Failed to initialize services: {e}")
+        print(f"ERROR: Failed to initialize services: {e}")
         raise
     finally:
         # Shutdown: Close services
         if background_processor_task:
             background_processor_task.cancel()
-            print("🔐 Background job processor stopped")
+            print("INFO: Background job processor stopped")
         if service_instance:
             await service_instance.close()
-            print("🔐 MongoDB connection closed")
+            print("INFO: MongoDB connection closed")
 
 
 # Create FastAPI app with lifecycle management
@@ -109,7 +109,7 @@ app.include_router(etf_router, prefix="/v1/etf")
 # Debug: Print all registered routes
 for route in app.routes:
     if hasattr(route, "methods"):
-        print(f"🛣️  Route: {route.methods} {route.path}")
+        print(f"INFO: Route: {route.methods} {route.path}")
 
 
 
@@ -520,7 +520,7 @@ async def upload_file(
         
         # 2. Save main file to database
         await file_upload_repo.create_file_upload(file_upload)
-        print(f"✅ Main file persisted: {file_upload.file_id}")
+        print(f"INFO: Main file persisted: {file_upload.file_id}")
         
         # 3. Get sheet information before processing
         sheet_infos = []
@@ -532,11 +532,11 @@ async def upload_file(
         
         # 4. Process Excel file (split into sheets and persist all)
         await file_processing_service.process_excel_file(file_upload.file_id)
-        print(f"✅ Excel processed and sheets split")
+        print(f"INFO: Excel processed and sheets split")
         
         # 5. Get all sheet files created
         sheet_files = await file_upload_repo.get_files_by_parent_id(file_upload.file_id)
-        print(f"✅ Found {len(sheet_files)} sheet files")
+        print(f"INFO: Found {len(sheet_files)} sheet files")
         
         # 6. Parse each sheet and save portfolios
         parsed_portfolios = []
@@ -561,7 +561,7 @@ async def upload_file(
                             "total_holdings": portfolio.total_holdings,
                             "portfolio_date": portfolio.portfolio_date
                         })
-                        print(f"✅ Parsed and saved: {sheet_file.original_filename}")
+                        print(f"INFO: Parsed and saved: {sheet_file.original_filename}")
                     else:
                         parsing_errors.append({
                             "sheet_name": sheet_file.original_filename,
@@ -578,7 +578,7 @@ async def upload_file(
                     "sheet_name": sheet_file.original_filename,
                     "error": str(e)
                 })
-                print(f"❌ Failed to parse {sheet_file.original_filename}: {e}")
+                print(f"ERROR: Failed to parse {sheet_file.original_filename}: {e}")
         
         # 7. Return comprehensive results
         return {
@@ -603,11 +603,11 @@ async def upload_file(
             "parsing_errors": parsing_errors,
             "parse_method": parse_method,
             "workflow_steps": [
-                "✅ File uploaded and saved to database",
-                "✅ Excel file split into individual sheet files", 
-                "✅ All sheet files saved to database",
-                f"✅ {len(parsed_portfolios)} portfolios parsed and saved",
-                f"⚠️ {len(parsing_errors)} parsing errors" if parsing_errors else "✅ All sheets parsed successfully"
+                "INFO: File uploaded and saved to database",
+                "INFO: Excel file split into individual sheet files", 
+                "INFO: All sheet files saved to database",
+                f"INFO: {len(parsed_portfolios)} portfolios parsed and saved",
+                f"WARNING: {len(parsing_errors)} parsing errors" if parsing_errors else "INFO: All sheets parsed successfully"
             ]
         }
         
@@ -628,15 +628,15 @@ async def upload_excel_complete(
     mutual_fund_service: MutualFundService = Depends(get_service)
 ):
     """
-    🚀 Complete Excel Upload Workflow - Does EVERYTHING automatically!
+    INFO: Complete Excel Upload Workflow - Does EVERYTHING automatically!
     
     This endpoint handles the complete workflow:
-    1. ✅ Upload Excel file
-    2. ✅ Persist main file to database  
-    3. ✅ Split Excel into individual sheet files
-    4. ✅ Persist all sheet files to database
-    5. ✅ Parse each sheet using manual or LLM parsing
-    6. ✅ Save all parsed portfolios to database
+    1. INFO: Upload Excel file
+    2. INFO: Persist main file to database  
+    3. INFO: Split Excel into individual sheet files
+    4. INFO: Persist all sheet files to database
+    5. INFO: Parse each sheet using manual or LLM parsing
+    6. INFO: Save all parsed portfolios to database
     
     - **file**: Excel file to upload (.xlsx, .xls)
     - **parse_method**: "together" (default) or "manual"
@@ -651,30 +651,30 @@ async def upload_excel_complete(
                 detail="Only Excel files (.xlsx, .xls) are supported"
             )
         
-        print(f"🚀 Starting complete Excel workflow for: {file.filename}")
-        print(f"� Using parse method: {parse_method}")
+        print(f"STEP: Starting complete Excel workflow for: {file.filename}")
+        print(f"INFO: Using parse method: {parse_method}")
         
         # Step 1: Upload and persist main file
         file_upload = await upload_service.save_uploaded_file(file)
         await upload_repo.create_file_upload(file_upload)
-        print(f"✅ Step 1: Main file uploaded and persisted ({file_upload.file_id})")
+        print(f"INFO: Step 1: Main file uploaded and persisted ({file_upload.file_id})")
         
         # Step 2: Get sheet information
         sheet_infos = []
         if file_upload.file_type.value == "excel":
             try:
                 sheet_infos = upload_service.get_excel_sheet_info(file_upload.file_path)
-                print(f"✅ Step 2: Found {len(sheet_infos)} sheets in Excel file")
+                print(f"INFO: Step 2: Found {len(sheet_infos)} sheets in Excel file")
             except Exception as e:
-                print(f"⚠️ Warning: Could not read sheet info: {e}")
+                print(f"WARNING: Warning: Could not read sheet info: {e}")
         
         # Step 3: Process Excel (split and persist sheets)
         await processing_service.process_excel_file(file_upload.file_id)
-        print(f"✅ Step 3: Excel split into individual sheet files")
+        print(f"INFO: Step 3: Excel split into individual sheet files")
         
         # Step 4: Get all created sheet files
         sheet_files = await upload_repo.get_files_by_parent_id(file_upload.file_id)
-        print(f"✅ Step 4: {len(sheet_files)} sheet files persisted to database")
+        print(f"INFO: Step 4: {len(sheet_files)} sheet files persisted to database")
         
         # Step 5: Parse each sheet and save portfolios
         parsed_portfolios = []
@@ -683,7 +683,7 @@ async def upload_excel_complete(
         for i, sheet_file in enumerate(sheet_files, 1):
             sheet_name = sheet_file.original_filename.replace('.xlsx', '')
             try:
-                print(f"🔄 Step 5.{i}: Parsing sheet '{sheet_name}' using {parse_method} method...")
+                print(f"INFO: Step 5.{i}: Parsing sheet '{sheet_name}' using {parse_method} method...")
                 
                 result = await processing_service.process_sheet_file(
                     sheet_file.file_id, 
@@ -702,33 +702,33 @@ async def upload_excel_complete(
                             "portfolio_date": portfolio.portfolio_date,
                             "parse_method": parse_method
                         })
-                        print(f"✅ Step 5.{i}: Successfully parsed and saved '{sheet_name}'")
+                        print(f"INFO: Step 5.{i}: Successfully parsed and saved '{sheet_name}'")
                     else:
                         parsing_errors.append({
                             "sheet_name": sheet_name,
                             "error": "Portfolio saved but could not retrieve"
                         })
-                        print(f"❌ Step 5.{i}: Failed to retrieve saved portfolio for '{sheet_name}'")
+                        print(f"ERROR: Step 5.{i}: Failed to retrieve saved portfolio for '{sheet_name}'")
                 else:
                     parsing_errors.append({
                         "sheet_name": sheet_name,
                         "error": "Failed to parse portfolio data"
                     })
-                    print(f"❌ Step 5.{i}: Failed to parse '{sheet_name}'")
+                    print(f"ERROR: Step 5.{i}: Failed to parse '{sheet_name}'")
                     
             except Exception as e:
                 parsing_errors.append({
                     "sheet_name": sheet_name,
                     "error": str(e)
                 })
-                print(f"❌ Step 5.{i}: Error parsing '{sheet_name}': {e}")
+                print(f"ERROR: Step 5.{i}: Error parsing '{sheet_name}': {e}")
         
         # Final results
         success_count = len(parsed_portfolios)
         error_count = len(parsing_errors)
         total_sheets = len(sheet_files)
         
-        print(f"🎉 Workflow complete! {success_count}/{total_sheets} sheets parsed successfully")
+        print(f"INFO: Workflow complete! {success_count}/{total_sheets} sheets parsed successfully")
         
         return {
             "success": True,
@@ -752,16 +752,16 @@ async def upload_excel_complete(
             "parsed_portfolios": parsed_portfolios,
             "parsing_errors": parsing_errors if parsing_errors else None,
             "workflow_steps": [
-                "✅ Excel file uploaded and saved to database",
-                "✅ Excel file split into individual sheet files", 
-                "✅ All sheet files saved to database",
-                f"✅ {success_count} portfolios successfully parsed and saved",
-                f"⚠️ {error_count} parsing errors" if error_count > 0 else "✅ All sheets parsed successfully"
+                "INFO: Excel file uploaded and saved to database",
+                "INFO: Excel file split into individual sheet files", 
+                "INFO: All sheet files saved to database",
+                f"INFO: {success_count} portfolios successfully parsed and saved",
+                f"WARNING: {error_count} parsing errors" if error_count > 0 else "INFO: All sheets parsed successfully"
             ]
         }
         
     except Exception as e:
-        print(f"❌ Complete workflow failed: {e}")
+        print(f"ERROR: Complete workflow failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Complete Excel workflow failed: {str(e)}"

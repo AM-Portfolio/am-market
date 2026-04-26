@@ -1,0 +1,31 @@
+name: Market Data Publish
+
+on:
+  push:
+    branches: ["main", "develop", "test/**"]
+    paths:
+      - 'am-market-data/**'
+      - 'am-common-investment-data/**'
+  pull_request:
+    branches: ["main", "develop", "test/**"]
+    paths:
+      - 'am-market-data/**'
+      - 'am-common-investment-data/**'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish Market Data
+    permissions:
+      contents: read
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
+    with:
+      language: 'java'
+      working_directory: 'am-market-data'
+      image_name: 'am-market-data'
+      build_context: '..'
+      preprod_namespace: 'am-apps-preprod'
+      prod_namespace: 'am-apps-prod'
+      deploy_prod: true
+    secrets: inherit

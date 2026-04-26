@@ -88,11 +88,11 @@ services:
         echo "=== Starting Market Data Service ==="
         java -jar app.jar
     ports:
-      - "8092:8080"
+      - "8080:8080"
     networks:
       - am-network
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8092/actuator/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/actuator/health" ]
       interval: 30s
       timeout: 3s
       retries: ${MARKET_DATA_MAX_RETRIES}

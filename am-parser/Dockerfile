@@ -23,6 +23,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 EXPOSE 8000
 
 # Health check
+# Force Trigger: 2026-04-11T14:31:00 (Credential Alignment)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8000/docs')" || exit 1
 

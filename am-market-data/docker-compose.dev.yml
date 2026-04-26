@@ -10,7 +10,7 @@ services:
     image: eclipse-temurin:17-jre-jammy
     container_name: am-market-data-dev
     ports:
-      - "8092:8092"
+      - "8080:8080"
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=am_kafka:9092
     volumes:

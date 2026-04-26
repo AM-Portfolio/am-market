@@ -1,9 +1,10 @@
-## Default values for market-data service
-## This is a YAML-formatted file.
-
 replicaCount: 1
-port: 8092
+port: 8080
 language: java
+
+global:
+  vault:
+    serviceAccountName: "am-backend-sa"
 
 image:
   repository: am-market-data
@@ -13,6 +14,9 @@ image:
 ingress:
   enabled: false
   className: "nginx"
+
+security:
+  automountServiceAccountToken: true
   annotations:
     kubernetes.io/ingress.class: nginx
   hosts:
@@ -24,63 +28,72 @@ ingress:
 
 resources:
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 1000m
+    memory: 1024Mi
   requests:
     cpu: 200m
-    memory: 256Mi
-
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 3
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
-
-# Environment configuration
-environment: "preprod"
-
-# PostgreSQL configuration
-postgresql:
-  enabled: false
-  fullname: "postgresql"
-  primary:
-    service:
-      port: 5432
-  auth:
-    database: "marketdata"
+    memory: 512Mi
 
 # Vault configuration
 vault:
   enabled: true
+  role: "am-backend-role"
   secretPaths:
-    postgres: "kv/preprod/database/postgres"
-    mongodb: "kv/preprod/database/mongo"
-    redis: "kv/preprod/database/redis"
-    influxdb: "kv/preprod/database/influxdb"
-    kafka: "kv/preprod/kafka"
-    upstock: "kv/preprod/api/upstock"
+    postgres: "secret/data/preprod/infra/postgres"
+    mongodb: 
+      path: "secret/data/preprod/infra/mongodb"
+      template: |
+        {{- with secret "secret/data/preprod/infra/mongodb" -}}
+        export MONGODB_USERNAME_INTERNAL="{{ .Data.data.MONGO_USER }}"
+        export MONGODB_PASSWORD_INTERNAL="{{ .Data.data.MONGO_PASSWORD }}"
+        export MONGODB_DATABASE_NAME="{{ .Data.data.MONGODB_DATABASE }}"
+        export INFRA_HOST="{{ .Data.data.MONGO_HOST }}"
+        {{- end }}
+    redis: 
+      path: "secret/data/preprod/infra/redis"
+      template: |
+        {{- with secret "secret/data/preprod/infra/redis" -}}
+        export REDIS_PASSWORD_INTERNAL="{{ .Data.data.REDIS_PASSWORD }}"
+        export REDIS_HOSTNAME="{{ .Data.data.REDIS_HOSTNAME }}"
+        {{- end }}
+    influxdb: 
+      path: "secret/data/preprod/infra/influxdb"
+      template: |
+        {{- with secret "secret/data/preprod/infra/influxdb" -}}
+        export INFLUXDB_URL_INTERNAL="{{ .Data.data.INFLUXDB_URL }}"
+        export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.INFLUXDB_TOKEN }}"
+        export INFLUXDB_ORG_INTERNAL="{{ .Data.data.INFLUXDB_ORG }}"
+        export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.INFLUXDB_BUCKET }}"
+        {{- end }}
+    jwt:
+      path: "secret/data/preprod/apps/auth/jwt"
+      template: |
+        {{- with secret "secret/data/preprod/apps/auth/jwt" -}}
+        export JWT_SECRET="{{ .Data.data.JWT_SECRET }}"
+        {{- end }}
+    kafka: 
+      path: "secret/data/preprod/infra/kafka"
+      template: |
+        {{- with secret "secret/data/preprod/infra/kafka" -}}
+        export KAFKA_BOOTSTRAP_SERVERS="{{ if index .Data.data "KAFKA_BOOTSTRAP_SERVERS" }}{{ index .Data.data "KAFKA_BOOTSTRAP_SERVERS" }}{{ else if index .Data.data "BOOTSTRAP_SERVERS" }}{{ index .Data.data "BOOTSTRAP_SERVERS" }}{{ else }}kafka.infra.svc.cluster.local:9092{{ end }}"
+        export KAFKA_USERNAME="{{ if index .Data.data "KAFKA_USERNAME" }}{{ index .Data.data "KAFKA_USERNAME" }}{{ else if index .Data.data "KAFKA_USER" }}{{ index .Data.data "KAFKA_USER" }}{{ else if index .Data.data "USER" }}{{ index .Data.data "USER" }}{{ else }}{{ end }}"
+        export KAFKA_PASSWORD="{{ if index .Data.data "KAFKA_PASSWORD" }}{{ index .Data.data "KAFKA_PASSWORD" }}{{ else if index .Data.data "PASSWORD" }}{{ index .Data.data "PASSWORD" }}{{ else }}{{ end }}"
+        export KAFKA_SECURITY_PROTOCOL="{{ if index .Data.data "SECURITY_PROTOCOL" }}{{ index .Data.data "SECURITY_PROTOCOL" }}{{ else }}SASL_PLAINTEXT{{ end }}"
+        export KAFKA_SASL_MECHANISM="{{ if index .Data.data "SASL_MECHANISM" }}{{ index .Data.data "SASL_MECHANISM" }}{{ else }}SCRAM-SHA-256{{ end }}"
+        {{- end }}
+    zerodha: "secret/data/preprod/api/zerodha"
+    upstox: 
+      path: "secret/data/preprod/api/upstox"
+      template: |
+        {{- with secret "secret/data/preprod/api/upstox" -}}
+        export UPSTOX_API_KEY="{{ .Data.data.API_KEY }}"
+        export UPSTOX_SECRET_KEY="{{ .Data.data.SECRET_KEY }}"
+        export UPSTOX_ACCESS_TOKEN="{{ .Data.data.ACCESS_TOKEN }}"
+        {{- end }}
 
 # Application specific configuration
 config:
   marketData:
-    maxRetries: 3
-    retryDelayMs: 1000
-    threadPoolSize: 5
-    threadQueueCapacity: 10
-    maxAgeMinutes: 15
-
-# Monitoring configuration (Prometheus auto-discovery)
-monitoring:
-  enabled: true
-  prometheus:
-    enabled: true
-    scrape: "true"
-    path: "/actuator/prometheus"
-    port: "8080"
+    maxRetries: 5
+    retryDelayMs: 2000
+  env: "preprod"

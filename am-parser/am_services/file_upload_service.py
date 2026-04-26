@@ -13,6 +13,7 @@ from fastapi import UploadFile
 import openpyxl
 
 from am_common.upload_models import FileUpload, FileType, ProcessingStatus, SheetInfo
+from am_configs.settings import settings
 
 
 class FileUploadService:
@@ -22,9 +23,13 @@ class FileUploadService:
         self.upload_dir = Path(upload_dir)
         self.sheets_dir = Path(sheets_dir)
         
-        # Create directories if they don't exist
-        self.upload_dir.mkdir(parents=True, exist_ok=True)
-        self.sheets_dir.mkdir(parents=True, exist_ok=True)
+        # Create directories ONLY in local environment to avoid permission errors in cluster
+        if settings.environment == "local":
+            print(f"INFO: Local environment detected, ensuring directories exist: {self.upload_dir}, {self.sheets_dir}")
+            self.upload_dir.mkdir(parents=True, exist_ok=True)
+            self.sheets_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            print(f"INFO: Non-local environment ({settings.environment}) detected, skipping directory creation.")
         
     def generate_unique_id(self) -> str:
         """Generate a unique ID for files"""
