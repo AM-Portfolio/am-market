@@ -1,0 +1,36 @@
+vault:
+  secretPaths:
+    mongodb:
+      mappings:
+        MONGODB_URL: "url"
+    redis:
+      mappings:
+        REDIS_HOSTNAME: "host"
+        REDIS_PASSWORD_INTERNAL: "password"
+        REDIS_PORT: "port"
+    influxdb:
+      template: |
+        {{- with secret "apps/data/preprod/infra/influxdb" -}}
+        export INFLUXDB_URL_INTERNAL="http://{{ .Data.data.host }}:{{ .Data.data.port }}"
+        export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.token }}"
+        export INFLUXDB_ORG_INTERNAL="{{ .Data.data.org }}"
+        export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.bucket }}"
+        {{- end }}
+    jwt:
+      mappings:
+        JWT_SECRET: "JWT_SECRET_KEY"
+    kafka:
+      mappings:
+        KAFKA_BOOTSTRAP_SERVERS: "bootstrap_servers"
+        KAFKA_JAAS_CONFIG: "__jaas__"
+        KAFKA_USERNAME: "username"
+        KAFKA_PASSWORD: "password"
+    upstox:
+      mappings:
+        UPSTOX_API_KEY: "API_KEY"
+        UPSTOX_SECRET_KEY: "SECRET_KEY"
+        UPSTOX_ACCESS_TOKEN: "ACCESS_TOKEN"
+    postgres:
+      mappings:
+        POSTGRES_PASSWORD: "password"
+        POSTGRES_USERNAME: "username"

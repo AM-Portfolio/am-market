@@ -1,5 +1,6 @@
 env:
   ENVIRONMENT: "preprod"
+  MONGO_DB: "mutual_funds"
 
 environment: preprod
 

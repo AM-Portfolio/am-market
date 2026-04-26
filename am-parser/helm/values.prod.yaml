@@ -13,5 +13,11 @@ resources:
 # Vault Configuration (Prod Override)
 vault:
   secretPaths:
-    mongodb: "secret/data/prod/infra/mongodb"
-    together: "secret/data/prod/api/together"
+    mongodb:
+      path: "secret/data/prod/infra/mongodb"
+    together:
+      path: "secret/data/prod/api/together"
+
+env:
+  ENVIRONMENT: "prod"
+  MONGO_DB: "mutual_funds"

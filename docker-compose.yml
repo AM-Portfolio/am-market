@@ -118,24 +118,6 @@ services:
       - am-network
       - am-infra_am-net
     restart: unless-stopped
-  # # --- Market Data Web (Flutter) ---
-  market-data-web:
-    container_name: market-data-web
-    build:
-      context: ../
-      dockerfile: am-market/am_market_ui/live/Dockerfile
-    ports:
-      - "9002:80"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.market-ui.rule=PathPrefix(`/market-ui`)"
-      - "traefik.http.routers.market-ui.entrypoints=web"
-      - "traefik.http.services.market-ui.loadbalancer.server.port=80"
-      - "traefik.http.middlewares.market-strip.stripprefix.prefixes=/market-ui"
-      - "traefik.http.routers.market-ui.middlewares=market-strip"
-    networks:
-      - am-network
-    restart: unless-stopped
 
 networks:
   am-network:

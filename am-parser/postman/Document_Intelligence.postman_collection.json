@@ -1,0 +1,86 @@
+{
+    "info": {
+        "_postman_id": "document-intelligence-collection",
+        "name": "AM Document Intelligence (Parser)",
+        "description": "API collection for am-parser/document processing. Supports Prod, Preprod, Dev, and Local environments.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Process Document",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "X-User-ID",
+                        "value": "{{user_id}}"
+                    },
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{jwt_token}}"
+                    }
+                ],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": []
+                        },
+                        {
+                            "key": "documentType",
+                            "value": "CONTRACT_NOTE",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{base_url}}/api/v1/documents/process",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "documents",
+                        "process"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Gmail - List Brokers",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/api/v1/brokers",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "brokers"
+                    ]
+                }
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8081",
+            "description": "Environment base URL: \nLocal: http://localhost:8081\nDev: https://dev.am.munish.org/parser\nPreprod: https://am.asrax.in/parser\nProd: https://am.munish.org/parser"
+        },
+        {
+            "key": "user_id",
+            "value": "test-user-id"
+        },
+        {
+            "key": "jwt_token",
+            "value": "paste-your-token-here"
+        }
+    ]
+}

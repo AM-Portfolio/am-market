@@ -1,0 +1,8 @@
+vault:
+  secretPaths:
+    mongodb:
+      mappings:
+        MONGO_URI: "url"
+    together:
+      mappings:
+        TOGETHER_API_KEY: "TOGETHER_API_KEY"
