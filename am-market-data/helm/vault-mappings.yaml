@@ -40,6 +40,8 @@ vault:
       mappings:
         UPSTOX_API_KEY: "UPSTOX_API_KEY"
         UPSTOX_SECRET_KEY: "UPSTOX_SECRET_KEY"
+        UPSTOX_REDIRECT_URI: "UPSTOX_REDIRECT_URI"
+        UPSTOX_ACCESS_TOKEN: "UPSTOX_ACCESS_TOKEN"
     postgres:
       mappings:
         POSTGRES_PASSWORD: "password"

@@ -73,7 +73,8 @@ public class SecurityConfig {
                                 "/actuator/health/ready",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
-                                "/v3/api-docs.yaml")
+                                "/v3/api-docs.yaml",
+                                "/v1/market-data/auth/**")
                         .permitAll()
                         .requestMatchers("/v1/**").authenticated()
                         .anyRequest().denyAll();

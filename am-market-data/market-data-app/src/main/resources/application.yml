@@ -46,10 +46,11 @@ MARKET_DATA_MAX_AGE_MINUTES: 15
 UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
 UPSTOX_SECRET_KEY: ${UPSTOX_SECRET_KEY}
 UPSTOX_CODE: ${UPSTOX_CODE}
+MARKET_DATA_KAFKA_ENABLED: ${MARKET_DATA_KAFKA_ENABLED:false}
 
 app:
   kafka:
-    enabled: true
+    enabled: ${MARKET_DATA_KAFKA_ENABLED}
 
 kafka:
   topics:
@@ -141,7 +142,7 @@ upstox:
     api-key: ${UPSTOX_API_KEY}
     secret-key: ${UPSTOX_SECRET_KEY}
     access-token: ${UPSTOX_ACCESS_TOKEN}
-    redirect-uri: http://localhost:8080/v1/market-data/auth/session
+    redirect-uri: ${UPSTOX_REDIRECT_URI:http://localhost:${server.port}/v1/market-data/auth/session}
     authorization-url: https://api-v2.upstox.com/login/authorization/dialog
     token-url: https://api-v2.upstox.com/login/authorization/token
     token-refresh-interval: 3600000

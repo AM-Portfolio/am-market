@@ -28,6 +28,14 @@
     "sdk:parser:java": "python3 scripts/test_publish.py --sdk sdk:parser:java",
     "sdk:parser:flutter": "python3 scripts/test_publish.py --sdk sdk:parser:flutter",
     "common:data:java": "python3 scripts/test_publish.py --sdk module:common:java",
-    "am-common-investment-data:publish": "python3 scripts/test_publish.py --sdk module:common:java"
+    "am-common-investment-data:publish": "python3 scripts/test_publish.py --sdk module:common:java",
+    "build:data:module": "node scripts/build-module.js data",
+    "build:data:kafka": "node scripts/build-module.js data kafka",
+    "build:data:api": "node scripts/build-module.js data api",
+    "build:data:all": "node scripts/build-module.js data ALL",
+    "build:common:module": "node scripts/build-module.js common",
+    "build:common:model": "node scripts/build-module.js common model",
+    "build:common:service": "node scripts/build-module.js common service",
+    "build:common:all": "node scripts/build-module.js common ALL"
   }
 }

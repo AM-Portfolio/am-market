@@ -41,6 +41,7 @@ import java.util.Map;
 @EnableKafka
 @RequiredArgsConstructor
 @Profile("!isolated")
+@ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true", matchIfMissing = true)
 public class KafkaConfig {
 
     private final KafkaProperties kafkaProperties;
