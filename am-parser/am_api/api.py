@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI):
 
 
 import time
-from am_common.logging.am_logging_client import AMLogger
+from am_common.logging.core import AMLogger
 
 # Create FastAPI app with lifecycle management
 app = FastAPI(

@@ -1,5 +1,6 @@
 import time
-from app.core.logging.am_logging_client import AMLogger
+from app.core.logging.core import AMLogger
+
 
 app = FastAPI(title="Market Data Analysis Service", version="1.0.0")
 

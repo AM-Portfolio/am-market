@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional, Callable
 # Generated Pattern: [{timestamp}] | [{service}] | [{trace_id}:{span_id}] | [{level}] | [{class}.{method}] | {message} | {context}
 
 class AMLogger:
-    def __init__(self, service_name: str, cls_url: str, persist_to_db: Optional[bool] = None):
+    def __init__(self, service_name: str, cls_url: str = "http://am-logging-svc", persist_to_db: Optional[bool] = None):
         self.service_name = service_name
         self.cls_url = cls_url
         if persist_to_db is None:
