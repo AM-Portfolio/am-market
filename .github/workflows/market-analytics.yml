@@ -2,11 +2,11 @@ name: Market Analytics Publish
 
 on:
   push:
-    branches: ["main", "develop", "test/**"]
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - 'market-data-analysis-py/**'
   pull_request:
-    branches: ["main", "develop", "test/**"]
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - 'market-data-analysis-py/**'
   workflow_dispatch:

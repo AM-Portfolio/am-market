@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/watchlist")
+@RequestMapping("/v1/watchlist")
 @RequiredArgsConstructor
 @CrossOrigin(originPatterns = "*")
 public class WatchlistController {

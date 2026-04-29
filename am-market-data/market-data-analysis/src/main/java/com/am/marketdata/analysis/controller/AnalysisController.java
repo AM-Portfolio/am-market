@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/analysis")
+@RequestMapping("/v1/analysis")
 @RequiredArgsConstructor
 @Tag(name = "Market Analysis", description = "Unified API for all market analysis including Seasonality, Technicals, Heatmaps, Performance, and Charts")
 @CrossOrigin(originPatterns = "*")
