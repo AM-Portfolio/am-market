@@ -2,12 +2,12 @@ name: Market Data Publish
 
 on:
   push:
-    branches: ["main", "develop", "test/**"]
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - 'am-market-data/**'
       - 'am-common-investment-data/**'
   pull_request:
-    branches: ["main", "develop", "test/**"]
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - 'am-market-data/**'
       - 'am-common-investment-data/**'

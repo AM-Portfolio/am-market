@@ -2,11 +2,11 @@ name: Market Parser Publish
 
 on:
   push:
-    branches: ["main", "develop", "test/**"]
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - "am-parser/**"
   pull_request:
-    branches: ["main", "develop", "test/**"]
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - "am-parser/**"
   workflow_dispatch:
