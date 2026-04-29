@@ -66,6 +66,35 @@
                     ]
                 }
             }
+        },
+        {
+            "name": "ETF Search",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/api/etf/v1/search?query=N&limit=50",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "etf",
+                        "v1",
+                        "search"
+                    ],
+                    "query": [
+                        {
+                            "key": "query",
+                            "value": "N"
+                        },
+                        {
+                            "key": "limit",
+                            "value": "50"
+                        }
+                    ]
+                }
+            }
         }
     ],
     "variable": [

@@ -85,6 +85,9 @@ async def lifespan(app: FastAPI):
             print("INFO: MongoDB connection closed")
 
 
+import time
+from am_common.logging.am_logging_client import AMLogger
+
 # Create FastAPI app with lifecycle management
 app = FastAPI(
     title="Mutual Fund Portfolio API",
@@ -92,6 +95,26 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+am_logger = AMLogger(service_name="am-parser")
+
+# Middleware for structured logging
+@app.middleware("http")
+async def log_requests(request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = (time.time() - start_time) * 1000 # to ms
+    
+    context = {
+        "method": request.method,
+        "path": request.url.path,
+        "status": response.status_code,
+        "latency_ms": round(duration, 2),
+        "client_ip": request.client.host if request.client else "unknown"
+    }
+    
+    am_logger.log("INFO", "API Request Processed", context)
+    return response
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
