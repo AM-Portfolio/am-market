@@ -192,8 +192,8 @@ public class UpstoxSdkService {
         com.am.marketdata.provider.upstox.model.OHLCResponse.OHLCData ohlcData = new com.am.marketdata.provider.upstox.model.OHLCResponse.OHLCData();
 
         // Map generic fields
-        ohlcData.setLast_price(sdkData.getLastPrice());
-        ohlcData.setInstrument_token(sdkData.getInstrumentToken());
+        ohlcData.setLastPrice(sdkData.getLastPrice());
+        ohlcData.setInstrumentToken(sdkData.getInstrumentToken());
 
         // Map Live OHLC values
         if (sdkData.getLiveOhlc() != null) {
@@ -209,7 +209,7 @@ public class UpstoxSdkService {
         if (sdkData.getPrevOhlc() != null) {
             log.debug("Found PrevOHLC from SDK for token {}: {}", sdkData.getInstrumentToken(),
                     sdkData.getPrevOhlc().getClose());
-            ohlcData.setPrevious_close(sdkData.getPrevOhlc().getClose());
+            ohlcData.setPreviousClose(sdkData.getPrevOhlc().getClose());
         } else {
             log.debug("PrevOHLC is NULL from SDK for token: {}", sdkData.getInstrumentToken());
         }

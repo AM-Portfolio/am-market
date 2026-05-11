@@ -73,8 +73,6 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         tradingSymbols.size(), timeFrame.getApiValue(), isIndexSymbol, forceRefresh));
 
         // Resolve symbols using InstrumentUtils
-        // isIndexSymbol=true means keep as-is (fetchIndexStocks=false)
-        // isIndexSymbol=false means expand indices (fetchIndexStocks=true)
         boolean fetchIndexStocks = !isIndexSymbol;
         Set<String> symbols = instrumentUtils.resolveSymbols(new ArrayList<>(tradingSymbols), fetchIndexStocks);
 
@@ -82,14 +80,37 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         Map<String, OHLCQuote> ohlcData = marketDataService.getOHLC(new ArrayList<>(symbols), timeFrame, forceRefresh,
                 null);
 
-        // Create response with cache status
+        // Create response in the flattened format requested by the user
         Map<String, Object> response = new HashMap<>();
-        response.put("quotes", ohlcData);
-        response.put("count", ohlcData.size());
+        response.put("provider", "UPSTOX");
         response.put("cached", !forceRefresh);
+        response.put("count", ohlcData.size());
+        
+        // Flatten OHLCQuote objects directly into the response map
+        for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
+            String symbol = entry.getKey();
+            OHLCQuote quote = entry.getValue();
+            
+            Map<String, Object> quoteMap = new HashMap<>();
+            quoteMap.put("symbol", symbol);
+            quoteMap.put("lastPrice", quote.getLastPrice());
+            quoteMap.put("time", quote.getTimestamp());
+            quoteMap.put("volume", quote.getVolume());
+            
+            if (quote.getOhlc() != null) {
+                quoteMap.put("open", quote.getOhlc().getOpen());
+                quoteMap.put("high", quote.getOhlc().getHigh());
+                quoteMap.put("low", quote.getOhlc().getLow());
+                quoteMap.put("close", quote.getOhlc().getClose());
+            }
+            
+            response.put(symbol, quoteMap);
+        }
+
+        // Add metadata at root level as seen in user's example
+        response.put("source", forceRefresh ? "provider" : "cache");
         response.put("timestamp", System.currentTimeMillis());
         response.put("timeFrame", timeFrame.getApiValue());
-        response.put("source", forceRefresh ? "provider" : "cache");
 
         return response;
     }
