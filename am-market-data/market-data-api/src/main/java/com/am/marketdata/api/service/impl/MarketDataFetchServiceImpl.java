@@ -47,11 +47,19 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         Map<String, OHLCQuote> ohlcData = marketDataService.getOHLC(
                 new ArrayList<>(tradingSymbols), TimeFrame.DAY, forceRefresh, null);
 
+        if (ohlcData == null) {
+            ohlcData = Collections.emptyMap();
+        }
+
         // Convert to expected format
         Map<String, Map<String, Object>> result = new HashMap<>();
         for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
-            Map<String, Object> quoteData = new HashMap<>();
             OHLCQuote quote = entry.getValue();
+            if (quote == null) {
+                continue;
+            }
+
+            Map<String, Object> quoteData = new HashMap<>();
             quoteData.put("lastPrice", quote.getLastPrice());
             if (quote.getOhlc() != null) {
                 quoteData.put("open", quote.getOhlc().getOpen());
@@ -80,17 +88,27 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         Map<String, OHLCQuote> ohlcData = marketDataService.getOHLC(new ArrayList<>(symbols), timeFrame, forceRefresh,
                 null);
 
+        if (ohlcData == null) {
+            ohlcData = Collections.emptyMap();
+        }
+
         // Create response in the flattened format requested by the user
         Map<String, Object> response = new HashMap<>();
         response.put("provider", "UPSTOX");
         response.put("cached", !forceRefresh);
-        response.put("count", ohlcData.size());
+        
+        int validQuotesCount = 0;
         
         // Flatten OHLCQuote objects directly into the response map
         for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
             String symbol = entry.getKey();
             OHLCQuote quote = entry.getValue();
             
+            if (quote == null) {
+                continue;
+            }
+
+            validQuotesCount++;
             Map<String, Object> quoteMap = new HashMap<>();
             quoteMap.put("symbol", symbol);
             quoteMap.put("lastPrice", quote.getLastPrice());
@@ -106,6 +124,8 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             
             response.put(symbol, quoteMap);
         }
+        
+        response.put("count", validQuotesCount);
 
         // Add metadata at root level as seen in user's example
         response.put("source", forceRefresh ? "provider" : "cache");

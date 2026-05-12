@@ -97,7 +97,7 @@ The API returns data in this format:
 
 ## Verification Results (Local)
 *   **Build**: Successfully built using `mvn clean install` after resolving internal library dependencies.
-*   **API Response**: Verified via `curl http://localhost:8080/api/v1/market-data/quotes?symbols=RAILTEL`.
+*   **API Response**: Verified via `curl http://localhost:8080/v1/market-data/quotes?symbols=RAILTEL`.
     *   The service correctly receives the request, identifies the provider (UPSTOX), and attempts data retrieval.
     *   Response format is now flat: `{"provider":"UPSTOX", "cached":..., "count":..., "RAILTEL": {...}}`.
 

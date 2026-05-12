@@ -39,7 +39,7 @@ import org.springframework.web.bind.annotation.*;
  * option chains, mutual fund details, and more
  */
 @RestController
-@RequestMapping("/api/v1/market-data")
+@RequestMapping("/v1/market-data")
 @Tag(name = "Market Data", description = "APIs for retrieving various types of market data including quotes, historical data, option chains, and more")
 public class MarketDataController {
 
