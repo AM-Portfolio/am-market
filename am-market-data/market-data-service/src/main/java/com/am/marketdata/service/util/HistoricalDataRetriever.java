@@ -128,14 +128,13 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             result.remove(key);
         }
 
-        // Remove all symbols found in VALID cache from remainingSymbols
         if (!result.isEmpty()) {
             remainingSymbols.removeAll(result.keySet());
-            log.info("[CACHE] Found valid historical data for {}/{} symbols in cache",
-                    result.size(), allSymbols.size());
+            log.info("[CACHE] Found valid historical data for {}/{} symbols interval={}",
+                    result.size(), allSymbols.size(), interval.getApiValue());
         }
 
-        log.info("[CACHE] {} symbols remaining after cache lookup", remainingSymbols.size());
+        log.info("[CACHE] {} symbols remaining after cache lookup interval={}", remainingSymbols.size(), interval.getApiValue());
 
         return result;
     }
@@ -177,8 +176,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             }
         }
 
-        log.info("[DATABASE] Found historical data for {} symbols in database", result.size());
-        log.info("[DATABASE] {} symbols remaining after database lookup", remainingSymbols.size());
+        log.info("[DATABASE] Found historical data for {} symbols in database interval={}", result.size(), interval.getApiValue());
+        log.info("[DATABASE] {} symbols remaining after database lookup interval={}", remainingSymbols.size(), interval.getApiValue());
 
         return result;
     }
@@ -223,9 +222,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             }
         }
 
-        log.info("[PROVIDER] Successfully fetched historical data for {}/{} symbols",
-                result.size(), symbols.size());
-
+        log.info("[PROVIDER] Successfully fetched historical data for {}/{} symbols interval={} provider={}",
+                result.size(), symbols.size(), interval.getApiValue(), provider.getProviderName());
         return result;
     }
 

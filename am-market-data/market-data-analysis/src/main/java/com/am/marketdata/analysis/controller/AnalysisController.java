@@ -3,7 +3,9 @@ package com.am.marketdata.analysis.controller;
 import com.am.marketdata.analysis.service.AnalysisService;
 import com.am.marketdata.analysis.service.MarketAnalyticsService;
 import com.am.marketdata.api.model.HistoricalDataResponseV1;
-import com.am.marketdata.common.log.AppLogger;
+import com.am.marketdata.common.observability.FlowLogger;
+import com.am.marketdata.common.observability.FlowSpan;
+import lombok.extern.slf4j.Slf4j;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.common.model.analysis.CalendarHeatmapResponse;
 import com.am.marketdata.common.model.analysis.SeasonalityResponse;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/v1/analysis")
 @RequiredArgsConstructor
@@ -25,7 +28,7 @@ import java.util.Map;
 @CrossOrigin(originPatterns = "*")
 public class AnalysisController {
 
-    private final AppLogger log = AppLogger.getLogger(AnalysisController.class);
+    private final FlowLogger flowLogger;
     private final AnalysisService analysisService;
     private final MarketAnalyticsService marketAnalyticsService;
 
@@ -36,8 +39,18 @@ public class AnalysisController {
             @RequestParam String symbol,
             @RequestParam(defaultValue = "DAY") String timeframe) {
 
-        TimeFrame tf = parseTimeFrame(timeframe);
-        return ResponseEntity.ok(analysisService.getSeasonalityAnalysis(symbol, tf));
+        try (FlowSpan span = flowLogger.start("analysis.seasonality", "symbol", symbol, "timeframe", timeframe)) {
+            try {
+                TimeFrame tf = parseTimeFrame(timeframe);
+                SeasonalityResponse response = analysisService.getSeasonalityAnalysis(symbol, tf);
+                flowLogger.complete(span);
+                return ResponseEntity.ok(response);
+            } catch (Exception e) {
+                log.error("Error in seasonality analysis for {}", symbol, e);
+                flowLogger.fail(span, e);
+                throw e;
+            }
+        }
     }
 
     @GetMapping("/technical")
@@ -45,8 +58,18 @@ public class AnalysisController {
             @RequestParam String symbol,
             @RequestParam(defaultValue = "DAY") String timeframe) {
 
-        TimeFrame tf = parseTimeFrame(timeframe);
-        return ResponseEntity.ok(analysisService.getTechnicalAnalysis(symbol, tf));
+        try (FlowSpan span = flowLogger.start("analysis.technical", "symbol", symbol, "timeframe", timeframe)) {
+            try {
+                TimeFrame tf = parseTimeFrame(timeframe);
+                TechnicalAnalysisResponse response = analysisService.getTechnicalAnalysis(symbol, tf);
+                flowLogger.complete(span);
+                return ResponseEntity.ok(response);
+            } catch (Exception e) {
+                log.error("Error in technical analysis for {}", symbol, e);
+                flowLogger.fail(span, e);
+                throw e;
+            }
+        }
     }
 
     @GetMapping("/heatmap/calendar")
@@ -54,9 +77,19 @@ public class AnalysisController {
             @RequestParam String symbol,
             @RequestParam(defaultValue = "-1") int year) {
 
-        if (year == -1)
-            year = java.time.LocalDate.now().getYear();
-        return ResponseEntity.ok(analysisService.getCalendarHeatmap(symbol, year));
+        try (FlowSpan span = flowLogger.start("analysis.heatmap.calendar", "symbol", symbol, "year", year)) {
+            try {
+                if (year == -1)
+                    year = java.time.LocalDate.now().getYear();
+                CalendarHeatmapResponse response = analysisService.getCalendarHeatmap(symbol, year);
+                flowLogger.complete(span);
+                return ResponseEntity.ok(response);
+            } catch (Exception e) {
+                log.error("Error in calendar heatmap for {}", symbol, e);
+                flowLogger.fail(span, e);
+                throw e;
+            }
+        }
     }
 
     @GetMapping("/seasonality/batch")
@@ -116,12 +149,24 @@ public class AnalysisController {
             @RequestParam(defaultValue = "false") boolean expandIndices) {
 
         String index = indexSymbol != null ? indexSymbol : "NIFTY 50";
-        TimeFrame tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
+        try (FlowSpan span = flowLogger.start("analysis.movers", "type", type, "index", index, "timeFrame",
+                timeFrame)) {
+            try {
+                TimeFrame tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
 
-        if ("all".equalsIgnoreCase(type)) {
-            return ResponseEntity.ok(marketAnalyticsService.getMoversUnified(limit, index, tf, expandIndices));
-        } else {
-            return ResponseEntity.ok(marketAnalyticsService.getMovers(limit, type, index, tf, expandIndices));
+                Object result;
+                if ("all".equalsIgnoreCase(type)) {
+                    result = marketAnalyticsService.getMoversUnified(limit, index, tf, expandIndices);
+                } else {
+                    result = marketAnalyticsService.getMovers(limit, type, index, tf, expandIndices);
+                }
+                flowLogger.complete(span);
+                return ResponseEntity.ok(result);
+            } catch (Exception e) {
+                log.error("Error fetching movers index={} type={}", index, type, e);
+                flowLogger.fail(span, e);
+                throw e;
+            }
         }
     }
 
@@ -166,7 +211,19 @@ public class AnalysisController {
             @RequestParam(defaultValue = "1D") String range,
             @RequestParam(defaultValue = "true") boolean isIndexSymbol) {
 
-        return ResponseEntity.ok(marketAnalyticsService.getHistoricalCharts(symbols, range, isIndexSymbol));
+        try (FlowSpan span = flowLogger.start("analysis.historical.charts", "symbols", symbols, "range", range,
+                "isIndex", isIndexSymbol)) {
+            try {
+                HistoricalDataResponseV1 response = marketAnalyticsService.getHistoricalCharts(symbols, range,
+                        isIndexSymbol);
+                flowLogger.complete(span, "resultCount", response.getData() != null ? response.getData().size() : 0);
+                return ResponseEntity.ok(response);
+            } catch (Exception e) {
+                log.error("Error fetching historical charts for {}", symbols, e);
+                flowLogger.fail(span, e);
+                throw e;
+            }
+        }
     }
 
     /**

@@ -1,19 +1,17 @@
 package com.am.marketdata.kafka.producer;
 
-import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.internals.RecordHeaders;
+import org.slf4j.MDC;
 import org.springframework.kafka.core.KafkaTemplate;
+import com.am.marketdata.common.observability.MdcKeys;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
+@Slf4j
 public class BaseKafkaProducer<T> {
-
-    private static final Logger log = LoggerFactory.getLogger(BaseKafkaProducer.class);
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
@@ -41,20 +39,26 @@ public class BaseKafkaProducer<T> {
 
         try {
             log.debug("Sending event to Kafka topic: {}", topic);
-            kafkaTemplate.send(topic, event)
+            
+            ProducerRecord<String, Object> record = new ProducerRecord<>(topic, event);
+            String correlationId = MDC.get(MdcKeys.CORRELATION_ID);
+            if (correlationId != null) {
+                record.headers().add(MdcKeys.CORRELATION_ID, correlationId.getBytes());
+            }
+
+            kafkaTemplate.send(record)
                     .whenComplete((result, ex) -> {
                         if (ex == null) {
-                            log.debug("Message sent successfully to topic: {}, partition: {}, offset: {}",
+                            log.debug("Message sent successfully topic={} partition={} offset={}",
                                     result.getRecordMetadata().topic(),
                                     result.getRecordMetadata().partition(),
                                     result.getRecordMetadata().offset());
                         } else {
-                            log.error("Failed to send message to topic: {}", topic, ex);
-                            throw new RuntimeException("Failed to send message to Kafka", ex);
+                            log.error("Failed to send message topic={}", topic, ex);
                         }
                     });
         } catch (Exception e) {
-            log.error("Failed to send event to Kafka topic: {}", topic, e);
+            log.error("Failed to send event topic={}", topic, e);
             throw new RuntimeException("Failed to send event to Kafka", e);
         }
     }
@@ -87,17 +91,21 @@ public class BaseKafkaProducer<T> {
 
             ProducerRecord<String, Object> record = new ProducerRecord<>(topic, null, timestampMillis, eventType, event,
                     headers);
+            
+            String correlationId = MDC.get(MdcKeys.CORRELATION_ID);
+            if (correlationId != null) {
+                record.headers().add(MdcKeys.CORRELATION_ID, correlationId.getBytes());
+            }
 
             kafkaTemplate.send(record)
                     .whenComplete((result, ex) -> {
                         if (ex == null) {
-                            log.info("Message sent successfully to topic: {}, partition: {}, offset: {}",
+                            log.info("Message sent successfully topic={} partition={} offset={}",
                                     result.getRecordMetadata().topic(),
                                     result.getRecordMetadata().partition(),
                                     result.getRecordMetadata().offset());
                         } else {
-                            log.error("Failed to send message", ex);
-                            throw new RuntimeException("Failed to send message to Kafka", ex);
+                            log.error("Failed to send message topic={}", topic, ex);
                         }
                     });
         } catch (Exception e) {
