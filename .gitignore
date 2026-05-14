@@ -55,6 +55,7 @@ build_log.txt
 
 # Environment
 .env
+.env.secrets
 .env.local
 .env.deploy
 **/.env

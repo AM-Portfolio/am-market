@@ -70,6 +70,14 @@ public class MarketAnalyticsService {
                 interval = "1D";
                 from = to.minusMonths(1);
                 break;
+            case "3M":
+                interval = "1D";
+                from = to.minusMonths(3);
+                break;
+            case "6M":
+                interval = "1D";
+                from = to.minusMonths(6);
+                break;
             case "5Y":
                 interval = "1W";
                 from = to.minusYears(5);

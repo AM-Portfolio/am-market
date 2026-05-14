@@ -116,7 +116,13 @@ public class AnalysisController {
             @RequestParam(defaultValue = "false") boolean expandIndices) {
 
         String index = indexSymbol != null ? indexSymbol : "NIFTY 50";
-        TimeFrame tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
+        TimeFrame tf;
+        try {
+            tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
+        } catch (IllegalArgumentException e) {
+            log.error("getMovers", "Invalid timeframe requested: " + timeFrame);
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid timeframe", "message", e.getMessage()));
+        }
 
         if ("all".equalsIgnoreCase(type)) {
             return ResponseEntity.ok(marketAnalyticsService.getMoversUnified(limit, index, tf, expandIndices));
