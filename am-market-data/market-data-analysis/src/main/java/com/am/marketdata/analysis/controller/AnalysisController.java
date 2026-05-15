@@ -152,7 +152,14 @@ public class AnalysisController {
         try (FlowSpan span = flowLogger.start("analysis.movers", "type", type, "index", index, "timeFrame",
                 timeFrame)) {
             try {
-                TimeFrame tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
+                TimeFrame tf;
+                try {
+                    tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
+                } catch (IllegalArgumentException e) {
+                    log.error("getMovers", "Invalid timeframe requested: " + timeFrame);
+                    flowLogger.warn(span, "Invalid timeframe requested");
+                    return ResponseEntity.badRequest().body(Map.of("error", "Invalid timeframe", "message", e.getMessage()));
+                }
 
                 Object result;
                 if ("all".equalsIgnoreCase(type)) {
