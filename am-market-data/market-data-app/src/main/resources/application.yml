@@ -217,6 +217,20 @@ management:
 
     influxdb:
       enabled: true
+  tracing:
+    enabled: true
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+    propagation:
+      type: w3c
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+
+otel:
+  service:
+    name: ${spring.application.name}
+    namespace: am-market
 
 jwt:
   secret: ${JWT_SECRET:internal-service-super-secret-key-32chars-minimum-change-in-prod}
