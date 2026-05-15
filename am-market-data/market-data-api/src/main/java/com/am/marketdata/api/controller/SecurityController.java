@@ -7,8 +7,8 @@ import com.am.marketdata.service.dto.SecuritySearchRequest;
 import com.am.marketdata.service.model.security.SecurityDocument;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import com.am.marketdata.common.observability.FlowLogger;
-import com.am.marketdata.common.observability.FlowSpan;
+import com.am.observability.flow.FlowLogger;
+import com.am.observability.flow.FlowSpan;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -116,3 +116,4 @@ public class SecurityController {
         return ResponseEntity.ok(response);
     }
 }
+

@@ -8,8 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import com.am.marketdata.common.observability.FlowLogger;
-import com.am.marketdata.common.observability.FlowSpan;
+import com.am.observability.flow.FlowLogger;
+import com.am.observability.flow.FlowSpan;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -101,3 +101,4 @@ public class WatchlistController {
         return ResponseEntity.ok(Map.of("inWatchlist", inWatchlist));
     }
 }
+

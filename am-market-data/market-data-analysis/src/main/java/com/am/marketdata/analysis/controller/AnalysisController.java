@@ -3,8 +3,8 @@ package com.am.marketdata.analysis.controller;
 import com.am.marketdata.analysis.service.AnalysisService;
 import com.am.marketdata.analysis.service.MarketAnalyticsService;
 import com.am.marketdata.api.model.HistoricalDataResponseV1;
-import com.am.marketdata.common.observability.FlowLogger;
-import com.am.marketdata.common.observability.FlowSpan;
+import com.am.observability.flow.FlowLogger;
+import com.am.observability.flow.FlowSpan;
 import lombok.extern.slf4j.Slf4j;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.common.model.analysis.CalendarHeatmapResponse;
@@ -253,3 +253,4 @@ public class AnalysisController {
         }
     }
 }
+

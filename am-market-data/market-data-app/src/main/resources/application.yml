@@ -52,6 +52,10 @@ app:
   kafka:
     enabled: ${MARKET_DATA_KAFKA_ENABLED}
 
+am:
+  observability:
+    enabled: ${AM_OBSERVABILITY_ENABLED:true}
+
 kafka:
   topics:
     stock-price: am-stock-price-update

@@ -68,6 +68,13 @@
             <version>2.15.2</version>
         </dependency>
 
+        <!-- Observability -->
+        <dependency>
+            <groupId>com.am.libraries</groupId>
+            <artifactId>am-observability-lib</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
         <!-- Kite Connect -->
         <dependency>
             <groupId>com.zerodhatech.kiteconnect</groupId>

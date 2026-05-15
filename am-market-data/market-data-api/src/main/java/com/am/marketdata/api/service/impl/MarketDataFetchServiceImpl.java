@@ -10,8 +10,8 @@ import com.am.marketdata.api.model.HistoricalDataResponseV1;
 import com.am.marketdata.api.service.MarketDataFetchService;
 import com.am.marketdata.api.util.InstrumentUtils;
 import com.am.marketdata.api.util.HistoricalDataFilterUtil;
-import com.am.marketdata.common.observability.FlowLogger;
-import com.am.marketdata.common.observability.FlowSpan;
+import com.am.observability.flow.FlowLogger;
+import com.am.observability.flow.FlowSpan;
 import lombok.extern.slf4j.Slf4j;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
@@ -452,3 +452,4 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         }
     }
 }
+

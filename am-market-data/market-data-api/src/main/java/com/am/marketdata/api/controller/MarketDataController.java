@@ -27,8 +27,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import lombok.extern.slf4j.Slf4j;
-import com.am.marketdata.common.observability.FlowLogger;
-import com.am.marketdata.common.observability.FlowSpan;
+import com.am.observability.flow.FlowLogger;
+import com.am.observability.flow.FlowSpan;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -711,3 +711,4 @@ public class MarketDataController {
                 .collect(Collectors.toSet());
     }
 }
+

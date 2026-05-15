@@ -8,8 +8,8 @@ import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.mapper.InstrumentMapper;
 import com.am.marketdata.mapper.MarketDataGenericMapper;
-import com.am.marketdata.common.observability.FlowLogger;
-import com.am.marketdata.common.observability.FlowSpan;
+import com.am.observability.flow.FlowLogger;
+import com.am.observability.flow.FlowSpan;
 import com.am.marketdata.service.util.DataSourceType;
 import com.am.marketdata.service.util.DataRetrievalStrategyUtil;
 import com.am.marketdata.service.util.HistoricalDataRetriever;
@@ -609,3 +609,4 @@ public class MarketDataService {
         return new java.util.ArrayList<>();
     }
 }
+
