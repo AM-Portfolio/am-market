@@ -1,6 +1,7 @@
 package com.am.marketdata.api.filter;
 
 import com.am.logging.AMLogger;
+import com.am.observability.mdc.MdcKeys;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -49,14 +50,14 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
         // Snapshot MDC for later restoration
         Map<String, String> priorMdc = org.slf4j.MDC.getCopyOfContextMap();
 
-        org.slf4j.MDC.put(com.am.marketdata.common.observability.MdcKeys.CORRELATION_ID, correlationId);
-        org.slf4j.MDC.put(com.am.marketdata.common.observability.MdcKeys.TRACE_ID, correlationId);
+        org.slf4j.MDC.put(MdcKeys.CORRELATION_ID, correlationId);
+        org.slf4j.MDC.put(MdcKeys.TRACE_ID, correlationId);
 
         // Safe Session ID (truncated to prevent sensitive leakage)
         String rawSessionId = request.getRequestedSessionId();
         if (rawSessionId != null) {
             String safeSessionId = rawSessionId.length() > 8 ? rawSessionId.substring(0, 8) + "..." : rawSessionId;
-            org.slf4j.MDC.put(com.am.marketdata.common.observability.MdcKeys.SESSION_ID, safeSessionId);
+            org.slf4j.MDC.put(MdcKeys.SESSION_ID, safeSessionId);
         }
 
         try {
@@ -76,7 +77,7 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
             context.put("client_ip", request.getRemoteAddr());
             context.put("correlation_id", correlationId);
             
-            String safeSessionId = org.slf4j.MDC.get(com.am.marketdata.common.observability.MdcKeys.SESSION_ID);
+            String safeSessionId = org.slf4j.MDC.get(MdcKeys.SESSION_ID);
             if (safeSessionId != null) {
                 context.put("session_id", safeSessionId);
             }

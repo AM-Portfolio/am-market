@@ -5,7 +5,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.slf4j.MDC;
 import org.springframework.kafka.core.KafkaTemplate;
-import com.am.marketdata.common.observability.MdcKeys;
+import com.am.observability.mdc.MdcKeys;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;

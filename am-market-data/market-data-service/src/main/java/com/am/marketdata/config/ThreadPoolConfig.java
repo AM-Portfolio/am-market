@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import com.am.marketdata.common.observability.MdcTaskDecorator;
+import com.am.observability.mdc.MdcTaskDecorator;
 import lombok.RequiredArgsConstructor;
 
 /**
