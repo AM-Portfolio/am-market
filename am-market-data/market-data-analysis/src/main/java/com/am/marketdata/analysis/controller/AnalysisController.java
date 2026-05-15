@@ -157,7 +157,7 @@ public class AnalysisController {
                     tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
                 } catch (IllegalArgumentException e) {
                     log.error("getMovers", "Invalid timeframe requested: " + timeFrame);
-                    flowLogger.warn(span, "Invalid timeframe requested");
+                    log.warn("Invalid timeframe requested: {}", timeFrame);
                     return ResponseEntity.badRequest().body(Map.of("error", "Invalid timeframe", "message", e.getMessage()));
                 }
 

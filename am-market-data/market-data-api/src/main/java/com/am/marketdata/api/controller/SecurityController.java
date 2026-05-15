@@ -74,7 +74,7 @@ public class SecurityController {
                             // If index is specified but not found, and no other filters, return empty
                             if (request.getQuery() == null && request.getSector() == null
                                     && request.getIndustry() == null) {
-                                flowLogger.warn(span, "Index not found: " + request.getIndex());
+                                log.warn(\"Index not found: {}\", request.getIndex());
                                 return ResponseEntity.ok(List.of());
                             }
                         }

@@ -18,6 +18,7 @@ import java.util.Map;
 @Component
 public class ApiLoggingFilter extends OncePerRequestFilter {
 
+    private static final String SESSION_ID = "sessionId";
     private final AMLogger amLogger;
 
     public ApiLoggingFilter(AMLogger amLogger) {
@@ -57,7 +58,7 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
         String rawSessionId = request.getRequestedSessionId();
         if (rawSessionId != null) {
             String safeSessionId = rawSessionId.length() > 8 ? rawSessionId.substring(0, 8) + "..." : rawSessionId;
-            org.slf4j.MDC.put(MdcKeys.SESSION_ID, safeSessionId);
+            org.slf4j.MDC.put(SESSION_ID, safeSessionId);
         }
 
         try {
@@ -77,7 +78,7 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
             context.put("client_ip", request.getRemoteAddr());
             context.put("correlation_id", correlationId);
             
-            String safeSessionId = org.slf4j.MDC.get(MdcKeys.SESSION_ID);
+            String safeSessionId = org.slf4j.MDC.get(SESSION_ID);
             if (safeSessionId != null) {
                 context.put("session_id", safeSessionId);
             }

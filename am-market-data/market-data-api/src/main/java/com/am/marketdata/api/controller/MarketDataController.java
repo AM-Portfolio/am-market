@@ -181,7 +181,7 @@ public class MarketDataController {
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("error", "INVALID_PARAMETER");
                 errorResponse.put("message", "Invalid timeFrame parameter: " + e.getMessage());
-                flowLogger.warn(span, "Invalid timeframe: " + e.getMessage());
+                log.warn("Invalid timeframe: {}", e.getMessage());
                 return ResponseEntity.badRequest().body(errorResponse);
             } catch (Exception e) {
                 log.error("Error processing quotes request symbolsCount={}", symbolList.size(), e);
@@ -303,7 +303,7 @@ public class MarketDataController {
                     log.warn("Historical data fetch returned error branch symbolsCount={}", symbolList.size());
                     String errorType = response.getError();
                     if (errorType.contains("No valid symbols") || errorType.contains("Invalid date format")) {
-                        flowLogger.warn(span, "Validation error: " + errorType);
+                        log.warn("Validation error: {}", errorType);
                         return ResponseEntity.badRequest().body(response);
                     } else {
                         flowLogger.fail(span, new Exception(response.getError()));
@@ -402,7 +402,7 @@ public class MarketDataController {
                         Map<String, Object> errorResponse = new HashMap<>();
                         errorResponse.put("error", "Invalid date format");
                         errorResponse.put("message", "Use yyyy-MM-dd format for expiry date");
-                        flowLogger.warn(span, "Invalid date format: " + expiryDate);
+                        log.warn("Invalid date format: {}", expiryDate);
                         return ResponseEntity.badRequest().body(errorResponse);
                     }
                 }
@@ -512,7 +512,7 @@ public class MarketDataController {
                     Map<String, Object> errorResponse = new HashMap<>();
                     errorResponse.put("error", "Invalid date format");
                     errorResponse.put("message", "Use yyyy-MM-dd format for dates");
-                    flowLogger.warn(span, "Invalid date format: " + from + " - " + to);
+                    log.warn("Invalid date format: {} - {}", from, to);
                     return ResponseEntity.badRequest().body(errorResponse);
                 }
 
@@ -622,7 +622,7 @@ public class MarketDataController {
                     log.warn("Live LTP request with no symbols");
                     Map<String, Object> errorResponse = new HashMap<>();
                     errorResponse.put("error", "No symbols provided");
-                    flowLogger.warn(span, "No symbols provided");
+                    log.warn("No symbols provided");
                     return ResponseEntity.badRequest().body(errorResponse);
                 }
 
