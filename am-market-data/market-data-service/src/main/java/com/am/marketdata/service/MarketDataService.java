@@ -183,13 +183,12 @@ public class MarketDataService {
                 "symbolsCount", tradingSymbols.size(), "timeFrame", tfValue, "forceRefresh", forceRefresh)) {
             try {
                 providerName = resolveProviderName(providerName);
-                span.addAttribute("provider", providerName);
 
                 OHLCDataRetriever retriever = createOHLCDataRetriever(providerName, forceRefresh);
                 Map<String, OHLCQuote> result = retriever.retrieveData(tradingSymbols, timeFrame, forceRefresh);
 
                 meterRegistry.counter("market.data.success.count", "operation", "getOHLC", "timeFrame", tfValue).increment();
-                flowLogger.complete(span, "resultCount", result != null ? result.size() : 0);
+                flowLogger.complete(span, "provider", providerName, "resultCount", result != null ? result.size() : 0);
                 return result;
             } catch (Exception e) {
                 log.error("Error getting OHLC data for symbolsCount={} timeFrame={}", tradingSymbols.size(), tfValue, e);
@@ -286,7 +285,6 @@ public class MarketDataService {
                 "symbolsCount", symbols.size(), "interval", tfValue, "forceRefresh", forceRefresh)) {
             try {
                 providerName = resolveProviderName(providerName);
-                span.addAttribute("provider", providerName);
 
                 List<DataSourceType> retrievalOrder = DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh);
                 HistoricalDataRetriever retriever = HistoricalDataRetriever.builder()
@@ -311,7 +309,7 @@ public class MarketDataService {
                         .sum();
 
                 meterRegistry.counter("market.data.success.count", "operation", "getHistoricalDataBatch", "timeFrame", tfValue).increment();
-                flowLogger.complete(span, "resultCount", result.size(), "totalPoints", totalDataPoints);
+                flowLogger.complete(span, "provider", providerName, "resultCount", result.size(), "totalPoints", totalDataPoints);
                 return result;
             } catch (Exception e) {
                 log.error("Error getting batch historical data for symbolsCount={} interval={}", symbols.size(), tfValue, e);
