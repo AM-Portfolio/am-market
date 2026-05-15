@@ -13,6 +13,16 @@ probes:
 
 replicaCount: 1
 
+# Vault configuration
+vault:
+  enabled: true
+  role: "am-backend-role"
+  secretPaths:
+    mongodb: 
+      path: "apps/data/preprod/infra/mongodb"
+    together:
+      path: "apps/data/preprod/infra/shared-api"
+
 resources:
   limits:
     cpu: 500m

@@ -10,6 +10,26 @@ probes:
   readiness:
     path: /actuator/health/readiness
 
+# Vault configuration
+vault:
+  enabled: true
+  role: "am-backend-role"
+  secretPaths:
+    postgres:
+      path: "apps/data/preprod/infra/postgres"
+    mongodb:
+      path: "apps/data/preprod/infra/mongodb"
+    redis:
+      path: "apps/data/preprod/infra/redis"
+    influxdb:
+      path: "apps/data/preprod/infra/influxdb"
+    kafka:
+      path: "apps/data/preprod/infra/kafka"
+    market-data:
+      path: "apps/data/preprod/services/am-market-data"
+    upstox:
+      path: "apps/data/preprod/services/am-market-data"
+
 # Application Configuration
 config:
   marketData:

@@ -20,12 +20,11 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # Expose API port
-EXPOSE 8000
+EXPOSE 8080
 
 # Health check
-# Force Trigger: 2026-04-11T14:31:00 (Credential Alignment)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8000/docs')" || exit 1
+    CMD python -c "import httpx; httpx.get('http://localhost:8080/health')" || exit 1
 
 # Run the API server
-CMD ["uvicorn", "am_api.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "am_api.api:app", "--host", "0.0.0.0", "--port", "8080"]
