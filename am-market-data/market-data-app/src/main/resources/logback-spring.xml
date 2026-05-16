@@ -8,17 +8,19 @@
     <include resource="am-logback-include.xml"/>
 
     <!--
-      CRITICAL OVERRIDE for Kubernetes/Cloud:
-      The library include unconditionally adds JSON_FILE to the root logger for cloud profiles.
-      In Kubernetes, this causes a CrashLoopBackOff because the ./logs directory is not writable.
-      
-      By redefining the root logger here AFTER the include, we override the library's
-      default and ensure ONLY JSON_STDOUT is used in preprod/prod.
+      THE NUCLEAR FIX:
+      Redefine 'JSON_FILE' to be a NOP (No-Operation) appender.
+      This is the ONLY way to guarantee the library won't touch the filesystem.
+    -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.helpers.NOPAppender"/>
+
+    <!--
+      Override the root logger for cloud environments.
+      Ensures ONLY JSON_STDOUT (Console) is used in preprod/prod.
     -->
     <springProfile name="!mcp-stdio &amp; !logback-text &amp; !local">
         <root level="INFO">
             <appender-ref ref="JSON_STDOUT"/>
-            <!-- JSON_FILE appender removed to prevent CrashLoopBackOff in read-only containers -->
         </root>
     </springProfile>
 
