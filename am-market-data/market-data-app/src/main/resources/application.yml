@@ -132,16 +132,10 @@ market-data:
     history-ttl-minutes: ${MARKET_HISTORY_DATA_CACHE_HISTORY_TTL_MINUTES:15}
 # Logging Configuration
 logging:
-  # NOTE: logging.file.name is intentionally NOT set for cloud/preprod/prod.
-  # In Kubernetes, the container filesystem has no writable ./logs directory.
-  # Setting a file path here causes the JSON_FILE appender (from am-logback-include.xml)
-  # to crash the JVM on startup with FileNotFoundException.
-  # Loki/Promtail collects logs from STDOUT — no file needed.
-  # For local dev only, run with: -Dlogging.file.name=./logs/market-data-app.log
-  # NOTE: logging.pattern.* removed intentionally.
-  # logback-spring.xml now uses am-logback-include.xml (from am-observability-lib) which
-  # uses the logstash JSON encoder. Plain-text pattern overrides here would conflict
-  # with the JSON encoder and break structured log output in Grafana/Loki.
+  # NOTE: logging.file.name and logging.pattern.* are intentionally NOT set.
+  # We have inlined the am-observability-lib JSON configuration into logback-spring.xml.
+  # This provides full traceId/spanId support and caller data (class/line numbers)
+  # while ensuring the app doesn't crash in read-only Kubernetes containers.
   level:
     root: WARN
     "[com.am.marketdata]": INFO

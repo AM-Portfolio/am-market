@@ -2,33 +2,95 @@
 <configuration>
 
     <!-- 
-      Pull in all appenders from the observability library.
-      This defines JSON_STDOUT, JSON_FILE, and TEXT_STDOUT.
+      We have removed the <include resource="am-logback-include.xml"/> because it
+      contains a hardcoded JSON_FILE appender that crashes in Kubernetes.
+      
+      We have now inlined the FULL configuration from the library below, 
+      including Caller Data (class/line numbers) and all telemetry fields, 
+      but EXCLUDING the crashing file appender.
     -->
-    <include resource="am-logback-include.xml"/>
 
-    <!--
-      THE NUCLEAR FIX:
-      Redefine 'JSON_FILE' to be a NOP (No-Operation) appender.
-      This is the ONLY way to guarantee the library won't touch the filesystem.
-    -->
-    <appender name="JSON_FILE" class="ch.qos.logback.core.helpers.NOPAppender"/>
+    <springProperty scope="context" name="serviceName" source="spring.application.name" defaultValue="market-data-service"/>
 
-    <!--
-      Override the root logger for cloud environments.
-      Ensures ONLY JSON_STDOUT (Console) is used in preprod/prod.
-    -->
-    <springProfile name="!mcp-stdio &amp; !logback-text &amp; !local">
+    <!-- JSON STDOUT (Fully compatible with am-observability-lib) -->
+    <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.out</target>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp>
+                    <fieldName>@timestamp</fieldName>
+                    <timeZone>UTC</timeZone>
+                </timestamp>
+                <pattern>
+                    <pattern>
+                        {
+                          "level": "%level",
+                          "service": "${serviceName}",
+                          "logger": "%logger{40}",
+                          "thread": "%thread",
+                          "traceId": "%mdc{traceId}",
+                          "spanId": "%mdc{spanId}",
+                          "userId": "%mdc{userId}",
+                          "correlationId": "%mdc{correlationId}",
+                          "flow.id": "%mdc{flow.id}",
+                          "flow.step": "%mdc{flow.step}",
+                          "flow.outcome": "%mdc{flow.outcome}",
+                          "flow.duration_ms": "%mdc{flow.duration_ms}",
+                          "request.method": "%mdc{request.method}",
+                          "request.path": "%mdc{request.path}",
+                          "http.status": "%mdc{http.status}",
+                          "tool.name": "%mdc{tool.name}"
+                        }
+                    </pattern>
+                </pattern>
+                <message/>
+                <loggerName/>
+                <mdc/>
+                <arguments/>
+                <logstashMarkers/>
+                <!-- This adds the caller.class, caller.method, etc. fields seen in your screenshot -->
+                <callerData>
+                    <classFieldName>caller.class</classFieldName>
+                    <methodFieldName>caller.method</methodFieldName>
+                    <fileFieldName>caller.file</fileFieldName>
+                    <lineFieldName>caller.line</lineFieldName>
+                </callerData>
+                <stackTrace>
+                    <fieldName>stack_trace</fieldName>
+                    <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                        <maxDepthPerThrowable>30</maxDepthPerThrowable>
+                        <maxLength>4096</maxLength>
+                        <shortenedClassNameLength>40</shortenedClassNameLength>
+                    </throwableConverter>
+                </stackTrace>
+            </providers>
+        </encoder>
+    </appender>
+
+    <!-- Plain text appender for local dev -->
+    <appender name="TEXT_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [${serviceName},%X{traceId:-},%X{spanId:-}] %logger{40} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Cloud Profiles: Use JSON STDOUT only -->
+    <springProfile name="!local">
         <root level="INFO">
             <appender-ref ref="JSON_STDOUT"/>
+        </root>
+    </springProfile>
+
+    <!-- Local Profile: Use Plain Text -->
+    <springProfile name="local">
+        <root level="INFO">
+            <appender-ref ref="TEXT_STDOUT"/>
         </root>
     </springProfile>
 
     <!-- Service-specific logger levels -->
     <logger name="com.am.marketdata" level="INFO"/>
     <logger name="org.springframework"            level="WARN"/>
-    <logger name="org.springframework.data.redis" level="WARN"/>
-    <logger name="org.hibernate"                  level="WARN"/>
     <logger name="org.apache.kafka"               level="WARN"/>
 
 </configuration>
