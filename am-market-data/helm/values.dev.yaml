@@ -45,10 +45,13 @@ probes:
     path: "/actuator/health"
     failureThreshold: 30
     periodSeconds: 10
+    timeoutSeconds: 10
   liveness:
     path: "/actuator/health"
+    timeoutSeconds: 10
   readiness:
     path: "/actuator/health"
+    timeoutSeconds: 10
 
 ingress:
   enabled: true
