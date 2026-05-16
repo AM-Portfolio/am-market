@@ -52,6 +52,27 @@ app:
   kafka:
     enabled: ${MARKET_DATA_KAFKA_ENABLED}
 
+am:
+  # Centralized observability from am-core-services
+  observability:
+    enabled: ${AM_OBSERVABILITY_ENABLED:true}
+    request-log:
+      # Emit a structured JSON log for every incoming HTTP request
+      enabled: true
+      ignore-paths:
+        - "/actuator/**"
+        - "/**/health/**"
+        - "/swagger-ui/**"
+        - "/v3/api-docs/**"
+    sanitize:
+      # Mask sensitive fields in log payloads (PII/Credentials)
+      extra-fields:
+        - code
+        - request_token
+        - access_token
+        - refresh_token
+        - client_secret
+
 kafka:
   topics:
     stock-price: am-stock-price-update
@@ -111,17 +132,10 @@ market-data:
     history-ttl-minutes: ${MARKET_HISTORY_DATA_CACHE_HISTORY_TTL_MINUTES:15}
 # Logging Configuration
 logging:
-  file:
-    name: ./logs/market-data-app.log # Log file in current directory
-  logback:
-    rollingpolicy:
-      max-file-size: 10MB
-      max-history: 30
-      total-size-cap: 1GB
-      clean-history-on-start: false
-  pattern:
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%class{0}.%method] - %msg%n"
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%class{0}.%method] - %msg%n"
+  # NOTE: logging.file.name and logging.pattern.* are intentionally NOT set.
+  # We have inlined the am-observability-lib JSON configuration into logback-spring.xml.
+  # This provides full traceId/spanId support and caller data (class/line numbers)
+  # while ensuring the app doesn't crash in read-only Kubernetes containers.
   level:
     root: WARN
     "[com.am.marketdata]": INFO
@@ -217,6 +231,20 @@ management:
 
     influxdb:
       enabled: true
+  tracing:
+    enabled: true
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+    propagation:
+      type: w3c
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+
+otel:
+  service:
+    name: ${spring.application.name}
+    namespace: am-market
 
 jwt:
   secret: ${JWT_SECRET:internal-service-super-secret-key-32chars-minimum-change-in-prod}

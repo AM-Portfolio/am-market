@@ -130,13 +130,11 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
             Map<String, OHLCQuote> providerData = provider.getOHLC(symbols, timeFrame);
 
             if (providerData != null && !providerData.isEmpty()) {
-                log.info(
-                        provider.getProviderName()
-                                + " Successfully fetched {} OHLC quotes from provider with timeFrame {}",
-                        providerData.size(), tfValue);
+                log.info("[PROVIDER] {} Successfully fetched {} OHLC quotes from provider with timeFrame {}",
+                        provider.getProviderName(), providerData.size(), tfValue);
             } else {
-                log.info(provider.getProviderName() + " No OHLC data returned from provider for timeFrame {}",
-                        tfValue);
+                log.info("[PROVIDER] {} No OHLC data returned from provider for timeFrame {}",
+                        provider.getProviderName(), tfValue);
             }
 
             return providerData != null ? providerData : Collections.emptyMap();

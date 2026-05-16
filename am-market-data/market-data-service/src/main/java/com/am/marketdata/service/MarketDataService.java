@@ -8,6 +8,8 @@ import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.mapper.InstrumentMapper;
 import com.am.marketdata.mapper.MarketDataGenericMapper;
+import com.am.observability.flow.FlowLogger;
+import com.am.observability.flow.FlowSpan;
 import com.am.marketdata.service.util.DataSourceType;
 import com.am.marketdata.service.util.DataRetrievalStrategyUtil;
 import com.am.marketdata.service.util.HistoricalDataRetriever;
@@ -61,6 +63,7 @@ public class MarketDataService {
     @Value("${market-data.provider:upstox}")
     private String defaultProvider;
 
+    private final FlowLogger flowLogger;
     private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService;
 
     public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
@@ -68,7 +71,8 @@ public class MarketDataService {
             MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
             MarketDataRetrievalUtil marketDataRetrievalUtil,
             java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
-            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService) {
+            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
+            FlowLogger flowLogger) {
         this.providerFactory = providerFactory;
         this.instrumentService = instrumentService;
         this.meterRegistry = meterRegistry;
@@ -78,6 +82,7 @@ public class MarketDataService {
         this.marketDataRetrievalUtil = marketDataRetrievalUtil;
         this.producer = producer.orElse(null);
         this.stockIndicesService = stockIndicesService;
+        this.flowLogger = flowLogger;
     }
 
     private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh) {
@@ -173,35 +178,26 @@ public class MarketDataService {
             String providerName) {
         String tfValue = timeFrame != null ? timeFrame.getApiValue() : "default";
         Timer.Sample timer = Timer.start(meterRegistry);
-        log.info(
-                "[INTERVAL_TRACE] MarketDataService.getOHLC: Getting OHLC for {} symbols with timeFrame: {} (enum: {}, apiValue: {}), forceRefresh: {}",
-                tradingSymbols.size(), timeFrame, timeFrame != null ? timeFrame.name() : "null", tfValue, forceRefresh);
+        
+        try (FlowSpan span = flowLogger.start("service.market.ohlc", 
+                "symbolsCount", tradingSymbols.size(), "timeFrame", tfValue, "forceRefresh", forceRefresh)) {
+            try {
+                providerName = resolveProviderName(providerName);
 
-        try {
+                OHLCDataRetriever retriever = createOHLCDataRetriever(providerName, forceRefresh);
+                Map<String, OHLCQuote> result = retriever.retrieveData(tradingSymbols, timeFrame, forceRefresh);
 
-            providerName = resolveProviderName(providerName);
-            log.info(
-                    "[INTERVAL_TRACE] MarketDataService.getOHLC → OHLCDataRetriever: Creating retriever with timeFrame: {} (apiValue: {}), forceRefresh: {}",
-                    timeFrame, tfValue, forceRefresh);
-
-            OHLCDataRetriever retriever = createOHLCDataRetriever(providerName, forceRefresh);
-            Map<String, OHLCQuote> result = retriever.retrieveData(tradingSymbols, timeFrame, forceRefresh);
-
-            log.info("[INTERVAL_TRACE] MarketDataService.getOHLC: Retrieved {} OHLC quotes for timeFrame: {}",
-                    result != null ? result.size() : 0, tfValue);
-
-            // Original success metric, adapted with tfValue
-            meterRegistry.counter("market.data.success.count", "operation", "getOHLC", "timeFrame", tfValue)
-                    .increment();
-            return result;
-        } catch (Exception e) {
-            log.error("[INTERVAL_TRACE] Error getting OHLC data for timeFrame {}: {}", tfValue, e.getMessage(), e);
-            meterRegistry
-                    .counter("market.data.failure.count", "operation", "getOHLC", "timeFrame", tfValue)
-                    .increment();
-            throw new RuntimeException("Failed to get OHLC data for timeFrame " + tfValue, e);
-        } finally {
-            timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getOHLC", "timeFrame", tfValue));
+                meterRegistry.counter("market.data.success.count", "operation", "getOHLC", "timeFrame", tfValue).increment();
+                flowLogger.complete(span, "provider", providerName, "resultCount", result != null ? result.size() : 0);
+                return result;
+            } catch (Exception e) {
+                log.error("Error getting OHLC data for symbolsCount={} timeFrame={}", tradingSymbols.size(), tfValue, e);
+                meterRegistry.counter("market.data.failure.count", "operation", "getOHLC", "timeFrame", tfValue).increment();
+                flowLogger.fail(span, e);
+                throw new RuntimeException("Failed to get OHLC data for timeFrame " + tfValue, e);
+            } finally {
+                timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getOHLC", "timeFrame", tfValue));
+            }
         }
     }
 
@@ -283,55 +279,47 @@ public class MarketDataService {
             TimeFrame interval, boolean continuous, Map<String, Object> additionalParams, String providerName,
             boolean isIndexSymbol, boolean forceRefresh) {
         Timer.Sample timer = Timer.start(meterRegistry);
-        log.info(
-                "[BATCH_HISTORICAL] MarketDataService.getHistoricalDataBatch: Fetching historical data for {} symbols, interval: {} (apiValue: {}), from: {}, to: {}",
-                symbols.size(), interval, interval != null ? interval.getApiValue() : "null", fromDate, toDate);
+        String tfValue = interval != null ? interval.getApiValue() : "null";
+        
+        try (FlowSpan span = flowLogger.start("service.market.historical.batch", 
+                "symbolsCount", symbols.size(), "interval", tfValue, "forceRefresh", forceRefresh)) {
+            try {
+                providerName = resolveProviderName(providerName);
 
-        try {
-            providerName = resolveProviderName(providerName);
+                List<DataSourceType> retrievalOrder = DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh);
+                HistoricalDataRetriever retriever = HistoricalDataRetriever.builder()
+                        .persistenceService(persistenceService)
+                        .providerFactory(providerFactory)
+                        .retrievalOrder(retrievalOrder)
+                        .cacheResults(true)
+                        .fromDate(fromDate)
+                        .toDate(toDate)
+                        .interval(interval)
+                        .continuous(continuous)
+                        .additionalParams(additionalParams)
+                        .targetProviderName(providerName)
+                        .producer(producer)
+                        .build();
 
-            // Determine retrieval order using centralized utility
-            List<DataSourceType> retrievalOrder = DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh);
+                Map<String, HistoricalData> result = retriever.retrieveData(symbols, interval, forceRefresh);
 
-            HistoricalDataRetriever retriever = HistoricalDataRetriever.builder()
-                    .persistenceService(persistenceService)
-                    .providerFactory(providerFactory)
-                    .retrievalOrder(retrievalOrder)
-                    .cacheResults(true)
-                    .fromDate(fromDate)
-                    .toDate(toDate)
-                    .interval(interval)
-                    .continuous(continuous)
-                    .additionalParams(additionalParams)
-                    .targetProviderName(providerName)
-                    .producer(producer)
-                    .build();
+                int totalDataPoints = result.values().stream()
+                        .filter(hd -> hd != null && hd.getDataPoints() != null)
+                        .mapToInt(hd -> hd.getDataPoints().size())
+                        .sum();
 
-            log.info(
-                    "[BATCH_HISTORICAL] MarketDataService.getHistoricalDataBatch → Strategy: {}, Calling with {} symbols",
-                    DataRetrievalStrategyUtil.getStrategyDescription(forceRefresh), symbols.size());
-
-            Map<String, HistoricalData> result = retriever.retrieveData(symbols, interval, forceRefresh);
-
-            int totalDataPoints = result.values().stream()
-                    .filter(hd -> hd != null && hd.getDataPoints() != null)
-                    .mapToInt(hd -> hd.getDataPoints().size())
-                    .sum();
-
-            log.info(
-                    "[BATCH_HISTORICAL] MarketDataService.getHistoricalDataBatch: Retrieved data for {}/{} symbols with {} total data points",
-                    result.size(), symbols.size(), totalDataPoints);
-
-            meterRegistry.counter("market.data.success.count", "operation", "getHistoricalDataBatch", "timeFrame",
-                    interval != null ? interval.getApiValue() : "null").increment();
-            return result;
-        } catch (Exception e) {
-            log.error("[BATCH_HISTORICAL] Error getting batch historical data: {}", e.getMessage(), e);
-            meterRegistry.counter("market.data.failure.count", "operation", "getHistoricalDataBatch").increment();
-            throw new RuntimeException("Failed to get batch historical data", e);
-        } finally {
-            timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getHistoricalDataBatch",
-                    "timeFrame", interval != null ? interval.getApiValue() : "null"));
+                meterRegistry.counter("market.data.success.count", "operation", "getHistoricalDataBatch", "timeFrame", tfValue).increment();
+                flowLogger.complete(span, "provider", providerName, "resultCount", result.size(), "totalPoints", totalDataPoints);
+                return result;
+            } catch (Exception e) {
+                log.error("Error getting batch historical data for symbolsCount={} interval={}", symbols.size(), tfValue, e);
+                meterRegistry.counter("market.data.failure.count", "operation", "getHistoricalDataBatch").increment();
+                flowLogger.fail(span, e);
+                throw new RuntimeException("Failed to get batch historical data", e);
+            } finally {
+                timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getHistoricalDataBatch",
+                        "timeFrame", tfValue));
+            }
         }
     }
 
@@ -619,3 +607,4 @@ public class MarketDataService {
         return new java.util.ArrayList<>();
     }
 }
+

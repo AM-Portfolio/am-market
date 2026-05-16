@@ -62,3 +62,7 @@ config:
     maxRetries: 5
     retryDelayMs: 2000
   env: "preprod"
+
+env:
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318/v1/traces"
+  TRACING_SAMPLING_PROBABILITY: "0.1"
