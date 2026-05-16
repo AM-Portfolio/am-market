@@ -33,12 +33,15 @@ probes:
   port: 8080
   startup:
     path: "/health"
+    timeoutSeconds: 10
     failureThreshold: 30
     periodSeconds: 10
   liveness:
     path: "/health"
+    timeoutSeconds: 10
   readiness:
     path: "/health"
+    timeoutSeconds: 10
 
 ingress:
   enabled: true
