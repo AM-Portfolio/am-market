@@ -132,14 +132,12 @@ market-data:
     history-ttl-minutes: ${MARKET_HISTORY_DATA_CACHE_HISTORY_TTL_MINUTES:15}
 # Logging Configuration
 logging:
-  file:
-    name: ./logs/market-data-app.log # Log file path; logback-spring.xml controls rolling policy
-  logback:
-    rollingpolicy:
-      max-file-size: 10MB
-      max-history: 30
-      total-size-cap: 1GB
-      clean-history-on-start: false
+  # NOTE: logging.file.name is intentionally NOT set for cloud/preprod/prod.
+  # In Kubernetes, the container filesystem has no writable ./logs directory.
+  # Setting a file path here causes the JSON_FILE appender (from am-logback-include.xml)
+  # to crash the JVM on startup with FileNotFoundException.
+  # Loki/Promtail collects logs from STDOUT — no file needed.
+  # For local dev only, run with: -Dlogging.file.name=./logs/market-data-app.log
   # NOTE: logging.pattern.* removed intentionally.
   # logback-spring.xml now uses am-logback-include.xml (from am-observability-lib) which
   # uses the logstash JSON encoder. Plain-text pattern overrides here would conflict
