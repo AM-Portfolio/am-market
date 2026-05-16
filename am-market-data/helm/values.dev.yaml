@@ -1,4 +1,4 @@
-# Dev Environment — am-parser
+# Dev Environment — am-market-data
 environment: dev
 replicaCount: 1
 
@@ -17,10 +17,20 @@ resources:
 vault:
   enabled: true
   secretPaths:
+    postgres:
+      path: "apps/data/dev/infra/postgres"
     mongodb:
       path: "apps/data/dev/infra/mongodb"
-    together:
-      path: "apps/data/dev/infra/shared-api"
+    redis:
+      path: "apps/data/dev/infra/redis"
+    influxdb:
+      path: "apps/data/dev/infra/influxdb"
+    kafka:
+      path: "apps/data/dev/infra/kafka"
+    market-data:
+      path: "apps/data/dev/services/am-market-data"
+    upstox:
+      path: "apps/data/dev/services/am-market-data"
 
 hostAliases:
   - ip: "203.174.22.129"
@@ -32,15 +42,15 @@ hostAliases:
 probes:
   port: 8080
   startup:
-    path: "/health"
-    timeoutSeconds: 10
+    path: "/actuator/health"
     failureThreshold: 30
     periodSeconds: 10
+    timeoutSeconds: 10
   liveness:
-    path: "/health"
+    path: "/actuator/health"
     timeoutSeconds: 10
   readiness:
-    path: "/health"
+    path: "/actuator/health"
     timeoutSeconds: 10
 
 ingress:
@@ -55,7 +65,7 @@ ingress:
   hosts:
     - host: am-dev.asrax.in
       paths:
-        - path: /market/parser
+        - path: /market
           pathType: Prefix
 
 env:

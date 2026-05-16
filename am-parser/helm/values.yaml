@@ -1,5 +1,6 @@
 replicaCount: 1
-port: 8000
+service:
+  port: 8080
 language: python
 
 security:
@@ -28,15 +29,5 @@ securityContext:
   capabilities:
     drop:
       - ALL
-
-# Vault configuration
-vault:
-  enabled: true
-  role: "am-backend-role"
-  secretPaths:
-    mongodb: 
-      path: "apps/data/preprod/infra/mongodb"
-    together:
-      path: "apps/data/preprod/infra/shared-api"
 
 environment: preprod
