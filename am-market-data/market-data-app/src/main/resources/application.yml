@@ -53,8 +53,25 @@ app:
     enabled: ${MARKET_DATA_KAFKA_ENABLED}
 
 am:
+  # Centralized observability from am-core-services
   observability:
     enabled: ${AM_OBSERVABILITY_ENABLED:true}
+    request-log:
+      # Emit a structured JSON log for every incoming HTTP request
+      enabled: true
+      ignore-paths:
+        - "/actuator/**"
+        - "/**/health/**"
+        - "/swagger-ui/**"
+        - "/v3/api-docs/**"
+    sanitize:
+      # Mask sensitive fields in log payloads (PII/Credentials)
+      extra-fields:
+        - code
+        - request_token
+        - access_token
+        - refresh_token
+        - client_secret
 
 kafka:
   topics:
@@ -124,8 +141,8 @@ logging:
       total-size-cap: 1GB
       clean-history-on-start: false
   pattern:
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%class{0}.%method] - %msg%n"
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%class{0}.%method] - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{traceId:-}, %X{spanId:-}] [%class{0}.%method] - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{traceId:-}, %X{spanId:-}] [%class{0}.%method] - %msg%n"
   level:
     root: WARN
     "[com.am.marketdata]": INFO

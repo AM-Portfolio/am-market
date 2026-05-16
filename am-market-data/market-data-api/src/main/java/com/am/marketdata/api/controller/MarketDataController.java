@@ -73,14 +73,17 @@ public class MarketDataController {
     })
     public ResponseEntity<Map<String, String>> getLoginUrl(
             @RequestParam(required = false) String provider) {
-        log.info("Request for login URL provider={}", provider);
-        try {
-            Map<String, String> response = marketDataService.getLoginUrl(provider);
-            log.info("Successfully generated login URL for provider={}", provider);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("Error getting login URL provider={}", provider, e);
-            return ResponseEntity.internalServerError().build();
+        // Instrument with FlowSpan to track authentication URL generation in distributed traces
+        try (FlowSpan span = flowLogger.start("market.auth.login-url", "provider", provider)) {
+            try {
+                Map<String, String> response = marketDataService.getLoginUrl(provider);
+                flowLogger.complete(span);
+                return ResponseEntity.ok(response);
+            } catch (Exception e) {
+                log.error("Error getting login URL provider={}", provider, e);
+                flowLogger.fail(span, e);
+                return ResponseEntity.internalServerError().build();
+            }
         }
     }
 
@@ -104,34 +107,37 @@ public class MarketDataController {
             @RequestParam(value = "requestToken", required = false) String requestTokenAlt,
             @RequestParam(value = "code", required = false) String code,
             @RequestParam(value = "status", required = false, defaultValue = "success") String status) {
-        try {
-            if (!"success".equalsIgnoreCase(status)) {
-                log.warn("Authentication failed status={}", status);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "Authentication failed");
-                errorResponse.put("message", "Login was not successful. Status: " + status);
-                return ResponseEntity.badRequest().body(errorResponse);
+        // Instrument with FlowSpan to track session generation in distributed traces
+        try (FlowSpan span = flowLogger.start("market.auth.session", "status", status)) {
+            try {
+                if (!"success".equalsIgnoreCase(status)) {
+                    log.warn("Authentication failed status={}", status);
+                    Map<String, Object> errorResponse = new HashMap<>();
+                    errorResponse.put("error", "Authentication failed");
+                    errorResponse.put("message", "Login was not successful. Status: " + status);
+                    return ResponseEntity.badRequest().body(errorResponse);
+                }
+
+                String token = requestToken != null ? requestToken : requestTokenAlt;
+                if (code != null)
+                    token = code;
+
+                if (token == null) {
+                    log.warn("Missing request token in session generation request");
+                    Map<String, Object> errorResponse = new HashMap<>();
+                    errorResponse.put("error", "Missing request token");
+                    errorResponse.put("message", "No request token provided");
+                    return ResponseEntity.badRequest().body(errorResponse);
+                }
+
+                Object session = marketDataService.generateSession(token);
+                flowLogger.complete(span);
+                return ResponseEntity.ok(session);
+            } catch (Exception e) {
+                log.error("Error generating session", e);
+                flowLogger.fail(span, e);
+                return ResponseEntity.internalServerError().build();
             }
-
-            String token = requestToken != null ? requestToken : requestTokenAlt;
-            if (code != null)
-                token = code;
-
-            if (token == null) {
-                log.warn("Missing request token in session generation request");
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "Missing request token");
-                errorResponse.put("message", "No request token provided");
-                return ResponseEntity.badRequest().body(errorResponse);
-            }
-
-            log.info("Generating session tokenPresent={} status={}", true, status);
-            Object session = marketDataService.generateSession(token);
-            log.info("Successfully generated session");
-            return ResponseEntity.ok(session);
-        } catch (Exception e) {
-            log.error("Error generating session", e);
-            return ResponseEntity.internalServerError().build();
         }
     }
 
@@ -344,7 +350,8 @@ public class MarketDataController {
             List<Object> symbols = marketDataService.getSymbolsForExchange(exchange, null);
             return ResponseEntity.ok(symbols);
         } catch (Exception e) {
-            log.error("getSymbolsForExchange", "Error getting symbols for exchange: " + e.getMessage(), e);
+            // Fixed SLF4J pattern: log.error("method", "msg") was discarding the message.
+            log.error("Error getting symbols for exchange={}: {}", exchange, e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -365,7 +372,8 @@ public class MarketDataController {
             Map<String, Object> response = marketDataService.logout(null);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("logout", "Error logging out", e);
+            // Fixed SLF4J pattern: log.error("method", "msg") was discarding the message.
+            log.error("Error logging out", e);
             return ResponseEntity.internalServerError().build();
         }
     }

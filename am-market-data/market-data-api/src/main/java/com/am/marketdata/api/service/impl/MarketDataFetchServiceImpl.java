@@ -82,6 +82,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
             boolean fetchIndexStocks = !isIndexSymbol;
             Set<String> symbols = instrumentUtils.resolveSymbols(new ArrayList<>(tradingSymbols), fetchIndexStocks);
+            // Fixed SLF4J pattern: was log.info("methodName", "msg") which failed to log params
             log.info("Resolved {} symbols from {} input symbols fetchIndexStocks={}", symbols.size(),
                     tradingSymbols.size(), fetchIndexStocks);
 
@@ -139,6 +140,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 Map<String, HistoricalData> symbolsData = new HashMap<>();
 
                 Set<String> resolvedSymbols = instrumentUtils.resolveSymbols(new ArrayList<>(symbols), fetchIndexStocks);
+                // Fixed SLF4J pattern: removed redundant methodName param
                 log.info("Resolved {} symbols from {} input symbols", resolvedSymbols.size(), symbols.size());
 
                 HistoricalDataFilterUtil.FilterParams filterParams = HistoricalDataFilterUtil
@@ -169,6 +171,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         int originalCount = dataPoints.size();
 
                         if (filterParams.isFiltered()) {
+                            // Fixed SLF4J pattern in helper classes might also have been updated
                             dataPoints = HistoricalDataFilterUtil.applyFilterStrategy(dataPoints, filterParams);
                         }
 
@@ -206,6 +209,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         .metadata(metadata)
                         .build();
             } catch (Exception e) {
+                // Fixed SLF4J pattern: was log.error("methodName", "msg", e)
                 log.error("Error in batch historical data retrieval", e);
                 flowLogger.fail(span, e);
                 return HistoricalDataResponseV1.builder()
@@ -218,8 +222,8 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
     @Override
     public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate, boolean forceRefresh) {
-        log.debug("getOptionChain",
-                "Fetching option chain for symbol: " + underlyingSymbol + " with expiry date: " + expiryDate);
+        log.debug(
+                "Fetching option chain for symbol={} expiryDate={}", underlyingSymbol, expiryDate);
         // Option chain functionality not yet migrated to MarketDataService
         Map<String, Object> result = new HashMap<>();
         result.put("error", "Option chain not yet supported");
@@ -228,7 +232,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
     @Override
     public Map<String, Object> getMutualFundDetails(String schemeCode, boolean forceRefresh) {
-        log.debug("getMutualFundDetails", "Fetching mutual fund details for scheme code: " + schemeCode);
+        log.debug("Fetching mutual fund details for schemeCode={}", schemeCode);
         // Mutual fund functionality not yet migrated to MarketDataService
         Map<String, Object> result = new HashMap<>();
         result.put("error", "Mutual fund details not yet supported");
@@ -237,8 +241,8 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
     @Override
     public Map<String, Object> getMutualFundNavHistory(String schemeCode, Date from, Date to, boolean forceRefresh) {
-        log.debug("getMutualFundNavHistory",
-                "Fetching mutual fund NAV history for scheme code: " + schemeCode + " from: " + from + " to: " + to);
+        log.debug(
+                "Fetching mutual fund NAV history for schemeCode={} from={} to={}", schemeCode, from, to);
         // Mutual fund functionality not yet migrated to MarketDataService
         Map<String, Object> result = new HashMap<>();
         result.put("error", "Mutual fund NAV history not yet supported");
@@ -248,34 +252,33 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     @Override
     public HistoricalDataResponseV1 processHistoricalDataRequest(
             HistoricalDataRequest request) throws Exception {
-        String methodName = "processHistoricalDataRequest";
-        log.info(methodName, String.format(
-                "[INTERVAL_TRACE] Controller → Service: Processing historical data request for symbols: %s from %s to %s, interval: %s (enum: %s, apiValue: %s), filterType: %s, isIndexSymbol: %b",
+        log.info(
+                "[INTERVAL_TRACE] Controller → Service: Processing historical data request symbols={} from={} to={} interval={} (enum={}, apiValue={}) filterType={} isIndexSymbol={}",
                 request.getSymbols(), request.getFrom(), request.getTo(),
                 request.getInterval(),
                 request.getInterval().name(),
                 request.getInterval().getApiValue(),
                 request.getFilterType(),
-                request.isIndexSymbol()));
+                request.isIndexSymbol());
 
         // Resolve symbols - DON'T expand if isIndexSymbol is true
         // isIndexSymbol=true means we want the index itself, not its constituents
         // isIndexSymbol=false means expand indices to constituent stocks
         Set<String> symbolList;
         if (request.isIndexSymbol()) {
-            log.info(methodName, "[INTERVAL_TRACE] isIndexSymbol=true, returning index symbols as-is: {}",
+            log.info("[INTERVAL_TRACE] isIndexSymbol=true, returning index symbols as-is: {}",
                     request.getSymbols());
             symbolList = parseSymbols(request.getSymbols());
             // Pass expandIndices=false to keep index symbols as-is
             symbolList = instrumentUtils.resolveSymbols(new ArrayList<>(symbolList), false);
-            log.info(methodName, "[INTERVAL_TRACE] Kept {} index symbols without expansion",
+            log.info("[INTERVAL_TRACE] Kept {} index symbols without expansion",
                     symbolList.size());
         } else {
-            log.info(methodName, "[INTERVAL_TRACE] isIndexSymbol=false, expanding indices to constituent stocks");
+            log.info("[INTERVAL_TRACE] isIndexSymbol=false, expanding indices to constituent stocks");
             Set<String> parsedSymbols = parseSymbols(request.getSymbols());
             // Pass expandIndices=true to expand indices to constituent stocks
             symbolList = instrumentUtils.resolveSymbols(new ArrayList<>(parsedSymbols), true);
-            log.info(methodName, "[INTERVAL_TRACE] Expanded {} symbols to {} stocks",
+            log.info("[INTERVAL_TRACE] Expanded {} symbols to {} stocks",
                     parsedSymbols.size(), symbolList.size());
         }
 
@@ -295,7 +298,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             // If 'to' date is not provided, use current date
             if (request.getTo() == null || request.getTo().trim().isEmpty()) {
                 toDate = new Date(); // Current date
-                log.info(methodName, "[INTERVAL_TRACE] 'to' date not provided, using current date: {}",
+                log.info("[INTERVAL_TRACE] 'to' date not provided, using current date: {}",
                         dateFormat.format(toDate));
             } else {
                 toDate = dateFormat.parse(request.getTo());
@@ -314,9 +317,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         additionalParams.put("filterType", request.getFilterType());
         additionalParams.put("filterFrequency", request.getFilterFrequency());
 
-        log.info(methodName, String.format(
-                "[INTERVAL_TRACE] Service → getHistoricalDataMultipleSymbols: Calling with interval: %s (apiValue: %s)",
-                request.getInterval(), request.getInterval().getApiValue()));
+        log.info(
+                "[INTERVAL_TRACE] Service → getHistoricalDataMultipleSymbols: Calling with interval: {} (apiValue: {})",
+                request.getInterval(), request.getInterval().getApiValue());
 
         HistoricalDataResponseV1 response = getHistoricalDataMultipleSymbols(
                 symbolList, fromDate, toDate, request.getInterval(),
@@ -324,9 +327,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 additionalParams, request.isForceRefresh(), !request.isIndexSymbol()); // fetchIndexStocks =
                                                                                        // !isIndexSymbol
 
-        log.info(methodName, String.format(
-                "[INTERVAL_TRACE] Service → Controller: Returning response for interval: %s",
-                response.getMetadata() != null ? response.getMetadata().getInterval() : "unknown"));
+        log.info(
+                "[INTERVAL_TRACE] Service → Controller: Returning response for interval: {}",
+                response.getMetadata() != null ? response.getMetadata().getInterval() : "unknown");
 
         return response;
     }
@@ -356,10 +359,10 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 null);
 
         if (ohlcData != null) {
-            log.info("getOHLC", "Fetched OHLC data for keys: " + ohlcData.keySet());
+            log.info("Fetched OHLC data for keys: {}", ohlcData.keySet());
             return ohlcData;
         } else {
-            log.warn("getOHLC", "Fetched OHLC data is null");
+            log.warn("Fetched OHLC data is null");
             return new HashMap<>();
         }
     }
@@ -380,7 +383,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     }
 
     public List<String> findMissingSymbols(List<String> indexSymbols, List<String> symbolsToCheck) {
-        log.debug("findMissingSymbols", "Finding symbols not included in the passed list: " + symbolsToCheck);
+        log.debug("Finding symbols not included in the passed list: {}", symbolsToCheck);
 
         if (symbolsToCheck == null || symbolsToCheck.isEmpty()) {
             return Collections.emptyList();
@@ -407,9 +410,8 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     }
 
     public Map<String, Object> getHistoricalChartsData(String symbol, String range) {
-        String methodName = "getHistoricalChartsData";
-        log.info(methodName, String.format("Fetching historical charts for symbol: %s, range: %s",
-                symbol, range));
+        log.info("Fetching historical charts for symbol={} range={}",
+                symbol, range);
 
         String interval;
         java.time.LocalDate to = java.time.LocalDate.now();
@@ -444,7 +446,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             }
             return result;
         } catch (Exception e) {
-            log.error(methodName, "Error fetching historical charts for " + symbol + ": " + e.getMessage());
+            log.error("Error fetching historical charts for {}: {}", symbol, e.getMessage());
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Failed to fetch chart data");
             errorResponse.put("message", e.getMessage());

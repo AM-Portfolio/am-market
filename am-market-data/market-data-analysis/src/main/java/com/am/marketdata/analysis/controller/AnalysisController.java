@@ -156,7 +156,6 @@ public class AnalysisController {
                 try {
                     tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
                 } catch (IllegalArgumentException e) {
-                    log.error("getMovers", "Invalid timeframe requested: " + timeFrame);
                     log.warn("Invalid timeframe requested: {}", timeFrame);
                     return ResponseEntity.badRequest().body(Map.of("error", "Invalid timeframe", "message", e.getMessage()));
                 }
@@ -170,6 +169,7 @@ public class AnalysisController {
                 flowLogger.complete(span);
                 return ResponseEntity.ok(result);
             } catch (Exception e) {
+                // Fixed SLF4J pattern: was log.error("methodName", "msg", e)
                 log.error("Error fetching movers index={} type={}", index, type, e);
                 flowLogger.fail(span, e);
                 throw e;
