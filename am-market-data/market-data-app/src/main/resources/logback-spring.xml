@@ -1,37 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Logback configuration for am-market-data.
-
-  Delegates to the shared am-observability-lib include file which provides:
-    - JSON_STDOUT + JSON_FILE for preprod/prod (default profile)
-    - TEXT_STDOUT for local dev (human-readable, no JSON parsing overhead)
-
-  Profile behaviour (controlled by spring.profiles.active):
-    - local        → plain text to STDOUT only (easy to read during dev)
-    - (default)    → JSON to STDOUT + rolling JSON file (Loki-indexable)
-    - caller-off   → composable flag to skip caller info (perf sensitive)
-
-  Why JSON?
-    The JSON encoder (logstash-logback-encoder) emits traceId, spanId,
-    service, userId, correlationId and flow.* as top-level JSON fields.
-    Grafana Loki extracts these automatically, enabling:
-      - Direct traceId → Tempo drill-through links
-      - LogQL filtering by field (e.g. {traceId="abc123"})
--->
 <configuration>
 
-    <!--
-      Pull in all appenders and profile-based root logger config from the
-      observability library. This single include replaces the manual
-      plain-text patterns we had before and is the only change needed
-      to unlock JSON-structured logs in Grafana/Loki.
+    <!-- 
+      Pull in all appenders from the observability library.
+      This defines JSON_STDOUT, JSON_FILE, and TEXT_STDOUT.
     -->
     <include resource="am-logback-include.xml"/>
 
     <!--
-      Service-specific logger levels.
-      These override the root level set inside the include file.
+      CRITICAL OVERRIDE for Kubernetes/Cloud:
+      The library include unconditionally adds JSON_FILE to the root logger for cloud profiles.
+      In Kubernetes, this causes a CrashLoopBackOff because the ./logs directory is not writable.
+      
+      By redefining the root logger here AFTER the include, we override the library's
+      default and ensure ONLY JSON_STDOUT is used in preprod/prod.
     -->
+    <springProfile name="!mcp-stdio &amp; !logback-text &amp; !local">
+        <root level="INFO">
+            <appender-ref ref="JSON_STDOUT"/>
+            <!-- JSON_FILE appender removed to prevent CrashLoopBackOff in read-only containers -->
+        </root>
+    </springProfile>
+
+    <!-- Service-specific logger levels -->
     <logger name="com.am.marketdata" level="INFO"/>
     <logger name="org.springframework"            level="WARN"/>
     <logger name="org.springframework.data.redis" level="WARN"/>
