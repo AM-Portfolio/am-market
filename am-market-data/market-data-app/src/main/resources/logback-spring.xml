@@ -1,54 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Logback configuration for am-market-data.
+
+  Delegates to the shared am-observability-lib include file which provides:
+    - JSON_STDOUT + JSON_FILE for preprod/prod (default profile)
+    - TEXT_STDOUT for local dev (human-readable, no JSON parsing overhead)
+
+  Profile behaviour (controlled by spring.profiles.active):
+    - local        → plain text to STDOUT only (easy to read during dev)
+    - (default)    → JSON to STDOUT + rolling JSON file (Loki-indexable)
+    - caller-off   → composable flag to skip caller info (perf sensitive)
+
+  Why JSON?
+    The JSON encoder (logstash-logback-encoder) emits traceId, spanId,
+    service, userId, correlationId and flow.* as top-level JSON fields.
+    Grafana Loki extracts these automatically, enabling:
+      - Direct traceId → Tempo drill-through links
+      - LogQL filtering by field (e.g. {traceId="abc123"})
+-->
 <configuration>
-    <!-- Console Appender -->
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{traceId:-}, %X{spanId:-}] - %msg%n</pattern>
-        </encoder>
-    </appender>
 
-    <!-- Local Environment Logging (Console + File) -->
-    <springProfile name="local">
-        <!-- File Appender with Rolling -->
-        <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-            <file>logs/market-data-app.log</file>
-            <encoder>
-                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{traceId:-}, %X{spanId:-}] - %msg%n</pattern>
-            </encoder>
-            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-                <fileNamePattern>logs/market-data-app-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-                <maxFileSize>10MB</maxFileSize>
-                <maxHistory>30</maxHistory>
-                <totalSizeCap>1GB</totalSizeCap>
-            </rollingPolicy>
-        </appender>
+    <!--
+      Pull in all appenders and profile-based root logger config from the
+      observability library. This single include replaces the manual
+      plain-text patterns we had before and is the only change needed
+      to unlock JSON-structured logs in Grafana/Loki.
+    -->
+    <include resource="am-logback-include.xml"/>
 
-        <!-- Root Logger -->
-        <root level="INFO">
-            <appender-ref ref="CONSOLE" />
-            <appender-ref ref="FILE" />
-        </root>
+    <!--
+      Service-specific logger levels.
+      These override the root level set inside the include file.
+    -->
+    <logger name="com.am.marketdata" level="INFO"/>
+    <logger name="org.springframework"            level="WARN"/>
+    <logger name="org.springframework.data.redis" level="WARN"/>
+    <logger name="org.hibernate"                  level="WARN"/>
+    <logger name="org.apache.kafka"               level="WARN"/>
 
-        <!-- Application Loggers -->
-        <logger name="com.am.marketdata" level="INFO" additivity="false">
-            <appender-ref ref="CONSOLE" />
-            <appender-ref ref="FILE" />
-        </logger>
-    </springProfile>
-
-    <!-- Cloud Environments (Console Only) -->
-    <springProfile name="!local">
-        <root level="INFO">
-            <appender-ref ref="CONSOLE" />
-        </root>
-        <logger name="com.am.marketdata" level="INFO" additivity="false">
-            <appender-ref ref="CONSOLE" />
-        </logger>
-    </springProfile>
-
-    <!-- Framework Loggers -->
-    <logger name="org.springframework" level="WARN" />
-    <logger name="org.springframework.data.redis" level="WARN" />
-    <logger name="org.hibernate" level="WARN" />
-    <logger name="org.apache.kafka" level="WARN" />
 </configuration>

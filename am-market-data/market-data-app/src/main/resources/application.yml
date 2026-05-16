@@ -133,16 +133,17 @@ market-data:
 # Logging Configuration
 logging:
   file:
-    name: ./logs/market-data-app.log # Log file in current directory
+    name: ./logs/market-data-app.log # Log file path; logback-spring.xml controls rolling policy
   logback:
     rollingpolicy:
       max-file-size: 10MB
       max-history: 30
       total-size-cap: 1GB
       clean-history-on-start: false
-  pattern:
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{traceId:-}, %X{spanId:-}] [%class{0}.%method] - %msg%n"
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{traceId:-}, %X{spanId:-}] [%class{0}.%method] - %msg%n"
+  # NOTE: logging.pattern.* removed intentionally.
+  # logback-spring.xml now uses am-logback-include.xml (from am-observability-lib) which
+  # uses the logstash JSON encoder. Plain-text pattern overrides here would conflict
+  # with the JSON encoder and break structured log output in Grafana/Loki.
   level:
     root: WARN
     "[com.am.marketdata]": INFO
