@@ -13,5 +13,7 @@ resources:
 # Vault Configuration (Dev Override)
 vault:
   secretPaths:
-    mongodb: "secret/data/dev/infra/mongodb"
-    together: "secret/data/dev/api/together"
+    mongodb:
+      path: "apps/data/dev/infra/mongodb"
+    together:
+      path: "apps/data/dev/infra/shared-api"
