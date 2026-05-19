@@ -7,6 +7,7 @@ Generated from OpenAPI spec version 1.0.0
 import httpx
 import asyncio
 import os
+import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
@@ -83,31 +84,57 @@ class LoggerMixin:
         super().__init__(*args, **kwargs)
         self._log_client = AMLoggingClient()
         self._service_name = getattr(self, 'service_name', self.__class__.__module__.split('.')[0])
+        # Retrieve the standard Logger configured under our new observability framework
+        self._logger = logging.getLogger(self._service_name)
     
     def _log_async(self, level: str, message: str, **kwargs):
-        """Async logging method"""
+        """Async logging method routed to standard Python logging and optionally legacy DB."""
         import uuid
         import inspect
+        from am_common.observability import context as obs_ctx
         
-        trace_id = kwargs.get('trace_id', str(uuid.uuid4()))
-        span_id = kwargs.get('span_id', str(uuid.uuid4()))
+        trace_id = obs_ctx.get_current_trace_id() or kwargs.get('trace_id') or str(uuid.uuid4())
+        span_id = obs_ctx.get_current_span_id() or kwargs.get('span_id') or str(uuid.uuid4())
         
         frame = inspect.currentframe().f_back
         class_name = frame.f_locals.get('self', None).__class__.__name__ if 'self' in frame.f_locals else "Global"
         method_name = frame.f_code.co_name
         
-        log_entry = self._log_client.create_log_entry(
-            trace_id=trace_id,
-            span_id=span_id,
-            service=self._service_name,
-            level=level,
-            payload={"message": message},
-            context={"class": class_name, "method": method_name},
-            metadata=kwargs.get('metadata'),
-            persist_to_db=kwargs.get('persist_to_db')
-        )
+        log_level_num = getattr(logging, level.upper(), logging.INFO)
         
-        self._log_client.send_log(log_entry)
+        # Merge keyword metadata
+        metadata = kwargs.get('metadata') or {}
+        
+        # Route to standard python logging via bind_context
+        with obs_ctx.bind_context(
+            correlationId=trace_id,
+            traceId=trace_id,
+            spanId=span_id,
+            **{
+                "caller.class": class_name,
+                "caller.method": method_name,
+                **metadata
+            }
+        ):
+            self._logger.log(log_level_num, message)
+            
+        # Determine actual database persistence
+        actual_persist = kwargs.get('persist_to_db')
+        if actual_persist is None:
+            actual_persist = self._log_client.persist_to_db
+            
+        if actual_persist:
+            log_entry = self._log_client.create_log_entry(
+                trace_id=trace_id,
+                span_id=span_id,
+                service=self._service_name,
+                level=level,
+                payload={"message": message},
+                context={"class": class_name, "method": method_name},
+                metadata=kwargs.get('metadata'),
+                persist_to_db=actual_persist
+            )
+            self._log_client.send_log(log_entry)
     
     def log_info(self, message: str, **kwargs):
         self._log_async("INFO", message, **kwargs)

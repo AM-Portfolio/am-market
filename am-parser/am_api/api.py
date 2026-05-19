@@ -15,6 +15,9 @@ import os
 # Add parent directory to path to find external modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from am_common.observability import get_logger, bind_context, set_context
+logger = get_logger("am_api.api")
+
 from am_persistence import create_mutual_fund_service, MutualFundService
 from am_common.mutual_fund_models import MutualFundPortfolio, PortfolioSummary
 from am_common.upload_models import (
@@ -48,8 +51,33 @@ async def lifespan(app: FastAPI):
     try:
         # Import centralized configuration
         from am_configs.settings import settings
+        from am_common.observability import ObservabilityConfig, configure_observability
         
-        print(f"🔌 Connecting to MongoDB: {settings.mongo_uri}")
+        # 1. Map settings parameters to decoupled ObservabilityConfig
+        obs_config = ObservabilityConfig(
+            service_name=settings.service_name,
+            otel_exporter_otlp_endpoint=settings.otel_exporter_otlp_endpoint,
+            otel_traces_exporter=settings.otel_traces_exporter,
+            log_level=settings.log_level,
+            log_format=settings.log_format
+        )
+        
+        # 2. Configure logging formats and tracing provider
+        configure_observability(obs_config)
+        logger.info("Observability pipelines initialized successfully")
+        
+        # 3. Auto-instrument FastAPI and HTTPx safely
+        try:
+            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+            from opentelemetry.instrumentation.httpx import HTTPxClientInstrumentor
+            
+            FastAPIInstrumentor.instrument_app(app)
+            HTTPxClientInstrumentor().instrument()
+            logger.info("FastAPI and HTTPx auto-instrumentation configured")
+        except Exception:
+            logger.warning("Failed to auto-instrument FastAPI/HTTPx", exc_info=True)
+            
+        logger.info(f"Connecting to MongoDB: {settings.mongo_uri}")
         
         service_instance = create_mutual_fund_service(
             mongo_uri=settings.mongo_uri,
@@ -67,22 +95,29 @@ async def lifespan(app: FastAPI):
         # Start background job processor
         job_queue = await get_job_queue()
         background_processor_task = asyncio.create_task(job_queue.start_job_processor())
-        print("INFO: Started background job processor")
+        logger.info("Started background job processor")
         
-        print("INFO: Connected to MongoDB")
-        print("INFO: Initialized file upload services")
+        logger.info("Connected to MongoDB")
+        logger.info("Initialized file upload services")
         yield
-    except Exception as e:
-        print(f"ERROR: Failed to initialize services: {e}")
+    except Exception:
+        logger.error("Failed to initialize services", exc_info=True)
         raise
     finally:
         # Shutdown: Close services
+        try:
+            from am_common.observability import shutdown_observability
+            shutdown_observability()
+            logger.info("Observability pipelines shut down cleanly")
+        except Exception:
+            logger.error("Failed to shut down observability cleanly", exc_info=True)
+            
         if background_processor_task:
             background_processor_task.cancel()
-            print("INFO: Background job processor stopped")
+            logger.info("Background job processor stopped")
         if service_instance:
             await service_instance.close()
-            print("INFO: MongoDB connection closed")
+            logger.info("MongoDB connection closed")
 
 
 import time
@@ -96,25 +131,59 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Refactored legacy am_logger to route to get_logger
 am_logger = AMLogger(service_name="am-parser")
 
-# Middleware for structured logging
+# Middleware for structured logging and MDC context binding
 @app.middleware("http")
 async def log_requests(request, call_next):
+    # Setup correlation ID (from headers or newly generated UUID)
+    correlation_id = request.headers.get("x-correlation-id") or request.headers.get("x-request-id")
+    if not correlation_id:
+        import uuid
+        correlation_id = str(uuid.uuid4())
+        
+    # Get user ID from header if available
+    user_id = request.headers.get("x-user-id")
+    
     start_time = time.time()
-    response = await call_next(request)
-    duration = (time.time() - start_time) * 1000 # to ms
     
-    context = {
-        "method": request.method,
-        "path": request.url.path,
-        "status": response.status_code,
-        "latency_ms": round(duration, 2),
-        "client_ip": request.client.host if request.client else "unknown"
-    }
-    
-    am_logger.log("INFO", "API Request Processed", context)
-    return response
+    # Establish thread-safe MDC context scope for the async call chain
+    with bind_context(
+        correlationId=correlation_id,
+        userId=user_id,
+        **{
+            "request.method": request.method,
+            "request.path": request.url.path
+        }
+    ):
+        try:
+            response = await call_next(request)
+            duration_ms = round((time.time() - start_time) * 1000, 2)
+            
+            # Update response headers with correlation ID
+            response.headers["x-correlation-id"] = correlation_id
+            
+            # Bind request outcome details to MDC
+            set_context(
+                **{
+                    "http.status": response.status_code,
+                    "flow.duration_ms": str(duration_ms)
+                }
+            )
+            
+            logger.info("API Request Processed")
+            return response
+        except Exception as e:
+            duration_ms = round((time.time() - start_time) * 1000, 2)
+            set_context(
+                **{
+                    "http.status": 500,
+                    "flow.duration_ms": str(duration_ms)
+                }
+            )
+            logger.error(f"API Request Failed: {e}", exc_info=True)
+            raise
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
@@ -132,7 +201,7 @@ app.include_router(etf_router, prefix="/v1/etf")
 # Debug: Print all registered routes
 for route in app.routes:
     if hasattr(route, "methods"):
-        print(f"INFO: Route: {route.methods} {route.path}")
+        logger.info(f"Registered route: {route.methods} {route.path}")
 
 
 
@@ -536,72 +605,76 @@ async def upload_file(
                 detail="Only Excel files (.xlsx, .xls) are supported"
             )
         
-        print(f"🔧 Using parse method: {parse_method}")
+        logger.info(f"Starting complete upload processing", extra={"parse_method": parse_method})
         
         # 1. Save uploaded file
         file_upload = await file_upload_service.save_uploaded_file(file)
         
-        # 2. Save main file to database
-        await file_upload_repo.create_file_upload(file_upload)
-        print(f"INFO: Main file persisted: {file_upload.file_id}")
-        
-        # 3. Get sheet information before processing
-        sheet_infos = []
-        if file_upload.file_type.value == "excel":
-            try:
-                sheet_infos = file_upload_service.get_excel_sheet_info(file_upload.file_path)
-            except Exception as e:
-                print(f"Warning: Could not read sheet info: {e}")
-        
-        # 4. Process Excel file (split into sheets and persist all)
-        await file_processing_service.process_excel_file(file_upload.file_id)
-        print(f"INFO: Excel processed and sheets split")
-        
-        # 5. Get all sheet files created
-        sheet_files = await file_upload_repo.get_files_by_parent_id(file_upload.file_id)
-        print(f"INFO: Found {len(sheet_files)} sheet files")
-        
-        # 6. Parse each sheet and save portfolios
-        parsed_portfolios = []
-        parsing_errors = []
-        
-        for sheet_file in sheet_files:
-            try:
-                # Parse the sheet file (no API key needed - service uses environment)
-                result = await file_processing_service.process_sheet_file(
-                    sheet_file.file_id, 
-                    parse_method
-                )
-                
-                if result and "portfolio_id" in result:
-                    # Get the saved portfolio
-                    portfolio = await service_instance.get_portfolio_by_id(result["portfolio_id"])
-                    if portfolio:
-                        parsed_portfolios.append({
-                            "sheet_name": sheet_file.original_filename.replace('.xlsx', ''),
-                            "portfolio_id": result["portfolio_id"],
-                            "mutual_fund_name": portfolio.mutual_fund_name,
-                            "total_holdings": portfolio.total_holdings,
-                            "portfolio_date": portfolio.portfolio_date
-                        })
-                        print(f"INFO: Parsed and saved: {sheet_file.original_filename}")
-                    else:
+        # Establish a bound context with file_id
+        with bind_context(file_id=file_upload.file_id, parse_method=parse_method):
+            # 2. Save main file to database
+            await file_upload_repo.create_file_upload(file_upload)
+            logger.info("Main file persisted successfully")
+            
+            # 3. Get sheet information before processing
+            sheet_infos = []
+            if file_upload.file_type.value == "excel":
+                try:
+                    sheet_infos = file_upload_service.get_excel_sheet_info(file_upload.file_path)
+                except Exception:
+                    logger.warning("Could not read sheet info from Excel", exc_info=True)
+            
+            # 4. Process Excel file (split into sheets and persist all)
+            await file_processing_service.process_excel_file(file_upload.file_id)
+            logger.info("Excel processed and sheets split successfully")
+            
+            # 5. Get all sheet files created
+            sheet_files = await file_upload_repo.get_files_by_parent_id(file_upload.file_id)
+            logger.info(f"Found {len(sheet_files)} sheet files")
+            
+            # 6. Parse each sheet and save portfolios
+            parsed_portfolios = []
+            parsing_errors = []
+            
+            for sheet_file in sheet_files:
+                # Bind sheet specifics
+                with bind_context(sheet_id=sheet_file.file_id, sheet_name=sheet_file.sheet_name):
+                    try:
+                        # Parse the sheet file
+                        result = await file_processing_service.process_sheet_file(
+                            sheet_file.file_id, 
+                            parse_method
+                        )
+                        
+                        if result and "portfolio_id" in result:
+                            # Get the saved portfolio
+                            portfolio = await service_instance.get_portfolio_by_id(result["portfolio_id"])
+                            if portfolio:
+                                parsed_portfolios.append({
+                                    "sheet_name": sheet_file.original_filename.replace('.xlsx', ''),
+                                    "portfolio_id": result["portfolio_id"],
+                                    "mutual_fund_name": portfolio.mutual_fund_name,
+                                    "total_holdings": portfolio.total_holdings,
+                                    "portfolio_date": portfolio.portfolio_date
+                                })
+                                logger.info("Parsed and saved sheet portfolio successfully", extra={"portfolio_id": result["portfolio_id"]})
+                            else:
+                                parsing_errors.append({
+                                    "sheet_name": sheet_file.original_filename,
+                                    "error": "Portfolio saved but could not retrieve"
+                                })
+                        else:
+                            parsing_errors.append({
+                                    "sheet_name": sheet_file.original_filename,
+                                    "error": "Failed to parse portfolio data"
+                                })
+                                
+                    except Exception:
                         parsing_errors.append({
                             "sheet_name": sheet_file.original_filename,
-                            "error": "Portfolio saved but could not retrieve"
+                            "error": "Exception occurred during sheet processing"
                         })
-                else:
-                    parsing_errors.append({
-                        "sheet_name": sheet_file.original_filename,
-                        "error": "Failed to parse portfolio data"
-                    })
-                    
-            except Exception as e:
-                parsing_errors.append({
-                    "sheet_name": sheet_file.original_filename,
-                    "error": str(e)
-                })
-                print(f"ERROR: Failed to parse {sheet_file.original_filename}: {e}")
+                        logger.error("Failed to parse sheet file", exc_info=True)
         
         # 7. Return comprehensive results
         return {
