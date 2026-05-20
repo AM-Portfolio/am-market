@@ -69,13 +69,13 @@ async def lifespan(app: FastAPI):
         # 3. Auto-instrument FastAPI and HTTPx safely
         try:
             from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-            from opentelemetry.instrumentation.httpx import HTTPxClientInstrumentor
+            from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
             
             FastAPIInstrumentor.instrument_app(app)
-            HTTPxClientInstrumentor().instrument()
-            logger.info("FastAPI and HTTPx auto-instrumentation configured")
+            HTTPXClientInstrumentor().instrument()
+            logger.info("FastAPI and HTTPX auto-instrumentation configured")
         except Exception:
-            logger.warning("Failed to auto-instrument FastAPI/HTTPx", exc_info=True)
+            logger.warning("Failed to auto-instrument FastAPI/HTTPX", exc_info=True)
             
         logger.info(f"Connecting to MongoDB: {settings.mongo_uri}")
         
