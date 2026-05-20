@@ -1,5 +1,6 @@
 replicaCount: 1
-port: 8080
+service:
+  port: 8080
 language: java
 
 global:
@@ -9,7 +10,7 @@ global:
 image:
   repository: am-market-data
   pullPolicy: Always
-  tag: "latest"
+  tag: "24962128676"
 
 ingress:
   enabled: false
@@ -33,28 +34,6 @@ resources:
   requests:
     cpu: 200m
     memory: 512Mi
-
-# Vault configuration
-vault:
-  enabled: true
-  role: "am-backend-role"
-  secretPaths:
-    postgres:
-      path: "apps/data/preprod/infra/postgres"
-    mongodb: 
-      path: "apps/data/preprod/infra/mongodb"
-    redis: 
-      path: "apps/data/preprod/infra/redis"
-    influxdb: 
-      path: "apps/data/preprod/infra/influxdb"
-    jwt:
-      path: "apps/data/preprod/services/am-market-data"
-    kafka: 
-      path: "apps/data/preprod/infra/kafka"
-    zerodha:
-      path: "apps/data/preprod/services/am-market-data"
-    upstox: 
-      path: "apps/data/preprod/services/am-market-data"
 
 # Application specific configuration
 config:
