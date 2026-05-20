@@ -135,55 +135,75 @@ app = FastAPI(
 am_logger = AMLogger(service_name="am-parser")
 
 # Middleware for structured logging and MDC context binding
-@app.middleware("http")
-async def log_requests(request, call_next):
-    # Setup correlation ID (from headers or newly generated UUID)
-    correlation_id = request.headers.get("x-correlation-id") or request.headers.get("x-request-id")
-    if not correlation_id:
+class RequestLoggingASGIMiddleware:
+    """ASGI Middleware for structured logging and MDC context binding.
+    Avoids Starlette's BaseHTTPMiddleware to ensure proper contextvars propagation with OpenTelemetry.
+    """
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        from starlette.datastructures import Headers
         import uuid
-        correlation_id = str(uuid.uuid4())
         
-    # Get user ID from header if available
-    user_id = request.headers.get("x-user-id")
-    
-    start_time = time.time()
-    
-    # Establish thread-safe MDC context scope for the async call chain
-    with bind_context(
-        correlationId=correlation_id,
-        userId=user_id,
-        **{
-            "request.method": request.method,
-            "request.path": request.url.path
-        }
-    ):
-        try:
-            response = await call_next(request)
-            duration_ms = round((time.time() - start_time) * 1000, 2)
+        headers = Headers(scope=scope)
+        correlation_id = headers.get("x-correlation-id") or headers.get("x-request-id")
+        if not correlation_id:
+            correlation_id = str(uuid.uuid4())
             
-            # Update response headers with correlation ID
-            response.headers["x-correlation-id"] = correlation_id
-            
-            # Bind request outcome details to MDC
-            set_context(
-                **{
-                    "http.status": response.status_code,
-                    "flow.duration_ms": str(duration_ms)
-                }
-            )
-            
-            logger.info("API Request Processed")
-            return response
-        except Exception as e:
-            duration_ms = round((time.time() - start_time) * 1000, 2)
-            set_context(
-                **{
-                    "http.status": 500,
-                    "flow.duration_ms": str(duration_ms)
-                }
-            )
-            logger.error(f"API Request Failed: {e}", exc_info=True)
-            raise
+        user_id = headers.get("x-user-id")
+        start_time = time.time()
+        status_code = [500]
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                status_code[0] = message["status"]
+                # Add x-correlation-id to response headers
+                headers_list = list(message.get("headers", []))
+                has_correlation = False
+                for i, (k, v) in enumerate(headers_list):
+                    if k.lower() == b"x-correlation-id":
+                        has_correlation = True
+                        break
+                if not has_correlation:
+                    headers_list.append((b"x-correlation-id", correlation_id.encode("utf-8")))
+                message["headers"] = headers_list
+            await send(message)
+
+        with bind_context(
+            correlationId=correlation_id,
+            userId=user_id,
+            **{
+                "request.method": scope["method"],
+                "request.path": scope["path"]
+            }
+        ):
+            try:
+                await self.app(scope, receive, send_wrapper)
+                duration_ms = round((time.time() - start_time) * 1000, 2)
+                set_context(
+                    **{
+                        "http.status": status_code[0],
+                        "flow.duration_ms": str(duration_ms)
+                    }
+                )
+                logger.info("API Request Processed")
+            except Exception as e:
+                duration_ms = round((time.time() - start_time) * 1000, 2)
+                set_context(
+                    **{
+                        "http.status": 500,
+                        "flow.duration_ms": str(duration_ms)
+                    }
+                )
+                logger.error(f"API Request Failed: {e}", exc_info=True)
+                raise
+
+app.add_middleware(RequestLoggingASGIMiddleware)
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(

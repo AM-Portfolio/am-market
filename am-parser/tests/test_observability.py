@@ -251,3 +251,52 @@ def test_mdc_priority_over_otel():
     finally:
         obs_ctx.get_current_trace_id = orig_get_trace
         obs_ctx.get_current_span_id = orig_get_span
+
+
+def test_logging_middleware_otel_integration():
+    """Verify that RequestLoggingASGIMiddleware preserves and logs active OTel traceId and spanId."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from am_api.api import RequestLoggingASGIMiddleware
+    from am_common.observability import configure_observability, ObservabilityConfig
+    
+    config = ObservabilityConfig(
+        service_name="middleware-test-service",
+        log_level="INFO",
+        log_format="json"
+    )
+    configure_observability(config)
+    
+    app = FastAPI()
+    app.add_middleware(RequestLoggingASGIMiddleware)
+    FastAPIInstrumentor.instrument_app(app)
+    
+    @app.get("/test")
+    def test_endpoint():
+        return {"status": "ok"}
+        
+    log_capture = StringIO()
+    handler = logging.StreamHandler(log_capture)
+    from am_common.observability.logger_config import ObservabilityJsonFormatter
+    formatter = ObservabilityJsonFormatter(config, "%(message)s")
+    handler.setFormatter(formatter)
+    
+    api_logger = logging.getLogger("am_api.api")
+    api_logger.handlers = []
+    api_logger.propagate = False
+    api_logger.addHandler(handler)
+    api_logger.setLevel(logging.INFO)
+    
+    client = TestClient(app)
+    resp = client.get("/test")
+    assert resp.status_code == 200
+    
+    log_output = log_capture.getvalue().strip()
+    assert log_output != ""
+    
+    log_json = json.loads(log_output)
+    assert log_json["level"] == "INFO"
+    assert log_json["request.path"] == "/test"
+    assert "traceId" in log_json and log_json["traceId"] != ""
+    assert "spanId" in log_json and log_json["spanId"] != ""
