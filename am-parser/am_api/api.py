@@ -159,6 +159,8 @@ class RequestLoggingASGIMiddleware:
         start_time = time.time()
         status_code = [500]
 
+        logged = [False]
+
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
                 status_code[0] = message["status"]
@@ -172,6 +174,17 @@ class RequestLoggingASGIMiddleware:
                 if not has_correlation:
                     headers_list.append((b"x-correlation-id", correlation_id.encode("utf-8")))
                 message["headers"] = headers_list
+                
+                # Log here while the OTel span is still active
+                duration_ms = round((time.time() - start_time) * 1000, 2)
+                set_context(
+                    **{
+                        "http.status": status_code[0],
+                        "flow.duration_ms": str(duration_ms)
+                    }
+                )
+                logger.info("API Request Processed")
+                logged[0] = True
             await send(message)
 
         with bind_context(
@@ -184,14 +197,15 @@ class RequestLoggingASGIMiddleware:
         ):
             try:
                 await self.app(scope, receive, send_wrapper)
-                duration_ms = round((time.time() - start_time) * 1000, 2)
-                set_context(
-                    **{
-                        "http.status": status_code[0],
-                        "flow.duration_ms": str(duration_ms)
-                    }
-                )
-                logger.info("API Request Processed")
+                if not logged[0]:
+                    duration_ms = round((time.time() - start_time) * 1000, 2)
+                    set_context(
+                        **{
+                            "http.status": status_code[0],
+                            "flow.duration_ms": str(duration_ms)
+                        }
+                    )
+                    logger.info("API Request Processed")
             except Exception as e:
                 duration_ms = round((time.time() - start_time) * 1000, 2)
                 set_context(
