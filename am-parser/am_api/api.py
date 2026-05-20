@@ -66,16 +66,7 @@ async def lifespan(app: FastAPI):
         configure_observability(obs_config)
         logger.info("Observability pipelines initialized successfully")
         
-        # 3. Auto-instrument FastAPI and HTTPx safely
-        try:
-            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-            from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-            
-            FastAPIInstrumentor.instrument_app(app)
-            HTTPXClientInstrumentor().instrument()
-            logger.info("FastAPI and HTTPX auto-instrumentation configured")
-        except Exception:
-            logger.warning("Failed to auto-instrument FastAPI/HTTPX", exc_info=True)
+        # Auto-instrumentation is now configured at module-level to guarantee correct ASGI middleware execution order.
             
         logger.info(f"Connecting to MongoDB: {settings.mongo_uri}")
         
@@ -183,6 +174,11 @@ class RequestLoggingASGIMiddleware:
                         "flow.duration_ms": str(duration_ms)
                     }
                 )
+                from opentelemetry import trace as otel_trace
+                current_span = otel_trace.get_current_span()
+                span_ctx = current_span.get_span_context() if current_span else None
+                print(f"[DEBUG_OTEL] Current Span: {current_span}, Is Valid: {span_ctx.is_valid if span_ctx else False}, TraceID: {span_ctx.trace_id if span_ctx else None}, HexTraceID: {f'{span_ctx.trace_id:032x}' if span_ctx and span_ctx.is_valid else None}", flush=True)
+                
                 logger.info("API Request Processed")
                 logged[0] = True
             await send(message)
@@ -218,6 +214,17 @@ class RequestLoggingASGIMiddleware:
                 raise
 
 app.add_middleware(RequestLoggingASGIMiddleware)
+
+# Auto-instrument FastAPI and HTTPx safely at module level
+try:
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    
+    FastAPIInstrumentor.instrument_app(app)
+    HTTPXClientInstrumentor().instrument()
+    logger.info("FastAPI and HTTPX auto-instrumentation configured at module level")
+except Exception:
+    logger.warning("Failed to auto-instrument FastAPI/HTTPX at module level", exc_info=True)
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
