@@ -2,6 +2,7 @@
 AM Common Module - Shared models and utilities
 """
 
+from sqlite3 import SQLITE_DROP_TRIGGER
 from .models import Fund, Holding, Totals, Portfolio, load_tabular
 from .mutual_fund_models import MutualFundPortfolio, PortfolioSummary, Holding as MFHolding
 
@@ -14,4 +15,6 @@ __all__ = [
     "MutualFundPortfolio",
     "PortfolioSummary", 
     "MFHolding"
-]
+] 
+
+# triggering for test 
