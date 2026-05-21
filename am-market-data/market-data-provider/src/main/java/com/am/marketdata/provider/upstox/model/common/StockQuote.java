@@ -1,59 +1,77 @@
 package com.am.marketdata.provider.upstox.model.common;
 
-import lombok.Data;
-import lombok.Builder;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.ZonedDateTime;
 
-@Data
-@Builder
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class StockQuote {
-   
+
     private String symbol;
     private String isin;
     private String exchange;
-    private String instrumentId;
-    private String instrument_token;
-    
-    // Price Information
+
+    @JsonProperty("last_price")
     private Double lastPrice;
-    private Double previousClose;
-    private Double change;
-    private Double changePercent;
-    private Double change5Min;
-    private Double change10Min;
-    private Double change15Min;
-    private Double change1Hour;
-    private Double change1Day;
-    
-    // OHLC
-    private Double openPrice;
-    private Double highPrice;
-    private Double lowPrice;
-    private Double closePrice;
-    
-    // Volume Information
+
+    @JsonProperty("ohlc")
+    private OHLC ohlc;
+
     private Long volume;
-    private Double averagePrice;
-    
-    // Market Depth
-    private Double totalBuyQuantity;
-    private Double totalSellQuantity;
-    
-    // Circuit Limits
-    private Double upperCircuitLimit;
-    private Double lowerCircuitLimit;
-    
-    // Timestamps
-    private ZonedDateTime lastUpdateTime;
-    private ZonedDateTime lastTradeTime;
-    
-    // Market Depth Details
-    private MarketDepth marketDepth;
-    
-    // Closing Prices for Different Timeframes
-    private Double closePrice5Min;
-    private Double closePrice10Min;
-    private Double closePrice15Min;
-    private Double closePrice1Hour;
-    private Double closePrice1Day;
-} 
+
+    @JsonProperty("instrument_token")
+    private String instrumentToken;
+
+    @JsonProperty("previous_close")
+    private Double previousClose;
+
+    private Double change;
+
+    @JsonProperty("change_percent")
+    private Double changePercent;
+
+    // Getters and Setters
+    public String getSymbol() { return symbol; }
+    public void setSymbol(String symbol) { this.symbol = symbol; }
+    public String getIsin() { return isin; }
+    public void setIsin(String isin) { this.isin = isin; }
+    public String getExchange() { return exchange; }
+    public void setExchange(String exchange) { this.exchange = exchange; }
+    public Double getLastPrice() { return lastPrice; }
+    public void setLastPrice(Double lastPrice) { this.lastPrice = lastPrice; }
+    public OHLC getOhlc() { return ohlc; }
+    public void setOhlc(OHLC ohlc) { this.ohlc = ohlc; }
+    public Long getVolume() { return volume; }
+    public void setVolume(Long volume) { this.volume = volume; }
+    public String getInstrumentToken() { return instrumentToken; }
+    public void setInstrumentToken(String instrumentToken) { this.instrumentToken = instrumentToken; }
+    public Double getPreviousClose() { return previousClose; }
+    public void setPreviousClose(Double previousClose) { this.previousClose = previousClose; }
+    public Double getChange() { return change; }
+    public void setChange(Double change) { this.change = change; }
+    public Double getChangePercent() { return changePercent; }
+    public void setChangePercent(Double changePercent) { this.changePercent = changePercent; }
+
+    // Convenience helpers so EquityStockMapper can still call getOpenPrice() etc.
+    public Double getOpenPrice() { return ohlc != null ? ohlc.getOpen() : null; }
+    public Double getHighPrice() { return ohlc != null ? ohlc.getHigh() : null; }
+    public Double getLowPrice()  { return ohlc != null ? ohlc.getLow()  : null; }
+    public Double getClosePrice(){ return ohlc != null ? ohlc.getClose(): null; }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class OHLC {
+        private Double open;
+        private Double high;
+        private Double low;
+        private Double close;
+
+        public Double getOpen()  { return open;  }
+        public void setOpen(Double open)   { this.open = open;   }
+        public Double getHigh()  { return high;  }
+        public void setHigh(Double high)   { this.high = high;   }
+        public Double getLow()   { return low;   }
+        public void setLow(Double low)     { this.low = low;     }
+        public Double getClose() { return close; }
+        public void setClose(Double close) { this.close = close; }
+    }
+}

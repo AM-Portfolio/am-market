@@ -1,6 +1,6 @@
 package com.am.marketdata.provider.upstox.mapper;
 
-import java.time.ZonedDateTime;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +28,7 @@ public class EquityStockMapper {
         return EquityPrice.builder()
             .symbol(stockQuote.getSymbol())
             .ohlcv(OHLCVTPoint.builder().open(stockQuote.getOpenPrice()).high(stockQuote.getHighPrice()).low(stockQuote.getLowPrice()).close(stockQuote.getClosePrice()).volume(stockQuote.getVolume()).build())
-            .time(ZonedDateTime.now().toInstant())
+            .time(java.time.Instant.now())
             .build();
     }
 
@@ -51,15 +51,15 @@ public class EquityStockMapper {
         .exchange(exchange)
         .isin(ohlcData.getISIN())
             .symbol(extractedSymbol)
-            .ohlcv(OHLCVTPoint.builder().open(ohlcData.getOpen()).high(ohlcData.getHigh()).low(ohlcData.getLow()).close(ohlcData.getClose()).build())
-            .time(ZonedDateTime.now().toInstant())
+            .ohlcv(OHLCVTPoint.builder().open(ohlcData.getOpen()).high(ohlcData.getHigh()).low(ohlcData.getLow()).close(ohlcData.getLastPrice() != null ? ohlcData.getLastPrice() : ohlcData.getClose()).build())
+            .time(java.time.Instant.now())
             .build();
     }
 
     public String getSymbol(String symbol) {
         if (symbol == null) return null;
-        String[] parts = symbol.split("\\:");
-        return parts.length > 1 ? parts[1] : null;
+        String[] parts = symbol.split("[:|]");
+        return parts.length > 1 ? parts[1] : symbol;
     }
 
 }

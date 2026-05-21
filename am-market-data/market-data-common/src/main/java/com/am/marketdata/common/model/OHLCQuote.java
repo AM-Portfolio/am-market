@@ -17,6 +17,9 @@ import lombok.NoArgsConstructor;
 public class OHLCQuote {
 
     private double lastPrice;
+    private long volume;
+    private double timestamp;
+    private String symbol;
 
     private OHLC ohlc;
 

@@ -26,17 +26,17 @@ public class UpStockClient {
     // Market Data APIs
     public MarketQuoteResponse getMarketQuotes(List<String> symbols) {
         String url = BASE_URL + "/market-quote/quotes";
-        return executeGet(url, MarketQuoteResponse.class, "symbol", formatSymbols(symbols));
+        return executeGet(url, MarketQuoteResponse.class, "instrument_key", formatSymbols(symbols));
     }
 
     public MarketQuoteResponse getFullMarketQuotes(List<String> symbols) {
         String url = BASE_URL + "/market-quote/full";
-        return executeGet(url, MarketQuoteResponse.class, "symbol", formatSymbols(symbols));
+        return executeGet(url, MarketQuoteResponse.class, "instrument_key", formatSymbols(symbols));
     }
 
     public OHLCResponse getOHLCData(List<String> symbols, String interval) {
         String url = BASE_URL + "/market-quote/ohlc";
-        return executeGet(url, OHLCResponse.class, "symbol", formatSymbols(symbols), "interval", interval);
+        return executeGet(url, OHLCResponse.class, "instrument_key", formatSymbols(symbols), "interval", interval);
     }
 
     // Historical Data APIs
@@ -76,7 +76,7 @@ public class UpStockClient {
 
             HttpResponse<T> response = request.asObject(responseType);
             log.info("Request successful. Status: {}", response.getStatus());
-            // logResponse(response);
+            logResponse(response);
             return response.getBody();
         } catch (Exception e) {
             log.error("Failed to execute GET request. URL: {}, Error: {}", url, e.getMessage(), e);

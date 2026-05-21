@@ -49,7 +49,7 @@ public class UpstoxResponseMapper implements ProviderResponseMapper {
         OHLCResponse.OHLCData data = (OHLCResponse.OHLCData) vendorOHLC;
 
         OHLCQuote quote = new OHLCQuote();
-        quote.setLastPrice(data.getLast_price() != null ? data.getLast_price() : 0.0);
+        quote.setLastPrice(data.getLastPrice() != null ? data.getLastPrice() : 0.0);
 
         if (data.getOhlc() != null) {
             OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
@@ -60,8 +60,8 @@ public class UpstoxResponseMapper implements ProviderResponseMapper {
             quote.setOhlc(ohlc);
         }
 
-        if (data.getPrevious_close() != null) {
-            quote.setPreviousClose(data.getPrevious_close());
+        if (data.getPreviousClose() != null) {
+            quote.setPreviousClose(data.getPreviousClose());
         }
 
         return quote;

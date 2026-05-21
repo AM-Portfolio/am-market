@@ -30,7 +30,7 @@ public class EquityPriceProcessingService {
 
     @Transactional
     public boolean processEquityPrices(List<String> isins) {
-        if (isins.isEmpty()) {
+        if (isins == null || isins.isEmpty()) {
             log.warn("No stocks found to process");
             return false;
         }
@@ -42,7 +42,7 @@ public class EquityPriceProcessingService {
             Set<String> formattedIsins = formatIsins(isins);
 
             // Process in batches
-            List<List<String>> batches = partition(formattedIsins.stream().toList(), BATCH_SIZE);
+            List<List<String>> batches = partition(new ArrayList<>(formattedIsins), BATCH_SIZE);
             log.info("Processing {} stocks in {} batches", isins.size(), batches.size());
 
             List<EquityPrice> allUpdatedStocks = new ArrayList<>();
@@ -102,11 +102,11 @@ public class EquityPriceProcessingService {
     }
 
     private <T> List<List<T>> partition(List<T> list, int size) {
-        return list.stream()
-                .collect(Collectors.groupingBy(item -> list.indexOf(item) / size))
-                .values()
-                .stream()
-                .toList();
+        List<List<T>> result = new ArrayList<>();
+        for (int i = 0; i < list.size(); i += size) {
+            result.add(list.subList(i, Math.min(i + size, list.size())));
+        }
+        return result;
     }
 
     /**
@@ -131,7 +131,7 @@ public class EquityPriceProcessingService {
             Set<String> formattedIsins = formatIsins(isins);
 
             // Process in batches for better performance
-            List<List<String>> batches = partition(formattedIsins.stream().toList(), BATCH_SIZE);
+            List<List<String>> batches = partition(new ArrayList<>(formattedIsins), BATCH_SIZE);
             log.debug("Processing {} ISINs in {} batches", isins.size(), batches.size());
 
             // Use a thread-safe collection to store results from all batches

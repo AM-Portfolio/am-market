@@ -128,8 +128,10 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                     String symbol = context.keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
 
                     OHLCQuote quote = new OHLCQuote();
+                    quote.setSymbol(symbol);
                     // Use getters as fields might be mapped differently or computed
-                    quote.setLastPrice(data.getLast_price() != null ? data.getLast_price() : 0.0);
+                    quote.setLastPrice(data.getLastPrice() != null ? data.getLastPrice() : 0.0);
+                    quote.setTimestamp(System.currentTimeMillis() / 1000.0);
 
                     if (data.getOhlc() != null) {
                         OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
@@ -141,10 +143,10 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                     }
 
                     // Also set previous close if available in data
-                    if (data.getPrevious_close() != null) {
+                    if (data.getPreviousClose() != null) {
                         log.debug("getOHLC",
-                                String.format("Setting Previous Close for %s: %s", symbol, data.getPrevious_close()));
-                        quote.setPreviousClose(data.getPrevious_close());
+                                String.format("Setting Previous Close for %s: %s", symbol, data.getPreviousClose()));
+                        quote.setPreviousClose(data.getPreviousClose());
                     } else {
                         log.debug("getOHLC", "No Previous Close found in mapped data for " + symbol);
                     }

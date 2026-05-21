@@ -38,7 +38,7 @@ public class SecurityConfig {
         if (securityEnabled) {
             log.info(methodName, "Mode: PRODUCTION (Security ENABLED)");
             log.info(methodName, "✓ JWT Validation is ACTIVE");
-            log.info(methodName, "✓ Protected endpoints: /api/v1/**");
+            log.info(methodName, "✓ Protected endpoints: /v1/**");
         } else {
             log.info(methodName, "Mode: DEVELOPMENT (Security DISABLED)");
             log.warn(methodName, "⚠️  WARNING: All endpoints are PUBLIC");
