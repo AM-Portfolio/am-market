@@ -21,11 +21,12 @@ class SmartETFHoldingsService:
     """ETF Holdings Service with intelligent caching"""
     
     def __init__(self, mongo_uri: str = None, db_name: str = None):
-        # Use environment variables or defaults
+        from am_configs.settings import settings, get_mongo_uri
+
         if mongo_uri is None:
-            mongo_uri = os.getenv("MONGO_URI", "mongodb://admin:password123@localhost:27017")
+            mongo_uri = get_mongo_uri()
         if db_name is None:
-            db_name = os.getenv("MONGO_DB", "etf_data")
+            db_name = settings.effective_etf_db
         self.mongo_uri = mongo_uri
         self.db_name = db_name
         self._client = None

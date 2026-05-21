@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "AM Market Orchestrator Root",
   "scripts": {
-    "run:parser": "cd am-parser && am run",
-    "run:data": "cd am-market-data && am run",
-    "run:analysis": "cd market-data-analysis-py && am run",
+    "run:parser": "node scripts/run-with-venv.js am-parser",
+    "run:data": "node scripts/run-with-venv.js am-market-data",
+    "run:analysis": "node scripts/run-with-venv.js market-data-analysis-py",
     "run": "npx -y concurrently -n \"parser,data,analysis\" -c \"magenta,blue,green\" \"npm run run:parser\" \"npm run run:data\" \"npm run run:analysis\"",
     "deploy:parser": "cd am-parser && am deploy",
     "deploy:data": "cd am-market-data && am deploy",

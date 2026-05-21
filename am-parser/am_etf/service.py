@@ -21,9 +21,11 @@ class ETFService:
             mongo_uri: MongoDB URI (defaults to settings.mongo_uri)
             db_name: Database name (defaults to settings.effective_etf_db)
         """
-        from am_configs.settings import settings
-        
-        self.mongo_uri = mongo_uri or settings.mongo_uri
+        from am_configs.settings import settings, get_mongo_uri
+        from am_common.logging.request_logging import get_logger
+
+        self._log = get_logger("etf_service")
+        self.mongo_uri = mongo_uri or get_mongo_uri()
         self.db_name = db_name or settings.effective_etf_db
         self._client = None
         self._db = None
@@ -32,7 +34,17 @@ class ETFService:
     def _get_collection(self):
         if self._collection is None:
             import motor.motor_asyncio
-            self._client = motor.motor_asyncio.AsyncIOMotorClient(self.mongo_uri)
+            mongo_target = (
+                self.mongo_uri.split("@")[-1]
+                if "@" in self.mongo_uri
+                else self.mongo_uri
+            )
+            self._log.info("Mongo connect target=%s db=%s", mongo_target, self.db_name)
+            self._client = motor.motor_asyncio.AsyncIOMotorClient(
+                self.mongo_uri,
+                directConnection=True,
+                serverSelectionTimeoutMS=20_000,
+            )
             self._db = self._client[self.db_name]
             self._collection = self._db.etfs
             # Indexes for lookup & uniqueness

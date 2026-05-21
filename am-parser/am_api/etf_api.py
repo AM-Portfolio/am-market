@@ -21,8 +21,9 @@ from am_services.job_queue_service import get_job_queue
 from am_etf.service import ETFService
 from am_etf.holdings_service import ETFHoldingsService
 from am_etf.smart_holdings_service import SmartETFHoldingsService
+from am_common.logging.request_logging import get_logger
 
-
+log = get_logger("etf_api")
 
 # Removing /etf prefix to align with global /v1 structure (will be included with /v1 in api.py)
 router = APIRouter(tags=["ETF Holdings"])
@@ -66,8 +67,6 @@ async def fetch_all_etf_holdings(
                 detail="No ETFs with ISIN found in database"
             )
         
-        print(f"🚀 Starting async ETF holdings fetch for {total_count} ETFs (force_refresh={force_refresh})")
-        
         # Validate webhook URL if provided
         normalized_callback = None
         callback_note = None
@@ -85,6 +84,14 @@ async def fetch_all_etf_holdings(
             "force_refresh": force_refresh,
             "operation": "fetch_all_holdings"
         }
+
+        log.info(
+            "fetch-all-holdings: etfs=%s force_refresh=%s callback=%s user=%s",
+            total_count,
+            force_refresh,
+            bool(normalized_callback),
+            user_id,
+        )
         
         job_id = await job_queue.create_job(
             job_type=JobType.ETF_HOLDINGS_FETCH,
@@ -92,6 +99,7 @@ async def fetch_all_etf_holdings(
             callback_url=normalized_callback,
             user_id=user_id
         )
+        log.info("fetch-all-holdings: job_id=%s", job_id)
         
         # Estimate completion time (smart: less time if cache hits expected)
         estimated_api_calls = total_count if force_refresh else int(total_count * 0.3)  # Assume 70% cache hit rate
@@ -122,7 +130,7 @@ async def fetch_all_etf_holdings(
         return resp
         
     except Exception as e:
-        print(f"❌ ETF holdings fetch error: {e}")
+        log.exception("fetch-all-holdings failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start ETF holdings fetch: {str(e)}"
@@ -138,6 +146,7 @@ async def search_etfs(
     Search ETFs by symbol, name, or ISIN
     """
     try:
+        log.info("search: query=%r limit=%s", query, limit)
         global _etf_list_cache
         
         # Check cache validity
@@ -195,6 +204,7 @@ async def search_etfs(
                     if len(matching_etfs) >= limit:
                         break
         
+        log.info("search: total_found=%s", len(matching_etfs))
         return {
             "query": query,
             "total_found": len(matching_etfs),
@@ -203,7 +213,7 @@ async def search_etfs(
 
         
     except Exception as e:
-        print(f"❌ ETF search error: {e}")
+        log.exception("search failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to search ETFs: {str(e)}"
@@ -597,6 +607,12 @@ async def load_etfs_from_json(
     """
     try:
         from am_etf.models import ETFInstrument
+
+        log.info(
+            "load-from-json: filename=%s dry_run=%s",
+            file.filename,
+            dry_run,
+        )
         
         # Read and parse JSON
         content = await file.read()
@@ -617,7 +633,12 @@ async def load_etfs_from_json(
             except Exception as e:
                 errors.append(f"Record {i}: {str(e)}")
         
-        print(f"📊 Parsed {len(instruments)} ETF instruments from {len(data)} records")
+        log.info(
+            "load-from-json: parsed=%s valid=%s errors=%s",
+            len(data),
+            len(instruments),
+            len(errors),
+        )
         
         if dry_run:
             return {
@@ -629,9 +650,14 @@ async def load_etfs_from_json(
             }
         
         # Save to database
+        from am_configs.settings import get_mongo_target_label
+
+        log.info("load-from-json: mongo_target=%s", get_mongo_target_label())
         etf_service = ETFService()
+        log.info("load-from-json: bulk_upsert count=%s", len(instruments))
         inserted_count = await etf_service.bulk_upsert(instruments)
         await etf_service.close()
+        log.info("load-from-json: inserted=%s", inserted_count)
         
         return {
             "status": "success",
@@ -648,7 +674,7 @@ async def load_etfs_from_json(
             detail=f"Invalid JSON: {str(e)}"
         )
     except Exception as e:
-        print(f"❌ ETF load error: {e}")
+        log.exception("load-from-json failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to load ETFs: {str(e)}"

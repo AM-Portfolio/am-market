@@ -18,12 +18,12 @@ class ETFHoldingsService:
     def __init__(self, mongo_uri: str = None, db_name: str = None):
         # Use environment variables or defaults
         # Use environment variables or defaults
+        from am_configs.settings import settings, get_mongo_uri
+
         if mongo_uri is None:
-            mongo_uri = os.getenv("MONGO_URI") or os.getenv("MONGODB_CONNECTION_URL") or os.getenv("MONGODB_URL") or "mongodb://admin:password123@localhost:27017"
-            
+            mongo_uri = get_mongo_uri()
         if db_name is None:
-            # Use configured DB or default
-            db_name = os.getenv("ETF_DB_NAME") or os.getenv("MONGO_DB") or "mutual_funds"
+            db_name = settings.effective_etf_db
 
         self.mongo_uri = mongo_uri
         self.db_name = db_name
@@ -34,7 +34,11 @@ class ETFHoldingsService:
     def _get_holdings_collection(self):
         if self._holdings_collection is None:
             import motor.motor_asyncio
-            self._client = motor.motor_asyncio.AsyncIOMotorClient(self.mongo_uri)
+            self._client = motor.motor_asyncio.AsyncIOMotorClient(
+                self.mongo_uri,
+                directConnection=True,
+                serverSelectionTimeoutMS=20_000,
+            )
             self._db = self._client[self.db_name]
             self._holdings_collection = self._db.etf_holdings  # New collection
             # Create indexes

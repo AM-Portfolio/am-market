@@ -47,13 +47,24 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize services
     try:
         # Import centralized configuration
-        from am_configs.settings import settings
-        
-        print(f"🔌 Connecting to MongoDB: {settings.mongo_uri}")
-        
+        from am_configs.settings import settings, refresh_settings_from_dotenv
+        from am_services import job_queue_service
+
+        from am_configs.settings import get_mongo_uri, get_mongo_db
+
+        refresh_settings_from_dotenv()
+        job_queue_service.job_queue = None  # drop stale queue using old MONGO_URI
+
+        setup_parser_logging(settings.log_level)
+        log = get_logger("startup")
+        mongo_uri = get_mongo_uri()
+        mongo_db = get_mongo_db()
+        _mongo_target = mongo_uri.split("@")[-1] if "@" in mongo_uri else mongo_uri
+        log.info("MongoDB target=%s db=%s", _mongo_target, mongo_db)
+
         service_instance = create_mutual_fund_service(
-            mongo_uri=settings.mongo_uri,
-            db_name=settings.mongo_db
+            mongo_uri=mongo_uri,
+            db_name=mongo_db
         )
         
         # Initialize file upload services
@@ -67,26 +78,30 @@ async def lifespan(app: FastAPI):
         # Start background job processor
         job_queue = await get_job_queue()
         background_processor_task = asyncio.create_task(job_queue.start_job_processor())
-        print("INFO: Started background job processor")
-        
-        print("INFO: Connected to MongoDB")
-        print("INFO: Initialized file upload services")
+        log.info("Background job processor started")
+        log.info("File upload services initialized")
         yield
     except Exception as e:
-        print(f"ERROR: Failed to initialize services: {e}")
+        get_logger("startup").exception("Failed to initialize services: %s", e)
         raise
     finally:
-        # Shutdown: Close services
+        log = get_logger("shutdown")
         if background_processor_task:
             background_processor_task.cancel()
-            print("INFO: Background job processor stopped")
+            log.info("Background job processor stopped")
         if service_instance:
             await service_instance.close()
-            print("INFO: MongoDB connection closed")
+            log.info("MongoDB connection closed")
 
 
 import time
-from am_common.logging.core import AMLogger
+import uuid
+import logging
+
+from am_common.logging.request_logging import setup_parser_logging, get_logger
+from am_configs.settings import settings as app_settings
+
+setup_parser_logging(app_settings.log_level)
 
 # Create FastAPI app with lifecycle management
 app = FastAPI(
@@ -96,24 +111,43 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-am_logger = AMLogger(service_name="am-parser")
+_http_log = get_logger("http")
 
-# Middleware for structured logging
+
 @app.middleware("http")
 async def log_requests(request, call_next):
+    request_id = request.headers.get("x-request-id", str(uuid.uuid4())[:8])
+    query = request.url.query
+    path = request.url.path
+    full_path = f"{path}?{query}" if query else path
+
+    _http_log.info("→ %s %s [req=%s]", request.method, full_path, request_id)
     start_time = time.time()
-    response = await call_next(request)
-    duration = (time.time() - start_time) * 1000 # to ms
-    
-    context = {
-        "method": request.method,
-        "path": request.url.path,
-        "status": response.status_code,
-        "latency_ms": round(duration, 2),
-        "client_ip": request.client.host if request.client else "unknown"
-    }
-    
-    am_logger.log("INFO", "API Request Processed", context)
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (time.time() - start_time) * 1000
+        _http_log.exception(
+            "✗ %s %s → unhandled error [req=%s, %.0fms]",
+            request.method,
+            full_path,
+            request_id,
+            duration_ms,
+        )
+        raise
+
+    duration_ms = (time.time() - start_time) * 1000
+    level = logging.WARNING if response.status_code >= 400 else logging.INFO
+    _http_log.log(
+        level,
+        "← %s %s → %s [req=%s, %.0fms]",
+        request.method,
+        full_path,
+        response.status_code,
+        request_id,
+        duration_ms,
+    )
+    response.headers["X-Request-Id"] = request_id
     return response
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -128,6 +162,23 @@ app.add_middleware(
 # Include routers
 app.include_router(job_router, prefix="/v1")
 app.include_router(etf_router, prefix="/v1/etf")
+
+
+@app.get("/health/live")
+async def health_live():
+    """Process is up; does not check Mongo (use /health for DB check)."""
+    from am_configs.settings import get_mongo_debug_info
+
+    return {"status": "alive", **get_mongo_debug_info()}
+
+
+@app.get("/debug/mongo")
+async def debug_mongo_config():
+    """Which Mongo URI this process uses (restart required after .env changes)."""
+    from am_configs.settings import get_mongo_debug_info
+
+    return get_mongo_debug_info()
+
 
 # Debug: Print all registered routes
 for route in app.routes:
@@ -146,6 +197,35 @@ def get_service() -> MutualFundService:
             detail="Database service not available"
         )
     return service_instance
+
+
+@app.get("/health", response_model=dict)
+async def health_check(service: MutualFundService = Depends(get_service)):
+    """Health check endpoint"""
+    try:
+        collection = service._get_collection()
+        count = await collection.count_documents({})
+
+        from am_configs.settings import get_mongo_debug_info
+
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "total_portfolios": count,
+            **get_mongo_debug_info(),
+        }
+    except Exception as e:
+        from am_configs.settings import get_mongo_debug_info
+
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "unhealthy",
+                "database": "disconnected",
+                "error": str(e),
+                **get_mongo_debug_info(),
+            },
+        )
 
 
 def get_file_upload_service() -> FileUploadService:
@@ -479,31 +559,6 @@ async def global_exception_handler(request, exc):
             "detail": str(exc) if app.debug else "An unexpected error occurred"
         }
     )
-
-
-# Health check endpoint
-@app.get("/health", response_model=dict)
-async def health_check(service: MutualFundService = Depends(get_service)):
-    """Health check endpoint"""
-    try:
-        # Test database connection
-        collection = service._get_collection()
-        count = await collection.count_documents({})
-        
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "total_portfolios": count
-        }
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "status": "unhealthy",
-                "database": "disconnected",
-                "error": str(e)
-            }
-        )
 
 
 # ================================
