@@ -32,7 +32,7 @@ Value: together
 
 Key: together_api_key
 Type: Text
-Value: bff39f38ee07df9a08ff8d2e7279b9d7223ab3f283a30bc39590d36f77dbd2fd
+Value: <your-together-api-key-from-.env-or-vault>
 ```
 
 ### **Expected Response (200 OK):**

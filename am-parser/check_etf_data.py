@@ -3,10 +3,10 @@ import asyncio
 import os
 import sys
 
-# Mock environment variables to ensure we check the right headers
-os.environ["MONGO_URI"] = "mongodb://admin:password123@100.72.208.15:27017"
-os.environ["MONGO_DB"] = "mutual_funds" 
-# Note: User's screenshot confirms 'mutual_funds' has the 'etfs' collection
+if not os.environ.get("MONGO_URI"):
+    print("Set MONGO_URI (and optionally MONGO_DB) before running this script.", file=sys.stderr)
+    sys.exit(1)
+os.environ.setdefault("MONGO_DB", "mutual_funds")
 
 from motor.motor_asyncio import AsyncIOMotorClient
 

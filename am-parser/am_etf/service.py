@@ -1,16 +1,12 @@
 """ETF persistence service"""
-import sys
-from pathlib import Path
 from typing import List, Optional, Iterable
 from datetime import datetime
-import httpx
 import asyncio
 import random
-import os
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from am_etf.models import ETFInstrument, ETFHolding
+from am_etf.clients import enrich_holdings_with_isins, fetch_holdings_from_moneycontrol
+from am_persistence.mongo_factory import get_async_mongo_client, release_service_mongo_refs
 
 
 class ETFService:
@@ -21,9 +17,11 @@ class ETFService:
             mongo_uri: MongoDB URI (defaults to settings.mongo_uri)
             db_name: Database name (defaults to settings.effective_etf_db)
         """
-        from am_configs.settings import settings
-        
-        self.mongo_uri = mongo_uri or settings.mongo_uri
+        from am_configs.settings import settings, get_mongo_uri
+        from am_common.logging.request_logging import get_logger
+
+        self._log = get_logger("etf_service")
+        self.mongo_uri = mongo_uri or get_mongo_uri()
         self.db_name = db_name or settings.effective_etf_db
         self._client = None
         self._db = None
@@ -31,8 +29,13 @@ class ETFService:
 
     def _get_collection(self):
         if self._collection is None:
-            import motor.motor_asyncio
-            self._client = motor.motor_asyncio.AsyncIOMotorClient(self.mongo_uri)
+            mongo_target = (
+                self.mongo_uri.split("@")[-1]
+                if "@" in self.mongo_uri
+                else self.mongo_uri
+            )
+            self._log.info("Mongo connect target=%s db=%s", mongo_target, self.db_name)
+            self._client = get_async_mongo_client(self.mongo_uri)
             self._db = self._client[self.db_name]
             self._collection = self._db.etfs
             # Indexes for lookup & uniqueness
@@ -46,133 +49,11 @@ class ETFService:
         return self._get_collection()
 
     async def fetch_holdings_from_api(self, isin: str) -> Optional[List[ETFHolding]]:
-        """Fetch holdings data from moneycontrol API"""
-        if not isin:
-            return None
-            
-        url = f"https://mf.moneycontrol.com/service/etf/v1/getSchemeHoldingData?isin={isin}&key=Stocks"
-        
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                data = response.json()
-                
-                holdings = []
-                # Parse the response structure - adjust based on actual API response
-                if isinstance(data, dict) and 'data' in data:
-                    holdings_data = data['data']
-                elif isinstance(data, list):
-                    holdings_data = data
-                else:
-                    holdings_data = data
-                
-                if isinstance(holdings_data, list):
-                    for holding_data in holdings_data:
-                        holding = ETFHolding(
-                            stock_name=holding_data.get('name') or holding_data.get('stock_name'),
-                            isin_code=holding_data.get('isin_code') or holding_data.get('isin'),
-                            percentage=self._safe_float(holding_data.get('holdingPer') or holding_data.get('percentage') or holding_data.get('weight')),
-                            market_value=self._safe_float(holding_data.get('investedAmount') or holding_data.get('market_value') or holding_data.get('value')),
-                            quantity=self._safe_int(holding_data.get('quantity')),
-                            raw_data=holding_data
-                        )
-                        holdings.append(holding)
-                
-                # Enrich holdings with ISINs from market-data
-                if holdings:
-                    await self.enrich_holdings_with_isins(holdings)
-                        
-                return holdings
-                
-        except Exception as e:
-            return None
-
-    async def enrich_holdings_with_isins(self, holdings: List[ETFHolding]):
-        """
-        Enrich holdings with ISINs using market-data batch search
-        """
-        try:
-            import os
-            
-            # Filter holdings that need enrichment
-            stock_names = [h.stock_name for h in holdings if h.stock_name]
-            
-            if not stock_names:
-                return
-
-            market_data_url = os.getenv("MARKET_DATA_URL", "http://localhost:8093")
-            api_url = f"{market_data_url}/v1/securities/batch-search"
-            
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                # Process all at once since market-data handles 1000+
-                payload = {
-                    "queries": stock_names,
-                    "limit": 1,
-                    "minMatchScore": 0.7
-                }
-                
-                try:
-                    response = await client.post(api_url, json=payload)
-                    response.raise_for_status()
-                    result_data = response.json()
-                    
-                    # Process results
-                    self._process_enrichment_results(holdings, result_data)
-                    
-                except Exception as req_err:
-                    print(f"Error in batch search request: {req_err}")
-                        
-        except Exception as e:
-            print(f"Enrichment failed: {e}")
-
-    def _process_enrichment_results(self, holdings: List[ETFHolding], api_response: dict):
-        """Map API results back to holdings records"""
-        if not api_response or 'results' not in api_response:
-            return
-
-        results_map = {r.get('query'): r.get('matches', []) for r in api_response.get('results', [])}
-        
-        for holding in holdings:
-            matches = results_map.get(holding.stock_name)
-            
-            if matches:
-                # Get best match
-                sorted_matches = sorted(matches, key=lambda x: x.get('matchScore', 0), reverse=True)
-                
-                if sorted_matches:
-                    best_match = sorted_matches[0]
-                    # Update holding with matched ISIN if score is good
-                    if best_match.get('matchScore', 0) >= 0.8:
-                        if not holding.isin_code:
-                            holding.isin_code = best_match.get('isin')
-                            # We could add extra fields to ETFHolding model if needed, 
-                            # but core requirement is to get the ISIN
-                            if hasattr(holding, 'enrichment_status'):
-                                holding.enrichment_status = "MATCHED"
-                                holding.matched_isin = best_match.get('isin')
-                                holding.match_score = best_match.get('matchScore')
-    
-    def _safe_float(self, value) -> Optional[float]:
-        """Safely convert to float"""
-        if value is None:
-            return None
-        try:
-            if isinstance(value, str):
-                # Remove % sign if present
-                value = value.replace('%', '').strip()
-            return float(value)
-        except (ValueError, TypeError):
-            return None
-    
-    def _safe_int(self, value) -> Optional[int]:
-        """Safely convert to int"""
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            return None
+        """Fetch holdings from Moneycontrol and enrich via market-data."""
+        holdings = await fetch_holdings_from_moneycontrol(isin)
+        if holdings:
+            await enrich_holdings_with_isins(holdings)
+        return holdings
 
     async def upsert_etf(self, etf: ETFInstrument):
         col = self._get_collection()
@@ -224,8 +105,7 @@ class ETFService:
         return None
 
     async def close(self):
-        if self._client:
-            self._client.close()
+        release_service_mongo_refs(self)
 
     async def fetch_and_update_holdings(self, limit: Optional[int] = None) -> int:
         """Fetch holdings for all ETFs with ISINs and update the database"""

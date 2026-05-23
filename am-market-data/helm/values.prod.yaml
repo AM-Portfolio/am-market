@@ -11,6 +11,11 @@ config:
     threadPoolSize: 5
     threadQueueCapacity: 10
     maxAgeMinutes: 15
+  batchSearch:
+    cacheEnabled: true
+    mongoQueryLimit: 0
+    maxCandidatesPerQuery: 100
+    internalBatchSize: 100
 
 # Service Configuration
 service:
