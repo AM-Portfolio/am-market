@@ -1,6 +1,7 @@
 package com.am.marketdata.service;
 
 import com.am.marketdata.common.log.AppLogger;
+import com.am.marketdata.config.BatchSearchProperties;
 import com.am.marketdata.service.dto.SecuritySearchRequest;
 import com.am.marketdata.service.model.security.SecurityDocument;
 import com.am.marketdata.service.repo.SecurityRepository;
@@ -20,8 +21,10 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 import java.time.Duration;
@@ -29,20 +32,26 @@ import java.time.Duration;
 @Service
 public class SecurityService {
 
+    /** Bumped when batch-search matching logic changes; ignores legacy Redis keys. */
+    private static final String BATCH_SEARCH_CACHE_PREFIX = "batch_search:v2:";
+
     private final AppLogger log = AppLogger.getLogger();
     private final SecurityRepository securityRepository;
     private final MongoTemplate mongoTemplate;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
     private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService;
+    private final BatchSearchProperties batchSearchProperties;
 
     public SecurityService(SecurityRepository securityRepository, MongoTemplate mongoTemplate,
             RedisTemplate<String, Object> redisTemplate,
-            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService) {
+            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService,
+            BatchSearchProperties batchSearchProperties) {
         this.securityRepository = securityRepository;
         this.mongoTemplate = mongoTemplate;
         this.redisTemplate = redisTemplate;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
+        this.batchSearchProperties = batchSearchProperties;
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -219,16 +228,29 @@ public class SecurityService {
     public com.am.marketdata.common.dto.BatchSearchResponse batchSearch(
             com.am.marketdata.common.dto.BatchSearchRequest request) {
 
-        log.info("batchSearch", "Processing " + request.getQueries().size() + " queries");
+        List<String> queries = request.getQueries();
+        if (queries == null || queries.isEmpty()) {
+            return com.am.marketdata.common.dto.BatchSearchResponse.builder()
+                    .results(List.of())
+                    .totalQueries(0)
+                    .totalMatches(0)
+                    .queriesWithNoMatches(0)
+                    .build();
+        }
+        int maxQueries = batchSearchProperties.getMaxQueries();
+        if (queries.size() > maxQueries) {
+            throw new IllegalArgumentException("Maximum " + maxQueries + " queries per batch-search request");
+        }
+
+        log.info("batchSearch", "Processing " + queries.size() + " queries (mongoQueryLimit="
+                + batchSearchProperties.getMongoQueryLimit() + ", maxCandidates="
+                + batchSearchProperties.getMaxCandidatesPerQuery() + ")");
 
         List<com.am.marketdata.common.dto.BatchSearchResponse.QueryResult> results = new ArrayList<>();
         int totalMatches = 0;
         int queriesWithNoMatches = 0;
         int cacheHits = 0;
-
-        // Process in internal batches of 100 for memory efficiency
-        int internalBatchSize = 100;
-        List<String> queries = request.getQueries();
+        int internalBatchSize = Math.max(1, batchSearchProperties.getInternalBatchSize());
 
         for (int batchStart = 0; batchStart < queries.size(); batchStart += internalBatchSize) {
             int batchEnd = Math.min(batchStart + internalBatchSize, queries.size());
@@ -237,60 +259,30 @@ public class SecurityService {
             log.info("batchSearch", String.format("Processing internal batch %d-%d of %d",
                     batchStart, batchEnd, queries.size()));
 
-            // Check cache first for this batch
-            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> cachedResults = new HashMap<>();
-            // checkBatchCache(batchQueries); // DISABLED per user request to force real
-            // logic
+            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> cachedResults =
+                    batchSearchProperties.isCacheEnabled() ? checkBatchCache(batchQueries) : new HashMap<>();
             cacheHits += cachedResults.size();
+            if (!cachedResults.isEmpty()) {
+                log.info("batchSearch", "Cache hits for queries: " + cachedResults.keySet());
+            }
 
-            // Separate cached vs uncached queries
             List<String> uncachedQueries = batchQueries.stream()
                     .filter(q -> !cachedResults.containsKey(q))
                     .collect(Collectors.toList());
+            if (!uncachedQueries.isEmpty()) {
+                log.info("batchSearch", "Fresh search for queries: " + uncachedQueries);
+            }
 
-            // Process uncached queries in bulk
-            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> freshResults = new HashMap<>();
+            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> freshResults =
+                    new LinkedHashMap<>();
 
             if (!uncachedQueries.isEmpty()) {
+                int limit = request.getLimit() != null ? request.getLimit() : 3;
                 for (String query : uncachedQueries) {
-                    // Try DB Search first (Regex based)
-                    List<SecurityDocument> matches = new ArrayList<>(securityRepository.search(query));
-                    if (matches != null) {
-                        matches.removeIf(doc -> !isValidDocument(doc));
-                    }
+                    List<SecurityDocument> matches = resolveDocumentsForQuery(query);
+                    List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches =
+                            convertToSecurityMatches(query, matches, request.getMinMatchScore());
 
-                    String normalizedQuery = normalizeQuery(query);
-
-                    if (matches.isEmpty() && !normalizedQuery.equals(query)) {
-                        List<SecurityDocument> normMatches = securityRepository.search(normalizedQuery);
-                        if (normMatches != null) {
-                            normMatches.removeIf(doc -> !isValidDocument(doc));
-                            matches.addAll(normMatches);
-                        }
-                    }
-
-                    // FALLBACK: In-Memory Fuzzy Search if DB returned nothing (or only garbage)
-                    if (matches.isEmpty()) {
-                        log.info("Batch Search: No DB match for '{}', trying in-memory fuzzy fallback...", query);
-                        List<SecurityDocument> fuzzyMatches = performInMemoryFuzzySearch(query);
-                        matches.addAll(fuzzyMatches); // performInMemoryFuzzySearch already filters ISINs
-                        if (!matches.isEmpty()) {
-                            log.info("Batch Search: Found {} matches via in-memory fuzzy search", matches.size());
-                        }
-                    }
-
-                    int limit = request.getLimit() != null ? request.getLimit() : 3;
-
-                    // Optimization: limit processing to top 100 matches
-                    List<SecurityDocument> candidateMatches = matches.stream()
-                            .distinct() // Ensure no duplicates from multiple strategies
-                            .limit(100)
-                            .collect(Collectors.toList());
-
-                    List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches = convertToSecurityMatches(
-                            query, candidateMatches, request.getMinMatchScore());
-
-                    // Sort by Match Score (desc) -> Market Cap (desc)
                     securityMatches.sort(java.util.Comparator
                             .comparingDouble(
                                     com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch::getMatchScore)
@@ -298,34 +290,29 @@ public class SecurityService {
                             .thenComparing(m -> m.getMarketCapValue() == null ? 0L : m.getMarketCapValue(),
                                     java.util.Comparator.reverseOrder()));
 
-                    // Apply the final user requested limit
                     if (securityMatches.size() > limit) {
                         securityMatches = securityMatches.subList(0, limit);
                     }
-
                     freshResults.put(query, securityMatches);
                 }
-
-                // Cache fresh results
-                // cacheBatchResults(freshResults); // DISABLED per user request
+                if (batchSearchProperties.isCacheEnabled()) {
+                    cacheBatchResults(freshResults);
+                }
             }
 
-            // Combine cached and fresh results
-            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> allResults = new HashMap<>();
+            Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> allResults =
+                    new HashMap<>();
             allResults.putAll(cachedResults);
             allResults.putAll(freshResults);
 
-            // Build query results
             for (String query : batchQueries) {
-                List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> matches = allResults
-                        .getOrDefault(query, List.of());
-
+                List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> matches =
+                        allResults.getOrDefault(query, List.of());
                 if (matches.isEmpty()) {
                     queriesWithNoMatches++;
                 } else {
                     totalMatches += matches.size();
                 }
-
                 results.add(com.am.marketdata.common.dto.BatchSearchResponse.QueryResult.builder()
                         .query(query)
                         .matches(matches)
@@ -339,10 +326,81 @@ public class SecurityService {
 
         return com.am.marketdata.common.dto.BatchSearchResponse.builder()
                 .results(results)
-                .totalQueries(request.getQueries().size())
+                .totalQueries(queries.size())
                 .totalMatches(totalMatches)
                 .queriesWithNoMatches(queriesWithNoMatches)
                 .build();
+    }
+
+    /**
+     * Bounded Mongo + NIFTY 500 + manual lookup — never loads full securities collection.
+     */
+    private List<SecurityDocument> resolveDocumentsForQuery(String query) {
+        if (query == null || query.isBlank()) {
+            return Collections.emptyList();
+        }
+        String trimmed = query.trim();
+        LinkedHashMap<String, SecurityDocument> deduped = new LinkedHashMap<>();
+
+        if (trimmed.matches("(?i)^INE[A-Z0-9]{10}$")) {
+            SecurityDocument byIsin = securityRepository.findByIsin(trimmed.toUpperCase());
+            if (isValidDocument(byIsin)) {
+                deduped.put(byIsin.getKey().getIsin(), byIsin);
+            }
+        }
+
+        addValidDocuments(deduped, searchDocuments(trimmed));
+
+        if (deduped.isEmpty()) {
+            String normalizedQuery = normalizeQuery(trimmed);
+            if (!normalizedQuery.equals(trimmed)) {
+                addValidDocuments(deduped, searchDocuments(normalizedQuery));
+            }
+        }
+
+        if (deduped.isEmpty()) {
+            log.info("batchSearch", "No DB match for '" + trimmed + "', trying NIFTY 500 / manual fallback");
+            addValidDocuments(deduped, performInMemoryFuzzySearch(trimmed));
+        }
+
+        return capCandidates(deduped.values().stream().collect(Collectors.toList()));
+    }
+
+    private List<SecurityDocument> capCandidates(List<SecurityDocument> documents) {
+        int cap = batchSearchProperties.getMaxCandidatesPerQuery();
+        if (cap <= 0 || documents.size() <= cap) {
+            return documents;
+        }
+        return documents.subList(0, cap);
+    }
+
+    private void addValidDocuments(Map<String, SecurityDocument> target, List<SecurityDocument> docs) {
+        if (docs == null) {
+            return;
+        }
+        for (SecurityDocument doc : docs) {
+            if (!isValidDocument(doc) || doc.getKey() == null || doc.getKey().getIsin() == null) {
+                continue;
+            }
+            target.putIfAbsent(doc.getKey().getIsin(), doc);
+        }
+    }
+
+    private List<SecurityDocument> searchDocuments(String text) {
+        if (text == null || text.isBlank()) {
+            return Collections.emptyList();
+        }
+        String escaped = Pattern.quote(text.trim());
+        Query mongoQuery = new Query(new Criteria().orOperator(
+                Criteria.where("metadata.company_name").regex(escaped, "i"),
+                Criteria.where("key.symbol").regex(escaped, "i"),
+                Criteria.where("key.isin").regex(escaped, "i")));
+        int mongoLimit = batchSearchProperties.getMongoQueryLimit();
+        if (mongoLimit > 0) {
+            mongoQuery.limit(mongoLimit);
+        }
+        List<SecurityDocument> found = mongoTemplate.find(mongoQuery, SecurityDocument.class);
+        return found != null ? found : Collections.emptyList();
     }
 
     /**
@@ -354,7 +412,7 @@ public class SecurityService {
 
         try {
             List<String> cacheKeys = queries.stream()
-                    .map(q -> "batch_search:" + q.toLowerCase().trim())
+                    .map(this::batchSearchCacheKey)
                     .collect(Collectors.toList());
 
             List<Object> cachedObjects = redisTemplate.opsForValue().multiGet(cacheKeys);
@@ -390,8 +448,10 @@ public class SecurityService {
 
             for (Map.Entry<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> entry : results
                     .entrySet()) {
-                String cacheKey = "batch_search:" + entry.getKey().toLowerCase().trim();
-                cacheUpdates.put(cacheKey, entry.getValue());
+                if (entry.getValue() == null || entry.getValue().isEmpty()) {
+                    continue;
+                }
+                cacheUpdates.put(batchSearchCacheKey(entry.getKey()), entry.getValue());
             }
             if (!cacheUpdates.isEmpty()) {
                 redisTemplate.opsForValue().multiSet(cacheUpdates);
@@ -491,35 +551,33 @@ public class SecurityService {
      * Calculate simple match score based on text similarity
      */
     private double calculateMatchScore(String query, SecurityDocument doc) {
-        String queryLower = query.toLowerCase().trim();
+        String queryNormalized = cleanString(query);
 
         // Exact matches
         if (doc.getKey() != null && doc.getKey().getSymbol() != null) {
-            if (queryLower.equals(doc.getKey().getSymbol().toLowerCase())) {
+            if (queryNormalized.equals(cleanString(doc.getKey().getSymbol()))) {
                 return 1.0;
             }
         }
 
         if (doc.getKey() != null && doc.getKey().getIsin() != null) {
-            if (queryLower.equals(doc.getKey().getIsin().toLowerCase())) {
+            if (queryNormalized.equals(cleanString(doc.getKey().getIsin()))) {
                 return 1.0;
             }
         }
 
         if (doc.getMetadata() != null && doc.getMetadata().getCompanyName() != null) {
-            String companyNameLower = doc.getMetadata().getCompanyName().toLowerCase();
-            if (queryLower.equals(companyNameLower)) {
-                return 1.0;
-            }
-
-            // Partial match - contains
-            if (companyNameLower.contains(queryLower)) {
-                return 0.9;
-            }
-
-            // Reverse - query contains company name
-            if (queryLower.contains(companyNameLower)) {
-                return 0.85;
+            String companyNormalized = cleanString(doc.getMetadata().getCompanyName());
+            if (!queryNormalized.isEmpty() && !companyNormalized.isEmpty()) {
+                if (queryNormalized.equals(companyNormalized)) {
+                    return 1.0;
+                }
+                if (companyNormalized.contains(queryNormalized)) {
+                    return 0.9;
+                }
+                if (queryNormalized.contains(companyNormalized)) {
+                    return 0.85;
+                }
             }
         }
 
@@ -713,30 +771,7 @@ public class SecurityService {
             log.error("performInMemoryFuzzySearch", "Error fetching NIFTY 500 data", e);
         }
 
-        // 2. Fallback to All Cached Securities (if enabled/populated)
-        refreshSecurityCache();
-        List<SecurityDocument> all = cachedAllSecurities.get();
-        if (all == null || all.isEmpty())
-            return Collections.emptyList();
-
-        List<SecurityDocument> cachedMatches = all.stream()
-                .filter(doc -> {
-                    if (doc.getKey() == null || doc.getKey().getIsin() == null)
-                        return false; // Filter null ISIN
-                    if (doc.getMetadata() == null || doc.getMetadata().getCompanyName() == null)
-                        return false;
-                    String companyName = cleanString(doc.getMetadata().getCompanyName());
-
-                    return companyName.contains(normalizedQuery) || normalizedQuery.contains(companyName);
-                })
-                .limit(20)
-                .collect(Collectors.toList());
-
-        if (!cachedMatches.isEmpty()) {
-            return cachedMatches;
-        }
-
-        // 3. Fallback to Manual JSON Update List
+        // 2. Manual JSON fallback only (no findAll — avoids OOM on large securities collection)
         return performManualSearch(normalizedQuery);
     }
 
@@ -781,10 +816,20 @@ public class SecurityService {
         return matches;
     }
 
+    private String batchSearchCacheKey(String query) {
+        return BATCH_SEARCH_CACHE_PREFIX + query.toLowerCase().trim();
+    }
+
     private String cleanString(String s) {
-        if (s == null)
+        if (s == null || s.isBlank()) {
             return "";
-        // Lowercase, remove all non-alphanumeric characters
-        return s.toLowerCase().replaceAll("[^a-z0-9]", "");
+        }
+        String normalized = s.toLowerCase().trim();
+        normalized = normalized.replaceAll("[.,;]+$", "");
+        // Align "Ltd" / "Limited" / etc. so "HDFC Bank Ltd" matches "HDFC Bank Limited"
+        normalized = normalized
+                .replaceAll("(?i)\\s+(ltd\\.?|limited|inc\\.?|incorporated|corp\\.?|corporation|plc|llc|llp)$", "")
+                .trim();
+        return normalized.replaceAll("[^a-z0-9]", "");
     }
 }

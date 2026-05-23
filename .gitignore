@@ -53,8 +53,26 @@ logs/
 *.log
 build_log.txt
 
-# Environment
-.env
+# Secrets — only *.env.template / *.env.example (placeholders) may be committed
+.env*
+!.env.template
+!.env.example
+!**/.env.template
+!**/.env.example
+.env.secrets
+**/.env.secrets
 .env.local
 .env.deploy
-**/.env
+.env.preprod
+.env.dev
+
+# Vault / credential dumps (use map_env_from_vault_backup.py → local .env only)
+vault/backups/
+**/vault/backups/
+**/vault/*backup*.json
+credentials.json
+**/credentials.json
+*.pem
+*.p12
+*.key
+!**/src/test/**/*.key

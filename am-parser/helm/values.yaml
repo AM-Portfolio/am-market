@@ -31,3 +31,8 @@ securityContext:
       - ALL
 
 environment: preprod
+
+vault:
+  enabled: true
+  role: "am-backend-role"
+  serviceAccountName: "am-backend-sa"

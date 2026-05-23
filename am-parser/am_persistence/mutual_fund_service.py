@@ -1,15 +1,11 @@
 """
 Mutual Fund Persistence Service - Handle MongoDB operations for mutual fund data
 """
-import sys
-from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-# Add parent directory to path to find external modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from am_common.mutual_fund_models import MutualFundPortfolio, PortfolioSummary, Holding
+from am_persistence.mongo_factory import get_async_mongo_client, release_service_mongo_refs
 
 
 class MutualFundService:
@@ -25,9 +21,9 @@ class MutualFundService:
             mongo_uri: MongoDB connection URI (defaults to settings.mongo_uri)
             db_name: Database name (defaults to settings.mongo_db)
         """
-        from am_configs.settings import settings
-        
-        self.mongo_uri = mongo_uri or settings.mongo_uri
+        from am_configs.settings import settings, get_mongo_uri
+
+        self.mongo_uri = mongo_uri or get_mongo_uri()
         self.db_name = db_name or settings.mongo_db
         self._client = None
         self._db = None
@@ -36,16 +32,9 @@ class MutualFundService:
     def _get_collection(self):
         """Lazy initialization of MongoDB connection"""
         if self._collection is None:
-            try:
-                import motor.motor_asyncio
-                self._client = motor.motor_asyncio.AsyncIOMotorClient(self.mongo_uri)
-                self._db = self._client[self.db_name]
-                self._collection = self._db.portfolios
-            except ImportError:
-                raise ImportError(
-                    "MongoDB support requires 'motor' package. "
-                    "Install with: pip install motor"
-                )
+            self._client = get_async_mongo_client(self.mongo_uri)
+            self._db = self._client[self.db_name]
+            self._collection = self._db.portfolios
         return self._collection
 
     @property
@@ -256,9 +245,8 @@ class MutualFundService:
         return None
 
     async def close(self):
-        """Close MongoDB connection"""
-        if self._client:
-            self._client.close()
+        """Release refs; shared Motor client closes on app shutdown."""
+        release_service_mongo_refs(self)
 
 
 # Factory function for easy instantiation

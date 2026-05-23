@@ -1,0 +1,14 @@
+# Local secrets — templates only in repo
+.env*
+!.env.template
+!.env.example
+.env.secrets
+.env.preprod
+.env.dev
+
+target/
+__pycache__/
+*.pyc
+.venv/
+logs/
+*.log

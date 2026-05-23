@@ -13,7 +13,7 @@ async def enrich_all_etfs():
     from am_configs.settings import settings
     
     # Set env var for market-data URL
-    os.environ["MARKET_DATA_URL"] = "http://localhost:8093"
+    os.environ["MARKET_DATA_URL"] = os.environ.get("MARKET_DATA_URL", "http://localhost:8092")
     
     # 1. Get list of all ETFs from main 'etfs' collection (the directory of ETFs)
     # We need to know WHICH ETFs to fetch.

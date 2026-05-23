@@ -50,7 +50,7 @@ MARKET_DATA_KAFKA_ENABLED: ${MARKET_DATA_KAFKA_ENABLED:false}
 
 app:
   kafka:
-    enabled: ${MARKET_DATA_KAFKA_ENABLED}
+    enabled: ${MARKET_DATA_KAFKA_ENABLED:false}
 
 kafka:
   topics:
@@ -98,11 +98,16 @@ spring:
       - classpath:nseindices.yml
       #- classpath:application-external-api.yml
       #- classpath:application-endpoints.yml
-      - classpath:application-kafka.yml
       - classpath:application-zerodha.yml
 
 market-data:
   provider: upstox
+  batch-search:
+    max-queries: ${BATCH_SEARCH_MAX_QUERIES:1000}
+    internal-batch-size: ${BATCH_SEARCH_INTERNAL_BATCH_SIZE:100}
+    mongo-query-limit: ${BATCH_SEARCH_MONGO_QUERY_LIMIT:0}
+    max-candidates-per-query: ${BATCH_SEARCH_MAX_CANDIDATES:100}
+    cache-enabled: ${BATCH_SEARCH_CACHE_ENABLED:true}
   stream:
     poll-interval-seconds: 10
   cache:
@@ -224,3 +229,14 @@ jwt:
   # Security Configuration
 security:
   enabled: ${SECURITY_ENABLED:false} # Disabled by default for development. Set SECURITY_ENABLED=true in production.
+
+---
+# Only load broker/topic Kafka settings when explicitly enabled (local laptop default: off)
+spring:
+  config:
+    activate:
+      on-property:
+        name: MARKET_DATA_KAFKA_ENABLED
+        having-value: "true"
+    import:
+      - classpath:application-kafka.yml

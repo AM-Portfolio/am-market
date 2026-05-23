@@ -6,7 +6,7 @@ KAFKA_BOOTSTRAP_SERVERS: localhost:9092 #${INFRA_HOST}:9092
 # Application-specific Kafka properties Here you can there you go
 app:
   kafka:
-    enabled: true
+    enabled: ${MARKET_DATA_KAFKA_ENABLED:false}
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     properties:
       securityProtocol: ${KAFKA_SECURITY_PROTOCOL:SASL_PLAINTEXT}

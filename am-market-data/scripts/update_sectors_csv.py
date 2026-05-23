@@ -4,8 +4,10 @@ import os
 from pymongo import MongoClient, UpdateOne
 
 
-# Configuration
-MONGO_URI = 'mongodb://admin:password123@100.72.208.15:27017/market_data?authSource=admin'
+# Configuration — set MONGO_URI in the environment (never commit credentials)
+MONGO_URI = os.environ.get("MONGO_URI") or os.environ.get("MONGODB_URL")
+if not MONGO_URI:
+    raise SystemExit("Set MONGO_URI or MONGODB_URL before running this script.")
 DB_NAME = 'market_data'
 COLLECTION_NAME = 'securities'
 CSV_PATH = os.path.join(os.path.dirname(__file__), '../data/Equity.csv')

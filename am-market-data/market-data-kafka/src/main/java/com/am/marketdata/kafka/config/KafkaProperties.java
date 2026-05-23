@@ -1,10 +1,12 @@
 package com.am.marketdata.kafka.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component("kafkaProperties")
 @ConfigurationProperties(prefix = "app.kafka")
+@ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true", matchIfMissing = false)
 public class KafkaProperties {
 
     private String bootstrapServers;

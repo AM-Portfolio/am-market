@@ -41,3 +41,10 @@ config:
     maxRetries: 5
     retryDelayMs: 2000
   env: "preprod"
+  # POST /v1/securities/batch-search — maps to BATCH_SEARCH_* env in universal chart
+  batchSearch:
+    cacheEnabled: true
+    maxQueries: 1000
+    internalBatchSize: 100
+    mongoQueryLimit: 0
+    maxCandidatesPerQuery: 100

@@ -6,6 +6,8 @@ import com.am.marketdata.common.model.events.OHLCDataIngestionEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
@@ -17,7 +19,8 @@ import java.util.Map;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnBean(KafkaTemplate.class)
 public class MarketDataProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;

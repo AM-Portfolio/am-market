@@ -1,6 +1,10 @@
 env:
   ENVIRONMENT: "preprod"
   MONGO_DB: "mutual_funds"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  LOG_LEVEL: "INFO"
+  ETF_LIST_CACHE_MINUTES: "60"
+  ETF_HOLDINGS_CACHE_DAYS: "1"
 
 environment: preprod
 
@@ -20,15 +24,21 @@ probes:
 
 replicaCount: 1
 
+
 # Vault configuration
 vault:
-  enabled: true
-  role: "am-backend-role"
   secretPaths:
+    auth:
+      path: apps/data/preprod/services/am-auth
+    logging:
+      path: apps/data/preprod/services/logging
+    market:
+      path: apps/data/preprod/services/am-market-data
     mongodb: 
       path: "apps/data/preprod/infra/mongodb"
     together:
       path: "apps/data/preprod/infra/shared-api"
+
 
 resources:
   limits:
@@ -37,4 +47,4 @@ resources:
   requests:
     cpu: 250m
     memory: 256Mi
-
+

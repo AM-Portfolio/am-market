@@ -68,5 +68,12 @@ ingress:
         - path: /market
           pathType: Prefix
 
+config:
+  batchSearch:
+    cacheEnabled: true
+    mongoQueryLimit: 0
+    maxCandidatesPerQuery: 100
+    internalBatchSize: 100
+
 env:
   SPRING_PROFILES_ACTIVE: "dev"

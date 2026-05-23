@@ -12,7 +12,7 @@ async def repair_etf_holdings():
     from am_configs.settings import settings
     
     # Set env var for market-data URL
-    os.environ["MARKET_DATA_URL"] = "http://localhost:8093"
+    os.environ["MARKET_DATA_URL"] = os.environ.get("MARKET_DATA_URL", "http://localhost:8092")
     
     print(f"Using MongoDB: {settings.mongo_uri.split('@')[-1] if '@' in settings.mongo_uri else 'localhost'}")
     
