@@ -72,6 +72,10 @@ public class OHLCMapper {
      * @return EquityPrice object
      */
     public EquityPrice toEquityPrice(String symbol, OHLCQuote ohlcQuote) {
+        return toEquityPrice(symbol, ohlcQuote, "NSE");
+    }
+
+    public EquityPrice toEquityPrice(String symbol, OHLCQuote ohlcQuote, String exchange) {
         if (ohlcQuote == null || ohlcQuote.getOhlc() == null) {
             return null;
         }
@@ -84,7 +88,7 @@ public class OHLCMapper {
             .lastPrice(ohlcQuote.getLastPrice())
             .ohlcv(OHLCVTPoint.builder().open(ohlcQuote.getOhlc().getOpen()).high(ohlcQuote.getOhlc().getHigh()).low(ohlcQuote.getOhlc().getLow()).close(ohlcQuote.getOhlc().getClose()).build())
             .time(ZonedDateTime.now().toInstant())
-            .exchange("NSE")
+            .exchange(exchange)
             .build();
     }
     
@@ -95,14 +99,26 @@ public class OHLCMapper {
      * @return List of EquityPrice objects
      */
     public List<EquityPrice> toEquityPriceList(Map<String, OHLCQuote> ohlcData) {
+        return toEquityPriceList(ohlcData, "NSE");
+    }
+
+    /**
+     * Convert a map of OHLCQuotes to a list of EquityPrice objects with provider info
+     *
+     * @param ohlcData Map of symbol to OHLCQuote
+     * @param provider The name of the data provider
+     * @return List of EquityPrice objects
+     */
+    public List<EquityPrice> toEquityPriceList(Map<String, OHLCQuote> ohlcData, String provider) {
         if (ohlcData == null || ohlcData.isEmpty()) {
             return new ArrayList<>();
         }
         
         List<EquityPrice> prices = new ArrayList<>(ohlcData.size());
+        String exchange = "MOCK".equalsIgnoreCase(provider) ? "MOCK" : "NSE";
         
         for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
-            EquityPrice price = toEquityPrice(entry.getKey(), entry.getValue());
+            EquityPrice price = toEquityPrice(entry.getKey(), entry.getValue(), exchange);
             if (price != null) {
                 prices.add(price);
             }

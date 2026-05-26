@@ -12,6 +12,7 @@ import com.am.marketdata.api.model.HistoricalDataResponseV1;
 import com.am.common.investment.model.historical.HistoricalData;
 import com.am.marketdata.service.MarketHoursService;
 import com.am.marketdata.service.websocket.service.StreamerManager;
+import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ public class MarketDataPollingService {
     private final MarketHoursService marketHoursService;
     private final StreamerManager streamerManager;
     private final MarketDataMockService mockService;
+    private final MarketDataProcessor processor;
 
     // Scheduler for polling
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
@@ -95,6 +97,12 @@ public class MarketDataPollingService {
                     log.debug("Broadcasting update via WebSocket handler. Quote count: {}",
                             update.getQuotes() != null ? update.getQuotes().size() : 0);
                     webSocketHandler.broadcast(update);
+                    try {
+                        Map<String, OHLCQuote> ohlcQuotes = convertToOHLCQuotes(update);
+                        processor.processUpdate(ohlcQuotes, providerKey);
+                    } catch (Exception ex) {
+                        log.error("Failed to publish polling data to Kafka/processor", ex);
+                    }
                 } else {
                     log.warn("Fetched market data update is null for provider: {}", providerKey);
                 }
@@ -460,5 +468,29 @@ public class MarketDataPollingService {
         }
 
         return quoteUpdates;
+    }
+
+    private Map<String, OHLCQuote> convertToOHLCQuotes(MarketDataUpdate update) {
+        if (update == null || update.getQuotes() == null) {
+            return Collections.emptyMap();
+        }
+        Map<String, OHLCQuote> ohlcQuotes = new HashMap<>();
+        for (Map.Entry<String, MarketDataUpdate.QuoteChange> entry : update.getQuotes().entrySet()) {
+            String symbol = entry.getKey();
+            MarketDataUpdate.QuoteChange change = entry.getValue();
+            OHLCQuote.OHLC ohlc = OHLCQuote.OHLC.builder()
+                    .open(change.getOpen() != null ? change.getOpen() : 0.0)
+                    .high(change.getHigh() != null ? change.getHigh() : 0.0)
+                    .low(change.getLow() != null ? change.getLow() : 0.0)
+                    .close(change.getClose() != null ? change.getClose() : 0.0)
+                    .build();
+            OHLCQuote quote = OHLCQuote.builder()
+                    .lastPrice(change.getLastPrice() != null ? change.getLastPrice() : 0.0)
+                    .previousClose(change.getPreviousClose() != null ? change.getPreviousClose() : 0.0)
+                    .ohlc(ohlc)
+                    .build();
+            ohlcQuotes.put(symbol, quote);
+        }
+        return ohlcQuotes;
     }
 }
