@@ -25,6 +25,7 @@ import com.am.marketdata.api.config.SecurityConfig;
 import com.am.marketdata.config.MetricsConfig;
 import com.am.marketdata.internal.config.MarketDataInternalConfig;
 import com.am.marketdata.scheduler.config.MarketDataSchedulerConfig;
+import com.am.marketdata.kafka.config.MarketDataKafkaModuleConfig;
 
 @SpringBootApplication(exclude = {
                 DataSourceAutoConfiguration.class,
@@ -32,7 +33,8 @@ import com.am.marketdata.scheduler.config.MarketDataSchedulerConfig;
 })
 @EnableConfigurationProperties
 @Import({ MetricsConfig.class, InfluxDBConfig.class, SecurityConfig.class,
-                MarketDataInternalConfig.class, MarketDataSchedulerConfig.class })
+                MarketDataInternalConfig.class, MarketDataSchedulerConfig.class,
+                MarketDataKafkaModuleConfig.class })
 @ComponentScans({
                 @ComponentScan(
                                 basePackages = "com.am.marketdata",
