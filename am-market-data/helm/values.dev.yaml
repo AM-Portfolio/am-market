@@ -31,6 +31,8 @@ vault:
       path: "apps/data/dev/services/am-market-data"
     upstox:
       path: "apps/data/dev/services/am-market-data"
+    scheduler-config:
+      path: "apps/data/dev/services/am-market-data-scheduler"
 
 hostAliases:
   - ip: "203.174.22.129"
@@ -74,6 +76,20 @@ config:
     mongoQueryLimit: 0
     maxCandidatesPerQuery: 100
     internalBatchSize: 100
+
+  # Dev: disable live-market schedulers to prevent accidental ingestion.
+  # Re-enable individually via env.SCHEDULER_* vars if you need to test.
+  scheduler:
+    cookie:
+      enabled: false
+    stockIndices:
+      enabled: false
+    ingestion:
+      enabled: false
+      provider: "UPSTOX"
+      force: false
+    redisCleanup:
+      enabled: false
 
 env:
   SPRING_PROFILES_ACTIVE: "dev"

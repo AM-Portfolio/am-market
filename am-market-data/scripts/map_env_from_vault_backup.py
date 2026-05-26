@@ -30,6 +30,13 @@ def _get(data: dict, path: str) -> dict:
 
 def _mongo_market_data_url(mongo: dict) -> str:
     base = (mongo.get("url") or "").strip()
+    if "mongodb.infra.svc.cluster.local" in base:
+        base = base.replace("mongodb.infra.svc.cluster.local:27017", "mongodb.asrax.in:8888")
+    elif "mongodb.infra.svc.cluster.local" in (mongo.get("host") or ""):
+        mongo = mongo.copy()
+        mongo["host"] = "mongodb.asrax.in"
+        mongo["port"] = "8888"
+
     if not base:
         user = mongo.get("username", "admin")
         password = mongo.get("password", "")
@@ -81,6 +88,12 @@ def build_env(env_name: str, data: dict) -> str:
     influx = _get(data, f"{prefix}/infra/influxdb")
     market = _get(data, f"{prefix}/services/am-market-data")
 
+    redis_host = redis.get('host', 'redis.asrax.in')
+    redis_port = redis.get('port', '8889')
+    if redis_host == 'redis.infra.svc.cluster.local':
+        redis_host = 'redis.asrax.in'
+        redis_port = '8889'
+
     upstox_token = (
         market.get("UPSTOX_ACCESS_TOKEN")
         or market.get("UPSTOCK_ACCESS_TOKEN")
@@ -102,8 +115,8 @@ def build_env(env_name: str, data: dict) -> str:
         f"MONGODB_USERNAME={mongo.get('username', 'admin')}",
         f"MONGODB_PASSWORD={mongo.get('password', '')}",
         "",
-        f"REDIS_HOSTNAME={redis.get('host', 'redis.asrax.in')}",
-        f"REDIS_PORT={redis.get('port', '8889')}",
+        f"REDIS_HOSTNAME={redis_host}",
+        f"REDIS_PORT={redis_port}",
         f"REDIS_PASSWORD={redis.get('password', '')}",
         "",
         f"INFLUXDB_URL=http://{influx.get('host', 'influxdb.asrax.in')}:{influx.get('port', '8086')}",
