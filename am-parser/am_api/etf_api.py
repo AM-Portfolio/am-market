@@ -21,9 +21,9 @@ from am_services.job_queue_service import get_job_queue
 from am_etf.service import ETFService
 from am_etf.holdings_service import ETFHoldingsService
 from am_etf.smart_holdings_service import SmartETFHoldingsService
-from am_common.logging.request_logging import get_logger
+from am_common.observability import get_logger, bind_context
 
-log = get_logger("etf_api")
+logger = get_logger("am_api.etf_api")
 
 # Removing /etf prefix to align with global /v1 structure (will be included with /v1 in api.py)
 router = APIRouter(tags=["ETF Holdings"])
@@ -67,6 +67,8 @@ async def fetch_all_etf_holdings(
                 detail="No ETFs with ISIN found in database"
             )
         
+        logger.info(f"Starting async ETF holdings fetch", extra={"etf_count": total_count, "force_refresh": force_refresh})
+        
         # Validate webhook URL if provided
         normalized_callback = None
         callback_note = None
@@ -99,38 +101,40 @@ async def fetch_all_etf_holdings(
             callback_url=normalized_callback,
             user_id=user_id
         )
-        log.info("fetch-all-holdings: job_id=%s", job_id)
         
-        # Estimate completion time (smart: less time if cache hits expected)
-        estimated_api_calls = total_count if force_refresh else int(total_count * 0.3)  # Assume 70% cache hit rate
-        estimated_minutes = (estimated_api_calls * 2) / 60  # Convert seconds to minutes
-        estimated_completion = datetime.now() + timedelta(minutes=estimated_minutes)
-        
-        await etf_service.close()
-        
-        message = f"Started smart fetching holdings for {total_count} ETFs in background."
-        if not force_refresh:
-            message += " Using cache for recently fetched data."
-        
-        resp = JobResponse(
-            job_id=job_id,
-            status=JobStatus.PENDING,
-            message=message,
-            estimated_completion_time=estimated_completion.strftime("%Y-%m-%d %H:%M:%S"),
-            status_url=f"/jobs/{job_id}/status",
-            webhook_url=normalized_callback
-        )
-        
-        # If invalid callback provided, include an extra hint field in response
-        if callback_note:
-            return JSONResponse(status_code=200, content={
-                **resp.dict(),
-                "note": callback_note
-            })
-        return resp
+        with bind_context(job_id=job_id, job_type=JobType.ETF_HOLDINGS_FETCH.value):
+            logger.info("Asynchronous ETF holdings fetch background job registered successfully")
+            
+            # Estimate completion time (smart: less time if cache hits expected)
+            estimated_api_calls = total_count if force_refresh else int(total_count * 0.3)  # Assume 70% cache hit rate
+            estimated_minutes = (estimated_api_calls * 2) / 60  # Convert seconds to minutes
+            estimated_completion = datetime.now() + timedelta(minutes=estimated_minutes)
+            
+            await etf_service.close()
+            
+            message = f"Started smart fetching holdings for {total_count} ETFs in background."
+            if not force_refresh:
+                message += " Using cache for recently fetched data."
+            
+            resp = JobResponse(
+                job_id=job_id,
+                status=JobStatus.PENDING,
+                message=message,
+                estimated_completion_time=estimated_completion.strftime("%Y-%m-%d %H:%M:%S"),
+                status_url=f"/jobs/{job_id}/status",
+                webhook_url=normalized_callback
+            )
+            
+            # If invalid callback provided, include an extra hint field in response
+            if callback_note:
+                return JSONResponse(status_code=200, content={
+                    **resp.dict(),
+                    "note": callback_note
+                })
+            return resp
         
     except Exception as e:
-        log.exception("fetch-all-holdings failed: %s", e)
+        logger.error("ETF holdings fetch error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start ETF holdings fetch: {str(e)}"
@@ -213,7 +217,7 @@ async def search_etfs(
 
         
     except Exception as e:
-        log.exception("search failed: %s", e)
+        logger.error("ETF search error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to search ETFs: {str(e)}"
@@ -284,7 +288,7 @@ async def bulk_fetch_etf_holdings(
         }
 
     except Exception as e:
-        print(f"❌ Bulk fetch error: {e}")
+        logger.error("Bulk fetch error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to bulk fetch ETF holdings: {str(e)}"
@@ -323,7 +327,7 @@ async def fetch_holdings_for_etf(
                 detail=f"ETF {symbol} does not have an ISIN"
             )
         
-        print(f"🚀 Starting async holdings fetch for ETF {symbol} (ISIN: {etf.isin})")
+        logger.info(f"Starting async holdings fetch for ETF", extra={"symbol": symbol, "isin": etf.isin})
         
         # Validate webhook URL if provided
         normalized_callback = None
@@ -350,30 +354,33 @@ async def fetch_holdings_for_etf(
             user_id=user_id
         )
         
-        # Estimate completion time (2 seconds for single ETF)
-        estimated_completion = datetime.now() + timedelta(seconds=5)
-        
-        await etf_service.close()
-        
-        resp = JobResponse(
-            job_id=job_id,
-            status=JobStatus.PENDING,
-            message=f"Started fetching holdings for ETF {symbol} in background.",
-            estimated_completion_time=estimated_completion.strftime("%Y-%m-%d %H:%M:%S"),
-            status_url=f"/jobs/{job_id}/status",
-            webhook_url=normalized_callback
-        )
-        
-        # If invalid callback provided, include an extra hint field in response
-        if callback_note:
-            return JSONResponse(status_code=200, content={
-                **resp.dict(),
-                "note": callback_note
-            })
-        return resp
+        with bind_context(job_id=job_id, job_type=JobType.ETF_HOLDINGS_FETCH.value, symbol=symbol, isin=etf.isin):
+            logger.info("Single ETF holdings fetch background job registered successfully")
+            
+            # Estimate completion time (2 seconds for single ETF)
+            estimated_completion = datetime.now() + timedelta(seconds=5)
+            
+            await etf_service.close()
+            
+            resp = JobResponse(
+                job_id=job_id,
+                status=JobStatus.PENDING,
+                message=f"Started fetching holdings for ETF {symbol} in background.",
+                estimated_completion_time=estimated_completion.strftime("%Y-%m-%d %H:%M:%S"),
+                status_url=f"/jobs/{job_id}/status",
+                webhook_url=normalized_callback
+            )
+            
+            # If invalid callback provided, include an extra hint field in response
+            if callback_note:
+                return JSONResponse(status_code=200, content={
+                    **resp.dict(),
+                    "note": callback_note
+                })
+            return resp
         
     except Exception as e:
-        print(f"❌ ETF holdings fetch error: {e}")
+        logger.error("ETF holdings fetch error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start ETF holdings fetch: {str(e)}"
@@ -453,8 +460,7 @@ async def get_etf_holdings(symbol_or_isin: str):
             
             return results
 
-        # --- Original Logic for Single Item ---
-        print(f"🔍 [DEBUG] Request received for ETF holdings: '{symbol_or_isin}'")
+        logger.info(f"Request received for ETF holdings", extra={"symbol_or_isin": symbol_or_isin})
         
         # First get ETF info
         etf_service = ETFService()
@@ -464,13 +470,13 @@ async def get_etf_holdings(symbol_or_isin: str):
         
         # If not found, try by ISIN
         if not etf:
-             print(f"DEBUG: Symbol lookup failed, trying ISIN: {symbol_or_isin}")
+             logger.info(f"Symbol lookup failed, trying ISIN", extra={"symbol_or_isin": symbol_or_isin})
              etf = await etf_service.get_by_isin(symbol_or_isin)
         
-        print(f"🔍 [DEBUG] ETF Service returned: {etf} for input: '{symbol_or_isin}'")
+        logger.info(f"ETF Service lookup result", extra={"symbol_or_isin": symbol_or_isin, "found": etf is not None})
         
         if not etf:
-            print(f"❌ [DEBUG] ETF not found in database for input: '{symbol_or_isin}'")
+            logger.warning(f"ETF not found in database", extra={"symbol_or_isin": symbol_or_isin})
             await etf_service.close()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -515,7 +521,7 @@ async def get_etf_holdings(symbol_or_isin: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Get ETF holdings error: {e}")
+        logger.error("Get ETF holdings error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get ETF holdings: {str(e)}"
@@ -544,7 +550,7 @@ async def get_cache_statistics():
         }
         
     except Exception as e:
-        print(f"❌ Get cache stats error: {e}")
+        logger.error("Get cache stats error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get cache statistics: {str(e)}"
@@ -589,7 +595,7 @@ async def get_etf_stats():
         }
         
     except Exception as e:
-        print(f"❌ Get ETF stats error: {e}")
+        logger.error("Get ETF stats error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get ETF stats: {str(e)}"
@@ -633,12 +639,7 @@ async def load_etfs_from_json(
             except Exception as e:
                 errors.append(f"Record {i}: {str(e)}")
         
-        log.info(
-            "load-from-json: parsed=%s valid=%s errors=%s",
-            len(data),
-            len(instruments),
-            len(errors),
-        )
+        logger.info(f"Parsed {len(instruments)} ETF instruments from {len(data)} records")
         
         if dry_run:
             return {
@@ -674,7 +675,7 @@ async def load_etfs_from_json(
             detail=f"Invalid JSON: {str(e)}"
         )
     except Exception as e:
-        log.exception("load-from-json failed: %s", e)
+        logger.error("ETF load error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to load ETFs: {str(e)}"

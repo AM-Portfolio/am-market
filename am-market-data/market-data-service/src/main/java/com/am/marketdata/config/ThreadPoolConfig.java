@@ -4,12 +4,17 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.core.task.TaskDecorator;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Configuration for thread pools used in the application
  */
 @Configuration
+@RequiredArgsConstructor
 public class ThreadPoolConfig {
+
+    private final TaskDecorator taskDecorator;
 
     @Value("${market.data.persistence.thread.pool.size:5}")
     private int persistenceThreadPoolSize;
@@ -30,6 +35,7 @@ public class ThreadPoolConfig {
         executor.setThreadNamePrefix("market-data-persistence-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
+        executor.setTaskDecorator(taskDecorator);
         executor.initialize();
         return executor;
     }

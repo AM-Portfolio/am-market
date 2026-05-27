@@ -16,8 +16,9 @@ from am_services.job_queue_service import get_job_queue
 from am_services.file_upload_service import FileUploadService
 from am_persistence.file_upload_repository import FileUploadRepository
 from am_persistence import create_mutual_fund_service
+from am_common.observability import get_logger, bind_context
 
-
+logger = get_logger("am_api.job_api")
 router = APIRouter(tags=["Background Jobs"])
 
 
@@ -42,73 +43,76 @@ async def upload_excel_async(
         upload_service = FileUploadService()  # Uses default directories
         job_queue = await get_job_queue()
         
-        # Step 1: Upload and split Excel file (quick operation)
-        print(f"🚀 Starting async Excel upload: {file.filename}")
+        logger.info(f"Starting async Excel upload: {file.filename}")
         
         # Upload main file
         main_file_upload = await upload_service.save_uploaded_file(file)
         
-        # Persist main file to database
-        await repo.create_file_upload(main_file_upload)
-        print(f"✅ Main file uploaded: {main_file_upload.file_id}")
-        
-        # Split into sheets (quick operation)
-        sheet_files = upload_service.split_excel_into_sheets(main_file_upload)
-        
-        # Persist sheet files to database
-        for sheet_file in sheet_files:
-            await repo.create_file_upload(sheet_file)
-        
-        sheet_count = len(sheet_files)
-        print(f"✅ Excel split into {sheet_count} sheets")
-        
-        # Step 2: Create background job for LLM processing
-        # Validate webhook URL if provided
-        normalized_callback = None
-        callback_note = None
-        if callback_url:
-            cb = callback_url.strip()
-            if cb.startswith("http://") or cb.startswith("https://"):
-                normalized_callback = cb
-            else:
-                callback_note = "Ignoring invalid callback_url (missing http/https)."
-        job_input = {
-            "file_id": main_file_upload.file_id,
-            "file_path": main_file_upload.file_path,
-            "sheet_count": sheet_count,
-            "parse_method": parse_method
-        }
-        
-        job_id = await job_queue.create_job(
-            job_type=JobType.EXCEL_PROCESSING,
-            input_data=job_input,
-            callback_url=normalized_callback,
-            user_id=user_id
-        )
-        
-        # Estimate completion time (1.5 min per sheet average)
-        estimated_minutes = sheet_count * 1.5
-        estimated_completion = datetime.now() + timedelta(minutes=estimated_minutes)
-        
-        resp = JobResponse(
-            job_id=job_id,
-            status=JobStatus.PENDING,
-            message=f"Excel file uploaded successfully. Processing {sheet_count} sheets in background.",
-            estimated_completion_time=estimated_completion.strftime("%Y-%m-%d %H:%M:%S"),
-            status_url=f"/jobs/{job_id}/status",
-            webhook_url=normalized_callback
-        )
-        # If invalid callback provided, include an extra hint field in response
-        if callback_note:
-            # FastAPI response_model ignores extra keys unless we wrap; use JSONResponse for hint
-            return JSONResponse(status_code=200, content={
-                **resp.dict(),
-                "note": callback_note
-            })
-        return resp
+        with bind_context(file_id=main_file_upload.file_id, parse_method=parse_method):
+            # Persist main file to database
+            await repo.create_file_upload(main_file_upload)
+            logger.info("Main file uploaded successfully")
+            
+            # Split into sheets (quick operation)
+            sheet_files = upload_service.split_excel_into_sheets(main_file_upload)
+            
+            # Persist sheet files to database
+            for sheet_file in sheet_files:
+                await repo.create_file_upload(sheet_file)
+            
+            sheet_count = len(sheet_files)
+            logger.info(f"Excel split completed", extra={"sheet_count": sheet_count})
+            
+            # Step 2: Create background job for LLM processing
+            # Validate webhook URL if provided
+            normalized_callback = None
+            callback_note = None
+            if callback_url:
+                cb = callback_url.strip()
+                if cb.startswith("http://") or cb.startswith("https://"):
+                    normalized_callback = cb
+                else:
+                    callback_note = "Ignoring invalid callback_url (missing http/https)."
+            job_input = {
+                "file_id": main_file_upload.file_id,
+                "file_path": main_file_upload.file_path,
+                "sheet_count": sheet_count,
+                "parse_method": parse_method
+            }
+            
+            job_id = await job_queue.create_job(
+                job_type=JobType.EXCEL_PROCESSING,
+                input_data=job_input,
+                callback_url=normalized_callback,
+                user_id=user_id
+            )
+            
+            with bind_context(job_id=job_id, job_type=JobType.EXCEL_PROCESSING.value):
+                logger.info("Background job created successfully")
+                
+                # Estimate completion time (1.5 min per sheet average)
+                estimated_minutes = sheet_count * 1.5
+                estimated_completion = datetime.now() + timedelta(minutes=estimated_minutes)
+                
+                resp = JobResponse(
+                    job_id=job_id,
+                    status=JobStatus.PENDING,
+                    message=f"Excel file uploaded successfully. Processing {sheet_count} sheets in background.",
+                    estimated_completion_time=estimated_completion.strftime("%Y-%m-%d %H:%M:%S"),
+                    status_url=f"/jobs/{job_id}/status",
+                    webhook_url=normalized_callback
+                )
+                # If invalid callback provided, include an extra hint field in response
+                if callback_note:
+                    # FastAPI response_model ignores extra keys unless we wrap; use JSONResponse for hint
+                    return JSONResponse(status_code=200, content={
+                        **resp.dict(),
+                        "note": callback_note
+                    })
+                return resp
         
     except Exception as e:
-        print(f"❌ Upload error: {e}")
+        logger.error("Upload error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload file: {str(e)}"

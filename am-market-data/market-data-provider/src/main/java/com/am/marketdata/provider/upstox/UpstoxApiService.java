@@ -86,7 +86,7 @@ public class UpstoxApiService {
     }
 
     public Object generateSession(String code) {
-        log.info("Generating Upstox session for code: {}", code);
+        log.info("Generating Upstox session codePresent={}", code != null && !code.isEmpty());
         try {
             // Manual Token Exchange using Kong Unirest as used in UpStockClient
             kong.unirest.HttpResponse<String> response = kong.unirest.Unirest
@@ -101,7 +101,8 @@ public class UpstoxApiService {
 
             if (response.getStatus() == 200) {
                 String body = response.getBody();
-                log.info("Successfully generated Upstox session");
+                log.info("Successfully generated Upstox session tokenLength={}", 
+                        (body != null && body.contains("access_token")) ? "PRESENT" : "MISSING");
 
                 try {
                     // Parse response to extract access_token

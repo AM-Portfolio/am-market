@@ -10,7 +10,9 @@ import com.am.marketdata.api.model.HistoricalDataResponseV1;
 import com.am.marketdata.api.service.MarketDataFetchService;
 import com.am.marketdata.api.util.InstrumentUtils;
 import com.am.marketdata.api.util.HistoricalDataFilterUtil;
-import com.am.marketdata.common.log.AppLogger;
+import com.am.observability.flow.FlowLogger;
+import com.am.observability.flow.FlowSpan;
+import lombok.extern.slf4j.Slf4j;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.MarketDataService;
@@ -24,18 +26,20 @@ import java.util.stream.Collectors;
 /**
  * Implementation of MarketDataFetchService
  */
+@Slf4j
 @Service
 public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
-    private final AppLogger log = AppLogger.getLogger();
-
+    private final FlowLogger flowLogger;
     private final MarketDataService marketDataService;
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final InstrumentUtils instrumentUtils;
 
-    public MarketDataFetchServiceImpl(MarketDataService marketDataService,
+    public MarketDataFetchServiceImpl(FlowLogger flowLogger,
+            MarketDataService marketDataService,
             StockIndicesMarketDataService stockIndicesMarketDataService,
             InstrumentUtils instrumentUtils) {
+        this.flowLogger = flowLogger;
         this.marketDataService = marketDataService;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.instrumentUtils = instrumentUtils;
@@ -67,31 +71,35 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     @Override
     public Map<String, Object> getQuotes(Set<String> tradingSymbols, boolean isIndexSymbol, TimeFrame timeFrame,
             boolean forceRefresh) {
-        String methodName = "getQuotes";
-        log.info(methodName,
-                String.format("Getting quotes for %d symbols with timeFrame: %s, isIndexSymbol: %b, forceRefresh: %b",
-                        tradingSymbols.size(), timeFrame.getApiValue(), isIndexSymbol, forceRefresh));
 
-        // Resolve symbols using InstrumentUtils
-        // isIndexSymbol=true means keep as-is (fetchIndexStocks=false)
-        // isIndexSymbol=false means expand indices (fetchIndexStocks=true)
-        boolean fetchIndexStocks = !isIndexSymbol;
-        Set<String> symbols = instrumentUtils.resolveSymbols(new ArrayList<>(tradingSymbols), fetchIndexStocks);
+        if (tradingSymbols == null || tradingSymbols.isEmpty()) {
+            return new HashMap<>();
+        }
 
-        // Get OHLC data with timeframe support (pass null provider)
-        Map<String, OHLCQuote> ohlcData = marketDataService.getOHLC(new ArrayList<>(symbols), timeFrame, forceRefresh,
-                null);
+        try (FlowSpan span = flowLogger.start("market.fetch.quotes",
+                "symbolsCount", tradingSymbols.size(), "isIndex", isIndexSymbol, "timeFrame", timeFrame.getApiValue(),
+                "forceRefresh", forceRefresh)) {
 
-        // Create response with cache status
-        Map<String, Object> response = new HashMap<>();
-        response.put("quotes", ohlcData);
-        response.put("count", ohlcData.size());
-        response.put("cached", !forceRefresh);
-        response.put("timestamp", System.currentTimeMillis());
-        response.put("timeFrame", timeFrame.getApiValue());
-        response.put("source", forceRefresh ? "provider" : "cache");
+            boolean fetchIndexStocks = !isIndexSymbol;
+            Set<String> symbols = instrumentUtils.resolveSymbols(new ArrayList<>(tradingSymbols), fetchIndexStocks);
+            // Fixed SLF4J pattern: was log.info("methodName", "msg") which failed to log params
+            log.info("Resolved {} symbols from {} input symbols fetchIndexStocks={}", symbols.size(),
+                    tradingSymbols.size(), fetchIndexStocks);
 
-        return response;
+            Map<String, OHLCQuote> ohlcData = marketDataService.getOHLC(new ArrayList<>(symbols), timeFrame,
+                    forceRefresh, null);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("quotes", ohlcData);
+            response.put("count", ohlcData.size());
+            response.put("cached", !forceRefresh);
+            response.put("timestamp", System.currentTimeMillis());
+            response.put("timeFrame", timeFrame.getApiValue());
+            response.put("source", forceRefresh ? "provider" : "cache");
+
+            flowLogger.complete(span, "resultCount", ohlcData.size());
+            return response;
+        }
     }
 
     @Override
@@ -116,126 +124,106 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             Date fromDate, Date toDate,
             TimeFrame interval, String instrumentType,
             Map<String, Object> additionalParams, boolean forceRefresh, boolean fetchIndexStocks) {
-        String methodName = "getHistoricalDataMultipleSymbols";
-        log.info(methodName, String.format(
-                "[BATCH_HISTORICAL] getHistoricalDataMultipleSymbols: Processing historical data request for %d symbols from %s to %s, interval: %s (apiValue: %s), fetchIndexStocks: %b",
-                symbols.size(), fromDate, toDate, interval, interval.getApiValue(), fetchIndexStocks));
-
-        Map<String, HistoricalData> symbolsData = new HashMap<>();
 
         if (symbols == null || symbols.isEmpty()) {
-            log.warn(methodName, "No symbols provided for historical data request");
+            log.warn("No symbols provided for historical data request");
             return HistoricalDataResponseV1.builder()
                     .data(new HashMap<>())
                     .error("No symbols provided")
                     .build();
         }
 
-        // Resolve symbols using InstrumentUtils based on fetchIndexStocks flag
-        Set<String> resolvedSymbols = instrumentUtils.resolveSymbols(new ArrayList<>(symbols), fetchIndexStocks);
+        try (FlowSpan span = flowLogger.start("market.fetch.historical.batch",
+                "symbolsCount", symbols.size(), "interval", interval.getApiValue(), "fetchIndexStocks",
+                fetchIndexStocks, "forceRefresh", forceRefresh)) {
+            try {
+                Map<String, HistoricalData> symbolsData = new HashMap<>();
 
-        HistoricalDataFilterUtil.FilterParams filterParams = HistoricalDataFilterUtil
-                .extractFilterParams(additionalParams);
-        long startTime = System.currentTimeMillis();
+                Set<String> resolvedSymbols = instrumentUtils.resolveSymbols(new ArrayList<>(symbols), fetchIndexStocks);
+                // Fixed SLF4J pattern: removed redundant methodName param
+                log.info("Resolved {} symbols from {} input symbols", resolvedSymbols.size(), symbols.size());
 
-        try {
-            // Use batch retrieval
-            log.info(methodName, String.format(
-                    "[BATCH_HISTORICAL] Calling marketDataService.getHistoricalDataBatch for %d symbols",
-                    resolvedSymbols.size()));
+                HistoricalDataFilterUtil.FilterParams filterParams = HistoricalDataFilterUtil
+                        .extractFilterParams(additionalParams);
 
-            boolean isIndexSymbol = !fetchIndexStocks; // If we're not fetching stocks, treat as index symbols
-            if (additionalParams != null && additionalParams.containsKey("isIndexSymbol")) {
-                Object paramValue = additionalParams.get("isIndexSymbol");
-                if (paramValue instanceof Boolean) {
-                    isIndexSymbol = (Boolean) paramValue;
-                } else if (paramValue instanceof String) {
-                    isIndexSymbol = Boolean.parseBoolean((String) paramValue);
+                boolean isIndexSymbol = !fetchIndexStocks;
+                if (additionalParams != null && additionalParams.containsKey("isIndexSymbol")) {
+                    Object paramValue = additionalParams.get("isIndexSymbol");
+                    if (paramValue instanceof Boolean)
+                        isIndexSymbol = (Boolean) paramValue;
+                    else if (paramValue instanceof String)
+                        isIndexSymbol = Boolean.parseBoolean((String) paramValue);
                 }
-            }
 
-            Map<String, HistoricalData> batchResult = marketDataService.getHistoricalDataBatch(
-                    new ArrayList<>(resolvedSymbols), fromDate, toDate, interval, false, additionalParams, null,
-                    isIndexSymbol,
-                    forceRefresh);
+                Map<String, HistoricalData> batchResult = marketDataService.getHistoricalDataBatch(
+                        new ArrayList<>(resolvedSymbols), fromDate, toDate, interval, false, additionalParams, null,
+                        isIndexSymbol, forceRefresh);
 
-            int successCount = 0;
-            int totalDataPoints = 0;
-            int totalFilteredDataPoints = 0;
+                int successCount = 0;
+                int totalDataPoints = 0;
+                int totalFilteredDataPoints = 0;
 
-            // Process batch results
-            for (String symbol : symbols) {
-                HistoricalData historicalData = batchResult.get(symbol);
+                for (String symbol : symbols) {
+                    HistoricalData historicalData = batchResult.get(symbol);
+                    if (historicalData != null && historicalData.getDataPoints() != null
+                            && !historicalData.getDataPoints().isEmpty()) {
+                        List<OHLCVTPoint> dataPoints = historicalData.getDataPoints();
+                        int originalCount = dataPoints.size();
 
-                if (historicalData != null && historicalData.getDataPoints() != null
-                        && !historicalData.getDataPoints().isEmpty()) {
-                    List<OHLCVTPoint> dataPoints = historicalData.getDataPoints();
-                    int originalCount = dataPoints.size();
+                        if (filterParams.isFiltered()) {
+                            // Fixed SLF4J pattern in helper classes might also have been updated
+                            dataPoints = HistoricalDataFilterUtil.applyFilterStrategy(dataPoints, filterParams);
+                        }
 
-                    // Apply filtering if requested
-                    if (filterParams.isFiltered()) {
-                        dataPoints = HistoricalDataFilterUtil.applyFilterStrategy(dataPoints, filterParams);
+                        HistoricalData filteredHistoricalData = new HistoricalData();
+                        filteredHistoricalData.setTradingSymbol(symbol);
+                        filteredHistoricalData.setInterval(interval.getApiValue());
+                        filteredHistoricalData.setDataPoints(dataPoints);
+
+                        symbolsData.put(symbol, filteredHistoricalData);
+                        successCount++;
+                        totalDataPoints += originalCount;
+                        totalFilteredDataPoints += dataPoints.size();
                     }
-
-                    // Create new HistoricalData object with potentially filtered points
-                    HistoricalData filteredHistoricalData = new HistoricalData();
-                    filteredHistoricalData.setTradingSymbol(symbol);
-                    filteredHistoricalData.setInterval(interval.getApiValue());
-                    filteredHistoricalData.setDataPoints(dataPoints);
-
-                    symbolsData.put(symbol, filteredHistoricalData);
-
-                    successCount++;
-                    totalDataPoints += originalCount;
-                    totalFilteredDataPoints += dataPoints.size();
-                } else {
-                    // Even if no data, we might want to put an empty entry or skip
-                    // For now, skipping empty results in the map to reduce noise
                 }
+
+                HistoricalDataMetadata metadata = HistoricalDataMetadata.builder()
+                        .fromDate(new SimpleDateFormat("yyyy-MM-dd").format(fromDate))
+                        .toDate(new SimpleDateFormat("yyyy-MM-dd").format(toDate))
+                        .interval(interval.getApiValue())
+                        .intervalEnum(interval.name())
+                        .totalSymbols(symbols.size())
+                        .successfulSymbols(successCount)
+                        .totalDataPoints(totalDataPoints)
+                        .filteredDataPoints(filterParams.isFiltered() ? totalFilteredDataPoints : totalDataPoints)
+                        .filtered(filterParams.isFiltered())
+                        .filterType(filterParams.getFilterType())
+                        .filterFrequency(filterParams.isFiltered() ? filterParams.getFilterFrequency() : null)
+                        .processingTimeMs(span.elapsedMillis())
+                        .source(forceRefresh ? "provider" : "cache")
+                        .build();
+
+                flowLogger.complete(span, "successfulSymbols", successCount, "totalPoints", totalFilteredDataPoints);
+                return HistoricalDataResponseV1.builder()
+                        .data(symbolsData)
+                        .metadata(metadata)
+                        .build();
+            } catch (Exception e) {
+                // Fixed SLF4J pattern: was log.error("methodName", "msg", e)
+                log.error("Error in batch historical data retrieval", e);
+                flowLogger.fail(span, e);
+                return HistoricalDataResponseV1.builder()
+                        .error("Failed to retrieve batch historical data")
+                        .message(e.getMessage())
+                        .build();
             }
-
-            if (!filterParams.isFiltered()) {
-                totalFilteredDataPoints = totalDataPoints;
-            }
-
-            long endTime = System.currentTimeMillis();
-
-            // Populate metadata
-            HistoricalDataMetadata metadata = HistoricalDataMetadata
-                    .builder()
-                    .fromDate(new SimpleDateFormat("yyyy-MM-dd").format(fromDate))
-                    .toDate(new SimpleDateFormat("yyyy-MM-dd").format(toDate))
-                    .interval(interval.getApiValue())
-                    .intervalEnum(interval.name())
-                    .totalSymbols(symbols.size())
-                    .successfulSymbols(successCount)
-                    .totalDataPoints(totalDataPoints)
-                    .filteredDataPoints(totalFilteredDataPoints)
-                    .filtered(filterParams.isFiltered())
-                    .filterType(filterParams.getFilterType())
-                    .filterFrequency(filterParams.isFiltered() ? filterParams.getFilterFrequency() : null)
-                    .processingTimeMs(endTime - startTime)
-                    .source(forceRefresh ? "provider" : "cache")
-                    .build();
-
-            return HistoricalDataResponseV1.builder()
-                    .data(symbolsData)
-                    .metadata(metadata)
-                    .build();
-
-        } catch (Exception e) {
-            log.error(methodName, "Error in batch historical data retrieval: " + e.getMessage(), e);
-            return HistoricalDataResponseV1.builder()
-                    .error("Failed to retrieve batch historical data")
-                    .message(e.getMessage())
-                    .build();
         }
     }
 
     @Override
     public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate, boolean forceRefresh) {
-        log.debug("getOptionChain",
-                "Fetching option chain for symbol: " + underlyingSymbol + " with expiry date: " + expiryDate);
+        log.debug(
+                "Fetching option chain for symbol={} expiryDate={}", underlyingSymbol, expiryDate);
         // Option chain functionality not yet migrated to MarketDataService
         Map<String, Object> result = new HashMap<>();
         result.put("error", "Option chain not yet supported");
@@ -244,7 +232,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
     @Override
     public Map<String, Object> getMutualFundDetails(String schemeCode, boolean forceRefresh) {
-        log.debug("getMutualFundDetails", "Fetching mutual fund details for scheme code: " + schemeCode);
+        log.debug("Fetching mutual fund details for schemeCode={}", schemeCode);
         // Mutual fund functionality not yet migrated to MarketDataService
         Map<String, Object> result = new HashMap<>();
         result.put("error", "Mutual fund details not yet supported");
@@ -253,8 +241,8 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
     @Override
     public Map<String, Object> getMutualFundNavHistory(String schemeCode, Date from, Date to, boolean forceRefresh) {
-        log.debug("getMutualFundNavHistory",
-                "Fetching mutual fund NAV history for scheme code: " + schemeCode + " from: " + from + " to: " + to);
+        log.debug(
+                "Fetching mutual fund NAV history for schemeCode={} from={} to={}", schemeCode, from, to);
         // Mutual fund functionality not yet migrated to MarketDataService
         Map<String, Object> result = new HashMap<>();
         result.put("error", "Mutual fund NAV history not yet supported");
@@ -264,34 +252,33 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     @Override
     public HistoricalDataResponseV1 processHistoricalDataRequest(
             HistoricalDataRequest request) throws Exception {
-        String methodName = "processHistoricalDataRequest";
-        log.info(methodName, String.format(
-                "[INTERVAL_TRACE] Controller → Service: Processing historical data request for symbols: %s from %s to %s, interval: %s (enum: %s, apiValue: %s), filterType: %s, isIndexSymbol: %b",
+        log.info(
+                "[INTERVAL_TRACE] Controller → Service: Processing historical data request symbols={} from={} to={} interval={} (enum={}, apiValue={}) filterType={} isIndexSymbol={}",
                 request.getSymbols(), request.getFrom(), request.getTo(),
                 request.getInterval(),
                 request.getInterval().name(),
                 request.getInterval().getApiValue(),
                 request.getFilterType(),
-                request.isIndexSymbol()));
+                request.isIndexSymbol());
 
         // Resolve symbols - DON'T expand if isIndexSymbol is true
         // isIndexSymbol=true means we want the index itself, not its constituents
         // isIndexSymbol=false means expand indices to constituent stocks
         Set<String> symbolList;
         if (request.isIndexSymbol()) {
-            log.info(methodName, "[INTERVAL_TRACE] isIndexSymbol=true, returning index symbols as-is: {}",
+            log.info("[INTERVAL_TRACE] isIndexSymbol=true, returning index symbols as-is: {}",
                     request.getSymbols());
             symbolList = parseSymbols(request.getSymbols());
             // Pass expandIndices=false to keep index symbols as-is
             symbolList = instrumentUtils.resolveSymbols(new ArrayList<>(symbolList), false);
-            log.info(methodName, "[INTERVAL_TRACE] Kept {} index symbols without expansion",
+            log.info("[INTERVAL_TRACE] Kept {} index symbols without expansion",
                     symbolList.size());
         } else {
-            log.info(methodName, "[INTERVAL_TRACE] isIndexSymbol=false, expanding indices to constituent stocks");
+            log.info("[INTERVAL_TRACE] isIndexSymbol=false, expanding indices to constituent stocks");
             Set<String> parsedSymbols = parseSymbols(request.getSymbols());
             // Pass expandIndices=true to expand indices to constituent stocks
             symbolList = instrumentUtils.resolveSymbols(new ArrayList<>(parsedSymbols), true);
-            log.info(methodName, "[INTERVAL_TRACE] Expanded {} symbols to {} stocks",
+            log.info("[INTERVAL_TRACE] Expanded {} symbols to {} stocks",
                     parsedSymbols.size(), symbolList.size());
         }
 
@@ -311,7 +298,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             // If 'to' date is not provided, use current date
             if (request.getTo() == null || request.getTo().trim().isEmpty()) {
                 toDate = new Date(); // Current date
-                log.info(methodName, "[INTERVAL_TRACE] 'to' date not provided, using current date: {}",
+                log.info("[INTERVAL_TRACE] 'to' date not provided, using current date: {}",
                         dateFormat.format(toDate));
             } else {
                 toDate = dateFormat.parse(request.getTo());
@@ -330,9 +317,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         additionalParams.put("filterType", request.getFilterType());
         additionalParams.put("filterFrequency", request.getFilterFrequency());
 
-        log.info(methodName, String.format(
-                "[INTERVAL_TRACE] Service → getHistoricalDataMultipleSymbols: Calling with interval: %s (apiValue: %s)",
-                request.getInterval(), request.getInterval().getApiValue()));
+        log.info(
+                "[INTERVAL_TRACE] Service → getHistoricalDataMultipleSymbols: Calling with interval: {} (apiValue: {})",
+                request.getInterval(), request.getInterval().getApiValue());
 
         HistoricalDataResponseV1 response = getHistoricalDataMultipleSymbols(
                 symbolList, fromDate, toDate, request.getInterval(),
@@ -340,9 +327,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 additionalParams, request.isForceRefresh(), !request.isIndexSymbol()); // fetchIndexStocks =
                                                                                        // !isIndexSymbol
 
-        log.info(methodName, String.format(
-                "[INTERVAL_TRACE] Service → Controller: Returning response for interval: %s",
-                response.getMetadata() != null ? response.getMetadata().getInterval() : "unknown"));
+        log.info(
+                "[INTERVAL_TRACE] Service → Controller: Returning response for interval: {}",
+                response.getMetadata() != null ? response.getMetadata().getInterval() : "unknown");
 
         return response;
     }
@@ -372,10 +359,10 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 null);
 
         if (ohlcData != null) {
-            log.info("getOHLC", "Fetched OHLC data for keys: " + ohlcData.keySet());
+            log.info("Fetched OHLC data for keys: {}", ohlcData.keySet());
             return ohlcData;
         } else {
-            log.warn("getOHLC", "Fetched OHLC data is null");
+            log.warn("Fetched OHLC data is null");
             return new HashMap<>();
         }
     }
@@ -396,7 +383,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     }
 
     public List<String> findMissingSymbols(List<String> indexSymbols, List<String> symbolsToCheck) {
-        log.debug("findMissingSymbols", "Finding symbols not included in the passed list: " + symbolsToCheck);
+        log.debug("Finding symbols not included in the passed list: {}", symbolsToCheck);
 
         if (symbolsToCheck == null || symbolsToCheck.isEmpty()) {
             return Collections.emptyList();
@@ -423,9 +410,8 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     }
 
     public Map<String, Object> getHistoricalChartsData(String symbol, String range) {
-        String methodName = "getHistoricalChartsData";
-        log.info(methodName, String.format("Fetching historical charts for symbol: %s, range: %s",
-                symbol, range));
+        log.info("Fetching historical charts for symbol={} range={}",
+                symbol, range);
 
         String interval;
         java.time.LocalDate to = java.time.LocalDate.now();
@@ -460,7 +446,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             }
             return result;
         } catch (Exception e) {
-            log.error(methodName, "Error fetching historical charts for " + symbol + ": " + e.getMessage());
+            log.error("Error fetching historical charts for {}: {}", symbol, e.getMessage());
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Failed to fetch chart data");
             errorResponse.put("message", e.getMessage());
@@ -468,3 +454,4 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         }
     }
 }
+

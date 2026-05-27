@@ -3,6 +3,10 @@ package com.am.marketdata.api.service;
 import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.marketdata.scraper.service.MarketDataProcessingService;
+import com.am.marketdata.service.MarketDataCacheService;
+import com.am.marketdata.common.model.OHLCQuote;
+import com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 
 import com.am.marketdata.common.log.AppLogger;
@@ -27,6 +31,7 @@ public class StockIndicesService {
     private final MarketDataProcessingService marketDataProcessingService;
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final MarketDataFetchService marketDataCacheService;
+    private final MarketDataCacheService redisCacheService;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
     @Value("${market.data.cache.enabled:true}")
@@ -39,27 +44,58 @@ public class StockIndicesService {
     public List<StockIndicesMarketData> getLatestIndicesData(List<String> indexSymbols, boolean forceRefresh) {
         String methodName = "getLatestIndicesData";
         try {
-            // 1. Try to get from cache first
-            List<StockIndicesMarketData> cachedResult = checkCache(indexSymbols, forceRefresh, methodName);
-            if (!cachedResult.isEmpty()) {
-                return cachedResult;
-            }
-
-            // 2. If cache miss, check database for existing data and identify what's
-            // missing
             List<StockIndicesMarketData> finalResults = new ArrayList<>();
             List<String> symbolsToProcess = new ArrayList<>();
+
+            // 1. Load from MongoDB Database
             checkDatabase(indexSymbols, forceRefresh, finalResults, symbolsToProcess, methodName);
 
-            // 4. Log summary
-            if (finalResults.isEmpty()) {
-                // 3. Fetch fresh data for missing symbols from API/Scraper
-                if (!symbolsToProcess.isEmpty()) {
+            // 2. Scrape only if MongoDB document is completely missing (constituent document repair)
+            if (!symbolsToProcess.isEmpty()) {
+                if (forceRefresh) {
+                    log.info(methodName, "Force refresh requested. Triggering fresh fetch/scraper.");
+                    fetchFreshData(symbolsToProcess, finalResults, methodName);
+                } else {
+                    log.info(methodName, "Constituent documents missing for some symbols. Triggering repair scraper.");
                     fetchFreshData(symbolsToProcess, finalResults, methodName);
                 }
-            } else {
-                log.info(methodName, String.format("Retrieved data for %d/%d symbols (fresh/db)", finalResults.size(),
-                        indexSymbols.size()));
+            }
+
+            // 3. Enrich with Redis latest streaming prices (No Upstox REST calls on normal requests)
+            Set<String> requestedSymbols = new HashSet<>(indexSymbols);
+            Map<String, OHLCQuote> latestPrices = redisCacheService.getLatestPrices(requestedSymbols);
+
+            if (latestPrices != null && !latestPrices.isEmpty()) {
+                for (StockIndicesMarketData data : finalResults) {
+                    String symbol = data.getIndexSymbol();
+                    OHLCQuote priceQuote = latestPrices.get(symbol);
+                    if (priceQuote != null) {
+                        IndexMetadata meta = data.getMetadata();
+                        if (meta == null) {
+                            meta = new IndexMetadata();
+                            data.setMetadata(meta);
+                        }
+
+                        double lastPrice = priceQuote.getLastPrice();
+                        double open = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getOpen() : 0.0;
+                        double high = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getHigh() : 0.0;
+                        double low = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getLow() : 0.0;
+                        double previousClose = priceQuote.getPreviousClose();
+                        double change = lastPrice - previousClose;
+                        double changePercent = previousClose != 0 ? (change / previousClose) * 100.0 : 0.0;
+
+                        meta.setLast(lastPrice);
+                        meta.setOpen(open);
+                        meta.setHigh(high);
+                        meta.setLow(low);
+                        meta.setPreviousClose(previousClose);
+                        meta.setChange(change);
+                        meta.setPercChange(changePercent);
+                        meta.setTimeVal(String.valueOf(System.currentTimeMillis()));
+
+                        log.debug(methodName, "Enriched index " + symbol + " from Redis latest price cache. Price=" + lastPrice);
+                    }
+                }
             }
 
             return finalResults;

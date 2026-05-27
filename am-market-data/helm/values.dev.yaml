@@ -1,9 +1,34 @@
-# Dev Environment — am-market-data
-environment: dev
-replicaCount: 1
+env:
+  SPRING_PROFILES_ACTIVE: "dev"
+  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=dev"
 
-service:
+probes:
   port: 8080
+  startup:
+    path: /actuator/health/liveness
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 18
+  liveness:
+    path: /actuator/health/liveness
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    path: /actuator/health/readiness
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+config:
+  marketData:
+    maxRetries: 3
+    retryDelayMs: 1000
+    threadPoolSize: 5
+    threadQueueCapacity: 10
+    maxAgeMinutes: 15
+  env: "dev"
 
 resources:
   limits:
@@ -13,7 +38,6 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-# Vault configuration
 vault:
   enabled: true
   secretPaths:
@@ -22,15 +46,26 @@ vault:
     mongodb:
       path: "apps/data/dev/infra/mongodb"
     redis:
-      path: "apps/data/dev/infra/redis"
+      path: "apps/data/dev/infra/redisset"
     influxdb:
       path: "apps/data/dev/infra/influxdb"
+    jwt:
+      path: "apps/data/dev/services/am-market-data"
     kafka:
       path: "apps/data/dev/infra/kafka"
-    market-data:
+    zerodha:
       path: "apps/data/dev/services/am-market-data"
     upstox:
       path: "apps/data/dev/services/am-market-data"
+    market-data:
+      path: "apps/data/dev/services/am-market-data"
+
+monitoring:
+  enabled: true
+  prometheus:
+    scrape: true
+    port: "8080"
+    path: "/actuator/prometheus"
 
 hostAliases:
   - ip: "203.174.22.129"
@@ -39,26 +74,12 @@ hostAliases:
       - "mongodb.asrax.in"
       - "kafka.asrax.in"
 
-probes:
-  port: 8080
-  startup:
-    path: "/actuator/health"
-    failureThreshold: 30
-    periodSeconds: 10
-    timeoutSeconds: 10
-  liveness:
-    path: "/actuator/health"
-    timeoutSeconds: 10
-  readiness:
-    path: "/actuator/health"
-    timeoutSeconds: 10
-
 ingress:
   enabled: true
   className: "traefik"
   annotations:
     kubernetes.io/ingress.class: "traefik"
-    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.entrypoints: "web,websecure"
     traefik.ingress.kubernetes.io/router.middlewares: >-
       am-apps-dev-dev-global-cors@kubernetescrd,
       am-apps-dev-dev-strip-prefix@kubernetescrd
@@ -67,6 +88,3 @@ ingress:
       paths:
         - path: /market
           pathType: Prefix
-
-env:
-  SPRING_PROFILES_ACTIVE: "dev"

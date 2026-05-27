@@ -13,7 +13,6 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-# Vault configuration
 vault:
   enabled: true
   secretPaths:
@@ -21,6 +20,7 @@ vault:
       path: "apps/data/dev/infra/mongodb"
     together:
       path: "apps/data/dev/infra/shared-api"
+    # Add other secret paths as needed
 
 hostAliases:
   - ip: "203.174.22.129"
@@ -48,7 +48,7 @@ ingress:
   className: "traefik"
   annotations:
     kubernetes.io/ingress.class: "traefik"
-    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.entrypoints: "web,websecure"
     traefik.ingress.kubernetes.io/router.middlewares: >-
       am-apps-dev-dev-global-cors@kubernetescrd,
       am-apps-dev-dev-strip-prefix@kubernetescrd

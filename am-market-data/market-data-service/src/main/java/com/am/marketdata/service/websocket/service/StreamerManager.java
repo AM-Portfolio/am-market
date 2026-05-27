@@ -6,6 +6,7 @@ import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.log.AppLogger;
 import com.am.marketdata.common.service.MarketDataPublisher;
 import com.am.marketdata.service.MarketDataPersistenceService;
+import com.am.marketdata.service.MarketDataCacheService;
 import com.am.marketdata.service.SymbolOrchestratorService;
 import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
 import java.util.List;
@@ -39,6 +40,7 @@ public class StreamerManager implements StreamerListener {
     private final MarketDataProcessor processor;
     private final SymbolOrchestratorService symbolService;
     private final MarketDataPublisher publisher; // For WebSocket broadcasting
+    private final MarketDataCacheService cacheService;
 
     private Set<String> subscribedSymbols = new HashSet<>();
     private static final String DEFAULT_MODE = "full";
@@ -48,12 +50,14 @@ public class StreamerManager implements StreamerListener {
             MarketDataPersistenceService persistenceService,
             MarketDataProcessor processor,
             SymbolOrchestratorService symbolService,
-            MarketDataPublisher publisher) {
+            MarketDataPublisher publisher,
+            MarketDataCacheService cacheService) {
         this.streamer = streamer;
         this.persistenceService = persistenceService;
         this.processor = processor;
         this.symbolService = symbolService;
         this.publisher = publisher;
+        this.cacheService = cacheService;
     }
 
     // @PostConstruct
@@ -203,24 +207,78 @@ public class StreamerManager implements StreamerListener {
         // Service layer expects ONLY common DTOs (UpstoxFeedResponse)
         // Provider layer is responsible for converting proto → common DTO
 
-        // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 for now
-        if (message instanceof MarketUpdateV3) {
+        if (message instanceof Map) {
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, OHLCQuote> quotes = (Map<String, OHLCQuote>) message;
+                
+                // Phase 2: Cache the latest streaming prices strictly in Redis
+                cacheService.cacheLatestPrices(quotes);
+
+                // Phase 1: Convert quotes into MarketDataUpdate and publish/broadcast to UI
+                Map<String, MarketDataUpdate.QuoteChange> uiQuotes = new HashMap<>();
+                for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
+                    String rawSymbol = entry.getKey();
+                    // Normalize symbol: e.g. NSE_INDEX|Nifty 50 -> NIFTY 50
+                    String symbol = rawSymbol;
+                    if (symbol.contains("|")) {
+                        symbol = symbol.substring(symbol.indexOf("|") + 1);
+                    }
+                    symbol = symbol.toUpperCase().trim();
+
+                    OHLCQuote quote = entry.getValue();
+                    if (quote != null) {
+                        double lastPrice = quote.getLastPrice();
+                        double open = quote.getOhlc() != null ? quote.getOhlc().getOpen() : 0.0;
+                        double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
+                        double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
+                        double close = quote.getOhlc() != null ? quote.getOhlc().getClose() : 0.0;
+                        double previousClose = quote.getPreviousClose();
+                        double change = lastPrice - previousClose;
+                        double changePercent = previousClose != 0 ? (change / previousClose) * 100.0 : 0.0;
+
+                        MarketDataUpdate.QuoteChange qc = MarketDataUpdate.QuoteChange.builder()
+                                .lastPrice(lastPrice)
+                                .open(open)
+                                .high(high)
+                                .low(low)
+                                .close(close)
+                                .previousClose(previousClose)
+                                .change(change)
+                                .changePercent(changePercent)
+                                .build();
+                        uiQuotes.put(symbol, qc);
+                    }
+                }
+
+                if (!uiQuotes.isEmpty()) {
+                    MarketDataUpdate update = MarketDataUpdate.builder()
+                            .timestamp(System.currentTimeMillis())
+                            .quotes(uiQuotes)
+                            .build();
+                    publisher.publish(update);
+                }
+            } catch (Exception e) {
+                log.error("StreamerManager", "Error handling Map message", e);
+            }
+        } else if (message instanceof MarketUpdateV3) {
+            // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 for now
             try {
                 processUpdateForPublisher((MarketUpdateV3) message);
             } catch (Exception e) {
                 log.error("StreamerManager", "Error broadcasting to UI", e);
             }
-        }
-
-        // 2. Process for Kafka/Persistence - expects UpstoxFeedResponse
-        try {
-            Map<String, OHLCQuote> quotes = processor.processUpdate(message);
-            if (quotes != null && !quotes.isEmpty()) {
-                // log.debug("StreamerManager", "Processed " + quotes.size() + " quotes
-                // (Kafka).");
+        } else {
+            // 2. Process for Kafka/Persistence - expects UpstoxFeedResponse
+            try {
+                Map<String, OHLCQuote> quotes = processor.processUpdate(message);
+                if (quotes != null && !quotes.isEmpty()) {
+                    // log.debug("StreamerManager", "Processed " + quotes.size() + " quotes
+                    // (Kafka).");
+                }
+            } catch (Exception e) {
+                log.error("StreamerManager", "Error handling message for persistence", e);
             }
-        } catch (Exception e) {
-            log.error("StreamerManager", "Error handling message for persistence", e);
         }
     }
 

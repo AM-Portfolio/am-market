@@ -103,7 +103,31 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     """OpenAI model to use for parsing."""
     
+    # ==================== Observability Configuration ====================
+    service_name: str = "am-parser"
+    """Name of the service for tracing and logging."""
+    
+    otel_exporter_otlp_endpoint: str = "http://otel-collector:4317"
+    """OTEL collector gRPC endpoint."""
+    
+    otel_traces_exporter: str = "otlp"
+    """OTEL traces exporter type."""
+    
+    log_level: str = "INFO"
+    """Application logging level."""
+    
+    log_format: str = "json"
+    """Application logging format: 'json' or 'text'."""
+    
+    # Legacy Logging service compatibility
+    am_logging_base_url: str = "http://am-logging-svc"
+    """URL of legacy AM Logging Service."""
+    
+    am_logging_persist_to_db: bool = False
+    """Whether to persist logs using legacy service."""
+
     model_config = {
+
         "env_file": str(_ENV_FILE) if _ENV_FILE.exists() else ".env",
         "env_file_encoding": "utf-8",
         "case_sensitive": False,
