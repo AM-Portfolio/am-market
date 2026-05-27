@@ -300,4 +300,18 @@ public class MarketDataIngestionService {
 
         return quoteUpdates;
     }
+
+    @jakarta.annotation.PreDestroy
+    public void shutdown() {
+        log.info("Shutting down MarketDataIngestionService scheduler...");
+        scheduler.shutdown();
+        try {
+            if (!scheduler.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
 }
