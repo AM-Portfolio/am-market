@@ -9,8 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Service;
-
 import jakarta.annotation.PostConstruct;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -19,7 +17,6 @@ import java.util.concurrent.TimeUnit;
  * Service for interacting with Upstox API
  */
 @Slf4j
-@Service
 public class UpstoxApiService {
 
     @Value("${upstox.auth.api-key}")
@@ -31,21 +28,21 @@ public class UpstoxApiService {
     @Value("${upstox.auth.redirect-uri}")
     private String redirectUri;
 
-    private static final String REDIS_KEY_ACCESS_TOKEN = "market_data:upstox:access_token";
-
     private final UpStockClient upStockClient;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final UpstoxConfig upstoxConfig;
+    private final UpstoxSdkService upstoxSdkService;
     private String accessToken;
 
     @Autowired
     public UpstoxApiService(UpStockClient upStockClient, StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
-            UpstoxConfig upstoxConfig) {
+            UpstoxConfig upstoxConfig, UpstoxSdkService upstoxSdkService) {
         this.upStockClient = upStockClient;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.upstoxConfig = upstoxConfig;
+        this.upstoxSdkService = upstoxSdkService;
     }
 
     @PostConstruct
@@ -53,13 +50,13 @@ public class UpstoxApiService {
         log.info("Initializing Upstox API service");
         try {
             // Try to load cached token from Redis
-            String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
-            if (cachedToken != null && !cachedToken.isEmpty()) {
+            String cachedToken = redisTemplate.opsForValue().get(UpstoxTokenKeys.REDIS_ACCESS_TOKEN);
+            if (UpstoxTokenKeys.isUsable(cachedToken)) {
                 log.info("Found cached Access Token in Redis, applying to configuration");
                 setAccessToken(UpstoxSdkService.sanitizeAccessToken(cachedToken));
             } else {
                 log.info("No cached Access Token found in Redis, checking configuration");
-                if (upstoxConfig.getAccessToken() != null && !upstoxConfig.getAccessToken().isEmpty()) {
+                if (UpstoxTokenKeys.isUsable(upstoxConfig.getAccessToken())) {
                     log.info("Found Access Token in configuration");
                     // We don't call setAccessToken to avoid overwriting config with itself or
                     // triggering side effects
@@ -73,7 +70,7 @@ public class UpstoxApiService {
         } catch (Exception e) {
             log.warn("Failed to load cached token from Redis (Redis might be down): {}", e.getMessage());
             // Fallback to config even on exception
-            if (upstoxConfig.getAccessToken() != null && !upstoxConfig.getAccessToken().isEmpty()) {
+            if (UpstoxTokenKeys.isUsable(upstoxConfig.getAccessToken())) {
                 log.info("Found Access Token in configuration (fallback)");
                 this.accessToken = UpstoxSdkService.sanitizeAccessToken(upstoxConfig.getAccessToken());
             }
@@ -111,7 +108,7 @@ public class UpstoxApiService {
                         log.info("Extracted Access Token, saving to Redis");
 
                         // Save to cache (TTL 1 day or as appropriate)
-                        redisTemplate.opsForValue().set(REDIS_KEY_ACCESS_TOKEN, newToken, 24, TimeUnit.HOURS);
+                        redisTemplate.opsForValue().set(UpstoxTokenKeys.REDIS_ACCESS_TOKEN, newToken, 24, TimeUnit.HOURS);
 
                         // Update in-memory state
                         setAccessToken(newToken);
@@ -133,13 +130,15 @@ public class UpstoxApiService {
     }
 
     public void setAccessToken(String accessToken) {
-        this.accessToken = UpstoxSdkService.sanitizeAccessToken(accessToken);
-        if (upstoxConfig != null) {
-            upstoxConfig.setAccessToken(accessToken);
+        String sanitized = UpstoxSdkService.sanitizeAccessToken(accessToken);
+        if (!UpstoxTokenKeys.isUsable(sanitized)) {
+            return;
         }
-        // Also ensure UpStockClient knows about it if it doesn't pull from config
-        // automatically
-        // Assuming UpStockClient uses UpstoxConfig bean which we just updated.
+        this.accessToken = sanitized;
+        if (upstoxConfig != null) {
+            upstoxConfig.setAccessToken(sanitized);
+        }
+        upstoxSdkService.setAccessToken(sanitized);
     }
 
     public MarketQuoteResponse getLtp(List<String> symbols) {

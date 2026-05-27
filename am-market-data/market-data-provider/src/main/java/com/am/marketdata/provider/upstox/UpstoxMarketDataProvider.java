@@ -60,6 +60,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     @Override
     public void setAccessToken(String accessToken) {
         upstoxApiService.setAccessToken(accessToken);
+        upstoxSdkService.setAccessToken(accessToken);
     }
 
     @Override

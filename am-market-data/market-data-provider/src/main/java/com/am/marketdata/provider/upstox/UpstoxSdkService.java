@@ -21,8 +21,6 @@ public class UpstoxSdkService {
     private final UpstoxConfig upstoxConfig;
     private String accessToken;
 
-    private static final String REDIS_KEY_ACCESS_TOKEN = "market_data:upstox:access_token";
-
     public UpstoxSdkService(StringRedisTemplate redisTemplate, UpstoxConfig upstoxConfig) {
         this.redisTemplate = redisTemplate;
         this.upstoxConfig = upstoxConfig;
@@ -33,13 +31,13 @@ public class UpstoxSdkService {
         log.info("Initializing Upstox SDK Service");
         try {
             // Try to load cached token from Redis
-            String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
+            String cachedToken = readCachedTokenFromRedis();
             if (cachedToken != null && !cachedToken.isEmpty()) {
                 log.info("Found cached Access Token in Redis for SDK Service");
                 this.setAccessToken(sanitizeAccessToken(cachedToken));
             } else {
                 log.info("No cached Access Token found in Redis for SDK Service, checking configuration");
-                if (upstoxConfig.getAccessToken() != null && !upstoxConfig.getAccessToken().isEmpty()) {
+                if (UpstoxTokenKeys.isUsable(upstoxConfig.getAccessToken())) {
                     log.info("Found Access Token in configuration for SDK Service");
                     this.setAccessToken(sanitizeAccessToken(upstoxConfig.getAccessToken()));
                 } else {
@@ -49,19 +47,60 @@ public class UpstoxSdkService {
         } catch (Exception e) {
             log.warn("Failed to initialize SDK Service token from Redis: {}", e.getMessage());
             // Fallback to config
-            if (upstoxConfig.getAccessToken() != null && !upstoxConfig.getAccessToken().isEmpty()) {
+            if (UpstoxTokenKeys.isUsable(upstoxConfig.getAccessToken())) {
                 this.setAccessToken(upstoxConfig.getAccessToken());
             }
         }
     }
 
     public void setAccessToken(String accessToken) {
+        if (!UpstoxTokenKeys.isUsable(accessToken)) {
+            return;
+        }
         this.accessToken = sanitizeAccessToken(accessToken);
+    }
+
+    /**
+     * Resolve token for each API call: Redis (post-login) → config → in-memory field.
+     */
+    String resolveAccessToken() {
+        String fromRedis = readCachedTokenFromRedis();
+        if (UpstoxTokenKeys.isUsable(fromRedis)) {
+            return sanitizeAccessToken(fromRedis);
+        }
+        if (upstoxConfig != null && UpstoxTokenKeys.isUsable(upstoxConfig.getAccessToken())) {
+            return sanitizeAccessToken(upstoxConfig.getAccessToken());
+        }
+        if (UpstoxTokenKeys.isUsable(this.accessToken)) {
+            return sanitizeAccessToken(this.accessToken);
+        }
+        return null;
+    }
+
+    private String readCachedTokenFromRedis() {
+        try {
+            String canonical = redisTemplate.opsForValue().get(UpstoxTokenKeys.REDIS_ACCESS_TOKEN);
+            if (UpstoxTokenKeys.isUsable(canonical)) {
+                return canonical;
+            }
+            return redisTemplate.opsForValue().get(UpstoxTokenKeys.REDIS_ACCESS_TOKEN_LEGACY);
+        } catch (Exception e) {
+            log.debug("Failed to read Upstox token from Redis: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private void ensureAccessToken() {
+        String token = resolveAccessToken();
+        if (!UpstoxTokenKeys.isUsable(token)) {
+            throw new IllegalStateException("Upstox Access token is not initialized");
+        }
+        this.accessToken = token;
     }
 
     /** Strip accidental JSON suffixes from env vars (e.g. {@code ...","extended_token":"...}). */
     static String sanitizeAccessToken(String accessToken) {
-        if (accessToken == null) {
+        if (!UpstoxTokenKeys.isUsable(accessToken)) {
             return null;
         }
         String token = accessToken.trim();
@@ -89,15 +128,7 @@ public class UpstoxSdkService {
      */
     public GetMarketQuoteLastTradedPriceResponseV3 getLtp(List<String> instrumentKeys)
             throws ApiException {
-        if (this.accessToken == null || this.accessToken.isEmpty()) {
-            // Try to refresh from config one last time
-            if (upstoxConfig.getAccessToken() != null) {
-                this.accessToken = upstoxConfig.getAccessToken();
-            }
-            if (this.accessToken == null || this.accessToken.isEmpty()) {
-                throw new IllegalStateException("Upstox Access token is not initialized");
-            }
-        }
+        ensureAccessToken();
 
         if (instrumentKeys == null || instrumentKeys.isEmpty()) {
             return new GetMarketQuoteLastTradedPriceResponseV3();
@@ -138,15 +169,7 @@ public class UpstoxSdkService {
      */
     public com.am.marketdata.provider.upstox.model.OHLCResponse getOhlc(List<String> instrumentKeys, String interval)
             throws ApiException {
-        if (this.accessToken == null || this.accessToken.isEmpty()) {
-            // Try to refresh from config one last time
-            if (upstoxConfig.getAccessToken() != null) {
-                this.accessToken = upstoxConfig.getAccessToken();
-            }
-            if (this.accessToken == null || this.accessToken.isEmpty()) {
-                throw new IllegalStateException("Upstox Access token is not initialized");
-            }
-        }
+        ensureAccessToken();
 
         if (instrumentKeys == null || instrumentKeys.isEmpty()) {
             return new com.am.marketdata.provider.upstox.model.OHLCResponse();
@@ -247,14 +270,7 @@ public class UpstoxSdkService {
      */
     public com.am.marketdata.provider.upstox.model.HistoricalDataResponse getHistoricalCandleData(String instrumentKey,
             String unit, Integer interval, String toDate, String fromDate) {
-        if (this.accessToken == null || this.accessToken.isEmpty()) {
-            if (upstoxConfig.getAccessToken() != null) {
-                this.accessToken = sanitizeAccessToken(upstoxConfig.getAccessToken());
-            }
-            if (this.accessToken == null || this.accessToken.isEmpty()) {
-                throw new IllegalStateException("Upstox Access token is not initialized");
-            }
-        }
+        ensureAccessToken();
 
         try {
             ApiClient apiClient = new ApiClient();

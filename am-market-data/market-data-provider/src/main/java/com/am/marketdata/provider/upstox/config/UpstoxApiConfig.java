@@ -31,22 +31,23 @@ public class UpstoxApiConfig {
     @Value("${market-data.upstox.api.retry.delay.ms:1000}")
     private int retryDelayMs;
 
-    @Bean(name = "upstoxApiService")
-    public UpstoxApiService upstoxApiService(
-            com.am.marketdata.provider.upstox.client.UpStockClient upStockClient,
-            org.springframework.data.redis.core.StringRedisTemplate redisTemplate,
-            com.fasterxml.jackson.databind.ObjectMapper objectMapper,
-            com.am.marketdata.provider.upstox.config.UpstoxConfig upstoxConfig) {
-        log.info("Creating Upstox API service");
-        return new UpstoxApiService(upStockClient, redisTemplate, objectMapper, upstoxConfig);
-    }
-
     @Bean(name = "upstoxSdkService")
     public UpstoxSdkService upstoxSdkService(
             org.springframework.data.redis.core.StringRedisTemplate redisTemplate,
             com.am.marketdata.provider.upstox.config.UpstoxConfig upstoxConfig) {
         log.info("Creating Upstox SDK service");
         return new UpstoxSdkService(redisTemplate, upstoxConfig);
+    }
+
+    @Bean(name = "upstoxApiService")
+    public UpstoxApiService upstoxApiService(
+            com.am.marketdata.provider.upstox.client.UpStockClient upStockClient,
+            org.springframework.data.redis.core.StringRedisTemplate redisTemplate,
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+            com.am.marketdata.provider.upstox.config.UpstoxConfig upstoxConfig,
+            UpstoxSdkService upstoxSdkService) {
+        log.info("Creating Upstox API service");
+        return new UpstoxApiService(upStockClient, redisTemplate, objectMapper, upstoxConfig, upstoxSdkService);
     }
 
     @Bean(name = "marketDataUpstoxRetryRegistry")

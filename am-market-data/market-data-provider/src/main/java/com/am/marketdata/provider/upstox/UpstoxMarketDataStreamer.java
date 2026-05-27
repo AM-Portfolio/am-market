@@ -39,8 +39,6 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
     private final UpstoxV3FeedConverter v3Converter;
     private final UpstoxSymbolResolver symbolResolver;
 
-    private static final String REDIS_KEY_ACCESS_TOKEN = "market_data:upstox:access_token";
-
     private MarketDataStreamerV3 streamer;
     private StreamerListener listener;
     private boolean isConnected = false;
@@ -246,8 +244,11 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
     private String getAccessTokenFromCacheOrConfig() {
         try {
             // Try Redis cache first
-            String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
-            if (cachedToken != null && !cachedToken.isEmpty()) {
+            String cachedToken = redisTemplate.opsForValue().get(UpstoxTokenKeys.REDIS_ACCESS_TOKEN);
+            if (!UpstoxTokenKeys.isUsable(cachedToken)) {
+                cachedToken = redisTemplate.opsForValue().get(UpstoxTokenKeys.REDIS_ACCESS_TOKEN_LEGACY);
+            }
+            if (UpstoxTokenKeys.isUsable(cachedToken)) {
                 log.info("UpstoxStreamer", "Using cached Access Token from Redis");
                 return UpstoxSdkService.sanitizeAccessToken(cachedToken);
             }
@@ -257,7 +258,7 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
         // Fallback to configuration
         String configToken = upstoxConfig.getAccessToken();
-        if (configToken != null && !configToken.isEmpty()) {
+        if (UpstoxTokenKeys.isUsable(configToken)) {
             log.info("UpstoxStreamer", "Using Access Token from configuration");
             return UpstoxSdkService.sanitizeAccessToken(configToken);
         }

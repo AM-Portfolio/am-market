@@ -1,5 +1,7 @@
 package com.am.marketdata.provider.upstox.client;
 
+import com.am.marketdata.provider.upstox.UpstoxSdkService;
+import com.am.marketdata.provider.upstox.UpstoxTokenKeys;
 import com.am.marketdata.provider.upstox.config.UpstoxConfig;
 import com.am.marketdata.provider.upstox.model.*;
 
@@ -21,8 +23,6 @@ public class UpStockClient {
     private final StringRedisTemplate redisTemplate;
 
     private static final String BASE_URL = "https://api.upstox.com/v2";
-    private static final String REDIS_KEY_ACCESS_TOKEN = "market-data:upstox:access_token";
-
     // Market Data APIs
     public MarketQuoteResponse getMarketQuotes(List<String> symbols) {
         String url = BASE_URL + "/market-quote/quotes";
@@ -49,14 +49,17 @@ public class UpStockClient {
 
     private String getAccessToken() {
         try {
-            String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
-            if (cachedToken != null && !cachedToken.isEmpty()) {
-                return cachedToken;
+            String cachedToken = redisTemplate.opsForValue().get(UpstoxTokenKeys.REDIS_ACCESS_TOKEN);
+            if (!UpstoxTokenKeys.isUsable(cachedToken)) {
+                cachedToken = redisTemplate.opsForValue().get(UpstoxTokenKeys.REDIS_ACCESS_TOKEN_LEGACY);
+            }
+            if (UpstoxTokenKeys.isUsable(cachedToken)) {
+                return UpstoxSdkService.sanitizeAccessToken(cachedToken);
             }
         } catch (Exception e) {
             log.warn("Failed to get access token from Redis: {}", e.getMessage());
         }
-        return upstoxConfig.getAccessToken();
+        return UpstoxSdkService.sanitizeAccessToken(upstoxConfig.getAccessToken());
     }
 
     private <T> T executeGet(String url, Class<T> responseType, String... queryParams) {
