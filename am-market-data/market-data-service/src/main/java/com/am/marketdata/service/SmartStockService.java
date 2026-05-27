@@ -112,8 +112,14 @@ public class SmartStockService {
                 return current.minusWeeks(1);
             case MONTH:
                 return current.minusMonths(1);
+            case THREE_MONTH:
+                return current.minusMonths(3);
+            case SIX_MONTH:
+                return current.minusMonths(6);
             case YEAR:
                 return current.minusYears(1);
+            case FIVE_YEAR:
+                return current.minusYears(5);
             default:
                 return current.minusDays(1);
         }
