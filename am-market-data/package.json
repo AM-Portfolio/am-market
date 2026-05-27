@@ -5,10 +5,12 @@
   "scripts": {
     "preprod:compile": "mvn -pl market-data-app -am install -DskipTests -B",
     "preprod:start": "npx -y dotenv-cli -e .env.preprod -- mvn -f market-data-app/pom.xml spring-boot:run",
-    "run:preprod": "npm run preprod:compile && npm run preprod:start",
+    "run:preprod": "node ../scripts/run-with-logs.js \"npm run preprod:compile && npm run preprod:start\"",
+    "run:preprod:fast": "node ../scripts/run-with-logs.js \"npm run preprod:start\"",
     "dev:compile": "mvn -pl market-data-app -am install -DskipTests -B",
     "dev:start": "npx -y dotenv-cli -e .env.dev -- mvn -f market-data-app/pom.xml spring-boot:run",
-    "run:dev": "npm run dev:compile && npm run dev:start",
+    "run:dev": "node ../scripts/run-with-logs.js \"npm run dev:compile && npm run dev:start\"",
+    "run:dev:fast": "node ../scripts/run-with-logs.js \"npm run dev:start\"",
     "env:from-vault": "python scripts/map_env_from_vault_backup.py",
     "env:preprod": "python scripts/map_env_from_vault_backup.py --env preprod",
     "env:dev": "python scripts/map_env_from_vault_backup.py --env dev"

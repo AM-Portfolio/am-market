@@ -39,6 +39,18 @@ public class MarketDataProcessor {
      */
     @SuppressWarnings("unchecked")
     public Map<String, OHLCQuote> processUpdate(Object marketUpdate) {
+        return processUpdate(marketUpdate, "PROVIDER_STREAM");
+    }
+
+    /**
+     * Process incoming market update using organization-level common model with provider details.
+     * 
+     * @param marketUpdate Map of instrumentKey -> OHLCQuote (common model from provider layer)
+     * @param provider     The provider of the data stream
+     * @return Map of Symbol -> OHLCQuote (same as input)
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, OHLCQuote> processUpdate(Object marketUpdate, String provider) {
         try {
             // Accept only common model: Map<String, OHLCQuote>
             final Map<String, OHLCQuote> results;
@@ -56,13 +68,13 @@ public class MarketDataProcessor {
             }
 
             // Publish to Kafka
-            log.info("Processed {} quotes. Publishing to Kafka.", results.size());
-            List<EquityPrice> equityPrices = ohlcMapper.toEquityPriceList(results);
+            log.info("Processed {} quotes. Publishing to Kafka. Provider: {}", results.size(), provider);
+            List<EquityPrice> equityPrices = ohlcMapper.toEquityPriceList(results, provider);
             kafkaProducerService.ifPresent(service -> service.sendEquityPriceUpdates(equityPrices));
 
             // Also send to Ingestion topic for robust persistence (Streaming Injection)
             marketDataProducer.ifPresent(producer -> producer.sendOHLCData(results,
-                    com.am.marketdata.common.model.TimeFrame.DAY, "PROVIDER_STREAM"));
+                    com.am.marketdata.common.model.TimeFrame.DAY, provider));
 
             return results;
 

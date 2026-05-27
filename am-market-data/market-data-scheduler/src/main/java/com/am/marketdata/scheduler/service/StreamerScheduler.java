@@ -24,12 +24,12 @@ public class StreamerScheduler {
     private final SymbolOrchestratorService symbolService;
 
     /**
-     * Start the streamer (Scheduled at 9:00 AM Monday-Friday)
-     * Auto-connects WebSocket and subscribes to all symbols
+     * Start the streamer (Scheduled at 9:00 AM Monday-Friday IST)
+     * Auto-connects Upstox WebSocket and subscribes to all portfolio symbols
      */
-    @Scheduled(cron = "0 0 12 ? * MON-FRI", zone = "Asia/Kolkata")
+    @Scheduled(cron = "${scheduler.stream.start-cron:0 0 9 ? * MON-FRI}", zone = "Asia/Kolkata")
     public void executeStartStreaming() {
-        log.info("⏰ Triggering scheduled Streamer start at 9:00 AM...");
+        log.info("⏰ Triggering scheduled Upstox Streamer start at 9:00 AM IST...");
 
         // Refresh symbols and subscribe
         Set<String> instrumentKeys = symbolService.findDistinctSymbols();
@@ -38,14 +38,14 @@ public class StreamerScheduler {
         streamerManager.refreshSubscriptions();
         streamerManager.startStreaming();
 
-        log.info("✅ Streamer started successfully");
+        log.info("✅ Upstox Streamer started successfully");
     }
 
     /**
-     * Stop the streamer (Scheduled at 3:30 PM Monday-Friday)
-     * Disconnects WebSocket gracefully at market close
+     * Stop the streamer (Scheduled at 3:30 PM Monday-Friday IST)
+     * Disconnects Upstox WebSocket gracefully at market close
      */
-    @Scheduled(cron = "0 30 15 ? * MON-FRI", zone = "Asia/Kolkata")
+    @Scheduled(cron = "${scheduler.stream.stop-cron:0 30 15 ? * MON-FRI}", zone = "Asia/Kolkata")
     public void executeStopStreaming() {
         log.info("⏰ Triggering scheduled Streamer stop at 3:30 PM (market close)...");
         streamerManager.stopStreaming();

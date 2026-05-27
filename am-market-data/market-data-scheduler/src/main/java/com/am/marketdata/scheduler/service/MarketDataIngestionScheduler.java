@@ -2,13 +2,15 @@ package com.am.marketdata.scheduler.service;
 
 import com.am.marketdata.internal.service.MarketDataIngestionService;
 import com.am.marketdata.service.SymbolOrchestratorService;
+import com.am.marketdata.service.websocket.service.StreamerManager;
 import com.am.marketdata.common.log.AppLogger;
 import com.am.marketdata.internal.service.MarketDataHistoricalSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 
-import jakarta.annotation.PostConstruct;
+import org.springframework.context.event.EventListener;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.time.LocalTime;
@@ -25,20 +27,27 @@ public class MarketDataIngestionScheduler {
 
     private final MarketDataIngestionService ingestionService;
     private final MarketDataHistoricalSyncService historicalSyncService;
+    private final StreamerManager streamerManager;
 
     private final SymbolOrchestratorService symbolService;
 
     @Value("${scheduler.ingestion.enabled:true}")
     private boolean enabled;
 
-    // derived from service now
-    // private List<String> symbols;
-
-    @Value("${scheduler.ingestion.provider:ZERODHA}")
+    @Value("${scheduler.ingestion.provider:UPSTOX}")
     private String provider;
 
-    @Value("${scheduler.ingestion.force:true}")
+    /** When false, historical/REST batch uses cache+DB only (no Upstox historical API on poll). */
+    @Value("${scheduler.ingestion.force:false}")
     private boolean forceRefresh;
+
+    /** Live prices via Upstox WebSocket during market hours (recommended). */
+    @Value("${scheduler.ingestion.use-websocket:true}")
+    private boolean useWebSocket;
+
+    /** Legacy REST polling loop (10s). Off by default when WebSocket is used. */
+    @Value("${scheduler.ingestion.poll-enabled:false}")
+    private boolean pollEnabled;
 
     // Market Hours Config
     @Value("${scheduler.market.start:09:15}")
@@ -47,11 +56,12 @@ public class MarketDataIngestionScheduler {
     @Value("${scheduler.market.end:15:30}")
     private String marketEndTime;
 
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     public void init() {
         if (enabled && isMarketOpen() && !isWeekend()) {
-            log.info("init", "Application started during market hours. Triggering ingestion.");
-            startIngestion();
+            log.info("init", "Application started during market hours. Starting live data path (websocket={}, poll={}).",
+                    useWebSocket, pollEnabled);
+            startLiveMarketData();
         }
     }
 
@@ -65,8 +75,9 @@ public class MarketDataIngestionScheduler {
             log.info("startIngestionJob", "Skipping market data ingestion on weekends.");
             return;
         }
-        log.info("scheduledStart", "Scheduled trigger: Starting Market Data Ingestion");
-        startIngestion();
+        log.info("scheduledStart", "Scheduled trigger: Starting live market data (websocket={}, poll={})",
+                useWebSocket, pollEnabled);
+        startLiveMarketData();
     }
 
     /**
@@ -75,8 +86,8 @@ public class MarketDataIngestionScheduler {
     public void stopIngestionJob() {
         if (!enabled)
             return;
-        log.info("scheduledStop", "Scheduled trigger: Stopping Market Data Ingestion");
-        ingestionService.stopIngestion(provider);
+        log.info("scheduledStop", "Scheduled trigger: Stopping live market data");
+        stopLiveMarketData();
     }
 
     /**
@@ -89,9 +100,9 @@ public class MarketDataIngestionScheduler {
             log.info("executeHistoricalSync", "Skipping historical data sync on weekends.");
             return;
         }
-        log.info("scheduledHistoricalSync", "Scheduled trigger: Starting Historical Data Sync (Smart Delta)");
-        // null duration -> uses default logic (10yr or incremental)
-        historicalSyncService.syncHistoricalData(null, null, true, false);
+        log.info("scheduledHistoricalSync", "Scheduled trigger: Starting Historical Data Sync (Smart Delta, cache-aware)");
+        // Once per day before market open; incremental when data already in cache/DB
+        historicalSyncService.syncHistoricalData(null, null, false, false);
     }
 
     public void executeManualHistoricalSync(String symbol, String duration, boolean forceRefresh) {
@@ -106,17 +117,44 @@ public class MarketDataIngestionScheduler {
         return new ArrayList<>(symbolService.findDistinctSymbols());
     }
 
-    private void startIngestion() {
-        // Trigger Ingestion for symbols from orchestrator
+    /**
+     * Market hours: Upstox WebSocket for live prices; optional legacy REST poll.
+     * Historical candles come from daily sync (07:15) + cache, not from this loop.
+     */
+    private void startLiveMarketData() {
+        if (useWebSocket && isUpstoxProvider()) {
+            streamerManager.refreshSubscriptions();
+            streamerManager.startStreaming();
+            log.info("startLiveMarketData", "Upstox WebSocket stream started for portfolio symbols");
+        }
+
+        if (pollEnabled) {
+            startRestPollingIngestion();
+        }
+    }
+
+    private void stopLiveMarketData() {
+        if (useWebSocket && isUpstoxProvider()) {
+            streamerManager.stopStreaming();
+        }
+        ingestionService.stopIngestion(provider);
+    }
+
+    /** Legacy REST polling (OHLC/historical). Disabled by default. */
+    private void startRestPollingIngestion() {
         List<String> symbolsToProcess = getSymbolsToProcess();
-        log.info("startIngestion", "Starting ingestion for {} symbols",
-                symbolsToProcess != null ? symbolsToProcess.size() : 0);
+        log.info("startRestPollingIngestion", "Starting REST polling for {} symbols (forceRefresh={})",
+                symbolsToProcess != null ? symbolsToProcess.size() : 0, forceRefresh);
 
         if (symbolsToProcess != null && !symbolsToProcess.isEmpty()) {
             ingestionService.startIngestion(symbolsToProcess, provider, "1D", true, forceRefresh);
         } else {
-            log.warn("startIngestion", "No symbols found to process!");
+            log.warn("startRestPollingIngestion", "No symbols found to process!");
         }
+    }
+
+    private boolean isUpstoxProvider() {
+        return provider != null && "UPSTOX".equalsIgnoreCase(provider.trim());
     }
 
     private boolean isMarketOpen() {

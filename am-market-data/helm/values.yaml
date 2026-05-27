@@ -48,3 +48,64 @@ config:
     internalBatchSize: 100
     mongoQueryLimit: 0
     maxCandidatesPerQuery: 100
+
+  # ── Scheduler configuration — maps to SCHEDULER_* env vars ────────────────
+  # All crons run in Asia/Kolkata. Override per environment in values.<env>.yaml.
+  scheduler:
+    timezone: "Asia/Kolkata"
+
+    cookie:
+      enabled: true
+      refreshCron: "0 0 9-16 * * MON-FRI"
+
+    stockIndices:
+      enabled: true
+      morningFetchCron: "0 30 9 * * *"
+      eveningFetchCron: "0 0 16 * * *"
+      retry:
+        cron: "0 */15 * * * *"
+        intervalMinutes: 15
+        maxRetries: 20
+
+    indices:
+      fetchCron: "0 */2 * * * *"
+
+    ingestion:
+      enabled: true
+      provider: "UPSTOX"
+      force: false
+      useWebsocket: true
+      pollEnabled: false
+      pollHistorical: false
+      symbols: "NIFTY 50,NIFTY BANK"
+      startCron: "0 15 9 * * MON-FRI"   # 9:15 AM weekdays
+      stopCron: "0 30 15 * * MON-FRI"   # 3:30 PM weekdays
+
+    market:
+      start: "09:15"
+      end: "15:30"
+
+    historical:
+      syncCron: "0 15 7 * * *"           # 7:15 AM daily
+
+    analysis:
+      dailyCron: "0 15 7 * * *"          # 7:15 AM daily
+
+    stream:
+      startCron: "0 0 9 ? * MON-FRI"
+      stopCron: "0 30 15 ? * MON-FRI"
+
+    redisCleanup:
+      enabled: true
+      cron: "0 0 2 * * *"               # 2:00 AM daily
+
+  # ── Redis TTL & cleanup tuning — maps to REDIS_* env vars ─────────────────
+  redis:
+    cleanupRetentionDays: 7             # Keep last N days in Redis
+    cleanupBatchSize: 1000             # Process N keys at a time
+    cacheTtl:
+      historical: 2592000              # 30 days (seconds)
+      analysis: 2592000                # 30 days (seconds)
+      intradayPast: 14400              # 4 hours for past dates
+      intradayFuture: 86400            # 24 hours for future dates
+      intradayBuffer: 14400            # 4 hour buffer after EOD
