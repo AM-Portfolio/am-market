@@ -110,7 +110,7 @@ public class MarketDataOrchestrator {
     public void triggerMarketOpenJobs() {
         log.info("Orchestrator: Triggering Market Open Jobs");
         if (ingestionScheduler.isPresent()) {
-            // ingestionScheduler.get().startIngestionJob();
+            ingestionScheduler.get().startIngestionJob();
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Market Open Jobs");
         }
@@ -137,7 +137,7 @@ public class MarketDataOrchestrator {
     public void triggerIngestionStop() {
         log.info("Orchestrator: Triggering Ingestion Stop");
         if (ingestionScheduler.isPresent()) {
-            // ingestionScheduler.get().stopIngestionJob();
+            ingestionScheduler.get().stopIngestionJob();
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Ingestion Stop");
         }
@@ -207,11 +207,11 @@ public class MarketDataOrchestrator {
     /**
      * Historical Data Sync (e.g. 7:15 AM)
      */
-    @Scheduled(cron = "${scheduler.historical.sync-cron:0 15 7 * * *}")
+    @Scheduled(cron = "${scheduler.historical.sync-cron:0 15 7 * * *}", zone = "Asia/Kolkata")
     public void triggerHistoricalSync() {
         log.info("Orchestrator: Triggering Historical Data Sync");
         if (ingestionScheduler.isPresent()) {
-            // ingestionScheduler.get().executeHistoricalSync();
+            ingestionScheduler.get().executeHistoricalSync();
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Historical Data Sync");
         }

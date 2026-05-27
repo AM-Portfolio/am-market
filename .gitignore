@@ -53,13 +53,15 @@ logs/
 *.log
 build_log.txt
 
-# Environment
-.env
+# Secrets — only *.env.template / *.env.example (placeholders) may be committed
+.env*
+!.env.template
+!.env.example
+!**/.env.template
+!**/.env.example
+.env.secrets
+**/.env.secrets
 .env.secrets
 .env.local
 .env.deploy
-.env.example
-.env.template
 **/.env
-**/.env.example
-**/.env.template

@@ -17,8 +17,11 @@ from am_services.file_upload_service import FileUploadService
 from am_persistence.file_upload_repository import FileUploadRepository
 from am_persistence import create_mutual_fund_service
 from am_common.observability import get_logger, bind_context
+from am_common.webhooks import normalize_callback_url
+from am_common.logging.request_logging import get_logger as _req_get_logger
 
 logger = get_logger("am_api.job_api")
+
 router = APIRouter(tags=["Background Jobs"])
 
 
@@ -35,10 +38,7 @@ async def upload_excel_async(
     """
     try:
         # Initialize services with proper database connection
-        service_instance = create_mutual_fund_service(
-            mongo_uri="mongodb://admin:password123@localhost:27017",
-            db_name="mutual_funds"
-        )
+        service_instance = create_mutual_fund_service()
         repo = FileUploadRepository(service_instance.database)
         upload_service = FileUploadService()  # Uses default directories
         job_queue = await get_job_queue()
@@ -65,14 +65,7 @@ async def upload_excel_async(
             
             # Step 2: Create background job for LLM processing
             # Validate webhook URL if provided
-            normalized_callback = None
-            callback_note = None
-            if callback_url:
-                cb = callback_url.strip()
-                if cb.startswith("http://") or cb.startswith("https://"):
-                    normalized_callback = cb
-                else:
-                    callback_note = "Ignoring invalid callback_url (missing http/https)."
+            normalized_callback, callback_note = normalize_callback_url(callback_url)
             job_input = {
                 "file_id": main_file_upload.file_id,
                 "file_path": main_file_upload.file_path,
@@ -111,6 +104,7 @@ async def upload_excel_async(
                     })
                 return resp
         
+
     except Exception as e:
         logger.error("Upload error", exc_info=True)
         raise HTTPException(

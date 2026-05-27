@@ -51,24 +51,8 @@ async def lifespan(app: FastAPI):
     try:
         # Import centralized configuration
         from am_configs.settings import settings
-        from am_common.observability import ObservabilityConfig, configure_observability
         
-        # 1. Map settings parameters to decoupled ObservabilityConfig
-        obs_config = ObservabilityConfig(
-            service_name=settings.service_name,
-            otel_exporter_otlp_endpoint=settings.otel_exporter_otlp_endpoint,
-            otel_traces_exporter=settings.otel_traces_exporter,
-            log_level=settings.log_level,
-            log_format=settings.log_format
-        )
-        
-        # 2. Configure logging formats and tracing provider
-        configure_observability(obs_config)
-        logger.info("Observability pipelines initialized successfully")
-        
-        # Auto-instrumentation is now configured at module-level to guarantee correct ASGI middleware execution order.
-            
-        logger.info(f"Connecting to MongoDB: {settings.mongo_uri}")
+        print(f"🔌 Connecting to MongoDB: {settings.mongo_uri}")
         
         service_instance = create_mutual_fund_service(
             mongo_uri=mongo_uri,
@@ -86,29 +70,22 @@ async def lifespan(app: FastAPI):
         # Start background job processor
         job_queue = await get_job_queue()
         background_processor_task = asyncio.create_task(job_queue.start_job_processor())
-        logger.info("Started background job processor")
+        print("INFO: Started background job processor")
         
-        logger.info("Connected to MongoDB")
-        logger.info("Initialized file upload services")
+        print("INFO: Connected to MongoDB")
+        print("INFO: Initialized file upload services")
         yield
-    except Exception:
-        logger.error("Failed to initialize services", exc_info=True)
+    except Exception as e:
+        print(f"ERROR: Failed to initialize services: {e}")
         raise
     finally:
         # Shutdown: Close services
-        try:
-            from am_common.observability import shutdown_observability
-            shutdown_observability()
-            logger.info("Observability pipelines shut down cleanly")
-        except Exception:
-            logger.error("Failed to shut down observability cleanly", exc_info=True)
-            
         if background_processor_task:
             background_processor_task.cancel()
-            logger.info("Background job processor stopped")
+            print("INFO: Background job processor stopped")
         if service_instance:
             await service_instance.close()
-            logger.info("MongoDB connection closed")
+            print("INFO: MongoDB connection closed")
 
 
 import time
@@ -128,109 +105,25 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Refactored legacy am_logger to route to get_logger
 am_logger = AMLogger(service_name="am-parser")
 
-# Middleware for structured logging and MDC context binding
-class RequestLoggingASGIMiddleware:
-    """ASGI Middleware for structured logging and MDC context binding.
-    Avoids Starlette's BaseHTTPMiddleware to ensure proper contextvars propagation with OpenTelemetry.
-    """
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        from starlette.datastructures import Headers
-        import uuid
-        
-        headers = Headers(scope=scope)
-        correlation_id = headers.get("x-correlation-id") or headers.get("x-request-id")
-        if not correlation_id:
-            correlation_id = str(uuid.uuid4())
-            
-        user_id = headers.get("x-user-id")
-        start_time = time.time()
-        status_code = [500]
-
-        logged = [False]
-
-        async def send_wrapper(message):
-            if message["type"] == "http.response.start":
-                status_code[0] = message["status"]
-                # Add x-correlation-id to response headers
-                headers_list = list(message.get("headers", []))
-                has_correlation = False
-                for i, (k, v) in enumerate(headers_list):
-                    if k.lower() == b"x-correlation-id":
-                        has_correlation = True
-                        break
-                if not has_correlation:
-                    headers_list.append((b"x-correlation-id", correlation_id.encode("utf-8")))
-                message["headers"] = headers_list
-                
-                # Log here while the OTel span is still active
-                duration_ms = round((time.time() - start_time) * 1000, 2)
-                set_context(
-                    **{
-                        "http.status": status_code[0],
-                        "flow.duration_ms": str(duration_ms)
-                    }
-                )
-                from opentelemetry import trace as otel_trace
-                current_span = otel_trace.get_current_span()
-                span_ctx = current_span.get_span_context() if current_span else None
-                print(f"[DEBUG_OTEL] Current Span: {current_span}, Is Valid: {span_ctx.is_valid if span_ctx else False}, TraceID: {span_ctx.trace_id if span_ctx else None}, HexTraceID: {f'{span_ctx.trace_id:032x}' if span_ctx and span_ctx.is_valid else None}", flush=True)
-                
-                logger.info("API Request Processed")
-                logged[0] = True
-            await send(message)
-
-        with bind_context(
-            correlationId=correlation_id,
-            userId=user_id,
-            **{
-                "request.method": scope["method"],
-                "request.path": scope["path"]
-            }
-        ):
-            try:
-                await self.app(scope, receive, send_wrapper)
-                if not logged[0]:
-                    duration_ms = round((time.time() - start_time) * 1000, 2)
-                    set_context(
-                        **{
-                            "http.status": status_code[0],
-                            "flow.duration_ms": str(duration_ms)
-                        }
-                    )
-                    logger.info("API Request Processed")
-            except Exception as e:
-                duration_ms = round((time.time() - start_time) * 1000, 2)
-                set_context(
-                    **{
-                        "http.status": 500,
-                        "flow.duration_ms": str(duration_ms)
-                    }
-                )
-                logger.error(f"API Request Failed: {e}", exc_info=True)
-                raise
-
-app.add_middleware(RequestLoggingASGIMiddleware)
-
-# Auto-instrument FastAPI and HTTPx safely at module level
-try:
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+# Middleware for structured logging
+@app.middleware("http")
+async def log_requests(request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = (time.time() - start_time) * 1000 # to ms
     
-    FastAPIInstrumentor.instrument_app(app)
-    HTTPXClientInstrumentor().instrument()
-    logger.info("FastAPI and HTTPX auto-instrumentation configured at module level")
-except Exception:
-    logger.warning("Failed to auto-instrument FastAPI/HTTPX at module level", exc_info=True)
+    context = {
+        "method": request.method,
+        "path": request.url.path,
+        "status": response.status_code,
+        "latency_ms": round(duration, 2),
+        "client_ip": request.client.host if request.client else "unknown"
+    }
+    
+    am_logger.log("INFO", "API Request Processed", context)
+    return response
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(

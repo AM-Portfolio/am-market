@@ -172,6 +172,12 @@ public class StreamerManager implements StreamerListener {
         // TODO: Implement WebSocket publishing when publisher supports batch publishing
         // For now, data is fetched and cached, available for API calls
 
+        try {
+            processor.processUpdate(ohlcData);
+        } catch (Exception e) {
+            log.error("StreamerManager", "Error processing fallback data for persistence/Kafka", e);
+        }
+
         log.info("StreamerManager", "✅ Fallback data processed successfully (cached for API access)");
     }
 
@@ -207,25 +213,21 @@ public class StreamerManager implements StreamerListener {
         // Service layer expects ONLY common DTOs (UpstoxFeedResponse)
         // Provider layer is responsible for converting proto → common DTO
 
-        if (message instanceof Map) {
+        // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 or Map<String,
+        // OHLCQuote>
+        if (message instanceof MarketUpdateV3) {
+            try {
+                processUpdateForPublisher((MarketUpdateV3) message);
+            } catch (Exception e) {
+                log.error("StreamerManager", "Error broadcasting to UI", e);
+            }
+        } else if (message instanceof Map) {
             try {
                 @SuppressWarnings("unchecked")
-                Map<String, OHLCQuote> quotes = (Map<String, OHLCQuote>) message;
-                
-                // Phase 2: Cache the latest streaming prices strictly in Redis
-                cacheService.cacheLatestPrices(quotes);
-
-                // Phase 1: Convert quotes into MarketDataUpdate and publish/broadcast to UI
-                Map<String, MarketDataUpdate.QuoteChange> uiQuotes = new HashMap<>();
-                for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
-                    String rawSymbol = entry.getKey();
-                    // Normalize symbol: e.g. NSE_INDEX|Nifty 50 -> NIFTY 50
-                    String symbol = rawSymbol;
-                    if (symbol.contains("|")) {
-                        symbol = symbol.substring(symbol.indexOf("|") + 1);
-                    }
-                    symbol = symbol.toUpperCase().trim();
-
+                Map<String, OHLCQuote> ohlcMap = (Map<String, OHLCQuote>) message;
+                Map<String, MarketDataUpdate.QuoteChange> quotes = new HashMap<>();
+                for (Map.Entry<String, OHLCQuote> entry : ohlcMap.entrySet()) {
+                    String symbol = entry.getKey();
                     OHLCQuote quote = entry.getValue();
                     if (quote != null) {
                         double lastPrice = quote.getLastPrice();
@@ -233,52 +235,46 @@ public class StreamerManager implements StreamerListener {
                         double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
                         double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
                         double close = quote.getOhlc() != null ? quote.getOhlc().getClose() : 0.0;
-                        double previousClose = quote.getPreviousClose();
-                        double change = lastPrice - previousClose;
-                        double changePercent = previousClose != 0 ? (change / previousClose) * 100.0 : 0.0;
+                        double prevClose = quote.getPreviousClose();
 
-                        MarketDataUpdate.QuoteChange qc = MarketDataUpdate.QuoteChange.builder()
+                        double change = lastPrice - prevClose;
+                        double changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0.0;
+
+                        MarketDataUpdate.QuoteChange changeObj = MarketDataUpdate.QuoteChange.builder()
                                 .lastPrice(lastPrice)
                                 .open(open)
                                 .high(high)
                                 .low(low)
                                 .close(close)
-                                .previousClose(previousClose)
+                                .previousClose(prevClose)
                                 .change(change)
                                 .changePercent(changePercent)
                                 .build();
-                        uiQuotes.put(symbol, qc);
+                        quotes.put(symbol, changeObj);
                     }
                 }
 
-                if (!uiQuotes.isEmpty()) {
-                    MarketDataUpdate update = MarketDataUpdate.builder()
+                if (!quotes.isEmpty()) {
+                    MarketDataUpdate data = MarketDataUpdate.builder()
                             .timestamp(System.currentTimeMillis())
-                            .quotes(uiQuotes)
+                            .quotes(quotes)
                             .build();
-                    publisher.publish(update);
+                    publisher.publish(data);
                 }
             } catch (Exception e) {
-                log.error("StreamerManager", "Error handling Map message", e);
+                log.error("StreamerManager", "Error broadcasting map updates to UI", e);
             }
-        } else if (message instanceof MarketUpdateV3) {
-            // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 for now
-            try {
-                processUpdateForPublisher((MarketUpdateV3) message);
-            } catch (Exception e) {
-                log.error("StreamerManager", "Error broadcasting to UI", e);
+        }
+
+        // 2. Process for Kafka/Persistence - expects UpstoxFeedResponse
+        try {
+            Map<String, OHLCQuote> quotes = processor.processUpdate(message);
+            if (quotes != null && !quotes.isEmpty()) {
+                // log.debug("StreamerManager", "Processed " + quotes.size() + " quotes
+                // (Kafka).");
             }
-        } else {
-            // 2. Process for Kafka/Persistence - expects UpstoxFeedResponse
-            try {
-                Map<String, OHLCQuote> quotes = processor.processUpdate(message);
-                if (quotes != null && !quotes.isEmpty()) {
-                    // log.debug("StreamerManager", "Processed " + quotes.size() + " quotes
-                    // (Kafka).");
-                }
-            } catch (Exception e) {
-                log.error("StreamerManager", "Error handling message for persistence", e);
-            }
+        } catch (Exception e) {
+            log.error("StreamerManager", "Error handling message for persistence", e);
         }
     }
 

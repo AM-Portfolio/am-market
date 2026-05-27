@@ -14,9 +14,14 @@ resources:
     memory: 256Mi
 
 vault:
-  enabled: true
   secretPaths:
-    mongodb:
+    auth:
+      path: apps/data/dev/services/am-auth
+    logging:
+      path: apps/data/dev/services/logging
+    market:
+      path: apps/data/dev/services/am-market-data
+    mongodb: 
       path: "apps/data/dev/infra/mongodb"
     together:
       path: "apps/data/dev/infra/shared-api"
@@ -59,4 +64,9 @@ ingress:
           pathType: Prefix
 
 env:
-  SPRING_PROFILES_ACTIVE: "dev"
+  ENVIRONMENT: "dev"
+  MONGO_DB: "mutual_funds"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  LOG_LEVEL: "INFO"
+  ETF_LIST_CACHE_MINUTES: "60"
+  ETF_HOLDINGS_CACHE_DAYS: "1"

@@ -59,6 +59,8 @@ vault:
       path: "apps/data/dev/services/am-market-data"
     market-data:
       path: "apps/data/dev/services/am-market-data"
+    scheduler-config:
+      path: "apps/data/dev/services/am-market-data-scheduler"
 
 monitoring:
   enabled: true
@@ -88,3 +90,27 @@ ingress:
       paths:
         - path: /market
           pathType: Prefix
+
+config:
+  batchSearch:
+    cacheEnabled: true
+    mongoQueryLimit: 0
+    maxCandidatesPerQuery: 100
+    internalBatchSize: 100
+
+  # Dev: disable live-market schedulers to prevent accidental ingestion.
+  # Re-enable individually via env.SCHEDULER_* vars if you need to test.
+  scheduler:
+    cookie:
+      enabled: false
+    stockIndices:
+      enabled: false
+    ingestion:
+      enabled: false
+      provider: "UPSTOX"
+      force: false
+      useWebsocket: true
+      pollEnabled: false
+      pollHistorical: false
+    redisCleanup:
+      enabled: false

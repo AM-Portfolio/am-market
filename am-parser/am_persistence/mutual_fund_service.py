@@ -1,15 +1,11 @@
 """
 Mutual Fund Persistence Service - Handle MongoDB operations for mutual fund data
 """
-import sys
-from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-# Add parent directory to path to find external modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from am_common.mutual_fund_models import MutualFundPortfolio, PortfolioSummary, Holding
+from am_persistence.mongo_factory import get_async_mongo_client, release_service_mongo_refs
 
 
 class MutualFundService:
@@ -25,6 +21,9 @@ class MutualFundService:
             mongo_uri: MongoDB connection URI (defaults to settings.mongo_uri)
             db_name: Database name (defaults to settings.mongo_db)
         """
+        from am_configs.settings import settings, get_mongo_uri
+
+        self.mongo_uri = mongo_uri or get_mongo_uri()
         from am_configs.settings import settings, get_mongo_uri
 
         self.mongo_uri = mongo_uri or get_mongo_uri()
@@ -260,9 +259,8 @@ class MutualFundService:
         return None
 
     async def close(self):
-        """Close MongoDB connection"""
-        if self._client:
-            self._client.close()
+        """Release refs; shared Motor client closes on app shutdown."""
+        release_service_mongo_refs(self)
 
 
 # Factory function for easy instantiation

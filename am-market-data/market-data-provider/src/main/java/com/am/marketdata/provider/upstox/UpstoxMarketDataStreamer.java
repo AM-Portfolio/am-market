@@ -249,7 +249,7 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
             String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
             if (cachedToken != null && !cachedToken.isEmpty()) {
                 log.info("UpstoxStreamer", "Using cached Access Token from Redis");
-                return cachedToken;
+                return UpstoxSdkService.sanitizeAccessToken(cachedToken);
             }
         } catch (Exception e) {
             log.warn("UpstoxStreamer", "Failed to load token from Redis: " + e.getMessage());
@@ -259,7 +259,7 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
         String configToken = upstoxConfig.getAccessToken();
         if (configToken != null && !configToken.isEmpty()) {
             log.info("UpstoxStreamer", "Using Access Token from configuration");
-            return configToken;
+            return UpstoxSdkService.sanitizeAccessToken(configToken);
         }
 
         return null;

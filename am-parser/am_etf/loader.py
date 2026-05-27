@@ -39,7 +39,7 @@ def main():
     import os
     parser = argparse.ArgumentParser(description="Load ETF details JSON into MongoDB")
     parser.add_argument("--file", required=True, help="Path to etf_details.json")
-    parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://admin:password123@localhost:27017"), help="Mongo connection URI")
+    parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"), help="Mongo connection URI")
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB", "etf_data"), help="Mongo database name for ETF data")
     parser.add_argument("--dry-run", action="store_true", help="Parse and validate only; do not persist")
     args = parser.parse_args()

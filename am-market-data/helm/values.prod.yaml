@@ -11,6 +11,61 @@ config:
     threadPoolSize: 5
     threadQueueCapacity: 10
     maxAgeMinutes: 15
+  batchSearch:
+    cacheEnabled: true
+    mongoQueryLimit: 0
+    maxCandidatesPerQuery: 100
+    internalBatchSize: 100
+
+  # ── Prod scheduler — explicit for auditability ───────────────────────
+  scheduler:
+    cookie:
+      enabled: true
+      refreshCron: "0 0 9-16 * * MON-FRI"
+    stockIndices:
+      enabled: true
+      morningFetchCron: "0 30 9 * * *"
+      eveningFetchCron: "0 0 16 * * *"
+      retry:
+        cron: "0 */15 * * * *"
+        intervalMinutes: 15
+        maxRetries: 20
+    indices:
+      fetchCron: "0 */2 * * * *"
+    ingestion:
+      enabled: true
+      provider: "UPSTOX"
+      force: false
+      useWebsocket: true
+      pollEnabled: false
+      pollHistorical: false
+      symbols: "NIFTY 50,NIFTY BANK"
+      startCron: "0 15 9 * * MON-FRI"
+      stopCron: "0 30 15 * * MON-FRI"
+    market:
+      start: "09:15"
+      end: "15:30"
+    historical:
+      syncCron: "0 15 7 * * *"
+    analysis:
+      dailyCron: "0 15 7 * * *"
+    stream:
+      startCron: "0 0 9 ? * MON-FRI"
+      stopCron: "0 30 15 ? * MON-FRI"
+    redisCleanup:
+      enabled: true
+      cron: "0 0 2 * * *"
+
+  # ── Redis TTLs ────────────────────────────────────────────────
+  redis:
+    cleanupRetentionDays: 7
+    cleanupBatchSize: 1000
+    cacheTtl:
+      historical: 2592000
+      analysis: 2592000
+      intradayPast: 14400
+      intradayFuture: 86400
+      intradayBuffer: 14400
 
 # Service Configuration
 service:
@@ -46,6 +101,8 @@ vault:
     kafka: "secret/data/prod/infra/kafka"
     zerodha: "secret/data/prod/api/zerodha"
     upstock: "secret/data/prod/api/upstock"
+    market-data: "secret/data/prod/services/am-market-data"
+    scheduler-config: "secret/data/prod/services/am-market-data-scheduler"
 
 # Monitoring Configuration
 monitoring:

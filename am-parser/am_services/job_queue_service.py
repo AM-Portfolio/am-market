@@ -490,7 +490,12 @@ class JobQueue:
         force_refresh = input_data.get("force_refresh", False)
         
         # Configure cache policy
-        holdings_service.set_cache_policy(expiry_days=1, force_refresh=force_refresh)
+        from am_configs.settings import settings
+
+        holdings_service.set_cache_policy(
+            expiry_days=settings.etf_holdings_cache_days,
+            force_refresh=force_refresh,
+        )
         
         try:
             if operation == "fetch_all_holdings":

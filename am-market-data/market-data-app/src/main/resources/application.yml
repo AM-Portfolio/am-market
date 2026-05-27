@@ -46,11 +46,10 @@ MARKET_DATA_MAX_AGE_MINUTES: 15
 UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
 UPSTOX_SECRET_KEY: ${UPSTOX_SECRET_KEY}
 UPSTOX_CODE: ${UPSTOX_CODE}
-MARKET_DATA_KAFKA_ENABLED: ${MARKET_DATA_KAFKA_ENABLED:false}
 
 app:
   kafka:
-    enabled: ${MARKET_DATA_KAFKA_ENABLED}
+    enabled: ${MARKET_DATA_KAFKA_ENABLED:false}
 
 am:
   # Centralized observability from am-core-services
@@ -119,13 +118,19 @@ spring:
       - classpath:nseindices.yml
       #- classpath:application-external-api.yml
       #- classpath:application-endpoints.yml
-      - classpath:application-kafka.yml
       - classpath:application-zerodha.yml
 
 market-data:
   provider: upstox
+  batch-search:
+    max-queries: ${BATCH_SEARCH_MAX_QUERIES:1000}
+    internal-batch-size: ${BATCH_SEARCH_INTERNAL_BATCH_SIZE:100}
+    mongo-query-limit: ${BATCH_SEARCH_MONGO_QUERY_LIMIT:0}
+    max-candidates-per-query: ${BATCH_SEARCH_MAX_CANDIDATES:100}
+    cache-enabled: ${BATCH_SEARCH_CACHE_ENABLED:true}
   stream:
-    poll-interval-seconds: 10
+    poll-interval-seconds: ${MARKET_DATA_POLL_INTERVAL_SECONDS:10}
+    mock-poll-interval-seconds: ${MARKET_DATA_MOCK_POLL_INTERVAL_SECONDS:5}
   cache:
     enabled: true
     price-ttl-minutes: ${MARKET_DATA_CACHE_PRICE_TTL_MINUTES:15}
@@ -171,38 +176,70 @@ server:
   port: ${SERVER_PORT:8080}
 
 scheduler:
+  timezone: ${SCHEDULER_TIMEZONE:Asia/Kolkata}
+  # ── Cookie / NSE session ──────────────────────────────────────────────────
   cookie:
-    enabled: true
+    enabled: ${SCHEDULER_COOKIE_ENABLED:true}
+    refresh: "${SCHEDULER_COOKIE_REFRESH_CRON:0 0 9-16 * * MON-FRI}"
+  # ── Stock-indices ─────────────────────────────────────────────────────────
   stock-indices:
-    enabled: true
+    enabled: ${SCHEDULER_STOCK_INDICES_ENABLED:true}
+    morning-fetch: "${SCHEDULER_STOCK_INDICES_MORNING_FETCH_CRON:0 30 9 * * *}"
+    evening-fetch: "${SCHEDULER_STOCK_INDICES_EVENING_FETCH_CRON:0 0 16 * * *}"
+    retry:
+      cron: "${SCHEDULER_STOCK_INDICES_RETRY_CRON:0 */15 * * * *}"
+      interval-minutes: ${SCHEDULER_STOCK_INDICES_RETRY_INTERVAL_MINUTES:15}
+      max-retries: ${SCHEDULER_STOCK_INDICES_RETRY_MAX_RETRIES:20}
+  # ── Intra-day indices fetch ───────────────────────────────────────────────
+  indices:
+    fetch: "${SCHEDULER_INDICES_FETCH_CRON:0 */2 * * * *}"
+  # ── Ingestion (live market-hours) ─────────────────────────────────────────
   ingestion:
-    enabled: true
-    symbols: "NIFTY 50,NIFTY BANK"
-    provider: UPSTOX
-    force: true
-    start-cron: "0 15 9 * * MON-FRI" # 9:15 AM weekdays
-    stop-cron: "0 30 15 * * MON-FRI" # 3:30 PM weekdays
+    enabled: ${SCHEDULER_INGESTION_ENABLED:true}
+    provider: ${SCHEDULER_INGESTION_PROVIDER:UPSTOX}
+  # Daily 07:15 historical sync fills cache/DB; do not force Upstox on every poll
+    force: ${SCHEDULER_INGESTION_FORCE:false}
+  # Live prices: Upstox WebSocket (market hours). REST poll loop off by default.
+    use-websocket: ${SCHEDULER_INGESTION_USE_WEBSOCKET:true}
+    poll-enabled: ${SCHEDULER_INGESTION_POLL_ENABLED:false}
+    poll-historical: ${SCHEDULER_INGESTION_POLL_HISTORICAL:false}
+    symbols: "${SCHEDULER_INGESTION_SYMBOLS:NIFTY 50,NIFTY BANK}"
+    start-cron: "${SCHEDULER_INGESTION_START_CRON:0 15 9 * * MON-FRI}"   # 9:15 AM weekdays
+    stop-cron: "${SCHEDULER_INGESTION_STOP_CRON:0 30 15 * * MON-FRI}"    # 3:30 PM weekdays
+  # ── Market window (used by MarketDataIngestionScheduler) ──────────────────
+  market:
+    start: ${SCHEDULER_MARKET_START:09:15}
+    end: ${SCHEDULER_MARKET_END:15:30}
+  # ── Historical sync ───────────────────────────────────────────────────────
   historical:
-    sync-cron: "0 15 7 * * *" # 7:15 AM daily
+    sync-cron: "${SCHEDULER_HISTORICAL_SYNC_CRON:0 15 7 * * *}"          # 7:15 AM daily
+  # ── Analysis ─────────────────────────────────────────────────────────────
+  analysis:
+    daily: "${SCHEDULER_ANALYSIS_DAILY_CRON:0 15 7 * * *}"               # 7:15 AM daily
+  # ── Stream start/stop ─────────────────────────────────────────────────────
+  stream:
+    start-cron: "${SCHEDULER_STREAM_START_CRON:0 0 9 ? * MON-FRI}"
+    stop-cron: "${SCHEDULER_STREAM_STOP_CRON:0 30 15 ? * MON-FRI}"
+  # ── Redis cleanup ─────────────────────────────────────────────────────────
   redis:
     cleanup:
-      enabled: true
-      cron: "0 0 2 * * *" # 2:00 AM daily
+      enabled: ${SCHEDULER_REDIS_CLEANUP_ENABLED:true}
+      cron: "${SCHEDULER_REDIS_CLEANUP_CRON:0 0 2 * * *}"                # 2:00 AM daily
 
 redis:
   cleanup:
     retention:
-      days: 7 # Keep last 7 days in Redis
+      days: ${REDIS_CLEANUP_RETENTION_DAYS:7}       # Keep last N days in Redis
     batch:
-      size: 1000 # Process 1000 keys at a time
+      size: ${REDIS_CLEANUP_BATCH_SIZE:1000}         # Process N keys at a time
   cache:
     ttl:
-      historical: 2592000 # 30 days
-      analysis: 2592000 # 30 days for historical analysis data
+      historical: ${REDIS_CACHE_TTL_HISTORICAL:2592000}         # 30 days
+      analysis: ${REDIS_CACHE_TTL_ANALYSIS:2592000}             # 30 days for historical analysis data
       intraday:
-        past: 14400 # 4 hours for past dates
-        future: 86400 # 24 hours for future dates
-        buffer: 14400 # 4 hour buffer after EOD
+        past: ${REDIS_CACHE_TTL_INTRADAY_PAST:14400}            # 4 hours for past dates
+        future: ${REDIS_CACHE_TTL_INTRADAY_FUTURE:86400}        # 24 hours for future dates
+        buffer: ${REDIS_CACHE_TTL_INTRADAY_BUFFER:14400}        # 4 hour buffer after EOD
 
 # Management/Actuator Configuration
 management:
@@ -252,3 +289,14 @@ jwt:
   # Security Configuration
 security:
   enabled: ${SECURITY_ENABLED:false} # Disabled by default for development. Set SECURITY_ENABLED=true in production.
+
+---
+# Only load broker/topic Kafka settings when explicitly enabled (local laptop default: off)
+spring:
+  config:
+    activate:
+      on-property:
+        name: MARKET_DATA_KAFKA_ENABLED
+        having-value: "true"
+    import:
+      - classpath:application-kafka.yml

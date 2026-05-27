@@ -8,9 +8,15 @@ logs/
 # BlueJ files
 *.ctxt
 
-# Variables files
-#*.env
-#.env
+# Secrets — only .env.template is committed (.env.example has local placeholders)
+.env*
+!.env.template
+!.env.example
+.env.secrets
+.env.preprod
+.env.dev
+vault/backups/
+**/vault/backups/
 
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/

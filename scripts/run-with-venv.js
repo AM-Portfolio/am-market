@@ -21,12 +21,19 @@ const python = path.join(
 );
 const cwd = path.join(marketRoot, serviceDir);
 
-/** Load am-parser/.env so it overrides stale Windows/user MONGO_URI etc. */
+/** Load service .env.preprod|.env.dev|.env (matches am-portfolio / am-market-data ENV.md). */
 function loadDotEnv(dir) {
-  const envPath = path.join(dir, ".env");
+  const fs = require("fs");
+  const profile = process.env.AM_ENV || "preprod";
+  const candidates = [
+    path.join(dir, `.env.${profile}`),
+    path.join(dir, ".env"),
+  ];
+  const envPath = candidates.find((p) => fs.existsSync(p));
   const out = {};
-  if (!require("fs").existsSync(envPath)) return out;
-  for (const line of require("fs").readFileSync(envPath, "utf8").split(/\r?\n/)) {
+  if (!envPath) return out;
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+
     const t = line.trim();
     if (!t || t.startsWith("#")) continue;
     const i = t.indexOf("=");
