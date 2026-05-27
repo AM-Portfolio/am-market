@@ -88,6 +88,9 @@ config:
       enabled: false
       provider: "UPSTOX"
       force: false
+      useWebsocket: true
+      pollEnabled: false
+      pollHistorical: false
     redisCleanup:
       enabled: false
 

@@ -46,7 +46,6 @@ MARKET_DATA_MAX_AGE_MINUTES: 15
 UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
 UPSTOX_SECRET_KEY: ${UPSTOX_SECRET_KEY}
 UPSTOX_CODE: ${UPSTOX_CODE}
-MARKET_DATA_KAFKA_ENABLED: ${MARKET_DATA_KAFKA_ENABLED:false}
 
 app:
   kafka:
@@ -167,46 +166,51 @@ scheduler:
   # ── Cookie / NSE session ──────────────────────────────────────────────────
   cookie:
     enabled: ${SCHEDULER_COOKIE_ENABLED:true}
-    refresh: ${SCHEDULER_COOKIE_REFRESH_CRON:"0 0 9-16 * * MON-FRI"}
+    refresh: "${SCHEDULER_COOKIE_REFRESH_CRON:0 0 9-16 * * MON-FRI}"
   # ── Stock-indices ─────────────────────────────────────────────────────────
   stock-indices:
     enabled: ${SCHEDULER_STOCK_INDICES_ENABLED:true}
-    morning-fetch: ${SCHEDULER_STOCK_INDICES_MORNING_FETCH_CRON:"0 30 9 * * *"}
-    evening-fetch: ${SCHEDULER_STOCK_INDICES_EVENING_FETCH_CRON:"0 0 16 * * *"}
+    morning-fetch: "${SCHEDULER_STOCK_INDICES_MORNING_FETCH_CRON:0 30 9 * * *}"
+    evening-fetch: "${SCHEDULER_STOCK_INDICES_EVENING_FETCH_CRON:0 0 16 * * *}"
     retry:
-      cron: ${SCHEDULER_STOCK_INDICES_RETRY_CRON:"0 */15 * * * *"}
+      cron: "${SCHEDULER_STOCK_INDICES_RETRY_CRON:0 */15 * * * *}"
       interval-minutes: ${SCHEDULER_STOCK_INDICES_RETRY_INTERVAL_MINUTES:15}
       max-retries: ${SCHEDULER_STOCK_INDICES_RETRY_MAX_RETRIES:20}
   # ── Intra-day indices fetch ───────────────────────────────────────────────
   indices:
-    fetch: ${SCHEDULER_INDICES_FETCH_CRON:"0 */2 * * * *"}
+    fetch: "${SCHEDULER_INDICES_FETCH_CRON:0 */2 * * * *}"
   # ── Ingestion (live market-hours) ─────────────────────────────────────────
   ingestion:
     enabled: ${SCHEDULER_INGESTION_ENABLED:true}
     provider: ${SCHEDULER_INGESTION_PROVIDER:UPSTOX}
-    force: ${SCHEDULER_INGESTION_FORCE:true}
-    symbols: ${SCHEDULER_INGESTION_SYMBOLS:"NIFTY 50,NIFTY BANK"}
-    start-cron: ${SCHEDULER_INGESTION_START_CRON:"0 15 9 * * MON-FRI"}   # 9:15 AM weekdays
-    stop-cron: ${SCHEDULER_INGESTION_STOP_CRON:"0 30 15 * * MON-FRI"}    # 3:30 PM weekdays
+  # Daily 07:15 historical sync fills cache/DB; do not force Upstox on every poll
+    force: ${SCHEDULER_INGESTION_FORCE:false}
+  # Live prices: Upstox WebSocket (market hours). REST poll loop off by default.
+    use-websocket: ${SCHEDULER_INGESTION_USE_WEBSOCKET:true}
+    poll-enabled: ${SCHEDULER_INGESTION_POLL_ENABLED:false}
+    poll-historical: ${SCHEDULER_INGESTION_POLL_HISTORICAL:false}
+    symbols: "${SCHEDULER_INGESTION_SYMBOLS:NIFTY 50,NIFTY BANK}"
+    start-cron: "${SCHEDULER_INGESTION_START_CRON:0 15 9 * * MON-FRI}"   # 9:15 AM weekdays
+    stop-cron: "${SCHEDULER_INGESTION_STOP_CRON:0 30 15 * * MON-FRI}"    # 3:30 PM weekdays
   # ── Market window (used by MarketDataIngestionScheduler) ──────────────────
   market:
     start: ${SCHEDULER_MARKET_START:09:15}
     end: ${SCHEDULER_MARKET_END:15:30}
   # ── Historical sync ───────────────────────────────────────────────────────
   historical:
-    sync-cron: ${SCHEDULER_HISTORICAL_SYNC_CRON:"0 15 7 * * *"}          # 7:15 AM daily
+    sync-cron: "${SCHEDULER_HISTORICAL_SYNC_CRON:0 15 7 * * *}"          # 7:15 AM daily
   # ── Analysis ─────────────────────────────────────────────────────────────
   analysis:
-    daily: ${SCHEDULER_ANALYSIS_DAILY_CRON:"0 15 7 * * *"}               # 7:15 AM daily
+    daily: "${SCHEDULER_ANALYSIS_DAILY_CRON:0 15 7 * * *}"               # 7:15 AM daily
   # ── Stream start/stop ─────────────────────────────────────────────────────
   stream:
-    start-cron: ${SCHEDULER_STREAM_START_CRON:"0 0 9 ? * MON-FRI"}
-    stop-cron: ${SCHEDULER_STREAM_STOP_CRON:"0 30 15 ? * MON-FRI"}
+    start-cron: "${SCHEDULER_STREAM_START_CRON:0 0 9 ? * MON-FRI}"
+    stop-cron: "${SCHEDULER_STREAM_STOP_CRON:0 30 15 ? * MON-FRI}"
   # ── Redis cleanup ─────────────────────────────────────────────────────────
   redis:
     cleanup:
       enabled: ${SCHEDULER_REDIS_CLEANUP_ENABLED:true}
-      cron: ${SCHEDULER_REDIS_CLEANUP_CRON:"0 0 2 * * *"}                # 2:00 AM daily
+      cron: "${SCHEDULER_REDIS_CLEANUP_CRON:0 0 2 * * *}"                # 2:00 AM daily
 
 redis:
   cleanup:

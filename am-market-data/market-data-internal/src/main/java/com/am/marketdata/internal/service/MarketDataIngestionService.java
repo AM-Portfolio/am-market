@@ -40,6 +40,10 @@ public class MarketDataIngestionService {
     @org.springframework.beans.factory.annotation.Value("${market-data.stream.poll-interval-seconds:10}")
     private int pollIntervalSeconds;
 
+    /** When false, polling never calls Upstox historical API (use daily sync + cache/DB). */
+    @org.springframework.beans.factory.annotation.Value("${scheduler.ingestion.poll-historical:false}")
+    private boolean pollHistorical;
+
     /**
      * Start ingestion stream for a set of instruments
      */
@@ -119,15 +123,27 @@ public class MarketDataIngestionService {
                 }
             });
 
-            // Task 2: Fetch Historical Data (if applicable)
+            // Task 2: Historical for prev-close enrichment — cache/DB only unless poll-historical enabled
             CompletableFuture<HistoricalDataResponseV1> historicalDataFuture;
-            if ("1D".equalsIgnoreCase(timeFrame) || "1W".equalsIgnoreCase(timeFrame)
-                    || "1M".equalsIgnoreCase(timeFrame)) {
+            boolean fetchHistorical = pollHistorical
+                    && ("1D".equalsIgnoreCase(timeFrame) || "1W".equalsIgnoreCase(timeFrame)
+                            || "1M".equalsIgnoreCase(timeFrame));
+            if (fetchHistorical) {
                 historicalDataFuture = CompletableFuture.supplyAsync(() -> {
                     try {
                         return fetchHistoricalData(keys, timeFrame, isIndexSymbol, forceRefresh);
                     } catch (Exception e) {
                         log.error("Error fetching historical data", e);
+                        return HistoricalDataResponseV1.builder().build();
+                    }
+                });
+            } else if ("1D".equalsIgnoreCase(timeFrame) || "1W".equalsIgnoreCase(timeFrame)
+                    || "1M".equalsIgnoreCase(timeFrame)) {
+                historicalDataFuture = CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return fetchHistoricalData(keys, timeFrame, isIndexSymbol, false);
+                    } catch (Exception e) {
+                        log.error("Error loading historical from cache", e);
                         return HistoricalDataResponseV1.builder().build();
                     }
                 });

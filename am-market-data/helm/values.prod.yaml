@@ -35,7 +35,10 @@ config:
     ingestion:
       enabled: true
       provider: "UPSTOX"
-      force: true
+      force: false
+      useWebsocket: true
+      pollEnabled: false
+      pollHistorical: false
       symbols: "NIFTY 50,NIFTY BANK"
       startCron: "0 15 9 * * MON-FRI"
       stopCron: "0 30 15 * * MON-FRI"
