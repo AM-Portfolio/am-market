@@ -478,6 +478,8 @@ class JobQueue:
         """Process ETF holdings fetching job with smart caching"""
         from am_etf.service import ETFService
         from am_etf.smart_holdings_service import SmartETFHoldingsService
+
+        log.info("_process_etf_holdings_job: job_id=%s", job.job_id)
         
         # Initialize services
         etf_service = ETFService()
@@ -596,10 +598,11 @@ async def get_job_queue() -> JobQueue:
     """Get the global job queue instance"""
     global job_queue
     if job_queue is None:
-        import os
-        # Initialize with MongoDB connection from environment or default
-        from am_configs.settings import settings
-        mongodb_uri = settings.mongo_uri
+        from am_configs.settings import settings, refresh_settings_from_dotenv, get_mongo_uri
+
+        refresh_settings_from_dotenv()
+        mongodb_uri = get_mongo_uri()
+        log.info("job_queue mongo_target=%s", mongodb_uri.split("@")[-1] if "@" in mongodb_uri else mongodb_uri)
         db_name = settings.mongo_db
         job_queue = JobQueue(mongodb_uri, db_name)
         

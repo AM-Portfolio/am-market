@@ -1,31 +1,26 @@
 env:
   SPRING_PROFILES_ACTIVE: "dev"
   JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=dev"
-environment: dev
 
 probes:
   port: 8080
-
   startup:
     path: /actuator/health/liveness
     initialDelaySeconds: 0
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 18
-
   liveness:
     path: /actuator/health/liveness
     periodSeconds: 30
     timeoutSeconds: 10
     failureThreshold: 3
-
   readiness:
     path: /actuator/health/readiness
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 3
 
-# Application Configuration
 config:
   marketData:
     maxRetries: 3
@@ -35,17 +30,6 @@ config:
     maxAgeMinutes: 15
   env: "dev"
 
-# Service Configuration
-service:
-  type: ClusterIP
-  port: 8080
-
-# Ingress Configuration (disabled for Kind)
-ingress:
-  enabled: false
-  ipAddress: 127.0.0.1
-
-# Resource Configuration (reduced for local/Kind development)
 resources:
   limits:
     cpu: 500m
@@ -54,31 +38,53 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-# Vault Configuration overrides for DEV
 vault:
   enabled: true
   secretPaths:
     postgres:
       path: "apps/data/dev/infra/postgres"
-    mongodb: 
+    mongodb:
       path: "apps/data/dev/infra/mongodb"
-    redis: 
-      path: "apps/data/dev/infra/redis"
-    influxdb: 
+    redis:
+      path: "apps/data/dev/infra/redisset"
+    influxdb:
       path: "apps/data/dev/infra/influxdb"
     jwt:
       path: "apps/data/dev/services/am-market-data"
-    kafka: 
+    kafka:
       path: "apps/data/dev/infra/kafka"
     zerodha:
       path: "apps/data/dev/services/am-market-data"
-    upstox: 
+    upstox:
+      path: "apps/data/dev/services/am-market-data"
+    market-data:
       path: "apps/data/dev/services/am-market-data"
 
-# Monitoring Configuration
 monitoring:
   enabled: true
   prometheus:
     scrape: true
     port: "8080"
     path: "/actuator/prometheus"
+
+hostAliases:
+  - ip: "203.174.22.129"
+    hostnames:
+      - "redis.asrax.in"
+      - "mongodb.asrax.in"
+      - "kafka.asrax.in"
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: "web,websecure"
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-dev-dev-global-cors@kubernetescrd,
+      am-apps-dev-dev-strip-prefix@kubernetescrd
+  hosts:
+    - host: am-dev.asrax.in
+      paths:
+        - path: /market
+          pathType: Prefix

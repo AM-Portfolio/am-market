@@ -86,6 +86,14 @@ async def fetch_all_etf_holdings(
             "force_refresh": force_refresh,
             "operation": "fetch_all_holdings"
         }
+
+        log.info(
+            "fetch-all-holdings: etfs=%s force_refresh=%s callback=%s user=%s",
+            total_count,
+            force_refresh,
+            bool(normalized_callback),
+            user_id,
+        )
         
         job_id = await job_queue.create_job(
             job_type=JobType.ETF_HOLDINGS_FETCH,
@@ -142,6 +150,7 @@ async def search_etfs(
     Search ETFs by symbol, name, or ISIN
     """
     try:
+        log.info("search: query=%r limit=%s", query, limit)
         global _etf_list_cache
         
         # Check cache validity
@@ -199,6 +208,7 @@ async def search_etfs(
                     if len(matching_etfs) >= limit:
                         break
         
+        log.info("search: total_found=%s", len(matching_etfs))
         return {
             "query": query,
             "total_found": len(matching_etfs),
@@ -603,6 +613,12 @@ async def load_etfs_from_json(
     """
     try:
         from am_etf.models import ETFInstrument
+
+        log.info(
+            "load-from-json: filename=%s dry_run=%s",
+            file.filename,
+            dry_run,
+        )
         
         # Read and parse JSON
         content = await file.read()
@@ -635,9 +651,14 @@ async def load_etfs_from_json(
             }
         
         # Save to database
+        from am_configs.settings import get_mongo_target_label
+
+        log.info("load-from-json: mongo_target=%s", get_mongo_target_label())
         etf_service = ETFService()
+        log.info("load-from-json: bulk_upsert count=%s", len(instruments))
         inserted_count = await etf_service.bulk_upsert(instruments)
         await etf_service.close()
+        log.info("load-from-json: inserted=%s", inserted_count)
         
         return {
             "status": "success",

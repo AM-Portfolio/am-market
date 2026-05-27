@@ -25,9 +25,9 @@ class MutualFundService:
             mongo_uri: MongoDB connection URI (defaults to settings.mongo_uri)
             db_name: Database name (defaults to settings.mongo_db)
         """
-        from am_configs.settings import settings
-        
-        self.mongo_uri = mongo_uri or settings.mongo_uri
+        from am_configs.settings import settings, get_mongo_uri
+
+        self.mongo_uri = mongo_uri or get_mongo_uri()
         self.db_name = db_name or settings.mongo_db
         self._client = None
         self._db = None
@@ -38,7 +38,11 @@ class MutualFundService:
         if self._collection is None:
             try:
                 import motor.motor_asyncio
-                self._client = motor.motor_asyncio.AsyncIOMotorClient(self.mongo_uri)
+                self._client = motor.motor_asyncio.AsyncIOMotorClient(
+                    self.mongo_uri,
+                    directConnection=True,
+                    serverSelectionTimeoutMS=20_000,
+                )
                 self._db = self._client[self.db_name]
                 self._collection = self._db.portfolios
             except ImportError:

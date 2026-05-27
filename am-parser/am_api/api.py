@@ -71,8 +71,8 @@ async def lifespan(app: FastAPI):
         logger.info(f"Connecting to MongoDB: {settings.mongo_uri}")
         
         service_instance = create_mutual_fund_service(
-            mongo_uri=settings.mongo_uri,
-            db_name=settings.mongo_db
+            mongo_uri=mongo_uri,
+            db_name=mongo_db
         )
         
         # Initialize file upload services
@@ -112,7 +112,13 @@ async def lifespan(app: FastAPI):
 
 
 import time
-from am_common.logging.core import AMLogger
+import uuid
+import logging
+
+from am_common.logging.request_logging import setup_parser_logging, get_logger
+from am_configs.settings import settings as app_settings
+
+setup_parser_logging(app_settings.log_level)
 
 # Create FastAPI app with lifecycle management
 app = FastAPI(
@@ -239,6 +245,23 @@ app.add_middleware(
 app.include_router(job_router, prefix="/v1")
 app.include_router(etf_router, prefix="/v1/etf")
 
+
+@app.get("/health/live")
+async def health_live():
+    """Process is up; does not check Mongo (use /health for DB check)."""
+    from am_configs.settings import get_mongo_debug_info
+
+    return {"status": "alive", **get_mongo_debug_info()}
+
+
+@app.get("/debug/mongo")
+async def debug_mongo_config():
+    """Which Mongo URI this process uses (restart required after .env changes)."""
+    from am_configs.settings import get_mongo_debug_info
+
+    return get_mongo_debug_info()
+
+
 # Debug: Print all registered routes
 for route in app.routes:
     if hasattr(route, "methods"):
@@ -256,6 +279,35 @@ def get_service() -> MutualFundService:
             detail="Database service not available"
         )
     return service_instance
+
+
+@app.get("/health", response_model=dict)
+async def health_check(service: MutualFundService = Depends(get_service)):
+    """Health check endpoint"""
+    try:
+        collection = service._get_collection()
+        count = await collection.count_documents({})
+
+        from am_configs.settings import get_mongo_debug_info
+
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "total_portfolios": count,
+            **get_mongo_debug_info(),
+        }
+    except Exception as e:
+        from am_configs.settings import get_mongo_debug_info
+
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "unhealthy",
+                "database": "disconnected",
+                "error": str(e),
+                **get_mongo_debug_info(),
+            },
+        )
 
 
 def get_file_upload_service() -> FileUploadService:
@@ -589,31 +641,6 @@ async def global_exception_handler(request, exc):
             "detail": str(exc) if app.debug else "An unexpected error occurred"
         }
     )
-
-
-# Health check endpoint
-@app.get("/health", response_model=dict)
-async def health_check(service: MutualFundService = Depends(get_service)):
-    """Health check endpoint"""
-    try:
-        # Test database connection
-        collection = service._get_collection()
-        count = await collection.count_documents({})
-        
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "total_portfolios": count
-        }
-    except Exception as e:
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "status": "unhealthy",
-                "database": "disconnected",
-                "error": str(e)
-            }
-        )
 
 
 # ================================
