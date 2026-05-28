@@ -61,7 +61,7 @@ jobs:
   deploy:
     name: Execute Deploy
     needs: setup
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-deploy.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-deploy.yml@develop
     with:
       service_name: ${{ github.event.inputs.service }}
       working_directory: ${{ needs.setup.outputs.working_directory }}

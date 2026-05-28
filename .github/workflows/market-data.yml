@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@develop
     with:
       language: 'java'
       working_directory: 'am-market-data'
