@@ -17,8 +17,6 @@ vault:
   secretPaths:
     auth:
       path: apps/data/dev/services/am-auth
-    logging:
-      path: apps/data/dev/services/logging
     market:
       path: apps/data/dev/services/am-market-data
     mongodb: 
