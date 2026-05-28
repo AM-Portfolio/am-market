@@ -1,6 +1,7 @@
 env:
   SPRING_PROFILES_ACTIVE: "dev"
   JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=dev"
+  JAVA_TOOL_OPTIONS: "-Xms256m -Xmx384m"
 
 probes:
   port: 8080
@@ -33,10 +34,10 @@ config:
 resources:
   limits:
     cpu: 500m
-    memory: 512Mi
+    memory: 1024Mi
   requests:
     cpu: 250m
-    memory: 256Mi
+    memory: 512Mi
 
 vault:
   enabled: true
