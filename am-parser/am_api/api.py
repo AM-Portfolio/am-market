@@ -55,8 +55,8 @@ async def lifespan(app: FastAPI):
         print(f"🔌 Connecting to MongoDB: {settings.mongo_uri}")
         
         service_instance = create_mutual_fund_service(
-            mongo_uri=mongo_uri,
-            db_name=mongo_db
+            mongo_uri=settings.mongo_uri,
+            db_name=settings.mongo_db
         )
         
         # Initialize file upload services
