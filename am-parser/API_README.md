@@ -215,7 +215,7 @@ The API requires these packages (already in requirements.txt):
 ## 🗄️ Database Integration
 
 The API automatically connects to your MongoDB instance:
-- **Connection**: `mongodb://admin:password123@localhost:27017`
+- **Connection**: `mongodb://admin:<REDACTED_PASSWORD>@localhost:27017`
 - **Database**: `mutual_funds`
 - **Collection**: `portfolios`
 

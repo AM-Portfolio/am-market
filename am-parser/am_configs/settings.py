@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     """Application logging format: 'json' or 'text'."""
 
     # ==================== MongoDB Configuration ====================
-    mongo_uri: str = "mongodb://admin:password123@localhost:27017"
+    mongo_uri: str = "mongodb://admin:<REDACTED_PASSWORD>@localhost:27017"
     """MongoDB connection URI. Can include authentication credentials."""
 
     mongo_db: str = "mutual_funds"
