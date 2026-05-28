@@ -46,7 +46,7 @@ vault:
     mongodb:
       path: "apps/data/dev/infra/mongodb"
     redis:
-      path: "apps/data/dev/infra/redisset"
+      path: "apps/data/dev/infra/redis"
     influxdb:
       path: "apps/data/dev/infra/influxdb"
     jwt:
