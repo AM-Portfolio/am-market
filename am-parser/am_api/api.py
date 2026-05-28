@@ -93,6 +93,7 @@ import uuid
 import logging
 
 from am_common.logging.request_logging import setup_parser_logging, get_logger
+from am_common.logging.core import AMLogger
 from am_configs.settings import settings as app_settings
 
 setup_parser_logging(app_settings.log_level)
