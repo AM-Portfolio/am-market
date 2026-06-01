@@ -172,10 +172,16 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             // Log for debugging
             log.info("getLTP", "Fetching LTP for keys: " + context.instrumentKeys);
 
-            GetMarketQuoteLastTradedPriceResponseV3 response = upstoxSdkService.getLtp(context.instrumentKeys);
+            GetMarketQuoteLastTradedPriceResponseV3 response = null;
+            try {
+                response = upstoxSdkService.getLtp(context.instrumentKeys);
+            } catch (Exception e) {
+                log.warn("getLTP", "Failed to fetch LTP via SDK Service, falling back to API Service: " + e.getMessage());
+            }
+
             Map<String, LTPQuote> result = new HashMap<>();
 
-            if (response != null && response.getData() != null) {
+            if (response != null && response.getData() != null && !response.getData().isEmpty()) {
                 for (Map.Entry<String, MarketQuoteSymbolLtpV3> entry : response.getData().entrySet()) {
                     String instrumentKey = entry.getKey();
                     MarketQuoteSymbolLtpV3 data = entry.getValue();
@@ -189,10 +195,26 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
                     result.put(symbol, quote);
                 }
+            } else {
+                com.am.marketdata.provider.upstox.model.MarketQuoteResponse apiResponse = upstoxApiService.getLtp(context.instrumentKeys);
+                if (apiResponse != null && apiResponse.getData() != null) {
+                    for (Map.Entry<String, com.am.marketdata.provider.upstox.model.common.StockQuote> entry : apiResponse.getData().entrySet()) {
+                        String instrumentKey = entry.getKey();
+                        com.am.marketdata.provider.upstox.model.common.StockQuote data = entry.getValue();
+
+                        String symbol = context.keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
+
+                        LTPQuote quote = new LTPQuote();
+                        quote.lastPrice = data.getLastPrice() != null ? data.getLastPrice() : 0.0;
+                        quote.instrumentToken = 0;
+
+                        result.put(symbol, quote);
+                    }
+                }
             }
             return result;
         } catch (Exception e) {
-            log.error("getLTP", "Error fetching Upstox LTP via SDK Service", e);
+            log.error("getLTP", "Error fetching Upstox LTP", e);
             return new HashMap<>();
         }
     }
