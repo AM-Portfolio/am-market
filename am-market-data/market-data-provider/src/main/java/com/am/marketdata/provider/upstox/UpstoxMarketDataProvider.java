@@ -35,6 +35,12 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     private final UpstoxSdkService upstoxSdkService;
     private final com.am.marketdata.provider.upstox.resolver.UpstoxSymbolResolver symbolResolver;
 
+    // Upstox API restricts the number of instrument keys per request to 500.
+    // Adding batching logic to prevent HTTP 400 Bad Request errors when fetching for many symbols.
+    private static final int BATCH_SIZE = 500;
+    // Delay between batch requests to prevent triggering HTTP 429 Rate Limits.
+    private static final int BATCH_DELAY_MS = 150;
+
     public UpstoxMarketDataProvider(
             UpstoxApiService upstoxApiService,
             UpstoxSdkService upstoxSdkService,
@@ -97,59 +103,79 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
             log.debug("getOHLC", "Fetching OHLC using interval: " + upstoxInterval);
 
-            OHLCResponse response = null;
-
-            // Try SDK Service first
-            try {
-                com.am.marketdata.provider.upstox.model.OHLCResponse sdkResponse = upstoxSdkService
-                        .getOhlc(context.instrumentKeys, upstoxInterval);
-                if (sdkResponse != null && sdkResponse.getData() != null && !sdkResponse.getData().isEmpty()) {
-                    // Map SDK response to OHLCResponse model structure used below
-                    response = sdkResponse;
-                }
-            } catch (Exception e) {
-                log.warn("getOHLC",
-                        "Failed to fetch OHLC via SDK Service, falling back to API Service: " + e.getMessage());
-            }
-
-            // Fallback to API Service if SDK failed or returned empty
-            if (response == null || response.getData() == null || response.getData().isEmpty()) {
-                response = upstoxApiService.getOhlc(context.instrumentKeys, upstoxInterval);
-            }
-
             Map<String, OHLCQuote> result = new HashMap<>();
+            List<String> allKeys = context.instrumentKeys;
 
-            if (response != null && response.getData() != null) {
-                for (Map.Entry<String, OHLCResponse.OHLCData> entry : response.getData().entrySet()) {
-                    String instrumentKey = entry.getKey();
-                    OHLCResponse.OHLCData data = entry.getValue();
+            log.info("getOHLC", String.format("Fetching OHLC quotes in batches of %d to comply with API limits", BATCH_SIZE));
+            
+            for (int i = 0; i < allKeys.size(); i += BATCH_SIZE) {
+                int end = Math.min(i + BATCH_SIZE, allKeys.size());
+                List<String> batchKeys = allKeys.subList(i, end);
+                
+                log.info("getOHLC", String.format("Fetching OHLC batch: %d to %d", i, end));
 
-                    // Map back to symbol if possible, otherwise use key
-                    String symbol = context.keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
+                OHLCResponse response = null;
 
-                    OHLCQuote quote = new OHLCQuote();
-                    // Use getters as fields might be mapped differently or computed
-                    quote.setLastPrice(data.getLast_price() != null ? data.getLast_price() : 0.0);
-
-                    if (data.getOhlc() != null) {
-                        OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
-                        ohlc.setOpen(data.getOhlc().getOpen());
-                        ohlc.setHigh(data.getOhlc().getHigh());
-                        ohlc.setLow(data.getOhlc().getLow());
-                        ohlc.setClose(data.getOhlc().getClose());
-                        quote.setOhlc(ohlc);
+                // Try SDK Service first
+                try {
+                    com.am.marketdata.provider.upstox.model.OHLCResponse sdkResponse = upstoxSdkService
+                            .getOhlc(batchKeys, upstoxInterval);
+                    if (sdkResponse != null && sdkResponse.getData() != null && !sdkResponse.getData().isEmpty()) {
+                        // Map SDK response to OHLCResponse model structure used below
+                        response = sdkResponse;
                     }
+                } catch (Exception e) {
+                    log.warn("getOHLC",
+                            "Failed to fetch OHLC batch via SDK Service, falling back to API Service: " + e.getMessage());
+                }
 
-                    // Also set previous close if available in data
-                    if (data.getPrevious_close() != null) {
-                        log.debug("getOHLC",
-                                String.format("Setting Previous Close for %s: %s", symbol, data.getPrevious_close()));
-                        quote.setPreviousClose(data.getPrevious_close());
-                    } else {
-                        log.debug("getOHLC", "No Previous Close found in mapped data for " + symbol);
+                // Fallback to API Service if SDK failed or returned empty
+                if (response == null || response.getData() == null || response.getData().isEmpty()) {
+                    response = upstoxApiService.getOhlc(batchKeys, upstoxInterval);
+                }
+
+                if (response != null && response.getData() != null) {
+                    for (Map.Entry<String, OHLCResponse.OHLCData> entry : response.getData().entrySet()) {
+                        String instrumentKey = entry.getKey();
+                        OHLCResponse.OHLCData data = entry.getValue();
+
+                        // Map back to symbol if possible, otherwise use key
+                        String symbol = context.keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
+
+                        OHLCQuote quote = new OHLCQuote();
+                        // Use getters as fields might be mapped differently or computed
+                        quote.setLastPrice(data.getLast_price() != null ? data.getLast_price() : 0.0);
+
+                        if (data.getOhlc() != null) {
+                            OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
+                            ohlc.setOpen(data.getOhlc().getOpen());
+                            ohlc.setHigh(data.getOhlc().getHigh());
+                            ohlc.setLow(data.getOhlc().getLow());
+                            ohlc.setClose(data.getOhlc().getClose());
+                            quote.setOhlc(ohlc);
+                        }
+
+                        // Also set previous close if available in data
+                        if (data.getPrevious_close() != null) {
+                            log.debug("getOHLC",
+                                    String.format("Setting Previous Close for %s: %s", symbol, data.getPrevious_close()));
+                            quote.setPreviousClose(data.getPrevious_close());
+                        } else {
+                            log.debug("getOHLC", "No Previous Close found in mapped data for " + symbol);
+                        }
+
+                        result.put(symbol, quote);
                     }
-
-                    result.put(symbol, quote);
+                }
+                
+                // Add a delay between batches to respect rate limits, but not after the final batch
+                if (end < allKeys.size()) {
+                    try {
+                        Thread.sleep(BATCH_DELAY_MS);
+                    } catch (InterruptedException ie) {
+                        log.error("getOHLC", "Batching sleep interrupted", ie);
+                        Thread.currentThread().interrupt();
+                    }
                 }
             }
             return result;
@@ -172,43 +198,63 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             // Log for debugging
             log.info("getLTP", "Fetching LTP for keys: " + context.instrumentKeys);
 
-            GetMarketQuoteLastTradedPriceResponseV3 response = null;
-            try {
-                response = upstoxSdkService.getLtp(context.instrumentKeys);
-            } catch (Exception e) {
-                log.warn("getLTP", "Failed to fetch LTP via SDK Service, falling back to API Service: " + e.getMessage());
-            }
-
             Map<String, LTPQuote> result = new HashMap<>();
+            List<String> allKeys = context.instrumentKeys;
+            
+            log.info("getLTP", String.format("Fetching LTP quotes in batches of %d to comply with API limits", BATCH_SIZE));
+            
+            for (int i = 0; i < allKeys.size(); i += BATCH_SIZE) {
+                int end = Math.min(i + BATCH_SIZE, allKeys.size());
+                List<String> batchKeys = allKeys.subList(i, end);
+                
+                log.info("getLTP", String.format("Fetching LTP batch: %d to %d", i, end));
 
-            if (response != null && response.getData() != null && !response.getData().isEmpty()) {
-                for (Map.Entry<String, MarketQuoteSymbolLtpV3> entry : response.getData().entrySet()) {
-                    String instrumentKey = entry.getKey();
-                    MarketQuoteSymbolLtpV3 data = entry.getValue();
-
-                    // Map back to symbol using the context map
-                    String symbol = context.keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
-
-                    LTPQuote quote = new LTPQuote();
-                    quote.lastPrice = data.getLastPrice();
-                    quote.instrumentToken = 0;
-
-                    result.put(symbol, quote);
+                GetMarketQuoteLastTradedPriceResponseV3 response = null;
+                try {
+                    response = upstoxSdkService.getLtp(batchKeys);
+                } catch (Exception e) {
+                    log.warn("getLTP", "Failed to fetch LTP batch via SDK Service, falling back to API Service: " + e.getMessage());
                 }
-            } else {
-                com.am.marketdata.provider.upstox.model.MarketQuoteResponse apiResponse = upstoxApiService.getLtp(context.instrumentKeys);
-                if (apiResponse != null && apiResponse.getData() != null) {
-                    for (Map.Entry<String, com.am.marketdata.provider.upstox.model.common.StockQuote> entry : apiResponse.getData().entrySet()) {
-                        String instrumentKey = entry.getKey();
-                        com.am.marketdata.provider.upstox.model.common.StockQuote data = entry.getValue();
 
+                if (response != null && response.getData() != null && !response.getData().isEmpty()) {
+                    for (Map.Entry<String, MarketQuoteSymbolLtpV3> entry : response.getData().entrySet()) {
+                        String instrumentKey = entry.getKey();
+                        MarketQuoteSymbolLtpV3 data = entry.getValue();
+
+                        // Map back to symbol using the context map
                         String symbol = context.keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
 
                         LTPQuote quote = new LTPQuote();
-                        quote.lastPrice = data.getLastPrice() != null ? data.getLastPrice() : 0.0;
+                        quote.lastPrice = data.getLastPrice();
                         quote.instrumentToken = 0;
 
                         result.put(symbol, quote);
+                    }
+                } else {
+                    com.am.marketdata.provider.upstox.model.MarketQuoteResponse apiResponse = upstoxApiService.getLtp(batchKeys);
+                    if (apiResponse != null && apiResponse.getData() != null) {
+                        for (Map.Entry<String, com.am.marketdata.provider.upstox.model.common.StockQuote> entry : apiResponse.getData().entrySet()) {
+                            String instrumentKey = entry.getKey();
+                            com.am.marketdata.provider.upstox.model.common.StockQuote data = entry.getValue();
+
+                            String symbol = context.keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
+
+                            LTPQuote quote = new LTPQuote();
+                            quote.lastPrice = data.getLastPrice() != null ? data.getLastPrice() : 0.0;
+                            quote.instrumentToken = 0;
+
+                            result.put(symbol, quote);
+                        }
+                    }
+                }
+                
+                // Add a delay between batches to respect rate limits, but not after the final batch
+                if (end < allKeys.size()) {
+                    try {
+                        Thread.sleep(BATCH_DELAY_MS);
+                    } catch (InterruptedException ie) {
+                        log.error("getLTP", "Batching sleep interrupted", ie);
+                        Thread.currentThread().interrupt();
                     }
                 }
             }
