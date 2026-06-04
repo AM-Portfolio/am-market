@@ -237,31 +237,7 @@ public class MarketDataCacheService {
                 // These are written by cacheLatestPrices() on every WebSocket tick.
                 // The intraday bars (Path 1) do not store previousClose, so it defaults to 0.0.
                 // This overlay fixes both: fresh lastPrice on reload and non-zero previousClose.
-                for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
-                    String symbol = entry.getKey().toUpperCase().trim();
-                    String latestKey = "market:latest-price:" + symbol;
-                    try {
-                        String json = redisTemplate.opsForValue().get(latestKey);
-                        if (json != null) {
-                            @SuppressWarnings("unchecked")
-                            Map<String, Object> latestData = objectMapper.readValue(json, Map.class);
-                            double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
-                            double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
-                            OHLCQuote quote = entry.getValue();
-                            if (latestPrice > 0) {
-                                quote.setLastPrice(latestPrice);
-                            }
-                            if (prevClose > 0) {
-                                quote.setPreviousClose(prevClose);
-                            }
-                            log.debug("getOHLCFromCache",
-                                    "Overlaid live prices for {}: lastPrice={}, previousClose={}", symbol, latestPrice, prevClose);
-                        }
-                    } catch (Exception ex) {
-                        log.warn("getOHLCFromCache",
-                                "Failed to overlay latest price for symbol {}: {}", symbol, ex.getMessage());
-                    }
-                }
+                overlayLatestPrices(result);
             }
 
             return result;
@@ -273,6 +249,42 @@ public class MarketDataCacheService {
         }
     }
 
+    /**
+     * Overlays the latest prices and previous close from the fast Redis cache onto the provided OHLC quotes.
+     * This is useful when fetching data from sources that might not have the absolute latest price or previous close.
+     * 
+     * @param result The map of OHLCQuotes to overlay with latest prices
+     */
+    public void overlayLatestPrices(Map<String, OHLCQuote> result) {
+        if (result == null || result.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
+            String symbol = entry.getKey().toUpperCase().trim();
+            String latestKey = "market:latest-price:" + symbol;
+            try {
+                String json = redisTemplate.opsForValue().get(latestKey);
+                if (json != null) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> latestData = objectMapper.readValue(json, Map.class);
+                    double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
+                    double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
+                    OHLCQuote quote = entry.getValue();
+                    if (latestPrice > 0) {
+                        quote.setLastPrice(latestPrice);
+                    }
+                    if (prevClose > 0) {
+                        quote.setPreviousClose(prevClose);
+                    }
+                    log.debug("overlayLatestPrices",
+                            "Overlaid live prices for {}: lastPrice={}, previousClose={}", symbol, latestPrice, prevClose);
+                }
+            } catch (Exception ex) {
+                log.warn("overlayLatestPrices",
+                        "Failed to overlay latest price for symbol {}: {}", symbol, ex.getMessage());
+            }
+        }
+    }
     /**
      * Batch retrieval of historical data from cache for multiple symbols
      * 
