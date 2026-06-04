@@ -16,10 +16,12 @@ public class ThreadPoolConfig {
 
     private final TaskDecorator taskDecorator;
 
-    @Value("${market.data.persistence.thread.pool.size:5}")
+    // Increased pool size from 5 to 15 to handle high-frequency streaming database/cache writes concurrently
+    @Value("${market.data.persistence.thread.pool.size:15}")
     private int persistenceThreadPoolSize;
 
-    @Value("${market.data.persistence.thread.queue.capacity:10}")
+    // Increased queue capacity from 10 to 1000 to act as a buffer during traffic bursts, preventing RejectedExecutionException
+    @Value("${market.data.persistence.thread.queue.capacity:1000}")
     private int persistenceQueueCapacity;
 
     /**
