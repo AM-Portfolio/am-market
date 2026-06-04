@@ -61,15 +61,65 @@ public class StockIndicesService {
                 }
             }
 
-            // 3. Enrich with Redis latest streaming prices (No Upstox REST calls on normal requests)
+            // 3. Enrich with Redis latest streaming prices or live prices API
             Set<String> requestedSymbols = new HashSet<>(indexSymbols);
             Map<String, OHLCQuote> latestPrices = redisCacheService.getLatestPrices(requestedSymbols);
 
-            if (latestPrices != null && !latestPrices.isEmpty()) {
+            if (latestPrices == null) {
+                latestPrices = new java.util.HashMap<>();
+            }
+
+            // Fallback for missing symbols to marketDataCacheService.getLivePrices
+            Set<String> missingSymbols = new HashSet<>();
+            for (String sym : requestedSymbols) {
+                if (!latestPrices.containsKey(sym) || latestPrices.get(sym).getLastPrice() == 0.0) {
+                    missingSymbols.add(sym);
+                }
+            }
+
+            if (!missingSymbols.isEmpty()) {
+                try {
+                    Map<String, Object> liveResponse = marketDataCacheService.getLivePrices(missingSymbols, true, forceRefresh);
+                    if (liveResponse != null && liveResponse.get("prices") instanceof List) {
+                        List<?> pricesList = (List<?>) liveResponse.get("prices");
+                        for (Object obj : pricesList) {
+                            if (obj instanceof com.am.common.investment.model.equity.EquityPrice) {
+                                com.am.common.investment.model.equity.EquityPrice ep = (com.am.common.investment.model.equity.EquityPrice) obj;
+                                if (ep.getSymbol() != null && ep.getLastPrice() != null) {
+                                    String matchingSymbol = null;
+                                    for (String reqSym : requestedSymbols) {
+                                        if (reqSym.equalsIgnoreCase(ep.getSymbol())) {
+                                            matchingSymbol = reqSym;
+                                            break;
+                                        }
+                                    }
+                                    if (matchingSymbol != null) {
+                                        OHLCQuote quote = latestPrices.getOrDefault(matchingSymbol, new OHLCQuote());
+                                        quote.setLastPrice(ep.getLastPrice());
+                                        if (ep.getOhlcv() != null) {
+                                            OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
+                                            ohlc.setOpen(ep.getOhlcv().getOpen());
+                                            ohlc.setHigh(ep.getOhlcv().getHigh());
+                                            ohlc.setLow(ep.getOhlcv().getLow());
+                                            ohlc.setClose(ep.getOhlcv().getClose());
+                                            quote.setOhlc(ohlc);
+                                        }
+                                        latestPrices.put(matchingSymbol, quote);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error(methodName, "Error fetching fallback live prices for indices", e);
+                }
+            }
+
+            if (!latestPrices.isEmpty()) {
                 for (StockIndicesMarketData data : finalResults) {
                     String symbol = data.getIndexSymbol();
                     OHLCQuote priceQuote = latestPrices.get(symbol);
-                    if (priceQuote != null) {
+                    if (priceQuote != null && priceQuote.getLastPrice() != 0.0) {
                         IndexMetadata meta = data.getMetadata();
                         if (meta == null) {
                             meta = new IndexMetadata();
@@ -80,20 +130,25 @@ public class StockIndicesService {
                         double open = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getOpen() : 0.0;
                         double high = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getHigh() : 0.0;
                         double low = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getLow() : 0.0;
+                        
                         double previousClose = priceQuote.getPreviousClose();
+                        if (previousClose == 0.0 && meta.getPreviousClose() != null) {
+                            previousClose = meta.getPreviousClose();
+                        }
+                        
                         double change = lastPrice - previousClose;
                         double changePercent = previousClose != 0 ? (change / previousClose) * 100.0 : 0.0;
 
                         meta.setLast(lastPrice);
-                        meta.setOpen(open);
-                        meta.setHigh(high);
-                        meta.setLow(low);
+                        if (open != 0.0) meta.setOpen(open);
+                        if (high != 0.0) meta.setHigh(high);
+                        if (low != 0.0) meta.setLow(low);
                         meta.setPreviousClose(previousClose);
                         meta.setChange(change);
                         meta.setPercChange(changePercent);
                         meta.setTimeVal(String.valueOf(System.currentTimeMillis()));
 
-                        log.debug(methodName, "Enriched index " + symbol + " from Redis latest price cache. Price=" + lastPrice);
+                        log.debug(methodName, "Enriched index " + symbol + " from latest prices. Price=" + lastPrice);
                     }
                 }
             }
