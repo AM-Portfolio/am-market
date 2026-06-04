@@ -179,6 +179,13 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         filteredHistoricalData.setTradingSymbol(symbol);
                         filteredHistoricalData.setInterval(interval.getApiValue());
                         filteredHistoricalData.setDataPoints(dataPoints);
+                        filteredHistoricalData.setDataPointCount(dataPoints.size());
+                        filteredHistoricalData.setExchange(historicalData.getExchange());
+                        filteredHistoricalData.setCurrency(historicalData.getCurrency());
+                        filteredHistoricalData.setIsin(historicalData.getIsin());
+                        filteredHistoricalData.setFromDate(historicalData.getFromDate());
+                        filteredHistoricalData.setToDate(historicalData.getToDate());
+                        filteredHistoricalData.setRetrievalTime(historicalData.getRetrievalTime());
 
                         symbolsData.put(symbol, filteredHistoricalData);
                         successCount++;
