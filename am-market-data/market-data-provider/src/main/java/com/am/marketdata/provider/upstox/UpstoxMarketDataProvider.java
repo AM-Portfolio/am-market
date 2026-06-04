@@ -178,10 +178,113 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                     }
                 }
             }
+
+            // Backfill previousClose for any symbol where Upstox OHLC API returned prevOhlc=null.
+            // This happens outside market hours (after 3:30 PM IST) or on weekends.
+            // We fetch the last 2 days of historical candles and use the penultimate candle's close.
+            backfillPreviousClose(result, context);
+
             return result;
         } catch (Exception e) {
             log.error("getOHLC", "Error fetching Upstox OHLC", e);
             return new HashMap<>();
+        }
+    }
+
+    /**
+     * Backfills previousClose for any symbol where the Upstox OHLC market-quote API
+     * returned prevOhlc=null. This happens outside market hours (after 3:30 PM IST).
+     * Fetches 2 days of daily historical candles and uses the prior day's close.
+     */
+    private void backfillPreviousClose(
+            Map<String, OHLCQuote> result,
+            com.am.marketdata.provider.common.InstrumentContext context) {
+        try {
+            // Find symbols that still have previousClose == 0.0
+            List<String> symbolsNeedingPrevClose = result.entrySet().stream()
+                    .filter(e -> e.getValue().getPreviousClose() == 0.0)
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+
+            if (symbolsNeedingPrevClose.isEmpty()) {
+                return;
+            }
+
+            log.info("backfillPreviousClose",
+                    "Backfilling previousClose via historical API for {} symbols: {}",
+                    symbolsNeedingPrevClose.size(), symbolsNeedingPrevClose);
+
+            java.time.LocalDate today = java.time.LocalDate.now();
+            String toDate = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+            // Fetch 5 calendar days back to safely cover weekends/holidays
+            String fromDate = today.minusDays(5).format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+
+            for (String symbol : symbolsNeedingPrevClose) {
+                try {
+                    // Resolve instrument key for this symbol
+                    String instrumentKey = context.keyToSymbolMap.entrySet().stream()
+                            .filter(e -> e.getValue().equals(symbol))
+                            .map(Map.Entry::getKey)
+                            .findFirst()
+                            .orElse(null);
+
+                    if (instrumentKey == null) {
+                        log.warn("backfillPreviousClose",
+                                "Could not find instrument key for symbol: {}, skipping", symbol);
+                        continue;
+                    }
+
+                    com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
+                            upstoxSdkService.getHistoricalCandleData(instrumentKey, "days", 1, toDate, fromDate);
+
+                    if (histResponse != null && histResponse.getData() != null
+                            && histResponse.getData().getCandles() != null
+                            && !histResponse.getData().getCandles().isEmpty()) {
+
+                        java.util.List<java.util.List<Object>> candles = histResponse.getData().getCandles();
+                        // Candles are in descending order (newest first): [0]=today, [1]=yesterday
+                        // If today's market is closed, [0] is yesterday's candle
+                        // We want the close of the candle BEFORE the most recent one
+                        double prevClose = 0.0;
+                        if (candles.size() >= 2) {
+                            // Use index 1 (the day before the most recent candle)
+                            java.util.List<Object> prevCandle = candles.get(1);
+                            if (prevCandle != null && prevCandle.size() >= 5) {
+                                Object closeObj = prevCandle.get(4);
+                                if (closeObj instanceof Number) {
+                                    prevClose = ((Number) closeObj).doubleValue();
+                                }
+                            }
+                        } else if (candles.size() == 1) {
+                            // Only one candle available — use it as a best-effort fallback
+                            java.util.List<Object> onlyCandle = candles.get(0);
+                            if (onlyCandle != null && onlyCandle.size() >= 5) {
+                                Object closeObj = onlyCandle.get(4);
+                                if (closeObj instanceof Number) {
+                                    prevClose = ((Number) closeObj).doubleValue();
+                                }
+                            }
+                        }
+
+                        if (prevClose > 0) {
+                            result.get(symbol).setPreviousClose(prevClose);
+                            log.info("backfillPreviousClose",
+                                    "Backfilled previousClose for {}: {}", symbol, prevClose);
+                        } else {
+                            log.warn("backfillPreviousClose",
+                                    "Could not extract valid previousClose from historical candles for {}", symbol);
+                        }
+                    } else {
+                        log.warn("backfillPreviousClose",
+                                "No historical candle data returned for symbol: {}", symbol);
+                    }
+                } catch (Exception ex) {
+                    log.error("backfillPreviousClose",
+                            "Failed to backfill previousClose for symbol {}: {}", symbol, ex.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.error("backfillPreviousClose", "Error in backfillPreviousClose: {}", e.getMessage());
         }
     }
 
