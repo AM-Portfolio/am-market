@@ -102,6 +102,17 @@ public class MarketDataCacheService {
                 log.info("cacheOHLCData", "Cached {} symbols with timeframe: {} for date: {}. Sample keys: {}",
                         ohlcData.size(), interval, today, sampleKeys);
             }
+
+            // Also persist lastPrice + previousClose to market:latest-price:* so that
+            // subsequent cache reads can overlay previousClose correctly.
+            // The stock:intraday:* path does NOT store previousClose, so this is the only
+            // durable place for it.
+            try {
+                cacheLatestPrices(ohlcData);
+                log.debug("cacheOHLCData", "Also cached latest prices (incl. previousClose) for {} symbols", ohlcData.size());
+            } catch (Exception latestEx) {
+                log.warn("cacheOHLCData", "Failed to cache latest prices alongside OHLC data: {}", latestEx.getMessage());
+            }
         } catch (Exception e) {
             // Use the specialized exception logging
             CacheLoggingUtil.logCacheException(log, "CACHE_OHLC", null, "Error caching OHLC data", e);
