@@ -254,6 +254,14 @@ public class StreamerManager implements StreamerListener {
                     }
                 }
 
+                // Cache live tick prices (lastPrice + previousClose) to Redis Path 2
+                // market:latest-price:<SYMBOL> so that page refreshes pick up the latest price.
+                try {
+                    cacheService.cacheLatestPrices(ohlcMap);
+                } catch (Exception e) {
+                    log.error("StreamerManager", "Error caching latest prices to Redis", e);
+                }
+
                 if (!quotes.isEmpty()) {
                     MarketDataUpdate data = MarketDataUpdate.builder()
                             .timestamp(System.currentTimeMillis())

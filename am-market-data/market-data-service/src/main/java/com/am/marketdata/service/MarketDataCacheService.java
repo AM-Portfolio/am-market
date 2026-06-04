@@ -221,6 +221,36 @@ public class MarketDataCacheService {
                 // Log the cache hits with values
                 log.info("getOHLCFromCache", "Retrieved OHLC data from cache for {} symbols", result.size());
                 log.debug("getOHLCFromCache", "Retrieved values: {}", cacheHits);
+
+                // Overlay lastPrice and previousClose from Redis Path 2 (market:latest-price:*)
+                // These are written by cacheLatestPrices() on every WebSocket tick.
+                // The intraday bars (Path 1) do not store previousClose, so it defaults to 0.0.
+                // This overlay fixes both: fresh lastPrice on reload and non-zero previousClose.
+                for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
+                    String symbol = entry.getKey().toUpperCase().trim();
+                    String latestKey = "market:latest-price:" + symbol;
+                    try {
+                        String json = redisTemplate.opsForValue().get(latestKey);
+                        if (json != null) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> latestData = objectMapper.readValue(json, Map.class);
+                            double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
+                            double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
+                            OHLCQuote quote = entry.getValue();
+                            if (latestPrice > 0) {
+                                quote.setLastPrice(latestPrice);
+                            }
+                            if (prevClose > 0) {
+                                quote.setPreviousClose(prevClose);
+                            }
+                            log.debug("getOHLCFromCache",
+                                    "Overlaid live prices for {}: lastPrice={}, previousClose={}", symbol, latestPrice, prevClose);
+                        }
+                    } catch (Exception ex) {
+                        log.warn("getOHLCFromCache",
+                                "Failed to overlay latest price for symbol {}: {}", symbol, ex.getMessage());
+                    }
+                }
             }
 
             return result;
