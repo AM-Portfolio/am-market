@@ -183,8 +183,8 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             // This happens outside market hours (after 3:30 PM IST) or on weekends.
             // We fetch the last 2 days of historical candles and use the penultimate candle's close.
             backfillPreviousClose(result, context);
-
             return result;
+            
         } catch (Exception e) {
             log.error("getOHLC", "Error fetching Upstox OHLC", e);
             return new HashMap<>();

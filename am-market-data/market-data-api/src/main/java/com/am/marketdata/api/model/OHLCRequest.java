@@ -26,11 +26,6 @@ public class OHLCRequest {
     @JsonProperty("refresh")
     private boolean forceRefresh = false;
 
-    @JsonProperty("forceRefresh")
-    public void setForceRefresh(boolean forceRefresh) {
-        this.forceRefresh = forceRefresh;
-    }
-
     public boolean isIndexSymbol() {
         return indexSymbol;
     }

@@ -630,6 +630,59 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Market Analysis",
+      "item": [
+        {
+          "name": "Get Top Movers & Gainers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/analysis/movers?type=gainers&limit=10&indexSymbol=NIFTY 50&expandIndices=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "analysis",
+                "movers"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "gainers",
+                  "description": "Type: gainers, losers, or all"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of results to return"
+                },
+                {
+                  "key": "indexSymbol",
+                  "value": "NIFTY 50",
+                  "description": "Index symbol (e.g. NIFTY 50, NIFTY BANK)"
+                },
+                {
+                  "key": "timeFrame",
+                  "value": "1D",
+                  "description": "Timeframe for analysis",
+                  "disabled": true
+                },
+                {
+                  "key": "expandIndices",
+                  "value": "false",
+                  "description": "Whether to expand index details"
+                }
+              ]
+            },
+            "description": "Retrieves top performing or worst performing stocks from the specified market index."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "event": [

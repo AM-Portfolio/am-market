@@ -2,7 +2,6 @@ package com.am.marketdata.api.model;
 
 import com.am.marketdata.common.model.TimeFrame;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 
 import lombok.Data;
 
@@ -16,9 +15,4 @@ public class QuotesRequest {
     private String timeFrame = TimeFrame.FIVE_MINUTE.getApiValue(); // Default to 5-minute timeframe
     private boolean forceRefresh = false;
     private boolean indexSymbol = false;
-
-    @JsonProperty("refresh")
-    public void setRefresh(boolean refresh) {
-        this.forceRefresh = refresh;
-    }
 }

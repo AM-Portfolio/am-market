@@ -101,57 +101,22 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             return new ArrayList<>();
         }
 
-        // Strip exchange prefix if present (e.g., NSE:RELIANCE -> RELIANCE, NSE_EQ:RELIANCE -> RELIANCE)
+        // Strip exchange prefix if present (e.g., NSE:RELIANCE -> RELIANCE)
         List<String> cleanedSymbols = symbols.stream()
                 .map(s -> {
-                    if (s == null) {
-                        return "";
-                    }
-                    if (s.startsWith("NSE_EQ:") || s.startsWith("BSE_EQ:")) {
-                        return s.substring(7);
-                    } else if (s.startsWith("NSE:") || s.startsWith("BSE:")) {
+                    if (s.startsWith("NSE:") || s.startsWith("BSE:")) {
                         return s.substring(4);
                     }
                     return s;
                 })
-                .filter(s -> !s.isEmpty())
                 .collect(Collectors.toList());
 
-        List<String> isins = new ArrayList<>();
-        List<String> tradingSymbols = new ArrayList<>();
-        for (String s : cleanedSymbols) {
-            if (s.toUpperCase().matches("^[A-Z]{2}[A-Z0-9]{9}[0-9]$")) {
-                isins.add(s.toUpperCase());
-            } else {
-                tradingSymbols.add(s);
-            }
-        }
+        com.am.marketdata.common.dto.InstrumentSearchCriteria criteria = new com.am.marketdata.common.dto.InstrumentSearchCriteria();
+        criteria.setTradingSymbols(cleanedSymbols);
+        criteria.setProvider("UPSTOX");
 
-        List<com.am.marketdata.common.model.UpstoxInstrument> results = new ArrayList<>();
-
-        if (!tradingSymbols.isEmpty()) {
-            com.am.marketdata.common.dto.InstrumentSearchCriteria criteria = new com.am.marketdata.common.dto.InstrumentSearchCriteria();
-            criteria.setTradingSymbols(tradingSymbols);
-            criteria.setProvider("UPSTOX");
-            List<com.am.marketdata.common.model.UpstoxInstrument> found = (List<com.am.marketdata.common.model.UpstoxInstrument>) instrumentDataProvider
-                    .searchInstruments(criteria);
-            if (found != null) {
-                results.addAll(found);
-            }
-        }
-
-        if (!isins.isEmpty()) {
-            com.am.marketdata.common.dto.InstrumentSearchCriteria criteria = new com.am.marketdata.common.dto.InstrumentSearchCriteria();
-            criteria.setIsins(isins);
-            criteria.setProvider("UPSTOX");
-            List<com.am.marketdata.common.model.UpstoxInstrument> found = (List<com.am.marketdata.common.model.UpstoxInstrument>) instrumentDataProvider
-                    .searchInstruments(criteria);
-            if (found != null) {
-                results.addAll(found);
-            }
-        }
-
-        return results;
+        return (List<com.am.marketdata.common.model.UpstoxInstrument>) instrumentDataProvider
+                .searchInstruments(criteria);
     }
 
     @Override
