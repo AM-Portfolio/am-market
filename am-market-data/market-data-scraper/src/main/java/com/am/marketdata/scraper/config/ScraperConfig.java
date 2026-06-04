@@ -35,6 +35,7 @@ public class ScraperConfig {
             }
         }
 
+        System.setProperty("wdm.cachePath", "/tmp");
         WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
         
