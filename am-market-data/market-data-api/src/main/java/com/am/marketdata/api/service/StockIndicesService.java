@@ -188,19 +188,45 @@ public class StockIndicesService {
                         .findByIndexSymbols(indexSymbols.stream().collect(Collectors.toSet()));
                 Set<String> foundSymbols = new HashSet<>();
 
-                // FIX: Add found documents to finalResults
                 docs.forEach(doc -> {
                     if (doc != null && doc.getIndexSymbol() != null) {
-                        finalResults.add(doc); // Add to results
-                        foundSymbols.add(doc.getIndexSymbol()); // Track found
-                        log.info(methodName, "Found data for " + doc.getIndexSymbol() + " in database");
+                        boolean isStale = false;
+                        if (doc.getAudit() != null && doc.getAudit().getUpdatedAt() != null) {
+                            java.time.LocalDateTime updatedAt = doc.getAudit().getUpdatedAt();
+                            java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                            // Assuming updatedAt is also in local timezone or UTC. Let's compare safely.
+                            // If updatedAt is stored in UTC, we might need a ZoneId. Let's just use simple Duration.
+                            // Since the scraper saves it using LocalDateTime.now(), they are in the same timezone (system default).
+                            long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now()).toMinutes();
+                            if (minutesOld > 15) {
+                                isStale = true;
+                            }
+                        } else {
+                            isStale = true;
+                        }
+
+                        if (isStale) {
+                            java.time.LocalTime time = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                            boolean isMarketHours = time.isAfter(java.time.LocalTime.of(9, 10)) && time.isBefore(java.time.LocalTime.of(15, 45));
+                            if (!isMarketHours) {
+                                isStale = false; // Outside market hours, consider it fresh
+                            }
+                        }
+
+                        if (!isStale) {
+                            finalResults.add(doc); // Add to results
+                            foundSymbols.add(doc.getIndexSymbol()); // Track found
+                            log.info(methodName, "Found fresh data for " + doc.getIndexSymbol() + " in database");
+                        } else {
+                            log.info(methodName, "Document for " + doc.getIndexSymbol() + " is stale during market hours.");
+                        }
                     }
                 });
 
                 // Identify missing symbols
                 for (String symbol : indexSymbols) {
                     if (!foundSymbols.contains(symbol)) {
-                        log.info(methodName, "Symbol " + symbol + " not found in database. Queuing for fresh fetch.");
+                        log.info(methodName, "Symbol " + symbol + " not found or stale in database. Queuing for fresh fetch.");
                         symbolsToProcess.add(symbol);
                     }
                 }

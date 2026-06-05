@@ -77,18 +77,18 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         return CompletableFuture.runAsync(() -> {
             try {
                 if ("MOCK".equalsIgnoreCase(provider)) {
-                    log.info("Simulated/MOCK stream - bypassing MongoDB database save to prevent pollution");
+                    log.info("Simulated/MOCK stream - bypassing MongoDB database and Cache save to prevent pollution");
                 } else {
                     // First save to database using EquityService
                     log.debug("Saving {} OHLC data points to database", ohlcData.size());
                     List<EquityPrice> equityPrices = ohlcMapper.toEquityPriceList(ohlcData, provider);
                     equityService.saveAllPrices(equityPrices);
                     log.debug("Successfully saved {} equity prices to database", equityPrices.size());
-                }
 
-                // Then update the cache with default timeframe (1D for current day data)
-                marketDataCacheService.cacheOHLCData(ohlcData, TimeFrame.DAY);
-                log.debug("Successfully cached OHLC data for {} symbols", ohlcData.size());
+                    // Then update the cache with default timeframe (1D for current day data)
+                    marketDataCacheService.cacheOHLCData(ohlcData, TimeFrame.DAY);
+                    log.debug("Successfully cached OHLC data for {} symbols", ohlcData.size());
+                }
             } catch (Exception e) {
                 log.error("Error saving OHLC data: {}", e.getMessage(), e);
                 throw new RuntimeException("Failed to save OHLC data", e);
