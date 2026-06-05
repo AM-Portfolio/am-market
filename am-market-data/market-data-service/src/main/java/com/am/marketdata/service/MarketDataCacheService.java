@@ -65,12 +65,17 @@ public class MarketDataCacheService {
                         : fullSymbol;
                 OHLCQuote quote = entry.getValue();
 
+                if (quote == null || quote.getOhlc() == null) {
+                    log.warn("cacheOHLCData", "Skipping symbol {} due to missing OHLC data", symbol);
+                    continue;
+                }
+
                 // Create OHLCV from OHLCQuote
                 OHLCV ohlcv = StockCacheService.createPricePoint(
                         LocalDateTime.now(),
                         quote.getOhlc().getOpen(),
                         quote.getOhlc().getHigh(),
-                        quote.getOhlc().getClose(),
+                        quote.getOhlc().getLow(),
                         quote.getOhlc().getClose(),
                         0L,
                         quote.getLastPrice());
@@ -162,10 +167,18 @@ public class MarketDataCacheService {
 
     public Map<String, OHLCQuote> getOHLCFromCache(List<String> tradingSymbols, TimeFrame timeFrame) {
         try {
-            // Clean symbols (remove NSE: prefix if present AND filter out index symbols)
-            // Clean symbols (remove NSE: prefix if present)
+            // Clean symbols (remove exchange prefixes)
             List<String> cleanSymbols = tradingSymbols.stream()
-                    .map(symbol -> symbol.replace("NSE:", "").replace("NSE_EQ:", ""))
+                    .map(symbol -> {
+                        String clean = symbol;
+                        if (clean.contains("|")) {
+                            clean = clean.substring(clean.indexOf("|") + 1);
+                        }
+                        if (clean.contains(":")) {
+                            clean = clean.substring(clean.indexOf(":") + 1);
+                        }
+                        return clean.toUpperCase().trim();
+                    })
                     .collect(Collectors.toList());
 
             if (cleanSymbols.isEmpty()) {
@@ -260,7 +273,14 @@ public class MarketDataCacheService {
             return;
         }
         for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
-            String symbol = entry.getKey().toUpperCase().trim();
+            String symbol = entry.getKey();
+            if (symbol.contains("|")) {
+                symbol = symbol.substring(symbol.indexOf("|") + 1);
+            }
+            if (symbol.contains(":")) {
+                symbol = symbol.substring(symbol.indexOf(":") + 1);
+            }
+            symbol = symbol.toUpperCase().trim();
             String latestKey = "market:latest-price:" + symbol;
             try {
                 String json = redisTemplate.opsForValue().get(latestKey);
@@ -763,6 +783,9 @@ public class MarketDataCacheService {
                 if (symbol.contains("|")) {
                     symbol = symbol.substring(symbol.indexOf("|") + 1);
                 }
+                if (symbol.contains(":")) {
+                    symbol = symbol.substring(symbol.indexOf(":") + 1);
+                }
                 symbol = symbol.toUpperCase().trim();
 
                 OHLCQuote quote = entry.getValue();
@@ -815,6 +838,9 @@ public class MarketDataCacheService {
                 String cleanSymbol = symbol;
                 if (cleanSymbol.contains("|")) {
                     cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf("|") + 1);
+                }
+                if (cleanSymbol.contains(":")) {
+                    cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf(":") + 1);
                 }
                 cleanSymbol = cleanSymbol.toUpperCase().trim();
 

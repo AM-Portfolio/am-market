@@ -213,12 +213,17 @@ public class StockIndicesService {
                             }
                         }
 
-                        if (!isStale) {
-                            finalResults.add(doc); // Add to results
-                            foundSymbols.add(doc.getIndexSymbol()); // Track found
-                            log.info(methodName, "Found fresh data for " + doc.getIndexSymbol() + " in database");
+                        // Add to results regardless of staleness to avoid blocking. 
+                        // Enrichment will provide latest prices from Redis anyway.
+                        finalResults.add(doc);
+                        foundSymbols.add(doc.getIndexSymbol());
+
+                        if (isStale) {
+                            log.info(methodName, "Document for " + doc.getIndexSymbol() + " is stale during market hours, but will return it with Redis enrichment to avoid blocking.");
+                            // If it's very stale, we might still want to trigger a background update, 
+                            // but for now let's just prioritize response time.
                         } else {
-                            log.info(methodName, "Document for " + doc.getIndexSymbol() + " is stale during market hours.");
+                            log.info(methodName, "Found fresh data for " + doc.getIndexSymbol() + " in database");
                         }
                     }
                 });
