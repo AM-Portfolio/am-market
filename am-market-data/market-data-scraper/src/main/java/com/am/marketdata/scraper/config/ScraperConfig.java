@@ -44,10 +44,11 @@ public class ScraperConfig {
         options.addArguments("--disable-gpu");
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
+        options.addArguments("--remote-allow-origins=*");
+        options.addArguments("--window-size=1920,1080");
         
         // Additional settings to improve reliability
         options.addArguments("--disable-blink-features=AutomationControlled");
-        options.addArguments("--start-maximized");
         options.addArguments("--enable-javascript");
         options.addArguments("--disable-extensions");
         options.addArguments("--disable-popup-blocking");
