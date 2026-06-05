@@ -46,6 +46,8 @@ public class ScraperConfig {
         options.addArguments("--disable-dev-shm-usage");
         options.addArguments("--remote-allow-origins=*");
         options.addArguments("--window-size=1920,1080");
+        options.addArguments("--user-data-dir=/tmp/chrome-user-data");
+        options.addArguments("--disk-cache-dir=/tmp/chrome-cache");
         
         // Additional settings to improve reliability
         options.addArguments("--disable-blink-features=AutomationControlled");
