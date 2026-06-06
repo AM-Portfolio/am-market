@@ -35,6 +35,10 @@ vault:
       path: "apps/data/preprod/services/am-market-data"
     scheduler-config:
       path: "apps/data/preprod/services/am-market-data-scheduler"
+    identity-oidc:
+      path: "apps/data/preprod/services/am-identity"
+    service-oauth:
+      path: "apps/data/preprod/services/am-market-data"
 
 # Application Configuration
 config:

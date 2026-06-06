@@ -18,6 +18,7 @@ import jakarta.annotation.PostConstruct;
 
 @Configuration
 @EnableWebSecurity
+@ConditionalOnProperty(prefix = "am.security", name = "enabled", havingValue = "false", matchIfMissing = true)
 public class SecurityConfig {
 
     private final AppLogger log = AppLogger.getLogger();
