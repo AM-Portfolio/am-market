@@ -100,3 +100,8 @@ config:
 
 env:
   SPRING_PROFILES_ACTIVE: "dev,security"
+  # These keys are missing from Vault (apps/data/dev/services/am-market-data-scheduler).
+  # Explicitly set here to prevent <no value> boolean parse crash on startup.
+  SCHEDULER_INGESTION_POLL_ENABLED: "false"
+  SCHEDULER_INGESTION_POLL_HISTORICAL: "false"
+  SCHEDULER_INGESTION_USE_WEBSOCKET: "true"
