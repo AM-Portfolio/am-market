@@ -357,18 +357,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         }
 
         try {
-            // First try to get from cache
-            HistoricalData cachedData = marketDataCacheService.getHistoricalDataFromCache(
-                    symbol, interval, fromDate, toDate);
-
-            if (cachedData != null && cachedData.getDataPoints() != null && !cachedData.getDataPoints().isEmpty()) {
-                log.debug("Retrieved historical data from cache for symbol: {}", symbol);
-                return cachedData;
-            }
-
-            // If not in cache, try to get from database
-            log.debug("No historical data found in cache, fetching from database for symbol: {}", symbol);
-
             // Clean symbol (remove NSE: prefix if present)
             String cleanSymbol = symbol.replace("NSE:", "");
 
@@ -384,6 +372,24 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                 from = LocalDate.parse(fromDate, alternativeFormatter);
                 to = LocalDate.parse(toDate, alternativeFormatter);
             }
+
+            // First try to get from cache
+            HistoricalData cachedData = marketDataCacheService.getHistoricalDataFromCache(
+                    symbol, interval, fromDate, toDate);
+
+            if (cachedData != null && cachedData.getDataPoints() != null && !cachedData.getDataPoints().isEmpty()) {
+                // Verify that the cached data actually covers the requested date range
+                if (validateDateRangeCoverage(cachedData, from, to)) {
+                    log.debug("Retrieved historical data from cache for symbol: {}", symbol);
+                    return cachedData;
+                } else {
+                    log.info("Cached data for symbol {} exists but does not cover the requested range ({} to {}). Bypassing cache to query database.", 
+                            symbol, fromDate, toDate);
+                }
+            }
+
+            // If not in cache or cache range is invalid, try to get from database
+            log.debug("No valid historical data found in cache, fetching from database for symbol: {}", symbol);
 
             // Map interval to the format expected by the database service
             String mappedInterval = interval.name().toLowerCase();
@@ -412,5 +418,35 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             log.error("Error retrieving historical data for symbol {}: {}", symbol, e.getMessage(), e);
             return null;
         }
+    }
+
+    /**
+     * Verifies if the cached historical data covers the requested date range within a tolerance window
+     */
+    private boolean validateDateRangeCoverage(HistoricalData data, LocalDate requiredStart, LocalDate requiredEnd) {
+        if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
+            return false;
+        }
+
+        List<com.am.common.investment.model.historical.OHLCVTPoint> points = data.getDataPoints();
+        
+        // Ensure points are sorted chronologically
+        points.sort(java.util.Comparator.comparing(com.am.common.investment.model.historical.OHLCVTPoint::getTime));
+
+        java.time.LocalDateTime firstPointTime = points.get(0).getTime();
+        java.time.LocalDateTime lastPointTime = points.get(points.size() - 1).getTime();
+
+        long dataStartMs = firstPointTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long dataEndMs = lastPointTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+
+        long requiredStartMs = requiredStart.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long requiredEndMs = requiredEnd.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+
+        long toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for holidays/weekends
+
+        boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
+        boolean missingRecentData = dataEndMs < (requiredEndMs - toleranceMs);
+
+        return !missingEarlyData && !missingRecentData;
     }
 }
