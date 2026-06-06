@@ -33,6 +33,10 @@ vault:
       path: "apps/data/dev/services/am-market-data"
     scheduler-config:
       path: "apps/data/dev/services/am-market-data-scheduler"
+    identity-oidc:
+      path: "apps/data/dev/services/am-identity"
+    service-oauth:
+      path: "apps/data/dev/services/am-market-data"
 
 hostAliases:
   - ip: "203.174.22.129"
@@ -95,4 +99,4 @@ config:
       enabled: false
 
 env:
-  SPRING_PROFILES_ACTIVE: "dev"
+  SPRING_PROFILES_ACTIVE: "dev,security"
