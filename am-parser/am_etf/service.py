@@ -36,6 +36,7 @@ class ETFService:
             )
             self._log.info("Mongo connect target=%s db=%s", mongo_target, self.db_name)
             self._client = get_async_mongo_client(self.mongo_uri)
+
             self._db = self._client[self.db_name]
             self._collection = self._db.etfs
             # Indexes for lookup & uniqueness

@@ -89,7 +89,7 @@ URL: http://127.0.0.1:8001/portfolios/{portfolio_id}
 ```
 URL: http://127.0.0.1:8081
 Username: admin
-Password: password123
+Password: <REDACTED_PASSWORD>
 
 Navigate to:
 Database: mutual_funds → Collection: portfolios
@@ -97,12 +97,12 @@ Database: mutual_funds → Collection: portfolios
 
 ### **Option B: Command Line Query**
 ```powershell
-docker exec -it am_parser_mongodb mongosh --authenticationDatabase admin -u admin -p password123 mutual_funds --eval "db.portfolios.find().pretty()"
+docker exec -it am_parser_mongodb mongosh --authenticationDatabase admin -u admin -p <REDACTED_PASSWORD> mutual_funds --eval "db.portfolios.find().pretty()"
 ```
 
 ### **Option C: Quick Portfolio Summary**
 ```powershell
-docker exec -it am_parser_mongodb mongosh --authenticationDatabase admin -u admin -p password123 mutual_funds --eval "db.portfolios.find({}, {mutual_fund_name: 1, portfolio_date: 1, total_holdings: 1, _id: 1}).pretty()"
+docker exec -it am_parser_mongodb mongosh --authenticationDatabase admin -u admin -p <REDACTED_PASSWORD> mutual_funds --eval "db.portfolios.find({}, {mutual_fund_name: 1, portfolio_date: 1, total_holdings: 1, _id: 1}).pretty()"
 ```
 
 ---

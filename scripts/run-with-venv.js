@@ -33,6 +33,7 @@ function loadDotEnv(dir) {
   const out = {};
   if (!envPath) return out;
   for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+
     const t = line.trim();
     if (!t || t.startsWith("#")) continue;
     const i = t.indexOf("=");

@@ -2,7 +2,9 @@ package com.am.marketdata.service;
 
 import com.am.common.investment.model.equity.EquityPrice;
 import com.am.common.investment.model.historical.HistoricalData;
+import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.service.EquityService;
+import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.common.investment.service.historical.HistoricalDataService;
 import com.am.marketdata.common.mapper.OHLCMapper;
 import com.am.marketdata.service.MarketDataPersistenceService;
@@ -41,17 +43,20 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
     private final ThreadPoolTaskExecutor taskExecutor;
     private final EquityService equityService;
     private final OHLCMapper ohlcMapper;
+    private final StockIndicesMarketDataService stockIndicesMarketDataService;
 
     public MarketDataPersistenceService(
             HistoricalDataService historicalDataService,
             MarketDataCacheService marketDataCacheService,
             EquityService equityService,
             OHLCMapper ohlcMapper,
+            StockIndicesMarketDataService stockIndicesMarketDataService,
             @Qualifier("marketDataPersistenceExecutor") ThreadPoolTaskExecutor taskExecutor) {
         this.historicalDataService = historicalDataService;
         this.marketDataCacheService = marketDataCacheService;
         this.equityService = equityService;
         this.ohlcMapper = ohlcMapper;
+        this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.taskExecutor = taskExecutor;
     }
 
@@ -77,23 +82,94 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         return CompletableFuture.runAsync(() -> {
             try {
                 if ("MOCK".equalsIgnoreCase(provider)) {
-                    log.info("Simulated/MOCK stream - bypassing MongoDB database save to prevent pollution");
+                    log.info("Simulated/MOCK stream - bypassing MongoDB database and Cache save to prevent pollution");
                 } else {
-                    // First save to database using EquityService
+                    // 1. Save to database using EquityService (for individual stocks)
                     log.debug("Saving {} OHLC data points to database", ohlcData.size());
                     List<EquityPrice> equityPrices = ohlcMapper.toEquityPriceList(ohlcData, provider);
                     equityService.saveAllPrices(equityPrices);
                     log.debug("Successfully saved {} equity prices to database", equityPrices.size());
-                }
 
-                // Then update the cache with default timeframe (1D for current day data)
-                marketDataCacheService.cacheOHLCData(ohlcData, TimeFrame.DAY);
-                log.debug("Successfully cached OHLC data for {} symbols", ohlcData.size());
+                    // 2. Update the cache with default timeframe (1D for current day data)
+                    marketDataCacheService.cacheOHLCData(ohlcData, TimeFrame.DAY);
+                    log.debug("Successfully cached OHLC data for {} symbols", ohlcData.size());
+
+                    // 3. Unified Persistence: If symbols are indices, update the permanent Index Database
+                    updateStockIndicesIfNecessary(ohlcData);
+                }
             } catch (Exception e) {
                 log.error("Error saving OHLC data: {}", e.getMessage(), e);
                 throw new RuntimeException("Failed to save OHLC data", e);
             }
         }, taskExecutor);
+    }
+
+    /**
+     * Updates the permanent StockIndicesMarketData collection if any symbols in the map are indices.
+     * This bridges the gap between Streaming/Fallback data and the Index Page.
+     */
+    private void updateStockIndicesIfNecessary(Map<String, OHLCQuote> ohlcData) {
+        // Known list of index patterns to avoid expensive DB lookups for every stock tick
+        List<String> indexHints = Arrays.asList("NIFTY", "SENSEX", "INDIA VIX", "BANKNIFTY", "FINNIFTY");
+
+        for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
+            String rawSymbol = entry.getKey();
+            
+            // Optimization: Only check DB if it looks like an index
+            boolean mightBeIndex = indexHints.stream().anyMatch(hint -> rawSymbol.toUpperCase().contains(hint));
+            if (!mightBeIndex) continue;
+
+            // Normalize symbol
+            String symbol = rawSymbol;
+            if (symbol.contains("|")) {
+                symbol = symbol.substring(symbol.indexOf("|") + 1);
+            }
+            if (symbol.contains(":")) {
+                symbol = symbol.substring(symbol.indexOf(":") + 1);
+            }
+            symbol = symbol.toUpperCase().trim();
+
+            try {
+                StockIndicesMarketData indexData = stockIndicesMarketDataService.findByIndexSymbol(symbol);
+                if (indexData != null) {
+                    OHLCQuote quote = entry.getValue();
+                    var meta = indexData.getMetadata();
+                    if (meta == null) {
+                        meta = new com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata();
+                        indexData.setMetadata(meta);
+                    }
+
+                    // Update prices
+                    meta.setLast(quote.getLastPrice());
+                    if (quote.getOhlc() != null) {
+                        meta.setOpen(quote.getOhlc().getOpen());
+                        meta.setHigh(quote.getOhlc().getHigh());
+                        meta.setLow(quote.getOhlc().getLow());
+                    }
+
+                    // Recalculate change stats
+                    Double prevClose = quote.getPreviousClose();
+                    if (prevClose == 0.0 && meta.getPreviousClose() != null) {
+                        prevClose = meta.getPreviousClose();
+                    }
+
+                    if (prevClose != null && prevClose != 0) {
+                        double change = quote.getLastPrice() - prevClose;
+                        meta.setChange(change);
+                        meta.setPercChange((change / prevClose) * 100.0);
+                        meta.setPreviousClose(prevClose);
+                    }
+                    
+                    meta.setTimeVal(String.valueOf(System.currentTimeMillis()));
+
+                    // Save back to permanent DB
+                    stockIndicesMarketDataService.save(indexData);
+                    log.debug("Unified Persistence: Updated permanent Index DB for symbol: {}", symbol);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to update permanent Index DB for symbol: {}. Error: {}", symbol, e.getMessage());
+            }
+        }
     }
 
     public CompletableFuture<Void> saveHistoricalData(String symbol, TimeFrame interval,
@@ -281,18 +357,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         }
 
         try {
-            // First try to get from cache
-            HistoricalData cachedData = marketDataCacheService.getHistoricalDataFromCache(
-                    symbol, interval, fromDate, toDate);
-
-            if (cachedData != null && cachedData.getDataPoints() != null && !cachedData.getDataPoints().isEmpty()) {
-                log.debug("Retrieved historical data from cache for symbol: {}", symbol);
-                return cachedData;
-            }
-
-            // If not in cache, try to get from database
-            log.debug("No historical data found in cache, fetching from database for symbol: {}", symbol);
-
             // Clean symbol (remove NSE: prefix if present)
             String cleanSymbol = symbol.replace("NSE:", "");
 
@@ -308,6 +372,24 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                 from = LocalDate.parse(fromDate, alternativeFormatter);
                 to = LocalDate.parse(toDate, alternativeFormatter);
             }
+
+            // First try to get from cache
+            HistoricalData cachedData = marketDataCacheService.getHistoricalDataFromCache(
+                    symbol, interval, fromDate, toDate);
+
+            if (cachedData != null && cachedData.getDataPoints() != null && !cachedData.getDataPoints().isEmpty()) {
+                // Verify that the cached data actually covers the requested date range
+                if (validateDateRangeCoverage(cachedData, from, to)) {
+                    log.debug("Retrieved historical data from cache for symbol: {}", symbol);
+                    return cachedData;
+                } else {
+                    log.info("Cached data for symbol {} exists but does not cover the requested range ({} to {}). Bypassing cache to query database.", 
+                            symbol, fromDate, toDate);
+                }
+            }
+
+            // If not in cache or cache range is invalid, try to get from database
+            log.debug("No valid historical data found in cache, fetching from database for symbol: {}", symbol);
 
             // Map interval to the format expected by the database service
             String mappedInterval = interval.name().toLowerCase();
@@ -336,5 +418,35 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             log.error("Error retrieving historical data for symbol {}: {}", symbol, e.getMessage(), e);
             return null;
         }
+    }
+
+    /**
+     * Verifies if the cached historical data covers the requested date range within a tolerance window
+     */
+    private boolean validateDateRangeCoverage(HistoricalData data, LocalDate requiredStart, LocalDate requiredEnd) {
+        if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
+            return false;
+        }
+
+        List<com.am.common.investment.model.historical.OHLCVTPoint> points = data.getDataPoints();
+        
+        // Ensure points are sorted chronologically
+        points.sort(java.util.Comparator.comparing(com.am.common.investment.model.historical.OHLCVTPoint::getTime));
+
+        java.time.LocalDateTime firstPointTime = points.get(0).getTime();
+        java.time.LocalDateTime lastPointTime = points.get(points.size() - 1).getTime();
+
+        long dataStartMs = firstPointTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long dataEndMs = lastPointTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+
+        long requiredStartMs = requiredStart.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long requiredEndMs = requiredEnd.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+
+        long toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for holidays/weekends
+
+        boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
+        boolean missingRecentData = dataEndMs < (requiredEndMs - toleranceMs);
+
+        return !missingEarlyData && !missingRecentData;
     }
 }

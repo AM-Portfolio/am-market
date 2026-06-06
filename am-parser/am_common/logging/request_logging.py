@@ -10,14 +10,11 @@ def setup_parser_logging(level: str = "INFO") -> None:
     global _CONFIGURED
     if _CONFIGURED:
         return
-    log_level = getattr(logging, (level or "INFO").upper(), logging.INFO)
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
-        datefmt="%H:%M:%S",
-        stream=sys.stdout,
-        force=True,
-    )
+    from am_common.observability.config import ObservabilityConfig
+    from am_common.observability.logger_config import configure_logging
+    
+    config = ObservabilityConfig(log_level=level, log_format="json")
+    configure_logging(config)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     _CONFIGURED = True
 

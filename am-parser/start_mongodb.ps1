@@ -18,7 +18,7 @@ docker-compose ps
 # Show connection info
 Write-Host ""
 Write-Host "✅ Environment Ready!" -ForegroundColor Green
-Write-Host "🗄️  MongoDB: mongodb://admin:password123@localhost:27017" -ForegroundColor White
+Write-Host "🗄️  MongoDB: mongodb://admin:<REDACTED_PASSWORD>@localhost:27017" -ForegroundColor White
 Write-Host "🌐 Web UI: http://localhost:8081" -ForegroundColor White
 Write-Host "   Username: webadmin" -ForegroundColor Gray
 Write-Host "   Password: webpass123" -ForegroundColor Gray

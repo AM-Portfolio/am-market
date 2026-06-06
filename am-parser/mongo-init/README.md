@@ -7,7 +7,7 @@ This directory contains MongoDB setup for AM Parser using Docker Compose.
 ### MongoDB (Port 27017)
 - **Image**: MongoDB 7.0
 - **Username**: admin
-- **Password**: password123
+- **Password**: <REDACTED_PASSWORD>
 - **Database**: mutual_funds
 - **Data Persistence**: Yes (Docker volumes)
 
@@ -45,7 +45,7 @@ docker-compose down -v
 mongo_uri = "mongodb://localhost:27017"
 
 # With authentication
-mongo_uri = "mongodb://admin:password123@localhost:27017"
+mongo_uri = "mongodb://admin:<REDACTED_PASSWORD>@localhost:27017"
 ```
 
 ### For AM Parser Service
@@ -57,7 +57,7 @@ service = create_mutual_fund_service()
 
 # Custom connection
 service = create_mutual_fund_service(
-    mongo_uri="mongodb://admin:password123@localhost:27017",
+    mongo_uri="mongodb://admin:<REDACTED_PASSWORD>@localhost:27017",
     db_name="mutual_funds"
 )
 ```

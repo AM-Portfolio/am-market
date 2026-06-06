@@ -6,6 +6,7 @@ import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.log.AppLogger;
 import com.am.marketdata.common.service.MarketDataPublisher;
 import com.am.marketdata.service.MarketDataPersistenceService;
+import com.am.marketdata.service.MarketDataCacheService;
 import com.am.marketdata.service.SymbolOrchestratorService;
 import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
 import java.util.List;
@@ -39,6 +40,7 @@ public class StreamerManager implements StreamerListener {
     private final MarketDataProcessor processor;
     private final SymbolOrchestratorService symbolService;
     private final MarketDataPublisher publisher; // For WebSocket broadcasting
+    private final MarketDataCacheService cacheService;
 
     private Set<String> subscribedSymbols = new HashSet<>();
     private static final String DEFAULT_MODE = "full";
@@ -48,12 +50,14 @@ public class StreamerManager implements StreamerListener {
             MarketDataPersistenceService persistenceService,
             MarketDataProcessor processor,
             SymbolOrchestratorService symbolService,
-            MarketDataPublisher publisher) {
+            MarketDataPublisher publisher,
+            MarketDataCacheService cacheService) {
         this.streamer = streamer;
         this.persistenceService = persistenceService;
         this.processor = processor;
         this.symbolService = symbolService;
         this.publisher = publisher;
+        this.cacheService = cacheService;
     }
 
     // @PostConstruct
@@ -209,7 +213,8 @@ public class StreamerManager implements StreamerListener {
         // Service layer expects ONLY common DTOs (UpstoxFeedResponse)
         // Provider layer is responsible for converting proto → common DTO
 
-        // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 or Map<String, OHLCQuote>
+        // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 or Map<String,
+        // OHLCQuote>
         if (message instanceof MarketUpdateV3) {
             try {
                 processUpdateForPublisher((MarketUpdateV3) message);
@@ -247,6 +252,14 @@ public class StreamerManager implements StreamerListener {
                                 .build();
                         quotes.put(symbol, changeObj);
                     }
+                }
+
+                // Cache live tick prices (lastPrice + previousClose) to Redis Path 2
+                // market:latest-price:<SYMBOL> so that page refreshes pick up the latest price.
+                try {
+                    cacheService.cacheLatestPrices(ohlcMap);
+                } catch (Exception e) {
+                    log.error("StreamerManager", "Error caching latest prices to Redis", e);
                 }
 
                 if (!quotes.isEmpty()) {

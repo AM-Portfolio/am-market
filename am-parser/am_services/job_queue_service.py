@@ -19,9 +19,9 @@ from am_common.job_models import BackgroundJob, JobStatus, JobType, JobProgress,
 from am_persistence.mutual_fund_service import create_mutual_fund_service
 from am_services.event_logger import EventLogger
 from am_common.event_models import EventType
-from am_common.logging.request_logging import get_logger
+from am_common.observability import get_logger, bind_context
 
-log = get_logger("job_queue")
+logger = get_logger("am_services.job_queue_service")
 
 
 class JobQueue:
@@ -59,7 +59,7 @@ class JobQueue:
         collection = self.mutual_fund_service.database[self.collection_name]
         await collection.insert_one(job.to_mongo_document())
         
-        log.info("create_job: id=%s type=%s user=%s", job_id, job_type, user_id)
+        logger.info("Created background job successfully", extra={"job_id": job_id, "job_type": job_type.value if hasattr(job_type, 'value') else str(job_type)})
         # Log event
         await self.event_logger.emit(
             EventType.JOB_CREATED,
@@ -100,11 +100,11 @@ class JobQueue:
             ]
         }).to_list(None)
         
-        log.info("Found %s potentially stuck jobs", len(stuck_jobs))
-
+        logger.info(f"Found potentially stuck jobs", extra={"stuck_count": len(stuck_jobs)})
+        
         for job_doc in stuck_jobs:
             job_id = job_doc["_id"]
-            log.info("Recovering stuck job: %s", job_id)
+            logger.warning(f"Recovering stuck job", extra={"job_id": job_id})
             
             # Mark as failed with recovery message
             await collection.update_one(
@@ -142,7 +142,7 @@ class JobQueue:
                     }
                 }
             )
-            log.info("Fixed stuck job %s - marked as failed", job_id)
+            logger.info("Manually fixed stuck job: marked as failed", extra={"job_id": job_id})
         else:
             # Reset to pending to allow retry
             await collection.update_one(
@@ -159,7 +159,7 @@ class JobQueue:
                     }
                 }
             )
-            log.info("Reset job %s to pending for retry", job_id)
+            logger.info("Reset job to pending for retry successfully", extra={"job_id": job_id})
     
     async def update_job_status(
         self, 
@@ -215,11 +215,7 @@ class JobQueue:
         # Basic validation to avoid exceptions on malformed URLs
         url = job.callback_url.strip()
         if not (url.startswith("http://") or url.startswith("https://")):
-            log.info(
-                "Skipping webhook for job %s: invalid URL '%s'. Include http:// or https://",
-                job_id,
-                url,
-            )
+            logger.warning("Skipping webhook: invalid URL. Include http:// or https://", extra={"job_id": job_id, "url": url})
             try:
                 await self.event_logger.emit(
                     EventType.WEBHOOK_SKIPPED,
@@ -253,7 +249,7 @@ class JobQueue:
                     headers=headers,
                     timeout=30.0
                 )
-                log.info("Webhook sent for job %s: %s", job_id, response.status_code)
+                logger.info("Webhook sent successfully for job", extra={"job_id": job_id, "status_code": response.status_code})
                 try:
                     await self.event_logger.emit(
                         EventType.WEBHOOK_SENT,
@@ -265,7 +261,7 @@ class JobQueue:
                     pass
                 
         except Exception as e:
-            log.warning("Failed to send webhook for job %s: %s", job_id, e)
+            logger.error("Failed to send webhook for job", exc_info=True, extra={"job_id": job_id})
             try:
                 await self.event_logger.emit(
                     EventType.WEBHOOK_FAILED,
@@ -279,7 +275,7 @@ class JobQueue:
     
     async def start_job_processor(self):
         """Start the background job processor"""
-        log.info("Starting background job processor")
+        logger.info("Starting background job processor...")
         
         while True:
             try:
@@ -298,13 +294,13 @@ class JobQueue:
                         # Start processing the job
                         task = asyncio.create_task(self._process_job(pending_job))
                         self.running_jobs[pending_job.job_id] = task
-                        log.info("Processing job: id=%s type=%s", pending_job.job_id, pending_job.job_type)
+                        logger.info("Started processing background job", extra={"job_id": pending_job.job_id})
                 
                 # Wait before checking again
                 await asyncio.sleep(5)
                 
             except Exception as e:
-                log.exception("Job processor loop error: %s", e)
+                logger.error("Error in job processor", exc_info=True)
                 await asyncio.sleep(10)
     
     async def _get_next_pending_job(self) -> Optional[BackgroundJob]:
@@ -335,7 +331,7 @@ class JobQueue:
                 raise ValueError(f"Unknown job type: {job.job_type}")
                 
         except Exception as e:
-            log.exception("Job %s failed: %s", job.job_id, e)
+            logger.error(f"Job {job.job_id} failed", exc_info=True, extra={"job_id": job.job_id})
             await self.update_job_status(
                 job.job_id, 
                 JobStatus.FAILED, 
@@ -445,7 +441,7 @@ class JobQueue:
                 try:
                     if main_file.file_path and Path(main_file.file_path).exists():
                         Path(main_file.file_path).unlink()
-                        log.info("Deleted parent Excel from disk: %s", main_file.file_path)
+                        logger.info("Deleted parent Excel from disk successfully", extra={"file_path": main_file.file_path})
                         try:
                             await self.event_logger.emit(
                                 EventType.SHEET_DELETED_DISK,
@@ -457,11 +453,7 @@ class JobQueue:
                         except Exception:
                             pass
                 except Exception as parent_disk_err:
-                    log.warning(
-                        "Could not delete parent Excel %s: %s",
-                        main_file.file_path,
-                        parent_disk_err,
-                    )
+                    logger.warning(f"Could not delete parent Excel from disk: {parent_disk_err}", extra={"file_path": main_file.file_path})
                 # Keep DB record for tracking
                 final_result["parent_deleted"] = {"disk": True, "db": False}
             
@@ -472,7 +464,7 @@ class JobQueue:
                 result=final_result
             )
             
-            log.info("Excel processing job completed: %s", job.job_id)
+            logger.info("Excel processing background job completed successfully", extra={"job_id": job.job_id})
             
         except Exception as e:
             await self.update_job_status(
@@ -487,7 +479,7 @@ class JobQueue:
         from am_etf.service import ETFService
         from am_etf.smart_holdings_service import SmartETFHoldingsService
 
-        log.info("_process_etf_holdings_job: job_id=%s", job.job_id)
+        logger.info("_process_etf_holdings_job: job_id=%s", job.job_id)
         
         # Initialize services
         etf_service = ETFService()
@@ -552,7 +544,7 @@ class JobQueue:
                 progress.current_item = f"{symbol} ({isin})"
                 await self.update_job_status(job.job_id, JobStatus.RUNNING, progress=progress)
                 
-                log.info("Smart fetching holdings for %s", symbol)
+                logger.info("Smart fetching holdings", extra={"symbol": symbol, "isin": isin})
                 
                 result = await holdings_service.smart_fetch_and_store_holdings(
                     isin=isin,
@@ -585,12 +577,11 @@ class JobQueue:
                 result=final_result
             )
             
-            log.info(
-                "ETF holdings job completed: id=%s cache_hit=%s savings=%s",
-                job.job_id,
-                final_result.get("cache_hit_rate", "N/A"),
-                final_result.get("api_call_savings", "N/A"),
-            )
+            logger.info("ETF holdings job completed", extra={"job_id": job.job_id})
+            logger.info("Cache performance stats", extra={
+                "cache_hit_rate": final_result.get('cache_hit_rate', 'N/A'),
+                "api_call_savings": final_result.get('api_call_savings', 'N/A')
+            })
             
         except Exception as e:
             await self.update_job_status(
@@ -616,7 +607,7 @@ async def get_job_queue() -> JobQueue:
 
         refresh_settings_from_dotenv()
         mongodb_uri = get_mongo_uri()
-        log.info("job_queue mongo_target=%s", mongodb_uri.split("@")[-1] if "@" in mongodb_uri else mongodb_uri)
+        logger.info("job_queue mongo_target=%s", mongodb_uri.split("@")[-1] if "@" in mongodb_uri else mongodb_uri)
         db_name = settings.mongo_db
         job_queue = JobQueue(mongodb_uri, db_name)
         
@@ -624,6 +615,6 @@ async def get_job_queue() -> JobQueue:
         try:
             await job_queue.recover_stuck_jobs()
         except Exception as e:
-            log.warning("Could not recover stuck jobs: %s", e)
+            logger.warning(f"Could not recover stuck jobs: {e}")
     
     return job_queue

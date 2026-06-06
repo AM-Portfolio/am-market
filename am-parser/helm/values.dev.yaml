@@ -10,22 +10,20 @@ resources:
     cpu: 500m
     memory: 512Mi
   requests:
-    cpu: 250m
+    cpu: 50m
     memory: 256Mi
 
-# Vault configuration
 vault:
   secretPaths:
     auth:
       path: apps/data/dev/services/am-auth
-    logging:
-      path: apps/data/dev/services/logging
     market:
       path: apps/data/dev/services/am-market-data
     mongodb: 
       path: "apps/data/dev/infra/mongodb"
     together:
       path: "apps/data/dev/infra/shared-api"
+    # Add other secret paths as needed
 
 hostAliases:
   - ip: "203.174.22.129"
@@ -53,7 +51,7 @@ ingress:
   className: "traefik"
   annotations:
     kubernetes.io/ingress.class: "traefik"
-    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.entrypoints: "web,websecure"
     traefik.ingress.kubernetes.io/router.middlewares: >-
       am-apps-dev-dev-global-cors@kubernetescrd,
       am-apps-dev-dev-strip-prefix@kubernetescrd

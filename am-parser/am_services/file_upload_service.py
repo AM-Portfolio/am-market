@@ -14,6 +14,9 @@ import openpyxl
 
 from am_common.upload_models import FileUpload, FileType, ProcessingStatus, SheetInfo
 from am_configs.settings import settings
+from am_common.observability import get_logger
+
+logger = get_logger("am_services.file_upload_service")
 
 
 class FileUploadService:
@@ -25,11 +28,14 @@ class FileUploadService:
         
         # Create directories ONLY in local environment to avoid permission errors in cluster
         if settings.environment == "local":
-            print(f"INFO: Local environment detected, ensuring directories exist: {self.upload_dir}, {self.sheets_dir}")
+            logger.info("Local environment detected, ensuring directories exist", extra={
+                "upload_dir": str(self.upload_dir),
+                "sheets_dir": str(self.sheets_dir)
+            })
             self.upload_dir.mkdir(parents=True, exist_ok=True)
             self.sheets_dir.mkdir(parents=True, exist_ok=True)
         else:
-            print(f"INFO: Non-local environment ({settings.environment}) detected, skipping directory creation.")
+            logger.info(f"Non-local environment ({settings.environment}) detected, skipping directory creation.")
         
     def generate_unique_id(self) -> str:
         """Generate a unique ID for files"""

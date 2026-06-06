@@ -3,6 +3,10 @@ package com.am.marketdata.api.service;
 import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.marketdata.scraper.service.MarketDataProcessingService;
+import com.am.marketdata.service.MarketDataCacheService;
+import com.am.marketdata.common.model.OHLCQuote;
+import com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 
 import com.am.marketdata.common.log.AppLogger;
@@ -27,6 +31,7 @@ public class StockIndicesService {
     private final MarketDataProcessingService marketDataProcessingService;
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final MarketDataFetchService marketDataCacheService;
+    private final MarketDataCacheService redisCacheService;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
     @Value("${market.data.cache.enabled:true}")
@@ -39,27 +44,113 @@ public class StockIndicesService {
     public List<StockIndicesMarketData> getLatestIndicesData(List<String> indexSymbols, boolean forceRefresh) {
         String methodName = "getLatestIndicesData";
         try {
-            // 1. Try to get from cache first
-            List<StockIndicesMarketData> cachedResult = checkCache(indexSymbols, forceRefresh, methodName);
-            if (!cachedResult.isEmpty()) {
-                return cachedResult;
-            }
-
-            // 2. If cache miss, check database for existing data and identify what's
-            // missing
             List<StockIndicesMarketData> finalResults = new ArrayList<>();
             List<String> symbolsToProcess = new ArrayList<>();
+
+            // 1. Load from MongoDB Database
             checkDatabase(indexSymbols, forceRefresh, finalResults, symbolsToProcess, methodName);
 
-            // 4. Log summary
-            if (finalResults.isEmpty()) {
-                // 3. Fetch fresh data for missing symbols from API/Scraper
-                if (!symbolsToProcess.isEmpty()) {
+            // 2. Scrape only if MongoDB document is completely missing (constituent document repair)
+            if (!symbolsToProcess.isEmpty()) {
+                if (forceRefresh) {
+                    log.info(methodName, "Force refresh requested. Triggering fresh fetch/scraper.");
+                    fetchFreshData(symbolsToProcess, finalResults, methodName);
+                } else {
+                    log.info(methodName, "Constituent documents missing for some symbols. Triggering repair scraper.");
                     fetchFreshData(symbolsToProcess, finalResults, methodName);
                 }
-            } else {
-                log.info(methodName, String.format("Retrieved data for %d/%d symbols (fresh/db)", finalResults.size(),
-                        indexSymbols.size()));
+            }
+
+            // 3. Enrich with Redis latest streaming prices or live prices API
+            Set<String> requestedSymbols = new HashSet<>(indexSymbols);
+            Map<String, OHLCQuote> latestPrices = redisCacheService.getLatestPrices(requestedSymbols);
+
+            if (latestPrices == null) {
+                latestPrices = new java.util.HashMap<>();
+            }
+
+            // Fallback for missing symbols to marketDataCacheService.getLivePrices
+            Set<String> missingSymbols = new HashSet<>();
+            for (String sym : requestedSymbols) {
+                if (!latestPrices.containsKey(sym) || latestPrices.get(sym).getLastPrice() == 0.0) {
+                    missingSymbols.add(sym);
+                }
+            }
+
+            if (!missingSymbols.isEmpty()) {
+                try {
+                    Map<String, Object> liveResponse = marketDataCacheService.getLivePrices(missingSymbols, true, forceRefresh);
+                    if (liveResponse != null && liveResponse.get("prices") instanceof List) {
+                        List<?> pricesList = (List<?>) liveResponse.get("prices");
+                        for (Object obj : pricesList) {
+                            if (obj instanceof com.am.common.investment.model.equity.EquityPrice) {
+                                com.am.common.investment.model.equity.EquityPrice ep = (com.am.common.investment.model.equity.EquityPrice) obj;
+                                if (ep.getSymbol() != null && ep.getLastPrice() != null) {
+                                    String matchingSymbol = null;
+                                    for (String reqSym : requestedSymbols) {
+                                        if (reqSym.equalsIgnoreCase(ep.getSymbol())) {
+                                            matchingSymbol = reqSym;
+                                            break;
+                                        }
+                                    }
+                                    if (matchingSymbol != null) {
+                                        OHLCQuote quote = latestPrices.getOrDefault(matchingSymbol, new OHLCQuote());
+                                        quote.setLastPrice(ep.getLastPrice());
+                                        if (ep.getOhlcv() != null) {
+                                            OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
+                                            ohlc.setOpen(ep.getOhlcv().getOpen());
+                                            ohlc.setHigh(ep.getOhlcv().getHigh());
+                                            ohlc.setLow(ep.getOhlcv().getLow());
+                                            ohlc.setClose(ep.getOhlcv().getClose());
+                                            quote.setOhlc(ohlc);
+                                        }
+                                        latestPrices.put(matchingSymbol, quote);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error(methodName, "Error fetching fallback live prices for indices", e);
+                }
+            }
+
+            if (!latestPrices.isEmpty()) {
+                for (StockIndicesMarketData data : finalResults) {
+                    String symbol = data.getIndexSymbol();
+                    OHLCQuote priceQuote = latestPrices.get(symbol);
+                    if (priceQuote != null && priceQuote.getLastPrice() != 0.0) {
+                        IndexMetadata meta = data.getMetadata();
+                        if (meta == null) {
+                            meta = new IndexMetadata();
+                            data.setMetadata(meta);
+                        }
+
+                        double lastPrice = priceQuote.getLastPrice();
+                        double open = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getOpen() : 0.0;
+                        double high = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getHigh() : 0.0;
+                        double low = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getLow() : 0.0;
+                        
+                        double previousClose = priceQuote.getPreviousClose();
+                        if (previousClose == 0.0 && meta.getPreviousClose() != null) {
+                            previousClose = meta.getPreviousClose();
+                        }
+                        
+                        double change = lastPrice - previousClose;
+                        double changePercent = previousClose != 0 ? (change / previousClose) * 100.0 : 0.0;
+
+                        meta.setLast(lastPrice);
+                        if (open != 0.0) meta.setOpen(open);
+                        if (high != 0.0) meta.setHigh(high);
+                        if (low != 0.0) meta.setLow(low);
+                        meta.setPreviousClose(previousClose);
+                        meta.setChange(change);
+                        meta.setPercChange(changePercent);
+                        meta.setTimeVal(String.valueOf(System.currentTimeMillis()));
+
+                        log.debug(methodName, "Enriched index " + symbol + " from latest prices. Price=" + lastPrice);
+                    }
+                }
             }
 
             return finalResults;
@@ -97,19 +188,50 @@ public class StockIndicesService {
                         .findByIndexSymbols(indexSymbols.stream().collect(Collectors.toSet()));
                 Set<String> foundSymbols = new HashSet<>();
 
-                // FIX: Add found documents to finalResults
                 docs.forEach(doc -> {
                     if (doc != null && doc.getIndexSymbol() != null) {
-                        finalResults.add(doc); // Add to results
-                        foundSymbols.add(doc.getIndexSymbol()); // Track found
-                        log.info(methodName, "Found data for " + doc.getIndexSymbol() + " in database");
+                        boolean isStale = false;
+                        if (doc.getAudit() != null && doc.getAudit().getUpdatedAt() != null) {
+                            java.time.LocalDateTime updatedAt = doc.getAudit().getUpdatedAt();
+                            java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                            // Assuming updatedAt is also in local timezone or UTC. Let's compare safely.
+                            // If updatedAt is stored in UTC, we might need a ZoneId. Let's just use simple Duration.
+                            // Since the scraper saves it using LocalDateTime.now(), they are in the same timezone (system default).
+                            long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now()).toMinutes();
+                            if (minutesOld > 15) {
+                                isStale = true;
+                            }
+                        } else {
+                            isStale = true;
+                        }
+
+                        if (isStale) {
+                            java.time.LocalTime time = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                            boolean isMarketHours = time.isAfter(java.time.LocalTime.of(9, 10)) && time.isBefore(java.time.LocalTime.of(15, 45));
+                            if (!isMarketHours) {
+                                isStale = false; // Outside market hours, consider it fresh
+                            }
+                        }
+
+                        // Add to results regardless of staleness to avoid blocking. 
+                        // Enrichment will provide latest prices from Redis anyway.
+                        finalResults.add(doc);
+                        foundSymbols.add(doc.getIndexSymbol());
+
+                        if (isStale) {
+                            log.info(methodName, "Document for " + doc.getIndexSymbol() + " is stale during market hours, but will return it with Redis enrichment to avoid blocking.");
+                            // If it's very stale, we might still want to trigger a background update, 
+                            // but for now let's just prioritize response time.
+                        } else {
+                            log.info(methodName, "Found fresh data for " + doc.getIndexSymbol() + " in database");
+                        }
                     }
                 });
 
                 // Identify missing symbols
                 for (String symbol : indexSymbols) {
                     if (!foundSymbols.contains(symbol)) {
-                        log.info(methodName, "Symbol " + symbol + " not found in database. Queuing for fresh fetch.");
+                        log.info(methodName, "Symbol " + symbol + " not found or stale in database. Queuing for fresh fetch.");
                         symbolsToProcess.add(symbol);
                     }
                 }

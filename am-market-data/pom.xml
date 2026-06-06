@@ -33,6 +33,7 @@
     <properties>
         <java.version>17</java.version>
         <postgresql.version>42.7.2</postgresql.version>
+        <!-- Upgraded to 3.5.0 to support am-observability-lib and modern Jakarta EE dependencies -->
         <spring.boot.version>3.5.0</spring.boot.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
@@ -41,11 +42,11 @@
         <kong-unirest.version>3.14.5</kong-unirest.version>
         <investment-model.version>1.6.24-SNAPSHOT</investment-model.version>
         <investment-service.version>1.6.24-SNAPSHOT</investment-service.version>
-        <spring-web.version>6.1.5</spring-web.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Core Spring Boot BOM - governs versions for Jackson, Micrometer, and Spring Framework -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -58,16 +59,6 @@
                 <artifactId>resilience4j-spring-boot3</artifactId>
                 <version>2.1.0</version>
             </dependency>
-            <dependency>
-				<groupId>org.springframework</groupId>
-				<artifactId>spring-web</artifactId>
-				<version>${spring-web.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.springframework</groupId>
-				<artifactId>spring-webmvc</artifactId>
-				<version>${spring-web.version}</version>
-			</dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -76,6 +67,12 @@
             <id>github-investment</id>
             <name>GitHub Packages</name>
             <url>https://maven.pkg.github.com/AM-Portfolio/am-market</url>
+        </repository>
+        <!-- Added to resolve am-observability-lib from am-core-services GitHub Packages -->
+        <repository>
+            <id>github-core</id>
+            <name>GitHub Packages - Core Services</name>
+            <url>https://maven.pkg.github.com/AM-Portfolio/am-core-services</url>
         </repository>
     </repositories>
 

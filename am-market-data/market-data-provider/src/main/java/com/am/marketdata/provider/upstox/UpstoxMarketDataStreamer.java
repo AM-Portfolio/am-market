@@ -22,7 +22,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -41,6 +43,7 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
     private static final String REDIS_KEY_ACCESS_TOKEN = "market_data:upstox:access_token";
 
+    private final Map<String, String> instrumentKeyToTradingSymbolMap = new java.util.concurrent.ConcurrentHashMap<>();
     private MarketDataStreamerV3 streamer;
     private StreamerListener listener;
     private boolean isConnected = false;
@@ -113,9 +116,41 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                         Map<String, com.am.marketdata.common.model.OHLCQuote> commonQuotes = v3Converter
                                 .convert(marketUpdate);
                         if (commonQuotes != null && !commonQuotes.isEmpty()) {
+                            Map<String, com.am.marketdata.common.model.OHLCQuote> mappedQuotes = new HashMap<>();
+                            for (Map.Entry<String, com.am.marketdata.common.model.OHLCQuote> entry : commonQuotes.entrySet()) {
+                                String instKey = entry.getKey();
+                                String tradingSymbol = instrumentKeyToTradingSymbolMap.get(instKey);
+                                if (tradingSymbol == null) {
+                                    String lookupKey = instKey;
+                                    if (lookupKey.contains("|")) {
+                                        lookupKey = lookupKey.substring(lookupKey.indexOf("|") + 1);
+                                    }
+                                    try {
+                                        InstrumentContext ctx = symbolResolver.resolveContext(List.of(lookupKey));
+                                        if (ctx.getKeyToSymbolMap() != null) {
+                                            for (Map.Entry<String, String> lookupEntry : ctx.getKeyToSymbolMap().entrySet()) {
+                                                if (lookupEntry.getKey().equalsIgnoreCase(instKey) || lookupEntry.getKey().endsWith(lookupKey)) {
+                                                    tradingSymbol = lookupEntry.getValue();
+                                                    instrumentKeyToTradingSymbolMap.put(instKey, tradingSymbol);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    } catch (Exception e) {
+                                        log.warn("UpstoxStreamer", "Failed dynamic symbol resolve: " + e.getMessage());
+                                    }
+                                }
+                                if (tradingSymbol == null) {
+                                    tradingSymbol = instKey;
+                                    if (tradingSymbol.contains("|")) {
+                                        tradingSymbol = tradingSymbol.substring(tradingSymbol.indexOf("|") + 1);
+                                    }
+                                }
+                                mappedQuotes.put(tradingSymbol, entry.getValue());
+                            }
                             log.debug("UpstoxStreamer",
-                                    "Converted " + commonQuotes.size() + " quotes, sending to listener");
-                            listener.onMessage(commonQuotes);
+                                    "Converted " + mappedQuotes.size() + " quotes, sending to listener");
+                            listener.onMessage(mappedQuotes);
                         } else {
                             log.debug("UpstoxStreamer",
                                     "Converter returned empty/null quotes (markets closed or LTP=0)");

@@ -24,6 +24,9 @@ class MutualFundService:
         from am_configs.settings import settings, get_mongo_uri
 
         self.mongo_uri = mongo_uri or get_mongo_uri()
+        from am_configs.settings import settings, get_mongo_uri
+
+        self.mongo_uri = mongo_uri or get_mongo_uri()
         self.db_name = db_name or settings.mongo_db
         self._client = None
         self._db = None
@@ -32,9 +35,20 @@ class MutualFundService:
     def _get_collection(self):
         """Lazy initialization of MongoDB connection"""
         if self._collection is None:
-            self._client = get_async_mongo_client(self.mongo_uri)
-            self._db = self._client[self.db_name]
-            self._collection = self._db.portfolios
+            try:
+                import motor.motor_asyncio
+                self._client = motor.motor_asyncio.AsyncIOMotorClient(
+                    self.mongo_uri,
+                    directConnection=True,
+                    serverSelectionTimeoutMS=20_000,
+                )
+                self._db = self._client[self.db_name]
+                self._collection = self._db.portfolios
+            except ImportError:
+                raise ImportError(
+                    "MongoDB support requires 'motor' package. "
+                    "Install with: pip install motor"
+                )
         return self._collection
 
     @property

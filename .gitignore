@@ -61,18 +61,7 @@ build_log.txt
 !**/.env.example
 .env.secrets
 **/.env.secrets
+.env.secrets
 .env.local
 .env.deploy
-.env.preprod
-.env.dev
-
-# Vault / credential dumps (use map_env_from_vault_backup.py → local .env only)
-vault/backups/
-**/vault/backups/
-**/vault/*backup*.json
-credentials.json
-**/credentials.json
-*.pem
-*.p12
-*.key
-!**/src/test/**/*.key
+**/.env

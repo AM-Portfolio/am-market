@@ -3,8 +3,8 @@ market-data:
   zerodha:
     # API Configuration
     api:
-      key: ${ZERODHA_API_KEY:u3bfkf1ttzvr00v3}
-      secret: ${ZERODHA_API_SECRET:r9f4csp93f0p8xokkr856uhu5oihvvn5}
+      key: ${ZERODHA_API_KEY:CHANGE_ME}
+      secret: ${ZERODHA_API_SECRET:CHANGE_ME}
       max:
         retries: ${ZERODHA_API_MAX_RETRIES:3}
       retry:
@@ -19,9 +19,9 @@ market-data:
         queue:
           capacity: ${ZERODHA_API_THREAD_QUEUE_CAPACITY:10}
       access:
-        token: ${ZERODHA_API_ACCESS_TOKEN:fT9jp5AjqqLMJ8Y7GgueT9Wd0MEJN2OA}
+        token: ${ZERODHA_API_ACCESS_TOKEN:CHANGE_ME}
       refresh:
-        token: ${ZERODHA_API_REFRESH_TOKEN:fT9jp5AjqqLMJ8Y7GgueT9Wd0MEJN2OA}
+        token: ${ZERODHA_API_REFRESH_TOKEN:CHANGE_ME}
   
     # Ticker Configuration
     ticker:

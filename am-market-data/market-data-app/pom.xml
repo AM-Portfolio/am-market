@@ -109,11 +109,13 @@
             <version>6.12.0</version>
         </dependency>
 
+        <!-- Required for JSON structured logging via am-logback-include.xml.
+             Enables traceId/spanId to appear as indexed Fields in Grafana Loki. -->
         <dependency>
-  <groupId>net.logstash.logback</groupId>
-  <artifactId>logstash-logback-encoder</artifactId>
-  <version>7.4</version>
-</dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.4</version>
+        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
