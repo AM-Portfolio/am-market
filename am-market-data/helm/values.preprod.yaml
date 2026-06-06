@@ -1,6 +1,6 @@
 env:
-  SPRING_PROFILES_ACTIVE: "preprod"
-  JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=preprod"
+  SPRING_PROFILES_ACTIVE: "preprod,security"
+  JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=preprod,security"
   # JVM reads JAVA_TOOL_OPTIONS automatically (chart entrypoint did not expand JAVA_OPTS)
   JAVA_TOOL_OPTIONS: "-Xms512m -Xmx768m"
 environment: preprod

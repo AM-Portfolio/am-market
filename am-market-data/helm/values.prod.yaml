@@ -113,3 +113,6 @@ monitoring:
     scrape: true
     port: "8080"
     path: "/actuator/prometheus"
+
+env:
+  SPRING_PROFILES_ACTIVE: "prod,security"
