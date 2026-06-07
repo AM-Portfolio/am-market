@@ -13,3 +13,11 @@ vault:
     together:
       mappings:
         TOGETHER_API_KEY: "TOGETHER_API_KEY"
+    identity-oidc:
+      mappings:
+        OIDC_JWKS_URL: "OIDC_JWKS_URL"
+        OIDC_ISSUER: "OIDC_ISSUER"
+    service-oauth:
+      mappings:
+        OAUTH2_CLIENT_ID: "PARSER_CLIENT_ID"
+        OAUTH2_CLIENT_SECRET: "PARSER_CLIENT_SECRET"
