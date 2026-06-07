@@ -66,6 +66,8 @@ ingress:
       paths:
         - path: /market/parser
           pathType: Prefix
+        - path: /parser
+          pathType: Prefix
 
 env:
   ENVIRONMENT: "dev"
