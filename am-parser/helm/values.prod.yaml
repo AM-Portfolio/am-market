@@ -35,3 +35,18 @@ env:
   LOG_LEVEL: "INFO"
   ETF_LIST_CACHE_MINUTES: "60"
   ETF_HOLDINGS_CACHE_DAYS: "1"
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-prod-prod-global-cors@kubernetescrd,
+      am-apps-prod-prod-strip-prefix@kubernetescrd
+  hosts:
+    - host: am.asrax.in
+      paths:
+        - path: /parser
+          pathType: Prefix
