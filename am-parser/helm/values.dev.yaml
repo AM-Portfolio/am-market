@@ -26,6 +26,10 @@ vault:
       path: "apps/data/dev/infra/mongodb"
     together:
       path: "apps/data/dev/infra/shared-api"
+    identity-oidc:
+      path: "apps/data/dev/services/am-identity"
+    service-oauth:
+      path: "apps/data/dev/services/am-parser"
 
 hostAliases:
   - ip: "203.174.22.129"

@@ -38,6 +38,10 @@ vault:
       path: "apps/data/preprod/infra/mongodb"
     together:
       path: "apps/data/preprod/infra/shared-api"
+    identity-oidc:
+      path: "apps/data/preprod/services/am-identity"
+    service-oauth:
+      path: "apps/data/preprod/services/am-parser"
 
 
 resources:

@@ -15,6 +15,23 @@ import os
 # Add parent directory to path to find external modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Add am-platform-security library to PYTHONPATH dynamically
+security_lib_path = Path(__file__).resolve().parents[3] / "am-platform" / "libraries" / "am-platform-security"
+if security_lib_path.exists() and str(security_lib_path) not in sys.path:
+    sys.path.insert(0, str(security_lib_path))
+
+try:
+    from am_platform_security import AuthContext, require_auth_context
+except ImportError:
+    from pydantic import BaseModel
+    class AuthContext(BaseModel):
+        subject: str = "anonymous"
+        claims: dict = {}
+    def require_auth_context():
+        def dependency():
+            return AuthContext(subject="anonymous")
+        return dependency
+
 from am_persistence import create_mutual_fund_service, MutualFundService
 from am_common.mutual_fund_models import MutualFundPortfolio, PortfolioSummary
 from am_common.upload_models import (
@@ -285,6 +302,7 @@ async def root():
 @mutual_fund_router.post("/portfolios", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def save_portfolio(
     portfolio_data: dict,
+    context: AuthContext = Depends(require_auth_context()),
     service: MutualFundService = Depends(get_service)
 ):
     """
@@ -301,10 +319,10 @@ async def save_portfolio(
         portfolio = MutualFundPortfolio(**portfolio_data)
         
         # Save to database via service
-        portfolio_id = await service.save_portfolio(portfolio)
+        portfolio_id = await service.save_portfolio(portfolio, user_id=context.subject)
         
         # Retrieve the saved portfolio to return complete data
-        saved_portfolio = await service.get_portfolio_by_id(portfolio_id)
+        saved_portfolio = await service.get_portfolio_by_id(portfolio_id, user_id=context.subject)
         
         if not saved_portfolio:
             raise HTTPException(
@@ -341,6 +359,7 @@ async def save_portfolio(
 @mutual_fund_router.get("/portfolios/{portfolio_id}", response_model=dict)
 async def get_portfolio(
     portfolio_id: str,
+    context: AuthContext = Depends(require_auth_context()),
     service: MutualFundService = Depends(get_service)
 ):
     """
@@ -353,7 +372,7 @@ async def get_portfolio(
         Portfolio data if found
     """
     try:
-        portfolio = await service.get_portfolio_by_id(portfolio_id)
+        portfolio = await service.get_portfolio_by_id(portfolio_id, user_id=context.subject)
         
         if not portfolio:
             raise HTTPException(
@@ -385,6 +404,7 @@ async def get_portfolio(
 async def list_portfolios(
     fund_name: Optional[str] = None,
     limit: int = 50,
+    context: AuthContext = Depends(require_auth_context()),
     service: MutualFundService = Depends(get_service)
 ):
     """
@@ -398,7 +418,7 @@ async def list_portfolios(
         List of portfolio summaries
     """
     try:
-        portfolios = await service.list_portfolios(fund_name=fund_name, limit=limit)
+        portfolios = await service.list_portfolios(user_id=context.subject, fund_name=fund_name, limit=limit)
         
         return {
             "status": "success",
@@ -424,6 +444,7 @@ async def list_portfolios(
 @mutual_fund_router.get("/portfolios/search", response_model=dict)
 async def search_portfolios(
     fund_name: str,
+    context: AuthContext = Depends(require_auth_context()),
     service: MutualFundService = Depends(get_service)
 ):
     """
@@ -436,7 +457,7 @@ async def search_portfolios(
         List of matching portfolio summaries
     """
     try:
-        portfolios = await service.list_portfolios(fund_name=fund_name)
+        portfolios = await service.list_portfolios(user_id=context.subject, fund_name=fund_name)
         
         return {
             "status": "success",
@@ -463,13 +484,14 @@ async def search_portfolios(
 @mutual_fund_router.get("/holdings/bulk", response_model=dict)
 async def get_bulk_holdings(
     limit: int = 100,
+    context: AuthContext = Depends(require_auth_context()),
     service: MutualFundService = Depends(get_service)
 ):
     """
     Get all portfolios with full holdings data
     """
     try:
-        portfolios = await service.get_all_portfolios(limit=limit)
+        portfolios = await service.get_all_portfolios(user_id=context.subject, limit=limit)
         return {
             "status": "success",
             "count": len(portfolios),
@@ -485,6 +507,7 @@ async def get_bulk_holdings(
 @mutual_fund_router.get("/holdings/{isin_code}", response_model=dict)
 async def get_holdings_by_isin(
     isin_code: str,
+    context: AuthContext = Depends(require_auth_context()),
     service: MutualFundService = Depends(get_service)
 ):
     """
@@ -497,7 +520,7 @@ async def get_holdings_by_isin(
         List of holdings with the specified ISIN
     """
     try:
-        holdings = await service.get_holdings_by_isin(isin_code)
+        holdings = await service.get_holdings_by_isin(isin_code, user_id=context.subject)
         
         return {
             "status": "success",
@@ -516,6 +539,7 @@ async def get_holdings_by_isin(
 @mutual_fund_router.get("/funds/{fund_name}/statistics", response_model=dict)
 async def get_fund_statistics(
     fund_name: str,
+    context: AuthContext = Depends(require_auth_context()),
     service: MutualFundService = Depends(get_service)
 ):
     """
@@ -572,7 +596,8 @@ async def global_exception_handler(request, exc):
 async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    parse_method: str = Form(default="together")
+    parse_method: str = Form(default="together"),
+    context: AuthContext = Depends(require_auth_context())
 ):
     """
     Upload an Excel file and do ALL the work automatically:
@@ -598,6 +623,7 @@ async def upload_file(
         
         # 1. Save uploaded file
         file_upload = await file_upload_service.save_uploaded_file(file)
+        file_upload.user_id = context.subject
         
         # 2. Save main file to database
         await file_upload_repo.create_file_upload(file_upload)
@@ -703,6 +729,7 @@ async def upload_file(
 async def upload_excel_complete(
     file: UploadFile = File(...),
     parse_method: str = Form(default="together"),
+    context: AuthContext = Depends(require_auth_context()),
     upload_service: FileUploadService = Depends(get_file_upload_service),
     upload_repo: FileUploadRepository = Depends(get_file_upload_repo),
     processing_service: FileProcessingService = Depends(get_file_processing_service),
@@ -737,6 +764,7 @@ async def upload_excel_complete(
         
         # Step 1: Upload and persist main file
         file_upload = await upload_service.save_uploaded_file(file)
+        file_upload.user_id = context.subject
         await upload_repo.create_file_upload(file_upload)
         print(f"INFO: Step 1: Main file uploaded and persisted ({file_upload.file_id})")
         
@@ -852,7 +880,8 @@ async def upload_excel_complete(
 @mutual_fund_router.post("/process/{file_id}")
 async def process_file(
     file_id: str,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    context: AuthContext = Depends(require_auth_context())
 ):
     """
     Process an uploaded Excel file by splitting it into individual sheet files
@@ -863,7 +892,7 @@ async def process_file(
     """
     try:
         # Check if file exists
-        file_upload = await file_upload_repo.get_file_upload(file_id)
+        file_upload = await file_upload_repo.get_file_upload(file_id, user_id=context.subject)
         if not file_upload:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -896,7 +925,8 @@ async def parse_sheet(
     sheet_id: str,
     background_tasks: BackgroundTasks,
     method: str = Form(default="manual"),
-    api_key: Optional[str] = Form(default=None)
+    api_key: Optional[str] = Form(default=None),
+    context: AuthContext = Depends(require_auth_context())
 ):
     """
     Parse an individual sheet file to extract portfolio data
@@ -921,7 +951,7 @@ async def parse_sheet(
             )
         
         # Check if sheet exists
-        sheet_file = await file_upload_repo.get_file_upload(sheet_id)
+        sheet_file = await file_upload_repo.get_file_upload(sheet_id, user_id=context.subject)
         if not sheet_file:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -956,7 +986,8 @@ async def parse_sheet(
 async def list_files(
     skip: int = 0,
     limit: int = 100,
-    status_filter: Optional[str] = None
+    status_filter: Optional[str] = None,
+    context: AuthContext = Depends(require_auth_context())
 ):
     """
     List uploaded files with optional filtering
@@ -977,8 +1008,8 @@ async def list_files(
                     detail=f"Invalid status filter: {status_filter}"
                 )
         
-        files = await file_upload_repo.get_all_files(skip, limit, status_enum)
-        total_count = await file_upload_repo.count_files(status_enum)
+        files = await file_upload_repo.get_all_files(skip, limit, status_enum, user_id=context.subject)
+        total_count = await file_upload_repo.count_files(status_enum, user_id=context.subject)
         
         return FileListResponse(
             files=files,
@@ -995,19 +1026,25 @@ async def list_files(
 
 
 @mutual_fund_router.get("/files/{file_id}")
-async def get_file_status(file_id: str):
+async def get_file_status(
+    file_id: str,
+    context: AuthContext = Depends(require_auth_context())
+):
     """
     Get detailed status information for a file and its sheets
     
     - **file_id**: ID of the file to check
     """
     try:
-        file_status = await file_processing_service.get_file_status(file_id)
-        if not file_status:
+        # First verify the parent file belongs to the user
+        file_upload = await file_upload_repo.get_file_upload(file_id, user_id=context.subject)
+        if not file_upload:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"File not found: {file_id}"
             )
+        
+        file_status = await file_processing_service.get_file_status(file_id)
         
         return file_status
         
@@ -1025,7 +1062,8 @@ async def parse_all_sheets(
     file_id: str,
     background_tasks: BackgroundTasks,
     method: str = Form(default="manual"),
-    api_key: Optional[str] = Form(default=None)
+    api_key: Optional[str] = Form(default=None),
+    context: AuthContext = Depends(require_auth_context())
 ):
     """
     Parse all sheets for a given Excel file
@@ -1050,7 +1088,7 @@ async def parse_all_sheets(
             )
         
         # Check if file exists
-        file_upload = await file_upload_repo.get_file_upload(file_id)
+        file_upload = await file_upload_repo.get_file_upload(file_id, user_id=context.subject)
         if not file_upload:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

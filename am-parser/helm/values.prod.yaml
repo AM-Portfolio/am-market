@@ -23,6 +23,10 @@ vault:
       path: "apps/data/prod/infra/mongodb"
     together:
       path: "apps/data/prod/infra/shared-api"
+    identity-oidc:
+      path: "secret/data/prod/services/am-identity"
+    service-oauth:
+      path: "secret/data/prod/services/am-parser"
 
 env:
   ENVIRONMENT: "prod"
