@@ -17,7 +17,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@develop
+    uses: AM-Portfolio/am-pipelines/.github/workflows/publish-library.yml@main
     with:
       language: 'java'
       working_directory: 'am-common-investment-data'
