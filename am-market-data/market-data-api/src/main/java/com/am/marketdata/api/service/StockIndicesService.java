@@ -25,6 +25,9 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class StockIndicesService {
 
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> lastMongoSaveTimeMap = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long MONGO_SAVE_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
     // Auto-detects class name "StockIndicesService"
     private final AppLogger log = AppLogger.getLogger();
 
@@ -116,6 +119,10 @@ public class StockIndicesService {
             }
 
             if (!latestPrices.isEmpty()) {
+                List<StockIndicesMarketData> docsToSave = new ArrayList<>();
+                java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                long nowMs = System.currentTimeMillis();
+
                 for (StockIndicesMarketData data : finalResults) {
                     String symbol = data.getIndexSymbol();
                     OHLCQuote priceQuote = latestPrices.get(symbol);
@@ -146,10 +153,82 @@ public class StockIndicesService {
                         meta.setPreviousClose(previousClose);
                         meta.setChange(change);
                         meta.setPercChange(changePercent);
-                        meta.setTimeVal(String.valueOf(System.currentTimeMillis()));
+                        meta.setTimeVal(String.valueOf(nowMs));
+
+                        // 1. Check local JVM memory cooldown to prevent race conditions
+                        long lastSaveTime = lastMongoSaveTimeMap.getOrDefault(symbol, 0L);
+                        boolean shouldSave = (nowMs - lastSaveTime) >= MONGO_SAVE_COOLDOWN_MS;
+
+                        if (shouldSave) {
+                            // 2. Check document's actual database timestamp for timezone-safe validation
+                            com.am.common.investment.model.stockindice.AuditData audit = data.getAudit();
+                            if (audit == null) {
+                                audit = new com.am.common.investment.model.stockindice.AuditData();
+                                audit.setCreatedAt(now);
+                                data.setAudit(audit);
+                            } else if (audit.getUpdatedAt() != null) {
+                                long minutesOld = java.time.Duration.between(audit.getUpdatedAt(), now).toMinutes();
+                                if (minutesOld < 5) {
+                                    shouldSave = false; // Document was updated by another pod/process recently
+                                }
+                            }
+                        }
+
+                        if (shouldSave) {
+                            // Update both the JVM cache and the MongoDB document timestamp
+                            lastMongoSaveTimeMap.put(symbol, nowMs);
+                            if (data.getAudit() != null) {
+                                data.getAudit().setUpdatedAt(now);
+                            }
+                            docsToSave.add(data);
+                        }
 
                         log.debug(methodName, "Enriched index " + symbol + " from latest prices. Price=" + lastPrice);
                     }
+                }
+
+                // Asynchronously save the debounced index documents back to MongoDB
+                if (!docsToSave.isEmpty()) {
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            for (StockIndicesMarketData doc : docsToSave) {
+                                stockIndicesMarketDataService.save(doc);
+                            }
+                            log.info("getLatestIndicesData", "Asynchronously persisted " + docsToSave.size() + " debounced indices back to MongoDB.");
+                        } catch (Exception ex) {
+                            log.error("getLatestIndicesData", "Failed to save enriched indices to MongoDB", ex);
+                        }
+                    });
+                }
+            }
+
+            // 4. Sanitize stale data before returning to prevent showing wrong prices
+            long nowMsFinal = System.currentTimeMillis();
+            for (StockIndicesMarketData data : finalResults) {
+                com.am.common.investment.model.stockindice.AuditData audit = data.getAudit();
+                boolean isStale = true;
+                if (audit != null && audit.getUpdatedAt() != null) {
+                    java.time.LocalDateTime updatedAt = audit.getUpdatedAt();
+                    long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata"))).toMinutes();
+                    
+                    if (minutesOld <= 15) {
+                        isStale = false;
+                    } else {
+                        // Check if outside market hours and less than 3 days old (weekend)
+                        java.time.LocalTime time = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                        boolean isMarketHours = time.isAfter(java.time.LocalTime.of(9, 10)) && time.isBefore(java.time.LocalTime.of(15, 45));
+                        if (!isMarketHours && minutesOld < 3 * 24 * 60) {
+                            isStale = false;
+                        }
+                    }
+                }
+                
+                // If it is STILL stale, Redis is empty and DB is outdated.
+                // Clear the prices to gracefully show "N/A" on the UI instead of wrong values.
+                if (isStale && data.getMetadata() != null) {
+                    data.getMetadata().setLast(0.0);
+                    data.getMetadata().setChange(0.0);
+                    data.getMetadata().setPercChange(0.0);
                 }
             }
 
