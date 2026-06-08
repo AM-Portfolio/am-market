@@ -75,6 +75,7 @@ jobs:
       sdk_name: 'java-market-sdk'
       action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
       use_release_version: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+      advance_snapshot: true
     secrets: inherit
 
   publish-python-market:
@@ -122,6 +123,7 @@ jobs:
       sdk_name: 'java-parser-sdk'
       action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
       use_release_version: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+      advance_snapshot: true
     secrets: inherit
 
   publish-python-parser:
