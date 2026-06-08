@@ -74,7 +74,7 @@ jobs:
       working_directory: 'am-market-sdk/java-market-sdk'
       sdk_name: 'java-market-sdk'
       action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
-      use_release_version: ${{ github.ref == 'refs/heads/main' }}
+      use_release_version: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
     secrets: inherit
 
   publish-python-market:
@@ -121,7 +121,7 @@ jobs:
       working_directory: 'am-market-sdk/java-parser-sdk'
       sdk_name: 'java-parser-sdk'
       action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
-      use_release_version: ${{ github.ref == 'refs/heads/main' }}
+      use_release_version: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
     secrets: inherit
 
   publish-python-parser:

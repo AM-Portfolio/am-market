@@ -25,5 +25,5 @@ jobs:
       maven_repo_id: 'github'
       maven_repo_url: 'https://maven.pkg.github.com/AM-Portfolio/am-market'
       action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
-      use_release_version: ${{ github.ref == 'refs/heads/main' }}
+      use_release_version: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
     secrets: inherit
