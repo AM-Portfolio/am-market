@@ -140,7 +140,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         OHLCResponse.OHLCData data = entry.getValue();
 
                         // Map back to symbol if possible, otherwise use key
-                        String symbol = context.keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
+                        String symbol = context.getSymbol(instrumentKey);
 
                         OHLCQuote quote = new OHLCQuote();
                         // Use getters as fields might be mapped differently or computed
@@ -325,7 +325,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         MarketQuoteSymbolLtpV3 data = entry.getValue();
 
                         // Map back to symbol using the context map
-                        String symbol = context.keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
+                        String symbol = context.getSymbol(instrumentKey);
 
                         LTPQuote quote = new LTPQuote();
                         quote.lastPrice = data.getLastPrice();
@@ -340,7 +340,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             String instrumentKey = entry.getKey();
                             com.am.marketdata.provider.upstox.model.common.StockQuote data = entry.getValue();
 
-                            String symbol = context.keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
+                             String symbol = context.getSymbol(instrumentKey);
 
                             LTPQuote quote = new LTPQuote();
                             quote.lastPrice = data.getLastPrice() != null ? data.getLastPrice() : 0.0;
