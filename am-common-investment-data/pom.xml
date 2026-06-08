@@ -7,7 +7,7 @@
 
     <groupId>com.am.common</groupId>
     <artifactId>am-common-investment-data-lib</artifactId>
-    <version>1.6.25-SNAPSHOT</version>
+    <version>1.6.26-SNAPSHOT</version>
     <packaging>pom</packaging>
 
 
