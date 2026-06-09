@@ -169,16 +169,51 @@ public class StreamerManager implements StreamerListener {
 
         log.info("StreamerManager", "Fallback data received: " + ohlcData.size() + " quotes");
 
-        // TODO: Implement WebSocket publishing when publisher supports batch publishing
-        // For now, data is fetched and cached, available for API calls
-
         try {
+            // Build QuoteChange map from OHLC data and broadcast to all connected WS clients
+            Map<String, MarketDataUpdate.QuoteChange> quotes = new HashMap<>();
+            for (Map.Entry<String, com.am.marketdata.common.model.OHLCQuote> entry : ohlcData.entrySet()) {
+                String symbol = entry.getKey();
+                com.am.marketdata.common.model.OHLCQuote quote = entry.getValue();
+                if (quote != null) {
+                    double lastPrice = quote.getLastPrice();
+                    double open = quote.getOhlc() != null ? quote.getOhlc().getOpen() : 0.0;
+                    double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
+                    double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
+                    double close = quote.getOhlc() != null ? quote.getOhlc().getClose() : 0.0;
+                    double prevClose = quote.getPreviousClose();
+                    double change = lastPrice - prevClose;
+                    double changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0.0;
+
+                    quotes.put(symbol, MarketDataUpdate.QuoteChange.builder()
+                            .lastPrice(lastPrice)
+                            .open(open)
+                            .high(high)
+                            .low(low)
+                            .close(close)
+                            .previousClose(prevClose)
+                            .change(change)
+                            .changePercent(changePercent)
+                            .build());
+                }
+            }
+
+            // Broadcast to all connected WebSocket clients (frontend price widgets)
+            if (!quotes.isEmpty()) {
+                MarketDataUpdate update = MarketDataUpdate.builder()
+                        .timestamp(System.currentTimeMillis())
+                        .quotes(quotes)
+                        .build();
+                publisher.publish(update);
+            }
+
+            // Also process for Kafka / persistence
             processor.processUpdate(ohlcData);
         } catch (Exception e) {
             log.error("StreamerManager", "Error processing fallback data for persistence/Kafka", e);
         }
 
-        log.info("StreamerManager", "✅ Fallback data processed successfully (cached for API access)");
+        log.info("StreamerManager", "Fallback data processed and broadcast successfully");
     }
 
     private void connectAndSubscribe() {
