@@ -120,7 +120,8 @@ public class StockIndicesService {
 
             if (!latestPrices.isEmpty()) {
                 List<StockIndicesMarketData> docsToSave = new ArrayList<>();
-                java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                // Use UTC for all timestamp comparisons (updatedAt is stored as UTC on server)
+                java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
                 long nowMs = System.currentTimeMillis();
 
                 for (StockIndicesMarketData data : finalResults) {
@@ -164,10 +165,11 @@ public class StockIndicesService {
                             com.am.common.investment.model.stockindice.AuditData audit = data.getAudit();
                             if (audit == null) {
                                 audit = new com.am.common.investment.model.stockindice.AuditData();
-                                audit.setCreatedAt(now);
+                                audit.setCreatedAt(java.time.LocalDateTime.now(java.time.ZoneOffset.UTC));
                                 data.setAudit(audit);
                             } else if (audit.getUpdatedAt() != null) {
-                                long minutesOld = java.time.Duration.between(audit.getUpdatedAt(), now).toMinutes();
+                                // updatedAt is stored as UTC; compare against UTC
+                                long minutesOld = java.time.Duration.between(audit.getUpdatedAt(), java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)).toMinutes();
                                 if (minutesOld < 5) {
                                     shouldSave = false; // Document was updated by another pod/process recently
                                 }
@@ -203,20 +205,22 @@ public class StockIndicesService {
             }
 
             // 4. Sanitize stale data before returning to prevent showing wrong prices
+            // NOTE: updatedAt is stored as UTC (server default). Compare only against UTC to avoid timezone skew.
             long nowMsFinal = System.currentTimeMillis();
             for (StockIndicesMarketData data : finalResults) {
                 com.am.common.investment.model.stockindice.AuditData audit = data.getAudit();
                 boolean isStale = true;
                 if (audit != null && audit.getUpdatedAt() != null) {
                     java.time.LocalDateTime updatedAt = audit.getUpdatedAt();
-                    long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata"))).toMinutes();
+                    // Both sides must use UTC to avoid a phantom 5h30m staleness from IST vs UTC mismatch.
+                    long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)).toMinutes();
                     
                     if (minutesOld <= 15) {
                         isStale = false;
                     } else {
-                        // Check if outside market hours and less than 3 days old (weekend)
-                        java.time.LocalTime time = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                        boolean isMarketHours = time.isAfter(java.time.LocalTime.of(9, 10)) && time.isBefore(java.time.LocalTime.of(15, 45));
+                        // Check if outside market hours (IST) and less than 3 days old (weekend)
+                        java.time.LocalTime istTime = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                        boolean isMarketHours = istTime.isAfter(java.time.LocalTime.of(9, 10)) && istTime.isBefore(java.time.LocalTime.of(15, 45));
                         if (!isMarketHours && minutesOld < 3 * 24 * 60) {
                             isStale = false;
                         }
@@ -272,11 +276,8 @@ public class StockIndicesService {
                         boolean isStale = false;
                         if (doc.getAudit() != null && doc.getAudit().getUpdatedAt() != null) {
                             java.time.LocalDateTime updatedAt = doc.getAudit().getUpdatedAt();
-                            java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                            // Assuming updatedAt is also in local timezone or UTC. Let's compare safely.
-                            // If updatedAt is stored in UTC, we might need a ZoneId. Let's just use simple Duration.
-                            // Since the scraper saves it using LocalDateTime.now(), they are in the same timezone (system default).
-                            long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now()).toMinutes();
+                            // updatedAt is stored as UTC (server default). Compare against UTC to avoid IST offset skew.
+                            long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)).toMinutes();
                             if (minutesOld > 15) {
                                 isStale = true;
                             }
@@ -285,8 +286,8 @@ public class StockIndicesService {
                         }
 
                         if (isStale) {
-                            java.time.LocalTime time = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                            boolean isMarketHours = time.isAfter(java.time.LocalTime.of(9, 10)) && time.isBefore(java.time.LocalTime.of(15, 45));
+                            java.time.LocalTime istTime = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                            boolean isMarketHours = istTime.isAfter(java.time.LocalTime.of(9, 10)) && istTime.isBefore(java.time.LocalTime.of(15, 45));
                             if (!isMarketHours) {
                                 isStale = false; // Outside market hours, consider it fresh
                             }
