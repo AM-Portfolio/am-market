@@ -51,6 +51,7 @@ public class UpstoxIndexIdentifier {
                         String tradingSymbol = (String) index.get("trading_symbol");
                         if (tradingSymbol != null && !tradingSymbol.equalsIgnoreCase(value)) {
                             indexKeyMap.put(tradingSymbol.toUpperCase(), id);
+                        }
                     }
                 }
 
