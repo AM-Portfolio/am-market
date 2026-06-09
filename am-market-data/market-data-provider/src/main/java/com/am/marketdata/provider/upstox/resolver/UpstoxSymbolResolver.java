@@ -110,6 +110,9 @@ public class UpstoxSymbolResolver implements SymbolResolver {
         for (String s : symbols) {
             // Strip exchange prefix if present (e.g., NSE:RELIANCE -> RELIANCE)
             String cleaned = s;
+            if (cleaned.contains("|")) {
+                cleaned = cleaned.substring(cleaned.indexOf("|") + 1);
+            }
             if (cleaned.startsWith("NSE:") || cleaned.startsWith("BSE:")) {
                 cleaned = cleaned.substring(4);
             }

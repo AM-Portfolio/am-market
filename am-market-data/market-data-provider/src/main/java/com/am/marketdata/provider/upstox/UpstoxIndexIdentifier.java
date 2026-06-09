@@ -65,6 +65,9 @@ public class UpstoxIndexIdentifier {
         if (name == null)
             return null;
         String cleanName = name.toUpperCase();
+        if (cleanName.contains("|")) {
+            cleanName = cleanName.substring(cleanName.indexOf("|") + 1);
+        }
         if (cleanName.startsWith("NSE:") || cleanName.startsWith("BSE:")) {
             cleanName = cleanName.substring(4);
         }

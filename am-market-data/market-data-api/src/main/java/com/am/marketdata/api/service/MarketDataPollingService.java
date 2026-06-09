@@ -254,7 +254,11 @@ public class MarketDataPollingService {
                         log.error("Error fetching historical data", e);
                         return HistoricalDataResponseV1.builder().build();
                     }
-                });
+                }).orTimeout(1500, TimeUnit.MILLISECONDS)
+                  .exceptionally(ex -> {
+                      log.warn("Historical data fetch timed out or failed: " + ex.getMessage());
+                      return HistoricalDataResponseV1.builder().build();
+                  });
             } else {
                 historicalDataFuture = CompletableFuture.completedFuture(HistoricalDataResponseV1.builder().build());
             }
