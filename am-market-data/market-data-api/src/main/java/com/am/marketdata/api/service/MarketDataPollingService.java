@@ -41,9 +41,7 @@ public class MarketDataPollingService {
     private final MarketDataMockService mockService;
     private final MarketDataProcessor processor;
 
-    // Scheduler for polling
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
-    private final Map<String, ScheduledFuture<?>> activeStreams = new ConcurrentHashMap<>();
+
 
     /**
      * Helper to resolve symbols using InstrumentUtils
@@ -52,74 +50,7 @@ public class MarketDataPollingService {
         return instrumentUtils.resolveSymbols(keys, expandIndices);
     }
 
-    @org.springframework.beans.factory.annotation.Value("${market-data.stream.poll-interval-seconds:10}")
-    private int pollIntervalSeconds;
 
-    public void connectStream(java.util.List<String> instrumentKeys, String modeStr, String provider, String timeFrame,
-            Boolean isIndexSymbol) {
-        connectStream(instrumentKeys, modeStr, provider, timeFrame, isIndexSymbol, false);
-    }
-
-    public void connectStream(java.util.List<String> instrumentKeys, String modeStr, String provider, String timeFrame,
-            Boolean isIndexSymbol, boolean mockMode) {
-
-        // Orchestration Step 1: Resolve Symbols (Common Logic)
-        Set<String> resolvedSymbols = resolveSymbols(instrumentKeys, false);
-        log.info(
-                "Initiating stream simulation via polling for {} instruments (resolved from {}). Provider: {}, TimeFrame: {}, IsIndexSymbol: {}, MockMode: {}",
-                resolvedSymbols.size(), instrumentKeys.size(), provider, timeFrame, isIndexSymbol, mockMode);
-
-        String providerKey = provider != null ? provider.toUpperCase() : "UNKNOWN";
-        final String finalTimeFrame = timeFrame != null ? timeFrame : "1D";
-
-        // Cancel existing stream if any for this provider
-        disconnectStream(providerKey);
-
-        // Initialize mock quotes if mockMode is enabled
-        if (mockMode) {
-            mockService.initializeMockQuotes(resolvedSymbols);
-        }
-
-        Runnable pollingTask = () -> {
-            try {
-                log.debug("Polling cycle executing for provider: {}, mockMode: {}", providerKey, mockMode);
-                MarketDataUpdate update;
-                if (mockMode) {
-                    update = mockService.generateMockUpdate(resolvedSymbols);
-                } else {
-                    update = fetchMarketDataUpdate(
-                            resolvedSymbols,
-                            finalTimeFrame,
-                            isIndexSymbol,
-                            providerKey,
-                            false);
-                }
-
-                if (update != null) {
-                    log.debug("Broadcasting update via WebSocket handler. Quote count: {}",
-                            update.getQuotes() != null ? update.getQuotes().size() : 0);
-                    webSocketHandler.broadcast(update);
-                    try {
-                        Map<String, OHLCQuote> ohlcQuotes = convertToOHLCQuotes(update);
-                        processor.processUpdate(ohlcQuotes, providerKey);
-                    } catch (Exception ex) {
-                        log.error("Failed to publish polling data to Kafka/processor", ex);
-                    }
-                } else {
-                    log.warn("Fetched market data update is null for provider: {}", providerKey);
-                }
-            } catch (Exception e) {
-                log.error("Error during polling stream execution for provider {}", providerKey, e);
-            }
-        };
-
-        // Schedule task - use 5 seconds if mockMode is active, else use configured interval
-        int intervalSeconds = mockMode ? 5 : pollIntervalSeconds;
-        ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(pollingTask, 0, intervalSeconds,
-                TimeUnit.SECONDS);
-        activeStreams.put(providerKey, future);
-        log.info("Polling stream started for provider: {} with interval: {} seconds", providerKey, intervalSeconds);
-    }
 
     public StreamConnectResponse initiateStream(
             StreamConnectRequest request) {
@@ -163,27 +94,21 @@ public class MarketDataPollingService {
         boolean shouldStartPollingStream = streamRequested && (forcePolling || !isUpstox || isMock);
 
         // Logic for streaming vs fallback
+        String message;
         if (shouldStartLiveStream) {
             log.info("Market is OPEN - Initiating WebSocket stream via StreamerManager.");
             streamerManager.subscribe(new java.util.HashSet<>(resolvedSymbols));
-        } else if (shouldStartPollingStream) {
-            // Simulated Stream (Polling) - DISABLED
-            log.info("Polling is DISABLED for this environment. Condition: ForcePolling={}, IsUpstox={}, MarketOpen={}, IsMock={}", forcePolling,
-                    isUpstox, isMarketOpen, isMock);
+            message = "Stream connection initiated successfully (Live Market Framework).";
         } else {
-            log.info(
-                    "Stream flag is false or Market Closed (Upstox) without ForcePolling. Skipping background stream.");
+            log.info("Stream flag is false or Market Closed (Upstox). Skipping background stream.");
+            message = "Market Closed. Serving latest data snapshot.";
         }
 
         // Fetch initial data synchronously to return in response
-        // In mock mode: bypass external provider completely - use local persistence only
         MarketDataUpdate initialData;
         if (isMock) {
             log.info("Mock mode: generating initial snapshot from local persistence (no external provider call).");
-            // Initialize mock quotes from local cache/db if not already done during connectStream
-            if (!shouldStartPollingStream) {
-                mockService.initializeMockQuotes(resolvedSymbols);
-            }
+            mockService.initializeMockQuotes(resolvedSymbols);
             initialData = mockService.generateMockUpdate(resolvedSymbols);
         } else {
             initialData = fetchMarketDataUpdate(
@@ -192,15 +117,6 @@ public class MarketDataPollingService {
                     request.getIsIndexSymbol(),
                     provider,
                     false);
-        }
-
-        String message;
-        if (shouldStartLiveStream) {
-            message = "Stream connection initiated successfully (Live Market Framework).";
-        } else if (shouldStartPollingStream) {
-            message = "Background polling is disabled. Serving latest data snapshot.";
-        } else {
-            message = "Market Closed. Fetched latest available data snapshot.";
         }
 
         return StreamConnectResponse.builder()
@@ -314,21 +230,12 @@ public class MarketDataPollingService {
     }
 
     public void disconnectStream(String provider) {
-        if (provider == null)
-            return;
+        if (provider == null) return;
         String key = provider.toUpperCase();
-        if (activeStreams.containsKey(key)) {
-            ScheduledFuture<?> future = activeStreams.get(key);
-            if (future != null && !future.isCancelled()) {
-                future.cancel(true);
-            }
-            activeStreams.remove(key);
-            log.info("Polling stream stopped for provider: {}", provider);
-        }
-        // Also ensure streamer manager disconnects if it's the active one
         if ("UPSTOX".equalsIgnoreCase(key)) {
             streamerManager.stopStreaming();
         }
+    }
     }
 
     /**
@@ -521,3 +428,6 @@ public class MarketDataPollingService {
         return ohlcQuotes;
     }
 }
+
+
+
