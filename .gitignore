@@ -8,6 +8,7 @@ market-data-analysis-py/.git/
 
 # Python
 __pycache__/
+*.py
 *.py[cod]
 *$py.class
 .venv/

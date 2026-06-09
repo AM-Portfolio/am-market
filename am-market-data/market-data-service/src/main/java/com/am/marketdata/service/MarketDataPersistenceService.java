@@ -204,11 +204,25 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
         try {
             // Filter out index symbols early to prevent false cache misses
-            List<String> knownIndices = Arrays.asList("NIFTY 50", "NIFTY BANK", "SENSEX", "NIFTY", "BANKNIFTY");
+            Set<String> knownIndices = new HashSet<>(Arrays.asList(
+                "INDIA VIX", "NIFTY 50", "NIFTY NEXT 50", "NIFTY 100", "NIFTY 200", 
+                "NIFTY 500", "NIFTY MIDCAP 50", "NIFTY MIDCAP 100", "NIFTY SMLCAP 100", 
+                "NIFTY MIDCAP 150", "NIFTY SMLCAP 50", "NIFTY SMLCAP 250", "NIFTY SMLCAP 500", 
+                "NIFTY BANK", "NIFTY AUTO", "NIFTY FMCG", "NIFTY MEDIA", "NIFTY METAL", 
+                "NIFTY PHARMA", "NIFTY PSU BANK", "NIFTY PVT BANK", "NIFTY REALTY", 
+                "NIFTY HEALTHCARE", "NIFTY CONSR DURABLE", "NIFTY OIL AND GAS", 
+                "NIFTY MIDSML HLTH", "NIFTY IT", "NIFTY FIN SERVICES", "NIFTY ENERGY", 
+                "NIFTY PHARMACEUTICALS", "SENSEX", "NIFTY", "BANKNIFTY"
+            ));
             List<String> filteredSymbols = tradingSymbols.stream()
                     .filter(symbol -> {
-                        String clean = symbol.replace("NSE:", "").replace("NSE_EQ:", "");
-                        return !knownIndices.contains(clean);
+                        String clean = symbol.replace("NSE:", "").replace("NSE_EQ:", "").trim().toUpperCase();
+                        return !knownIndices.contains(clean) && 
+                               !clean.startsWith("NIFTY ") && 
+                               !clean.contains("VIX") && 
+                               !clean.startsWith("SENSEX") && 
+                               !clean.equals("FINNIFTY") &&
+                               !clean.equals("MIDCPNIFTY");
                     })
                     .collect(Collectors.toList());
 

@@ -336,8 +336,15 @@ public class StockIndicesService {
                         }))
                 .collect(Collectors.toList());
 
-        // Wait for completion
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        // Wait for completion with a timeout guard to prevent API hanging if a scraper fails
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .get(4, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            log.warn(methodName, "Scraping fresh index data timed out after 4 seconds, continuing with cached/seeded records");
+        } catch (Exception e) {
+            log.error(methodName, "Error during parallel index data fetch", e);
+        }
 
         try {
             // Add a small delay to ensure data is persisted
