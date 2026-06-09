@@ -252,7 +252,7 @@ public class MarketDataPollingService {
 
             // Orchestration Step 2 & 3: Parallel Execution of Data Fetching
 
-            CompletableFuture<Map<String, OHLCQuote>> liveDataFuture = CompletableFuture.supplyAsync(() -> {
+            CompletableFuture<Map<String, OHLCQuote>> liveDataFuture = CompletableFuture.<Map<String, OHLCQuote>>supplyAsync(() -> {
                 try {
                     // Pass forceRefresh parameter
                     return marketDataFetchService.getOHLC(keys, forceRefresh, TimeFrame.DAY, false);
@@ -260,9 +260,7 @@ public class MarketDataPollingService {
                     log.error("Error fetching live OHLC data", e);
                     return new HashMap<String, OHLCQuote>();
                 }
-            });
-
-            liveDataFuture = liveDataFuture.orTimeout(1500, TimeUnit.MILLISECONDS)
+            }).orTimeout(1500, TimeUnit.MILLISECONDS)
               .exceptionally(ex -> {
                   log.warn("Live OHLC data fetch timed out or failed: " + ex.getMessage());
                   return new HashMap<String, OHLCQuote>();
