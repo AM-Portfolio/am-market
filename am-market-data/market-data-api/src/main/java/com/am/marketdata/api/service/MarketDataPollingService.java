@@ -241,7 +241,11 @@ public class MarketDataPollingService {
                     log.error("Error fetching live OHLC data", e);
                     return new HashMap<>();
                 }
-            });
+            }).orTimeout(1500, TimeUnit.MILLISECONDS)
+              .exceptionally(ex -> {
+                  log.warn("Live OHLC data fetch timed out or failed: " + ex.getMessage());
+                  return new HashMap<>();
+              });
 
             // Task 2: Fetch Historical Data (if applicable)
             CompletableFuture<HistoricalDataResponseV1> historicalDataFuture;
