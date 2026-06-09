@@ -138,20 +138,34 @@ public class StockIndicesService {
                         double open = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getOpen() : 0.0;
                         double high = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getHigh() : 0.0;
                         double low = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getLow() : 0.0;
-                        
+
+                        // Determine previousClose: Redis first, then MongoDB metadata as fallback.
+                        // Validate it: if it is >30% away from lastPrice it is a corrupted/stale document
+                        // value (e.g. 26177 stored from a historical scrape while Nifty is at ~23000).
+                        // In that case discard it so we never show wildly wrong change figures.
                         double previousClose = priceQuote.getPreviousClose();
                         if (previousClose == 0.0 && meta.getPreviousClose() != null) {
                             previousClose = meta.getPreviousClose();
                         }
-                        
-                        double change = lastPrice - previousClose;
-                        double changePercent = previousClose != 0 ? (change / previousClose) * 100.0 : 0.0;
+                        if (previousClose != 0.0 && lastPrice != 0.0) {
+                            double deviation = Math.abs(previousClose - lastPrice) / lastPrice;
+                            if (deviation > 0.30) {
+                                // More than 30% apart — this previousClose is stale/corrupted. Reset.
+                                log.warn(methodName, "Discarding suspicious previousClose=" + previousClose
+                                        + " for " + symbol + " (lastPrice=" + lastPrice
+                                        + ", deviation=" + String.format("%.1f%%", deviation * 100) + ")");
+                                previousClose = 0.0;
+                            }
+                        }
+
+                        double change = previousClose != 0.0 ? lastPrice - previousClose : 0.0;
+                        double changePercent = previousClose != 0.0 ? (change / previousClose) * 100.0 : 0.0;
 
                         meta.setLast(lastPrice);
                         if (open != 0.0) meta.setOpen(open);
                         if (high != 0.0) meta.setHigh(high);
                         if (low != 0.0) meta.setLow(low);
-                        meta.setPreviousClose(previousClose);
+                        if (previousClose != 0.0) meta.setPreviousClose(previousClose);
                         meta.setChange(change);
                         meta.setPercChange(changePercent);
                         meta.setTimeVal(String.valueOf(nowMs));
