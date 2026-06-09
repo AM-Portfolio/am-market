@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.MarketDataService;
+import com.am.marketdata.service.MarketHoursService;
 import org.springframework.stereotype.Service;
 
 import java.text.ParseException;
@@ -34,15 +35,18 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     private final MarketDataService marketDataService;
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final InstrumentUtils instrumentUtils;
+    private final MarketHoursService marketHoursService;
 
     public MarketDataFetchServiceImpl(FlowLogger flowLogger,
             MarketDataService marketDataService,
             StockIndicesMarketDataService stockIndicesMarketDataService,
-            InstrumentUtils instrumentUtils) {
+            InstrumentUtils instrumentUtils,
+            MarketHoursService marketHoursService) {
         this.flowLogger = flowLogger;
         this.marketDataService = marketDataService;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.instrumentUtils = instrumentUtils;
+        this.marketHoursService = marketHoursService;
     }
 
     @Override
@@ -355,6 +359,31 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     @Override
     public Map<String, OHLCQuote> getOHLC(Set<String> symbols, boolean isIndexSymbol, TimeFrame timeFrame,
             boolean forceRefresh) {
+
+        // Fallback for Index Symbols when Market is Closed
+        if (isIndexSymbol && !marketHoursService.isMarketOpen()) {
+            log.info("Market is closed. Fetching OHLC for index symbols from MongoDB fallback: {}", symbols);
+            Map<String, OHLCQuote> fallbackData = new HashMap<>();
+            for (String symbol : symbols) {
+                var indexData = stockIndicesMarketDataService.findByIndexSymbol(symbol);
+                if (indexData != null && indexData.getMetadata() != null) {
+                    var meta = indexData.getMetadata();
+                    fallbackData.put(symbol, OHLCQuote.builder()
+                        .lastPrice(meta.getLast())
+                        .previousClose(meta.getPreviousClose())
+                        .ohlc(OHLCQuote.OHLC.builder()
+                            .open(meta.getOpen())
+                            .high(meta.getHigh())
+                            .low(meta.getLow())
+                            .close(meta.getLast())
+                            .build())
+                        .build());
+                }
+            }
+            if (!fallbackData.isEmpty()) {
+                return fallbackData;
+            }
+        }
 
         // Resolve symbols using InstrumentUtils
         // isIndexSymbol=true means keep as-is (fetchIndexStocks=false)

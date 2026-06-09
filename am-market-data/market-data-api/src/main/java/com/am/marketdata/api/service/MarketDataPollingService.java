@@ -1,5 +1,6 @@
 package com.am.marketdata.api.service;
 
+import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.marketdata.api.websocket.MarketDataWebSocketHandler;
 import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import com.am.marketdata.common.model.OHLCQuote;
@@ -31,6 +32,7 @@ import java.util.concurrent.*;
 public class MarketDataPollingService {
 
     private final MarketDataFetchService marketDataFetchService;
+    private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final MarketDataWebSocketHandler webSocketHandler;
     private final InstrumentUtils instrumentUtils;
     private final MarketDataProviderFactory marketDataProviderFactory;
@@ -165,18 +167,9 @@ public class MarketDataPollingService {
             log.info("Market is OPEN - Initiating WebSocket stream via StreamerManager.");
             streamerManager.subscribe(new java.util.HashSet<>(resolvedSymbols));
         } else if (shouldStartPollingStream) {
-            // Simulated Stream (Polling)
-            log.info("Starting Polling Stream. Condition: ForcePolling={}, IsUpstox={}, MarketOpen={}, IsMock={}", forcePolling,
+            // Simulated Stream (Polling) - DISABLED
+            log.info("Polling is DISABLED for this environment. Condition: ForcePolling={}, IsUpstox={}, MarketOpen={}, IsMock={}", forcePolling,
                     isUpstox, isMarketOpen, isMock);
-            // Polling uses cache by default (forceRefresh=false) unless configured
-            // otherwise
-            connectStream(
-                    new ArrayList<>(resolvedSymbols),
-                    request.getMode(),
-                    isMock ? "MOCK" : provider,
-                    timeFrame,
-                    request.getIsIndexSymbol() != null ? request.getIsIndexSymbol() : false,
-                    isMock);
         } else {
             log.info(
                     "Stream flag is false or Market Closed (Upstox) without ForcePolling. Skipping background stream.");
@@ -205,11 +198,7 @@ public class MarketDataPollingService {
         if (shouldStartLiveStream) {
             message = "Stream connection initiated successfully (Live Market Framework).";
         } else if (shouldStartPollingStream) {
-            if (isMock) {
-                message = "Stream connection initiated successfully (Active Mock/Simulation Framework).";
-            } else {
-                message = "Stream connection initiated successfully (Simulated/Polling Framework).";
-            }
+            message = "Background polling is disabled. Serving latest data snapshot.";
         } else {
             message = "Market Closed. Fetched latest available data snapshot.";
         }
@@ -230,6 +219,37 @@ public class MarketDataPollingService {
     public MarketDataUpdate fetchMarketDataUpdate(
             Set<String> keys, String timeFrame, Boolean isIndexSymbol, String providerKey, boolean forceRefresh) {
         try {
+            // Fallback for Index Symbols when Market is Closed
+            if (Boolean.TRUE.equals(isIndexSymbol) && !marketHoursService.isMarketOpen()) {
+                log.info("Market is closed. Fetching index data from MongoDB fallback for symbols: {}", keys);
+                Map<String, MarketDataUpdate.QuoteChange> quoteUpdates = new HashMap<>();
+                
+                for (String symbol : keys) {
+                    com.am.common.investment.model.stockindice.StockIndicesMarketData indexData = 
+                        stockIndicesMarketDataService.findByIndexSymbol(symbol);
+                    
+                    if (indexData != null && indexData.getMetadata() != null) {
+                        var meta = indexData.getMetadata();
+                        quoteUpdates.put(symbol, MarketDataUpdate.QuoteChange.builder()
+                            .lastPrice(meta.getLast())
+                            .open(meta.getOpen())
+                            .high(meta.getHigh())
+                            .low(meta.getLow())
+                            .previousClose(meta.getPreviousClose())
+                            .change(meta.getChange())
+                            .changePercent(meta.getPercChange())
+                            .build());
+                    }
+                }
+                
+                if (!quoteUpdates.isEmpty()) {
+                    return MarketDataUpdate.builder()
+                        .timestamp(System.currentTimeMillis())
+                        .quotes(quoteUpdates)
+                        .build();
+                }
+            }
+
             // Orchestration Step 2 & 3: Parallel Execution of Data Fetching
 
             // Task 1: Fetch Live OHLC Data
