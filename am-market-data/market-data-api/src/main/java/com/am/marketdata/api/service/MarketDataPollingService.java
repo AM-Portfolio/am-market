@@ -41,8 +41,6 @@ public class MarketDataPollingService {
     private final MarketDataMockService mockService;
     private final MarketDataProcessor processor;
 
-
-
     /**
      * Helper to resolve symbols using InstrumentUtils
      */
@@ -50,10 +48,7 @@ public class MarketDataPollingService {
         return instrumentUtils.resolveSymbols(keys, expandIndices);
     }
 
-
-
-    public StreamConnectResponse initiateStream(
-            StreamConnectRequest request) {
+    public StreamConnectResponse initiateStream(StreamConnectRequest request) {
         // Use expandIndices from request (defaults to false if not provided)
         boolean expandIndices = request.getExpandIndices() != null ? request.getExpandIndices() : false;
 
@@ -62,7 +57,6 @@ public class MarketDataPollingService {
 
         // FIX: Ensure the Index itself is included in the stream, even if
         // resolvedSymbols expanded to constituents.
-        // The UI requires the Index value (e.g. "NIFTY 50") to update the cards.
         if (Boolean.TRUE.equals(request.getIsIndexSymbol())) {
             resolvedSymbols.addAll(request.getInstrumentKeys());
         }
@@ -74,7 +68,6 @@ public class MarketDataPollingService {
         String provider = request.getProvider() != null && !request.getProvider().trim().isEmpty()
                 ? request.getProvider().toUpperCase()
                 : marketDataProviderFactory.getProvider().getProviderName().toUpperCase();
-        log.info("Resolved provider for stream initiation: {}", provider);
 
         String timeFrame = request.getTimeFrame() != null ? request.getTimeFrame() : "1D";
 
@@ -82,16 +75,13 @@ public class MarketDataPollingService {
         boolean isMarketOpen = marketHoursService.isMarketOpen();
 
         // Check if we should stream
-        // Stream requested AND Market is Open AND Upstox provider (since others use
-        // polling)
-        boolean streamRequested = request.getStream() == null || request.getStream(); // Default to true if null
+        boolean streamRequested = request.getStream() == null || request.getStream();
         boolean isUpstox = "UPSTOX".equalsIgnoreCase(provider);
         boolean isMock = "MOCK".equalsIgnoreCase(provider) || Boolean.TRUE.equals(request.getMockMode());
         boolean forcePolling = Boolean.TRUE.equals(request.getForcePolling());
 
         // Decision Logic
         boolean shouldStartLiveStream = streamRequested && isUpstox && isMarketOpen && !forcePolling && !isMock;
-        boolean shouldStartPollingStream = streamRequested && (forcePolling || !isUpstox || isMock);
 
         // Logic for streaming vs fallback
         String message;
@@ -107,7 +97,7 @@ public class MarketDataPollingService {
         // Fetch initial data synchronously to return in response
         MarketDataUpdate initialData;
         if (isMock) {
-            log.info("Mock mode: generating initial snapshot from local persistence (no external provider call).");
+            log.info("Mock mode: generating initial snapshot from local persistence.");
             mockService.initializeMockQuotes(resolvedSymbols);
             initialData = mockService.generateMockUpdate(resolvedSymbols);
         } else {
@@ -128,7 +118,6 @@ public class MarketDataPollingService {
 
     public MarketDataUpdate fetchMarketDataUpdate(
             Set<String> keys, String timeFrame, Boolean isIndexSymbol, String providerKey) {
-        // Backward compatibility
         return fetchMarketDataUpdate(keys, timeFrame, isIndexSymbol, providerKey, false);
     }
 
@@ -139,11 +128,11 @@ public class MarketDataPollingService {
             if (Boolean.TRUE.equals(isIndexSymbol) && !marketHoursService.isMarketOpen()) {
                 log.info("Market is closed. Fetching index data from MongoDB fallback for symbols: {}", keys);
                 Map<String, MarketDataUpdate.QuoteChange> quoteUpdates = new HashMap<>();
-                
+
                 for (String symbol : keys) {
-                    com.am.common.investment.model.stockindice.StockIndicesMarketData indexData = 
+                    com.am.common.investment.model.stockindice.StockIndicesMarketData indexData =
                         stockIndicesMarketDataService.findByIndexSymbol(symbol);
-                    
+
                     if (indexData != null && indexData.getMetadata() != null) {
                         var meta = indexData.getMetadata();
                         quoteUpdates.put(symbol, MarketDataUpdate.QuoteChange.builder()
@@ -157,7 +146,7 @@ public class MarketDataPollingService {
                             .build());
                     }
                 }
-                
+
                 if (!quoteUpdates.isEmpty()) {
                     return MarketDataUpdate.builder()
                         .timestamp(System.currentTimeMillis())
@@ -167,10 +156,8 @@ public class MarketDataPollingService {
             }
 
             // Orchestration Step 2 & 3: Parallel Execution of Data Fetching
-
             CompletableFuture<Map<String, OHLCQuote>> liveDataFuture = CompletableFuture.<Map<String, OHLCQuote>>supplyAsync(() -> {
                 try {
-                    // Pass forceRefresh parameter
                     return marketDataFetchService.getOHLC(keys, forceRefresh, TimeFrame.DAY, false);
                 } catch (Exception e) {
                     log.error("Error fetching live OHLC data", e);
@@ -182,10 +169,8 @@ public class MarketDataPollingService {
                   return new HashMap<String, OHLCQuote>();
               });
 
-            // Task 2: Fetch Historical Data (if applicable)
             CompletableFuture<HistoricalDataResponseV1> historicalDataFuture;
-            if ("1D".equalsIgnoreCase(timeFrame) || "1W".equalsIgnoreCase(timeFrame)
-                    || "1M".equalsIgnoreCase(timeFrame)) {
+            if ("1D".equalsIgnoreCase(timeFrame) || "1W".equalsIgnoreCase(timeFrame) || "1M".equalsIgnoreCase(timeFrame)) {
                 historicalDataFuture = CompletableFuture.supplyAsync(() -> {
                     try {
                         return fetchHistoricalData(keys, timeFrame, isIndexSymbol);
@@ -202,22 +187,15 @@ public class MarketDataPollingService {
                 historicalDataFuture = CompletableFuture.completedFuture(HistoricalDataResponseV1.builder().build());
             }
 
-            // Wait for both tasks to complete
             CompletableFuture.allOf(liveDataFuture, historicalDataFuture).join();
 
-            // Get results
             Map<String, OHLCQuote> liveOhlcData = liveDataFuture.get();
             HistoricalDataResponseV1 historicalResponse = historicalDataFuture.get();
 
-            // Orchestration Step 4: Business Calculation (Merge Data)
             Map<String, OHLCQuote> enrichedData = mergeData(liveOhlcData, historicalResponse);
 
-            // Step 3: Build update object
             if (enrichedData != null && !enrichedData.isEmpty()) {
-                // Orchestration Step 5: Response Mapping
-                Map<String, MarketDataUpdate.QuoteChange> quoteUpdates = buildQuoteUpdates(
-                        enrichedData);
-
+                Map<String, MarketDataUpdate.QuoteChange> quoteUpdates = buildQuoteUpdates(enrichedData);
                 return MarketDataUpdate.builder()
                         .timestamp(System.currentTimeMillis())
                         .quotes(quoteUpdates)
@@ -236,24 +214,17 @@ public class MarketDataPollingService {
             streamerManager.stopStreaming();
         }
     }
-    }
 
-    /**
-     * Fetches historical data based on timeFrame
-     */
-    private HistoricalDataResponseV1 fetchHistoricalData(Set<String> symbols,
-            String timeFrame, Boolean isIndexSymbol) {
-        // Calculate historical date range based on timeFrame
+    private HistoricalDataResponseV1 fetchHistoricalData(Set<String> symbols, String timeFrame, Boolean isIndexSymbol) {
         java.time.LocalDate today = java.time.LocalDate.now();
         java.time.LocalDate historicalDate;
-
         java.time.LocalDate startDate;
 
         switch (timeFrame.toUpperCase()) {
             case "1D":
             case "DAY":
                 historicalDate = today.minusDays(1);
-                startDate = historicalDate.minusDays(7); // Lookback 7 days to cover weekends/holidays
+                startDate = historicalDate.minusDays(7);
                 break;
             case "1W":
             case "WEEK":
@@ -270,17 +241,8 @@ public class MarketDataPollingService {
                 startDate = historicalDate.minusDays(7);
         }
 
-        String historicalDateStr = historicalDate.toString();
-
-        // Convert LocalDate to Date for API call
-        // Convert LocalDate to Date for API call
-        java.util.Date fromDate = java.util.Date.from(
-                startDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
-        java.util.Date toDate = java.util.Date.from(
-                historicalDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
-
-        log.info("Fetching historical data for {} symbols from {} (timeFrame: {}) from: {} to: {}",
-                symbols.size(), historicalDateStr, timeFrame, fromDate, toDate);
+        java.util.Date fromDate = java.util.Date.from(startDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+        java.util.Date toDate = java.util.Date.from(historicalDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
 
         Map<String, Object> additionalParams = new HashMap<>();
         if (isIndexSymbol != null && isIndexSymbol) {
@@ -288,84 +250,49 @@ public class MarketDataPollingService {
         }
 
         return marketDataFetchService.getHistoricalDataMultipleSymbols(
-                symbols,
-                fromDate,
-                toDate,
-                TimeFrame.DAY,
-                "STOCK",
-                additionalParams,
-                false,
-                false); // fetchIndexStocks = false (keep symbols as-is for polling)
+                symbols, fromDate, toDate, TimeFrame.DAY, "STOCK", additionalParams, false, false);
     }
 
-    /**
-     * Merges historical data into live OHLC data
-     */
-    private Map<String, OHLCQuote> mergeData(Map<String, OHLCQuote> liveData,
-            HistoricalDataResponseV1 historicalResponse) {
+    private Map<String, OHLCQuote> mergeData(Map<String, OHLCQuote> liveData, HistoricalDataResponseV1 historicalResponse) {
         Map<String, OHLCQuote> enrichedData = new HashMap<>();
-
-        if (liveData == null || liveData.isEmpty()) {
-            return enrichedData;
-        }
+        if (liveData == null || liveData.isEmpty()) return enrichedData;
 
         for (Map.Entry<String, OHLCQuote> entry : liveData.entrySet()) {
             String symbol = entry.getKey();
             OHLCQuote liveQuote = entry.getValue();
-
             double previousClose = liveQuote.getPreviousClose();
 
-            // Extract historical data from response
             if (historicalResponse != null && historicalResponse.getData() != null) {
                 Map<String, HistoricalData> symbolsData = historicalResponse.getData();
-
                 if (symbolsData != null && symbolsData.containsKey(symbol)) {
                     HistoricalData historicalData = symbolsData.get(symbol);
-                    if (historicalData != null && historicalData.getDataPoints() != null
-                            && !historicalData.getDataPoints().isEmpty()) {
+                    if (historicalData != null && historicalData.getDataPoints() != null && !historicalData.getDataPoints().isEmpty()) {
                         var dataPoints = historicalData.getDataPoints();
                         var lastPoint = dataPoints.get(dataPoints.size() - 1);
                         if (lastPoint.getClose() > 0) {
                             previousClose = lastPoint.getClose();
-                            log.debug("Updated previous close for {}: {} (from HistoricalData object)", symbol,
-                                    previousClose);
                         }
                     }
                 }
             }
 
-            // Build enriched quote with previous close from historical data
-            OHLCQuote enrichedQuote = OHLCQuote.builder()
+            enrichedData.put(symbol, OHLCQuote.builder()
                     .lastPrice(liveQuote.getLastPrice())
                     .previousClose(previousClose)
                     .ohlc(liveQuote.getOhlc())
-                    .build();
-
-            enrichedData.put(symbol, enrichedQuote);
+                    .build());
         }
         return enrichedData;
     }
 
-    /**
-     * Builds QuoteChange objects from OHLC quotes
-     * Separated for better maintainability
-     */
-    private Map<String, MarketDataUpdate.QuoteChange> buildQuoteUpdates(
-            Map<String, OHLCQuote> ohlcQuotes) {
-
+    private Map<String, MarketDataUpdate.QuoteChange> buildQuoteUpdates(Map<String, OHLCQuote> ohlcQuotes) {
         Map<String, MarketDataUpdate.QuoteChange> quoteUpdates = new HashMap<>();
-
         for (Map.Entry<String, OHLCQuote> entry : ohlcQuotes.entrySet()) {
             String symbol = entry.getKey();
             OHLCQuote quote = entry.getValue();
-
             double lastPrice = quote.getLastPrice();
-            double open = 0.0;
-            double high = 0.0;
-            double low = 0.0;
-            double close = 0.0;
+            double open = 0.0, high = 0.0, low = 0.0, close = 0.0;
 
-            // Extract OHLC data if available
             if (quote.getOhlc() != null) {
                 open = quote.getOhlc().getOpen();
                 high = quote.getOhlc().getHigh();
@@ -374,60 +301,37 @@ public class MarketDataPollingService {
             }
 
             double prevClose = quote.getPreviousClose();
-            double change = 0.0;
-            double changePercent = 0.0;
-
+            double change = 0.0, changePercent = 0.0;
             if (prevClose > 0) {
                 change = lastPrice - prevClose;
                 changePercent = (change / prevClose) * 100;
-
-                // Round to 2 decimal places
                 change = BigDecimal.valueOf(change).setScale(2, RoundingMode.HALF_UP).doubleValue();
                 changePercent = BigDecimal.valueOf(changePercent).setScale(2, RoundingMode.HALF_UP).doubleValue();
             }
 
-            MarketDataUpdate.QuoteChange update = MarketDataUpdate.QuoteChange
-                    .builder()
-                    .lastPrice(lastPrice)
-                    .open(open)
-                    .high(high)
-                    .low(low)
-                    .close(close)
-                    .previousClose(prevClose)
-                    .change(change)
-                    .changePercent(changePercent)
-                    .build();
-
-            quoteUpdates.put(symbol, update);
+            quoteUpdates.put(symbol, MarketDataUpdate.QuoteChange.builder()
+                    .lastPrice(lastPrice).open(open).high(high).low(low).close(close)
+                    .previousClose(prevClose).change(change).changePercent(changePercent).build());
         }
-
         return quoteUpdates;
     }
 
     private Map<String, OHLCQuote> convertToOHLCQuotes(MarketDataUpdate update) {
-        if (update == null || update.getQuotes() == null) {
-            return Collections.emptyMap();
-        }
+        if (update == null || update.getQuotes() == null) return Collections.emptyMap();
         Map<String, OHLCQuote> ohlcQuotes = new HashMap<>();
         for (Map.Entry<String, MarketDataUpdate.QuoteChange> entry : update.getQuotes().entrySet()) {
             String symbol = entry.getKey();
             MarketDataUpdate.QuoteChange change = entry.getValue();
-            OHLCQuote.OHLC ohlc = OHLCQuote.OHLC.builder()
-                    .open(change.getOpen() != null ? change.getOpen() : 0.0)
-                    .high(change.getHigh() != null ? change.getHigh() : 0.0)
-                    .low(change.getLow() != null ? change.getLow() : 0.0)
-                    .close(change.getClose() != null ? change.getClose() : 0.0)
-                    .build();
-            OHLCQuote quote = OHLCQuote.builder()
+            ohlcQuotes.put(symbol, OHLCQuote.builder()
                     .lastPrice(change.getLastPrice() != null ? change.getLastPrice() : 0.0)
                     .previousClose(change.getPreviousClose() != null ? change.getPreviousClose() : 0.0)
-                    .ohlc(ohlc)
-                    .build();
-            ohlcQuotes.put(symbol, quote);
+                    .ohlc(OHLCQuote.OHLC.builder()
+                            .open(change.getOpen() != null ? change.getOpen() : 0.0)
+                            .high(change.getHigh() != null ? change.getHigh() : 0.0)
+                            .low(change.getLow() != null ? change.getLow() : 0.0)
+                            .close(change.getClose() != null ? change.getClose() : 0.0).build())
+                    .build());
         }
         return ohlcQuotes;
     }
 }
-
-
-
