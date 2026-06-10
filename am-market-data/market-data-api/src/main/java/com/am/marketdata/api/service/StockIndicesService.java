@@ -131,8 +131,8 @@ public class StockIndicesService {
 
             if (!latestPrices.isEmpty()) {
                 List<StockIndicesMarketData> docsToSave = new ArrayList<>();
-                // Use UTC for all timestamp comparisons (updatedAt is stored as UTC on server)
-                java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+                // Use default local timezone for all timestamp comparisons
+                java.time.LocalDateTime now = java.time.LocalDateTime.now();
                 long nowMs = System.currentTimeMillis();
 
                 for (StockIndicesMarketData data : finalResults) {
@@ -190,11 +190,11 @@ public class StockIndicesService {
                             com.am.common.investment.model.stockindice.AuditData audit = data.getAudit();
                             if (audit == null) {
                                 audit = new com.am.common.investment.model.stockindice.AuditData();
-                                audit.setCreatedAt(java.time.LocalDateTime.now(java.time.ZoneOffset.UTC));
+                                audit.setCreatedAt(java.time.LocalDateTime.now());
                                 data.setAudit(audit);
                             } else if (audit.getUpdatedAt() != null) {
-                                // updatedAt is stored as UTC; compare against UTC
-                                long minutesOld = java.time.Duration.between(audit.getUpdatedAt(), java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)).toMinutes();
+                                // compare against default local timezone
+                                long minutesOld = java.time.Duration.between(audit.getUpdatedAt(), java.time.LocalDateTime.now()).toMinutes();
                                 if (minutesOld < 5) {
                                     shouldSave = false; // Document was updated by another pod/process recently
                                 }
@@ -237,8 +237,8 @@ public class StockIndicesService {
                 boolean isStale = true;
                 if (audit != null && audit.getUpdatedAt() != null) {
                     java.time.LocalDateTime updatedAt = audit.getUpdatedAt();
-                    // Both sides must use UTC to avoid a phantom 5h30m staleness from IST vs UTC mismatch.
-                    long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)).toMinutes();
+                    // Both sides must use same timezone to avoid a phantom staleness from IST vs UTC mismatch.
+                    long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now()).toMinutes();
                     
                     if (minutesOld <= 15) {
                         isStale = false;
@@ -301,8 +301,8 @@ public class StockIndicesService {
                         boolean isStale = false;
                         if (doc.getAudit() != null && doc.getAudit().getUpdatedAt() != null) {
                             java.time.LocalDateTime updatedAt = doc.getAudit().getUpdatedAt();
-                            // updatedAt is stored as UTC (server default). Compare against UTC to avoid IST offset skew.
-                            long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)).toMinutes();
+                            // Compare against default timezone to avoid offset skew.
+                            long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now()).toMinutes();
                             if (minutesOld > 15) {
                                 isStale = true;
                             }
