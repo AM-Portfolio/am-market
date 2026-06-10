@@ -84,7 +84,8 @@ public class StockIndicesService {
                 try {
                     Map<String, Object> liveResponse = CompletableFuture.supplyAsync(() -> {
                         try {
-                            return marketDataCacheService.getLivePrices(missingSymbols, true, forceRefresh);
+                            // Use isIndexSymbol=false to compute live index prices from live constituents
+                            return marketDataCacheService.getLivePrices(missingSymbols, false, forceRefresh);
                         } catch (Exception e) {
                             throw new RuntimeException(e);
                         }
@@ -194,7 +195,7 @@ public class StockIndicesService {
                                 data.setAudit(audit);
                             } else if (audit.getUpdatedAt() != null) {
                                 // compare against default local timezone
-                                long minutesOld = java.time.Duration.between(audit.getUpdatedAt(), java.time.LocalDateTime.now()).toMinutes();
+                                long minutesOld = java.time.Duration.between(audit.getUpdatedAt(), java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)).toMinutes();
                                 if (minutesOld < 5) {
                                     shouldSave = false; // Document was updated by another pod/process recently
                                 }
@@ -238,7 +239,7 @@ public class StockIndicesService {
                 if (audit != null && audit.getUpdatedAt() != null) {
                     java.time.LocalDateTime updatedAt = audit.getUpdatedAt();
                     // Both sides must use same timezone to avoid a phantom staleness from IST vs UTC mismatch.
-                    long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now()).toMinutes();
+                    long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)).toMinutes();
                     
                     if (minutesOld <= 15) {
                         isStale = false;
@@ -302,7 +303,7 @@ public class StockIndicesService {
                         if (doc.getAudit() != null && doc.getAudit().getUpdatedAt() != null) {
                             java.time.LocalDateTime updatedAt = doc.getAudit().getUpdatedAt();
                             // Compare against default timezone to avoid offset skew.
-                            long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now()).toMinutes();
+                            long minutesOld = java.time.Duration.between(updatedAt, java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)).toMinutes();
                             if (minutesOld > 15) {
                                 isStale = true;
                             }
