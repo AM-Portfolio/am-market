@@ -151,21 +151,21 @@ public class StockIndicesService {
                         double low = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getLow() : 0.0;
 
                         // Determine previousClose: Redis first, then MongoDB metadata as fallback.
-                        // Validate it: if it is >30% away from lastPrice it is a corrupted/stale document
+                        // Validate it: if it is >10% away from lastPrice it is a corrupted/stale document
                         // value (e.g. 26177 stored from a historical scrape while Nifty is at ~23000).
-                        // In that case discard it so we never show wildly wrong change figures.
+                        // In that case discard/correct it so we never show wildly wrong change figures.
                         double previousClose = priceQuote.getPreviousClose();
                         if (previousClose == 0.0 && meta.getPreviousClose() != null) {
                             previousClose = meta.getPreviousClose();
                         }
                         if (previousClose != 0.0 && lastPrice != 0.0) {
                             double deviation = Math.abs(previousClose - lastPrice) / lastPrice;
-                            if (deviation > 0.30) {
-                                // More than 30% apart — this previousClose is stale/corrupted. Reset.
+                            if (deviation > 0.10) {
+                                // More than 10% apart — this previousClose is stale/corrupted. Fall back to open or last price to correct it.
                                 log.warn(methodName, "Discarding suspicious previousClose=" + previousClose
                                         + " for " + symbol + " (lastPrice=" + lastPrice
                                         + ", deviation=" + String.format("%.1f%%", deviation * 100) + ")");
-                                previousClose = 0.0;
+                                previousClose = open != 0.0 ? open : lastPrice;
                             }
                         }
 
