@@ -153,11 +153,23 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                         prevClose = meta.getPreviousClose();
                     }
 
+                    if (prevClose != null && prevClose != 0 && quote.getLastPrice() != 0) {
+                        double deviation = Math.abs(prevClose - quote.getLastPrice()) / quote.getLastPrice();
+                        if (deviation > 0.30) {
+                            log.warn("Discarding suspicious previousClose={} for {} (lastPrice={}, deviation={}%) during streaming update",
+                                    prevClose, symbol, quote.getLastPrice(), String.format("%.1f", deviation * 100));
+                            prevClose = 0.0;
+                        }
+                    }
+
                     if (prevClose != null && prevClose != 0) {
                         double change = quote.getLastPrice() - prevClose;
                         meta.setChange(change);
                         meta.setPercChange((change / prevClose) * 100.0);
                         meta.setPreviousClose(prevClose);
+                    } else {
+                        meta.setChange(0.0);
+                        meta.setPercChange(0.0);
                     }
                     
                     meta.setTimeVal(String.valueOf(System.currentTimeMillis()));
