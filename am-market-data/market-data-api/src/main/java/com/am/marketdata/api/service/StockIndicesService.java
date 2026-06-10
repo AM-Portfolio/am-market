@@ -84,8 +84,8 @@ public class StockIndicesService {
                 try {
                     Map<String, Object> liveResponse = CompletableFuture.supplyAsync(() -> {
                         try {
-                            // Use isIndexSymbol=false to compute live index prices from live constituents
-                            return marketDataCacheService.getLivePrices(missingSymbols, false, forceRefresh);
+                            // Use isIndexSymbol=true to fetch live index prices directly
+                            return marketDataCacheService.getLivePrices(missingSymbols, true, forceRefresh);
                         } catch (Exception e) {
                             throw new RuntimeException(e);
                         }
