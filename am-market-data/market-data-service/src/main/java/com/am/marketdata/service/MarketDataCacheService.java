@@ -849,6 +849,14 @@ public class MarketDataCacheService {
                 if (json != null) {
                     Map<String, Object> map = objectMapper.readValue(json, Map.class);
 
+                    // Ignore Redis prices older than 15 minutes (900,000 ms)
+                    long updatedAt = ((Number) map.getOrDefault("updatedAt", 0L)).longValue();
+                    long ageMs = System.currentTimeMillis() - updatedAt;
+                    if (ageMs > 15 * 60 * 1000) {
+                        log.warn("getLatestPrices", "Redis price for " + cleanSymbol + " is stale (age: " + (ageMs / 1000) + "s). Ignoring.");
+                        continue;
+                    }
+
                     double lastPrice = ((Number) map.getOrDefault("lastPrice", 0.0)).doubleValue();
                     double open = ((Number) map.getOrDefault("open", 0.0)).doubleValue();
                     double high = ((Number) map.getOrDefault("high", 0.0)).doubleValue();
