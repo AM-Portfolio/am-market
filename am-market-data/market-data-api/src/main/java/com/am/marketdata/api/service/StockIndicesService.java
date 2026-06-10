@@ -82,7 +82,18 @@ public class StockIndicesService {
 
             if (!missingSymbols.isEmpty()) {
                 try {
-                    Map<String, Object> liveResponse = marketDataCacheService.getLivePrices(missingSymbols, true, forceRefresh);
+                    Map<String, Object> liveResponse = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return marketDataCacheService.getLivePrices(missingSymbols, true, forceRefresh);
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).orTimeout(1500, TimeUnit.MILLISECONDS)
+                      .exceptionally(ex -> {
+                          log.warn(methodName, "Live price retrieval for indices timed out or failed: " + ex.getMessage());
+                          return null;
+                      }).get();
+
                     if (liveResponse != null && liveResponse.get("prices") instanceof List) {
                         List<?> pricesList = (List<?>) liveResponse.get("prices");
                         for (Object obj : pricesList) {
