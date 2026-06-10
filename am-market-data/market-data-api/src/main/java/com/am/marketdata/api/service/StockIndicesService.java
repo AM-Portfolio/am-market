@@ -395,17 +395,6 @@ public class StockIndicesService {
     public StockIndicesMarketData getLatestIndexData(String indexSymbol, boolean forceRefresh) {
         String methodName = "getLatestIndexData";
         try {
-            // Check if we should use cache
-            if (cacheEnabled && !forceRefresh) {
-                StockIndicesMarketData cachedData = marketDataCacheService.getStockIndexData(indexSymbol, false);
-                if (cachedData != null) {
-                    log.info(methodName,
-                            String.format("Retrieved index data for %s from cache (cached=%s)", indexSymbol, "true"));
-                    return cachedData;
-                }
-            }
-
-            // If cache miss or disabled, get fresh data
             List<StockIndicesMarketData> data = getLatestIndicesData(List.of(indexSymbol), forceRefresh);
             return data.isEmpty() ? null : data.get(0);
         } catch (Exception e) {
