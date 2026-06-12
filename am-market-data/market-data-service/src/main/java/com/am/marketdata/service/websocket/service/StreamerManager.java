@@ -270,15 +270,19 @@ public class StreamerManager implements StreamerListener {
                         double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
                         double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
                         double close = quote.getOhlc() != null ? quote.getOhlc().getClose() : 0.0;
-                        double prevClose = quote.getPreviousClose();
+                        // 1. Prioritize the official adjusted previousClose from the Redis cache
+                        Double prevClose = cacheService.getPreviousClose(symbol);
                         
-                        // Fallback: If Upstox tick doesn't provide previousClose, fetch it from Redis
-                        if (prevClose == 0.0) {
-                            Double cachedPrevClose = cacheService.getPreviousClose(symbol);
-                            if (cachedPrevClose != null) {
-                                prevClose = cachedPrevClose;
-                                quote.setPreviousClose(prevClose);
+                        // 2. Fall back to the streaming tick's previousClose if the cache is empty
+                        if (prevClose == null || prevClose == 0.0) {
+                            prevClose = quote.getPreviousClose();
+                            // Dynamically populate Redis so subsequent updates don't hit the fallback logic
+                            if (prevClose != null && prevClose != 0.0) {
+                                cacheService.setPreviousClose(symbol, prevClose);
                             }
+                        } else {
+                            // Sync the correct close value back into the quote object
+                            quote.setPreviousClose(prevClose);
                         }
 
                         double change = lastPrice - prevClose;

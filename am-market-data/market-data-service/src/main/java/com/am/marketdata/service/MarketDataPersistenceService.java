@@ -148,14 +148,19 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                     }
 
                     // Recalculate change statistics
-                    Double prevClose = quote.getPreviousClose();
+                    // 1. Prioritize the official adjusted previousClose from the Redis cache
+                    Double prevClose = marketDataCacheService.getPreviousClose(symbol);
                     
-                    // Fallback 1: If tick has no previousClose (0.0), look it up in Redis cache (populated by scheduler)
+                    // 2. Fall back to the live tick's previousClose if the cache is empty
                     if (prevClose == null || prevClose == 0.0) {
-                        prevClose = marketDataCacheService.getPreviousClose(symbol);
+                        prevClose = quote.getPreviousClose();
+                        // Dynamically populate Redis so subsequent ticks don't hit the fallback logic
+                        if (prevClose != null && prevClose != 0.0) {
+                            marketDataCacheService.setPreviousClose(symbol, prevClose);
+                        }
                     }
                     
-                    // Fallback 2: If still 0.0/null, fall back to existing MongoDB metadata
+                    // 3. Fall back to existing MongoDB metadata if still unresolved
                     if ((prevClose == null || prevClose == 0.0) && meta.getPreviousClose() != null) {
                         prevClose = meta.getPreviousClose();
                     }
