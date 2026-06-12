@@ -147,9 +147,16 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                         meta.setLow(quote.getOhlc().getLow());
                     }
 
-                    // Recalculate change stats
+                    // Recalculate change statistics
                     Double prevClose = quote.getPreviousClose();
-                    if (prevClose == 0.0 && meta.getPreviousClose() != null) {
+                    
+                    // Fallback 1: If tick has no previousClose (0.0), look it up in Redis cache (populated by scheduler)
+                    if (prevClose == null || prevClose == 0.0) {
+                        prevClose = marketDataCacheService.getPreviousClose(symbol);
+                    }
+                    
+                    // Fallback 2: If still 0.0/null, fall back to existing MongoDB metadata
+                    if ((prevClose == null || prevClose == 0.0) && meta.getPreviousClose() != null) {
                         prevClose = meta.getPreviousClose();
                     }
 

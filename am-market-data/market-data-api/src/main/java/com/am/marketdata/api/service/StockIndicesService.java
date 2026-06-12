@@ -157,14 +157,21 @@ public class StockIndicesService {
                         double high = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getHigh() : 0.0;
                         double low = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getLow() : 0.0;
 
-                        // Determine previousClose: Redis first, then MongoDB metadata as fallback.
-                        // Validate it: if it is >10% away from lastPrice it is a corrupted/stale document
-                        // value (e.g. 26177 stored from a historical scrape while Nifty is at ~23000).
-                        // In that case discard/correct it so we never show wildly wrong change figures.
+                        // Determine previousClose with the following fallback order to guarantee data consistency:
+                        // 1. Check the real-time priceQuote received from the WebSocket/API.
+                        // 2. If the quote doesn't have it (is 0.0), query the Redis cache where the Upstox-based PreviousCloseScheduler stores daily pre-fetched closes.
+                        // 3. If still empty, fall back to the historical/existing previousClose saved in MongoDB index metadata.
                         double previousClose = priceQuote.getPreviousClose();
+                        if (previousClose == 0.0) {
+                            Double cachedPrevClose = redisCacheService.getPreviousClose(symbol);
+                            if (cachedPrevClose != null && cachedPrevClose != 0.0) {
+                                previousClose = cachedPrevClose;
+                            }
+                        }
                         if (previousClose == 0.0 && meta.getPreviousClose() != null) {
                             previousClose = meta.getPreviousClose();
                         }
+                        // Validate previousClose against lastPrice to prevent wildly inaccurate percent changes if data is corrupted:
                         if (previousClose != 0.0 && lastPrice != 0.0) {
                             double deviation = Math.abs(previousClose - lastPrice) / lastPrice;
                             if (deviation > 0.10) {
