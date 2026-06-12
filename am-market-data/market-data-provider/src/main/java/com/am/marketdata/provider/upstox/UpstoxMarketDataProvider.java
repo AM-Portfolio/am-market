@@ -221,16 +221,17 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
             for (String symbol : symbolsNeedingPrevClose) {
                 try {
-                    // Resolve instrument key for this symbol
+                    // Resolve instrument key for this symbol, stripping exchange prefixes if present
+                    String cleanSymbol = symbol.replace("NSE_EQ:", "").replace("NSE:", "").trim();
                     String instrumentKey = context.keyToSymbolMap.entrySet().stream()
-                            .filter(e -> e.getValue().equals(symbol))
+                            .filter(e -> e.getValue().equals(cleanSymbol) || e.getValue().equals(symbol))
                             .map(Map.Entry::getKey)
                             .findFirst()
                             .orElse(null);
 
                     if (instrumentKey == null) {
                         log.warn("backfillPreviousClose",
-                                "Could not find instrument key for symbol: {}, skipping", symbol);
+                                "Could not find instrument key for symbol: {} (cleaned: {}), skipping", symbol, cleanSymbol);
                         continue;
                     }
 
