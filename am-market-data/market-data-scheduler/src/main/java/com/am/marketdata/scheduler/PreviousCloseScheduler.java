@@ -76,11 +76,8 @@ public class PreviousCloseScheduler {
                 symbols = new java.util.HashSet<>();
             }
 
-            // 2. Append index symbols explicitly so we cache Nifty/BankNifty closes as well
-            List<String> indexSymbols = java.util.Arrays.asList(
-                "NIFTY 50", "NIFTY BANK", "NIFTY IT", "NIFTY NEXT 50", "NIFTY MIDCAP 50",
-                "NIFTY INFRA", "NIFTY FMCG", "NIFTY METAL", "NIFTY REALTY", "NIFTY ENERGY"
-            );
+            // 2. Append index symbols dynamically from configuration (nseindices.yml)
+            List<String> indexSymbols = loadIndicesFromYaml();
             symbols.addAll(indexSymbols);
 
             if (symbols.isEmpty()) {
@@ -111,5 +108,49 @@ public class PreviousCloseScheduler {
         } catch (Exception e) {
             log.error("PreviousCloseScheduler", "Error executing previous close scheduler", e);
         }
+    }
+
+    /**
+     * Dynamically reads all index symbols configured in nseindices.yml on the classpath.
+     * Parses standard YAML list elements formatted as `- "INDEX NAME"`.
+     * If the file cannot be read, falls back to a list of major benchmark indices.
+     */
+    private List<String> loadIndicesFromYaml() {
+        List<String> indices = new ArrayList<>();
+        try {
+            org.springframework.core.io.ClassPathResource resource = new org.springframework.core.io.ClassPathResource("nseindices.yml");
+            if (resource.exists()) {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(resource.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        // Look for list items: - "NIFTY BANK" or - NIFTY BANK
+                        if (line.startsWith("-")) {
+                            String index = line.substring(1).trim()
+                                    .replace("\"", "")
+                                    .replace("'", "");
+                            if (!index.isEmpty()) {
+                                indices.add(index);
+                            }
+                        }
+                    }
+                }
+                log.info("PreviousCloseScheduler", "Loaded " + indices.size() + " indices dynamically from nseindices.yml.");
+            } else {
+                log.warn("PreviousCloseScheduler", "nseindices.yml not found on classpath, using default fallback list.");
+            }
+        } catch (Exception e) {
+            log.error("PreviousCloseScheduler", "Failed to parse nseindices.yml dynamically: " + e.getMessage(), e);
+        }
+
+        // Fallback list of major indices if the file read fails
+        if (indices.isEmpty()) {
+            indices.addAll(java.util.Arrays.asList(
+                "NIFTY 50", "NIFTY BANK", "NIFTY IT", "NIFTY NEXT 50", "NIFTY MIDCAP 50",
+                "NIFTY INFRA", "NIFTY FMCG", "NIFTY METAL", "NIFTY REALTY", "NIFTY ENERGY"
+            ));
+        }
+        return indices;
     }
 }

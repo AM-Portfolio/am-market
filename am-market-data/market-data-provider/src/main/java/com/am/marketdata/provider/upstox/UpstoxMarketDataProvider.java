@@ -255,26 +255,32 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             && !histResponse.getData().getCandles().isEmpty()) {
 
                         java.util.List<java.util.List<Object>> candles = histResponse.getData().getCandles();
-                        // Candles are in descending order (newest first): [0]=today, [1]=yesterday
-                        // If today's market is closed, [0] is yesterday's candle
-                        // We want the close of the candle BEFORE the most recent one
                         double prevClose = 0.0;
-                        if (candles.size() >= 2) {
-                            // Use index 1 (the day before the most recent candle)
-                            java.util.List<Object> prevCandle = candles.get(1);
-                            if (prevCandle != null && prevCandle.size() >= 5) {
-                                Object closeObj = prevCandle.get(4);
-                                if (closeObj instanceof Number) {
-                                    prevClose = ((Number) closeObj).doubleValue();
+                        if (!candles.isEmpty()) {
+                            java.util.List<Object> newestCandle = candles.get(0);
+                            String candleDateStr = newestCandle.get(0) != null ? newestCandle.get(0).toString() : "";
+                            
+                            // Compare candle date against today's date in Asia/Kolkata timezone
+                            java.time.LocalDate todayKolkata = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+                            String todayStr = todayKolkata.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+                            boolean isTodayCandle = !candleDateStr.isEmpty() && candleDateStr.startsWith(todayStr);
+                            
+                            if (isTodayCandle && candles.size() >= 2) {
+                                // Index 0 represents today's trading candle; previous close is yesterday's candle (index 1)
+                                java.util.List<Object> prevCandle = candles.get(1);
+                                if (prevCandle != null && prevCandle.size() >= 5) {
+                                    Object closeObj = prevCandle.get(4);
+                                    if (closeObj instanceof Number) {
+                                        prevClose = ((Number) closeObj).doubleValue();
+                                    }
                                 }
-                            }
-                        } else if (candles.size() == 1) {
-                            // Only one candle available — use it as a best-effort fallback
-                            java.util.List<Object> onlyCandle = candles.get(0);
-                            if (onlyCandle != null && onlyCandle.size() >= 5) {
-                                Object closeObj = onlyCandle.get(4);
-                                if (closeObj instanceof Number) {
-                                    prevClose = ((Number) closeObj).doubleValue();
+                            } else {
+                                // Index 0 represents yesterday's (or older) candle; it is the correct previous close
+                                if (newestCandle.size() >= 5) {
+                                    Object closeObj = newestCandle.get(4);
+                                    if (closeObj instanceof Number) {
+                                        prevClose = ((Number) closeObj).doubleValue();
+                                    }
                                 }
                             }
                         }
