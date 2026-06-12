@@ -368,22 +368,29 @@ public class StockIndicesService {
         log.info(methodName, "Fetching fresh data for " + symbolsToProcess.size() + " symbols: " + symbolsToProcess);
 
         // Fetch in parallel
-        List<CompletableFuture<Boolean>> futures = symbolsToProcess.stream()
-                .map(symbol -> marketDataProcessingService.fetchAndProcessStockIndices(symbol)
+        List<CompletableFuture<Boolean>> futures = new ArrayList<>();
+        for (String symbol : symbolsToProcess) {
+            try {
+                futures.add(marketDataProcessingService.fetchAndProcessStockIndices(symbol)
                         .exceptionally(e -> {
                             log.error(methodName, "Error fetching data for symbol: " + symbol, e);
                             return false;
-                        }))
-                .collect(Collectors.toList());
+                        }));
+            } catch (Exception e) {
+                log.error(methodName, "Rejected execution or error submitting scraper task for symbol: " + symbol, e);
+            }
+        }
 
         // Wait for completion with a timeout guard to prevent API hanging if a scraper fails
-        try {
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                    .get(4, TimeUnit.SECONDS);
-        } catch (java.util.concurrent.TimeoutException e) {
-            log.warn(methodName, "Scraping fresh index data timed out after 4 seconds, continuing with cached/seeded records");
-        } catch (Exception e) {
-            log.error(methodName, "Error during parallel index data fetch", e);
+        if (!futures.isEmpty()) {
+            try {
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                        .get(4, TimeUnit.SECONDS);
+            } catch (java.util.concurrent.TimeoutException e) {
+                log.warn(methodName, "Scraping fresh index data timed out after 4 seconds, continuing with cached/seeded records");
+            } catch (Exception e) {
+                log.error(methodName, "Error during parallel index data fetch", e);
+            }
         }
 
         try {
