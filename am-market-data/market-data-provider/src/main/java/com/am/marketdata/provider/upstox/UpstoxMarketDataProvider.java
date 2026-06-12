@@ -219,8 +219,20 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             // Fetch 5 calendar days back to safely cover weekends/holidays
             String fromDate = today.minusDays(5).format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
 
+            int callCount = 0;
             for (String symbol : symbolsNeedingPrevClose) {
                 try {
+                    if (callCount > 0) {
+                        try {
+                            Thread.sleep(100); // Respect Upstox rate limits (10 requests/sec)
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            log.warn("backfillPreviousClose", "Interrupted during backfill rate-limit sleep");
+                            break;
+                        }
+                    }
+                    callCount++;
+
                     // Resolve instrument key for this symbol, stripping exchange prefixes if present
                     String cleanSymbol = symbol.replace("NSE_EQ:", "").replace("NSE:", "").trim();
                     String instrumentKey = context.keyToSymbolMap.entrySet().stream()

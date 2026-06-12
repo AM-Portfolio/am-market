@@ -32,6 +32,12 @@ public class PreviousCloseScheduler {
         this.cacheService = cacheService;
     }
 
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void init() {
+        log.info("PreviousCloseScheduler", "Bootstrapping previous close cache on startup...");
+        new Thread(this::fetchAndCachePreviousClose, "prev-close-bootstrap-thread").start();
+    }
+
     // Run at 8:00 AM IST daily
     @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
     public void fetchAndCachePreviousClose() {
