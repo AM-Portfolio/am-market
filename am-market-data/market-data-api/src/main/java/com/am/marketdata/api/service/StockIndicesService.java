@@ -80,9 +80,9 @@ public class StockIndicesService {
 
             if (!missingSymbols.isEmpty()) {
                 try {
-                    // Skip REST fallback if WebSocket is active and streaming (rely purely on WS push updates)
+                    // Skip REST fallback if WebSocket is active and streaming, UNLESS forceRefresh is requested
                     boolean isWebSocketActive = "UPSTOX".equalsIgnoreCase(redisCacheService.getActiveProvider());
-                    if (isWebSocketActive) {
+                    if (isWebSocketActive && !forceRefresh) {
                         log.info(methodName, "WebSocket is active provider. Skipping REST fallback for: " + missingSymbols + " (relying purely on WS ticks)");
                     } else {
                         List<CompletableFuture<Void>> futures = new ArrayList<>();
