@@ -68,12 +68,19 @@ public class StreamerManager implements StreamerListener {
 
     public void refreshSubscriptions() {
         Set<String> symbols = symbolService.findDistinctSymbols();
-        if (symbols != null && !symbols.isEmpty()) {
+        if (symbols == null) {
+            symbols = new HashSet<>();
+        }
+        
+        // Load and merge index symbols from the configuration file so we stream index ticks too
+        symbols.addAll(loadIndicesFromYaml());
+
+        if (!symbols.isEmpty()) {
             this.subscribedSymbols.clear();
             this.subscribedSymbols.addAll(symbols);
 
             log.info("StreamerManager",
-                    "Refreshed subscriptions with " + subscribedSymbols.size() + " instrument keys");
+                    "Refreshed subscriptions with " + subscribedSymbols.size() + " instrument keys (including indices)");
 
             // Actually subscribe if connected
             if (streamer.isConnected()) {
@@ -380,5 +387,49 @@ public class StreamerManager implements StreamerListener {
         } catch (Exception e) {
             // log.warn("StreamerManager", "Error processing update for publisher", e);
         }
+    }
+
+    /**
+     * Dynamically reads all index symbols configured in nseindices.yml on the classpath.
+     * Parses standard YAML list elements formatted as `- "INDEX NAME"`.
+     * If the file cannot be read, falls back to a list of major benchmark indices.
+     */
+    private List<String> loadIndicesFromYaml() {
+        List<String> indices = new java.util.ArrayList<>();
+        try {
+            org.springframework.core.io.ClassPathResource resource = new org.springframework.core.io.ClassPathResource("nseindices.yml");
+            if (resource.exists()) {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(resource.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        // Look for list items: - "NIFTY BANK" or - NIFTY BANK
+                        if (line.startsWith("-")) {
+                            String index = line.substring(1).trim()
+                                    .replace("\"", "")
+                                    .replace("'", "");
+                            if (!index.isEmpty()) {
+                                indices.add(index);
+                            }
+                        }
+                    }
+                }
+                log.info("StreamerManager", "Loaded " + indices.size() + " indices dynamically from nseindices.yml for streaming.");
+            } else {
+                log.warn("StreamerManager", "nseindices.yml not found on classpath, using default fallback list.");
+            }
+        } catch (Exception e) {
+            log.error("StreamerManager", "Failed to parse nseindices.yml dynamically for streaming: " + e.getMessage(), e);
+        }
+
+        // Fallback list of major indices if the file read fails
+        if (indices.isEmpty()) {
+            indices.addAll(java.util.Arrays.asList(
+                "NIFTY 50", "NIFTY BANK", "NIFTY IT", "NIFTY NEXT 50", "NIFTY MIDCAP 50",
+                "NIFTY INFRA", "NIFTY FMCG", "NIFTY METAL", "NIFTY REALTY", "NIFTY ENERGY"
+            ));
+        }
+        return indices;
     }
 }

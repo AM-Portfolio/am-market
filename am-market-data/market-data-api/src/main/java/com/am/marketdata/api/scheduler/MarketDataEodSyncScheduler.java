@@ -36,9 +36,9 @@ public class MarketDataEodSyncScheduler {
         log.info(methodName, "Starting EOD Index Price Sync Scheduler to persist Redis prices to MongoDB");
 
         try {
-            // Calling getLatestIndicesData automatically retrieves Redis prices and 
-            // debounces/saves them to MongoDB if prices are available.
-            stockIndicesService.getLatestIndicesData(MAJOR_INDICES, false);
+            // Force a refresh (forceRefresh = true) to fetch the official exchange-adjusted 
+            // post-market closing prices from Upstox instead of copying the raw 3:30 PM ticks from Redis.
+            stockIndicesService.getLatestIndicesData(MAJOR_INDICES, true);
             log.info(methodName, "Successfully completed EOD Index Price Sync");
         } catch (Exception e) {
             log.error(methodName, "Error during EOD Index Price Sync", e);
