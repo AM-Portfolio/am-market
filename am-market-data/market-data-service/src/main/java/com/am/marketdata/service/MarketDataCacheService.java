@@ -47,6 +47,28 @@ public class MarketDataCacheService {
         this.redisTemplate = redisTemplate;
     }
 
+    public Double getPreviousClose(String symbol) {
+        try {
+            String redisKey = "market:prev-close:" + symbol;
+            String value = redisTemplate.opsForValue().get(redisKey);
+            if (value != null) {
+                return Double.parseDouble(value);
+            }
+        } catch (Exception e) {
+            log.warn("getPreviousClose", "Failed to get previous close for symbol: " + symbol, e);
+        }
+        return null;
+    }
+
+    public void setPreviousClose(String symbol, double previousClose) {
+        try {
+            String redisKey = "market:prev-close:" + symbol;
+            redisTemplate.opsForValue().set(redisKey, String.valueOf(previousClose), 26, TimeUnit.HOURS);
+        } catch (Exception e) {
+            log.warn("setPreviousClose", "Failed to set previous close for symbol: " + symbol, e);
+        }
+    }
+
     public void cacheOHLCData(Map<String, OHLCQuote> ohlcData, TimeFrame timeFrame) {
         try {
             String interval = timeFrame != null ? timeFrame.getApiValue() : "1D";

@@ -271,6 +271,15 @@ public class StreamerManager implements StreamerListener {
                         double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
                         double close = quote.getOhlc() != null ? quote.getOhlc().getClose() : 0.0;
                         double prevClose = quote.getPreviousClose();
+                        
+                        // Fallback: If Upstox tick doesn't provide previousClose, fetch it from Redis
+                        if (prevClose == 0.0) {
+                            Double cachedPrevClose = cacheService.getPreviousClose(symbol);
+                            if (cachedPrevClose != null) {
+                                prevClose = cachedPrevClose;
+                                quote.setPreviousClose(prevClose);
+                            }
+                        }
 
                         double change = lastPrice - prevClose;
                         double changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0.0;
@@ -324,6 +333,12 @@ public class StreamerManager implements StreamerListener {
     @Override
     public void onError(Throwable error) {
         log.error("StreamerManager", "Streamer Error: " + error.getMessage(), error);
+        // Introduce a cooling period so it doesn't spin in a rapid loop
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Override

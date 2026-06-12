@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 public class StockIndicesService {
 
     private final java.util.concurrent.ConcurrentHashMap<String, Long> lastMongoSaveTimeMap = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<OHLCQuote>> activeSymbolFetches = new java.util.concurrent.ConcurrentHashMap<>();
     private static final long MONGO_SAVE_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
     // Auto-detects class name "StockIndicesService"
@@ -66,11 +67,8 @@ public class StockIndicesService {
 
             // 3. Enrich with Redis latest streaming prices or live prices API
             Set<String> requestedSymbols = new HashSet<>(indexSymbols);
-            Map<String, OHLCQuote> latestPrices = redisCacheService.getLatestPrices(requestedSymbols);
-
-            if (latestPrices == null) {
-                latestPrices = new java.util.HashMap<>();
-            }
+            Map<String, OHLCQuote> initialLatestPrices = redisCacheService.getLatestPrices(requestedSymbols);
+            final Map<String, OHLCQuote> latestPrices = initialLatestPrices != null ? initialLatestPrices : new java.util.HashMap<>();
 
             // Fallback for missing symbols to marketDataCacheService.getLivePrices
             Set<String> missingSymbols = new HashSet<>();
@@ -82,48 +80,56 @@ public class StockIndicesService {
 
             if (!missingSymbols.isEmpty()) {
                 try {
-                    Map<String, Object> liveResponse = CompletableFuture.supplyAsync(() -> {
-                        try {
-                            // Use isIndexSymbol=true to fetch live index prices directly
-                            return marketDataCacheService.getLivePrices(missingSymbols, true, forceRefresh);
-                        } catch (Exception e) {
-                            throw new RuntimeException(e);
-                        }
-                    }).orTimeout(1500, TimeUnit.MILLISECONDS)
-                      .exceptionally(ex -> {
-                          log.warn(methodName, "Live price retrieval for indices timed out or failed: " + ex.getMessage());
-                          return null;
-                      }).get();
-
-                    if (liveResponse != null && liveResponse.get("prices") instanceof List) {
-                        List<?> pricesList = (List<?>) liveResponse.get("prices");
-                        for (Object obj : pricesList) {
-                            if (obj instanceof com.am.common.investment.model.equity.EquityPrice) {
-                                com.am.common.investment.model.equity.EquityPrice ep = (com.am.common.investment.model.equity.EquityPrice) obj;
-                                if (ep.getSymbol() != null && ep.getLastPrice() != null) {
-                                    String matchingSymbol = null;
-                                    for (String reqSym : requestedSymbols) {
-                                        if (reqSym.equalsIgnoreCase(ep.getSymbol())) {
-                                            matchingSymbol = reqSym;
-                                            break;
+                    // Skip REST fallback if WebSocket is active and streaming (rely purely on WS push updates)
+                    boolean isWebSocketActive = "UPSTOX".equalsIgnoreCase(redisCacheService.getActiveProvider());
+                    if (isWebSocketActive) {
+                        log.info(methodName, "WebSocket is active provider. Skipping REST fallback for: " + missingSymbols + " (relying purely on WS ticks)");
+                    } else {
+                        List<CompletableFuture<Void>> futures = new ArrayList<>();
+                        for (String symbol : missingSymbols) {
+                            CompletableFuture<Void> symbolFuture = activeSymbolFetches.computeIfAbsent(symbol, sym -> {
+                                log.info(methodName, "🚀 [COALESCING] Initiating single flight live price fetch for symbol: " + sym);
+                                return CompletableFuture.supplyAsync(() -> {
+                                    try {
+                                        // Use isIndexSymbol=true to fetch live index prices directly
+                                        Map<String, Object> liveResponse = marketDataCacheService.getLivePrices(Set.of(sym), true, forceRefresh);
+                                        if (liveResponse != null && liveResponse.get("prices") instanceof List) {
+                                            List<?> pricesList = (List<?>) liveResponse.get("prices");
+                                            if (!pricesList.isEmpty() && pricesList.get(0) instanceof com.am.common.investment.model.equity.EquityPrice) {
+                                                com.am.common.investment.model.equity.EquityPrice ep = (com.am.common.investment.model.equity.EquityPrice) pricesList.get(0);
+                                                OHLCQuote quote = new OHLCQuote();
+                                                quote.setLastPrice(ep.getLastPrice() != null ? ep.getLastPrice() : 0.0);
+                                                if (ep.getOhlcv() != null) {
+                                                    OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
+                                                    ohlc.setOpen(ep.getOhlcv().getOpen() != null ? ep.getOhlcv().getOpen() : 0.0);
+                                                    ohlc.setHigh(ep.getOhlcv().getHigh() != null ? ep.getOhlcv().getHigh() : 0.0);
+                                                    ohlc.setLow(ep.getOhlcv().getLow() != null ? ep.getOhlcv().getLow() : 0.0);
+                                                    ohlc.setClose(ep.getOhlcv().getClose() != null ? ep.getOhlcv().getClose() : 0.0);
+                                                    quote.setOhlc(ohlc);
+                                                }
+                                                return quote;
+                                            }
                                         }
+                                        return null;
+                                    } catch (Exception e) {
+                                        throw new RuntimeException(e);
                                     }
-                                    if (matchingSymbol != null) {
-                                        OHLCQuote quote = latestPrices.getOrDefault(matchingSymbol, new OHLCQuote());
-                                        quote.setLastPrice(ep.getLastPrice());
-                                        if (ep.getOhlcv() != null) {
-                                            OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
-                                            ohlc.setOpen(ep.getOhlcv().getOpen());
-                                            ohlc.setHigh(ep.getOhlcv().getHigh());
-                                            ohlc.setLow(ep.getOhlcv().getLow());
-                                            ohlc.setClose(ep.getOhlcv().getClose());
-                                            quote.setOhlc(ohlc);
-                                        }
-                                        latestPrices.put(matchingSymbol, quote);
-                                    }
+                                });
+                            }).thenAccept(quote -> {
+                                if (quote != null) {
+                                    latestPrices.put(symbol, quote);
                                 }
-                            }
+                            }).orTimeout(1500, TimeUnit.MILLISECONDS)
+                              .exceptionally(ex -> {
+                                  log.warn(methodName, "Timeout fetching live price for: " + symbol);
+                                  return null;
+                              }).whenComplete((v, ex) -> activeSymbolFetches.remove(symbol));
+
+                            futures.add(symbolFuture);
                         }
+
+                        // Wait for all symbol fetches to finish (or timeout)
+                        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
                     }
                 } catch (Exception e) {
                     log.error(methodName, "Error fetching fallback live prices for indices", e);

@@ -47,6 +47,9 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
     private MarketDataStreamerV3 streamer;
     private StreamerListener listener;
     private boolean isConnected = false;
+    private volatile boolean isConnecting = false;
+    private java.util.concurrent.ScheduledFuture<?> connectionWatchdog;
+    private final java.util.concurrent.ScheduledExecutorService scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
 
     @Autowired
     public UpstoxMarketDataStreamer(
@@ -62,7 +65,24 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
     @Override
     public void connect() {
+        if (isConnected || isConnecting) {
+            log.info("UpstoxStreamer", "Already connected or connection attempt in progress. Skipping.");
+            return;
+        }
         try {
+            isConnecting = true;
+            
+            // Set safety watchdog to reset isConnecting in case handshake hangs indefinitely
+            if (connectionWatchdog != null) {
+                connectionWatchdog.cancel(false);
+            }
+            connectionWatchdog = scheduler.schedule(() -> {
+                if (isConnecting && !isConnected) {
+                    log.warn("UpstoxStreamer", "⚠️ Connection handshake watchdog triggered! Resetting connection lock.");
+                    isConnecting = false;
+                }
+            }, 15, java.util.concurrent.TimeUnit.SECONDS);
+
             log.info("UpstoxStreamer", "=== STARTING Upstox Market Data Streamer connection ===");
 
             // Get Access Token - Try Redis cache first, then config
@@ -96,6 +116,10 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                 public void onOpen() {
                     log.info("UpstoxStreamer", "✅ *** CONNECTION ESTABLISHED *** ✅");
                     isConnected = true;
+                    isConnecting = false;
+                    if (connectionWatchdog != null) {
+                        connectionWatchdog.cancel(false);
+                    }
                     if (listener != null) {
                         log.info("UpstoxStreamer", "Notifying listener of connection open");
                         listener.onOpen();
@@ -164,6 +188,10 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
             streamer.setOnErrorListener(new OnErrorListener() {
                 @Override
                 public void onError(Throwable error) {
+                    if (error instanceof java.io.InterruptedIOException || error.getCause() instanceof InterruptedException) {
+                        log.info("UpstoxStreamer", "Streamer thread interrupted (normal during disconnect/reconnect).");
+                        return;
+                    }
                     log.error("UpstoxStreamer", "❌ ERROR in streamer: " + error.getMessage(), error);
                     if (listener != null)
                         listener.onError(error);
@@ -175,6 +203,10 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                 public void onClose(int code, String reason) {
                     log.info("UpstoxStreamer", "Connection Closed: " + code + " | Reason: " + reason);
                     isConnected = false;
+                    isConnecting = false;
+                    if (connectionWatchdog != null) {
+                        connectionWatchdog.cancel(false);
+                    }
                     if (listener != null)
                         listener.onClose();
                 }
@@ -189,6 +221,10 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
         } catch (Exception e) {
             log.error("UpstoxStreamer", "❌ FATAL: Failed to connect: " + e.getMessage(), e);
             isConnected = false;
+            isConnecting = false;
+            if (connectionWatchdog != null) {
+                connectionWatchdog.cancel(false);
+            }
             if (listener != null)
                 listener.onError(e);
         }
@@ -196,8 +232,12 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
     @Override
     public void disconnect() {
+        if (connectionWatchdog != null) {
+            connectionWatchdog.cancel(false);
+        }
         if (streamer != null) {
             log.info("UpstoxStreamer", "Disconnecting...");
+            isConnecting = false;
             streamer.disconnect();
             isConnected = false;
         }
