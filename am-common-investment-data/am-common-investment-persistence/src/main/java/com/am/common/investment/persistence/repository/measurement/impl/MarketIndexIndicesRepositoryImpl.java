@@ -61,7 +61,6 @@ public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepos
 
     @Override
     public List<MarketIndexIndicesMeasurement> findByKey(String key) {
-        String escapedKey = key.replace(" ", "\\ ");
         String query = String.format(
             "from(bucket: \"%s\") " +
             "|> range(start: -30d) " +
@@ -71,7 +70,7 @@ public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepos
             "        columnKey: [\"_field\"], " +
             "        valueColumn: \"_value\") " +
             "|> last()",
-            bucket, MEASUREMENT_NAME, escapedKey
+            bucket, MEASUREMENT_NAME, key
         );
 
         logger.debug("Executing findByKey query: measurement=market_index, key={}", key);
@@ -95,7 +94,6 @@ public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepos
 
     @Override
     public List<MarketIndexIndicesMeasurement> findByIndexSymbolAndTimeBetween(String indexSymbol, Instant startTime, Instant endTime) {
-        String escapedSymbol = indexSymbol.replace(" ", "\\ ");
         String query = String.format(
             "from(bucket: \"%s\") " +
             "|> range(start: %s, stop: %s) " +
@@ -104,7 +102,7 @@ public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepos
             "|> pivot(rowKey: [\"_time\"], " +
             "        columnKey: [\"_field\"], " +
             "        valueColumn: \"_value\") ",
-            bucket, startTime, endTime, MEASUREMENT_NAME, escapedSymbol
+            bucket, startTime, endTime, MEASUREMENT_NAME, indexSymbol
         );
 
         logger.debug("Executing findByIndexSymbolAndTimeBetween query: measurement=market_index, indexSymbol={}, start: {}, end: {}", indexSymbol, startTime, endTime);
