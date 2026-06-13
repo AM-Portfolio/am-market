@@ -30,16 +30,52 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
     private static final Logger logger = LoggerFactory.getLogger(HistoricalDataServiceImpl.class);
     
     private final EquityService equityService;
+    private final com.am.common.investment.service.MarketIndexIndicesService marketIndexIndicesService;
     
     @Override
     public Optional<HistoricalData> getHistoricalData(String tradingSymbol, Instant fromDate, Instant toDate, String interval) {
-        logger.debug("Retrieving historical data for symbol: {}, from: {}, to: {}, interval: {}", 
-                tradingSymbol, fromDate, toDate, interval);
+        return getHistoricalData(tradingSymbol, fromDate, toDate, interval, false);
+    }
+
+    @Override
+    public Optional<HistoricalData> getHistoricalData(String tradingSymbol, Instant fromDate, Instant toDate, String interval, boolean isIndexSymbol) {
+        logger.debug("Retrieving historical data for symbol: {}, from: {}, to: {}, interval: {}, isIndexSymbol: {}", 
+                tradingSymbol, fromDate, toDate, interval, isIndexSymbol);
         
         long startTime = System.currentTimeMillis();
         
-        // Get price history from equity service
-        List<EquityPrice> prices = equityService.getPriceHistoryByKey(tradingSymbol, fromDate, toDate);
+        List<EquityPrice> prices;
+        if (isIndexSymbol) {
+            List<com.am.common.investment.model.equity.MarketIndexIndices> indices = 
+                marketIndexIndicesService.getByIndexSymbolAndTimeBetween(tradingSymbol, fromDate, toDate);
+            
+            prices = indices.stream().map(index -> {
+                com.am.common.investment.model.historical.OHLCVTPoint ohlcv = null;
+                if (index.getMarketData() != null) {
+                    ohlcv = com.am.common.investment.model.historical.OHLCVTPoint.builder()
+                        .open(index.getMarketData().getOpen() != null ? index.getMarketData().getOpen() : 0.0)
+                        .high(index.getMarketData().getHigh() != null ? index.getMarketData().getHigh() : 0.0)
+                        .low(index.getMarketData().getLow() != null ? index.getMarketData().getLow() : 0.0)
+                        .close(index.getMarketData().getLast() != null ? index.getMarketData().getLast() : 0.0)
+                        .volume(0L)
+                        .build();
+                }
+                
+                return com.am.common.investment.model.equity.EquityPrice.builder()
+                    .symbol(index.getIndexSymbol())
+                    .time(index.getTimestamp() != null ? index.getTimestamp().toInstant(java.time.ZoneOffset.UTC) : null)
+                    .lastPrice(index.getMarketData() != null && index.getMarketData().getLast() != null ? index.getMarketData().getLast() : 0.0)
+                    .ohlcv(ohlcv)
+                    .exchange("NSE")
+                    .currency("INR")
+                    .build();
+            })
+            .filter(price -> price.getTime() != null && price.getOhlcv() != null)
+            .collect(java.util.stream.Collectors.toList());
+        } else {
+            // Get price history from equity service
+            prices = equityService.getPriceHistoryByKey(tradingSymbol, fromDate, toDate);
+        }
         
         if (prices.isEmpty()) {
             logger.debug("No historical data found for symbol: {}", tradingSymbol);

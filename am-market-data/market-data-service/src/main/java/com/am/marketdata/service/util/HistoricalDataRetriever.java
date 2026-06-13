@@ -165,7 +165,7 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             try {
                 // Force database lookup by setting forceRefresh to true in the persistence
                 // service
-                HistoricalData data = persistenceService.getHistoricalData(symbol, interval, fromDateStr, toDateStr);
+                HistoricalData data = persistenceService.getHistoricalData(symbol, interval, fromDateStr, toDateStr, isIndexSymbol);
                 if (data != null && data.getDataPoints() != null && !data.getDataPoints().isEmpty()) {
                     result.put(symbol, data);
                     remainingSymbols.remove(symbol);

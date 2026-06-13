@@ -390,6 +390,10 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
     }
 
     public HistoricalData getHistoricalData(String symbol, TimeFrame interval, String fromDate, String toDate) {
+        return getHistoricalData(symbol, interval, fromDate, toDate, false);
+    }
+
+    public HistoricalData getHistoricalData(String symbol, TimeFrame interval, String fromDate, String toDate, boolean isIndexSymbol) {
         if (symbol == null || symbol.isEmpty() || interval == null) {
             return null;
         }
@@ -442,7 +446,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
             // Handle Optional return type
             HistoricalData historicalData = historicalDataService.getHistoricalData(
-                    cleanSymbol, fromInstant, toInstant, mappedInterval).orElse(null);
+                    cleanSymbol, fromInstant, toInstant, mappedInterval, isIndexSymbol).orElse(null);
 
             if (historicalData != null && historicalData.getDataPoints() != null
                     && !historicalData.getDataPoints().isEmpty()) {

@@ -92,4 +92,36 @@ public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepos
 
         return results;
     }
+
+    @Override
+    public List<MarketIndexIndicesMeasurement> findByIndexSymbolAndTimeBetween(String indexSymbol, Instant startTime, Instant endTime) {
+        String escapedSymbol = indexSymbol.replace(" ", "\\ ");
+        String query = String.format(
+            "from(bucket: \"%s\") " +
+            "|> range(start: %s, stop: %s) " +
+            "|> filter(fn: (r) => r._measurement == \"%s\") " +
+            "|> filter(fn: (r) => r.indexSymbol == \"%s\") " +
+            "|> pivot(rowKey: [\"_time\"], " +
+            "        columnKey: [\"_field\"], " +
+            "        valueColumn: \"_value\") ",
+            bucket, startTime, endTime, MEASUREMENT_NAME, escapedSymbol
+        );
+
+        logger.debug("Executing findByIndexSymbolAndTimeBetween query: measurement=market_index, indexSymbol={}, start: {}, end: {}", indexSymbol, startTime, endTime);
+        logger.debug("Query: {}", query);
+
+        QueryApi queryApi = influxDBClient.getQueryApi();
+        List<MarketIndexIndicesMeasurement> results = queryApi.query(query, MarketIndexIndicesMeasurement.class);
+        logger.debug("Found {} results for indexSymbol={}", results.size(), indexSymbol);
+
+        if (!results.isEmpty()) {
+            results.forEach(m -> {
+                m.setIndexSymbol(indexSymbol);
+                m.setIndex(m.getIndex());
+                m.setKey(m.getKey());
+            });
+        }
+
+        return results;
+    }
 }

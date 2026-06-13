@@ -13,32 +13,25 @@ public interface HistoricalDataService {
     
     /**
      * Retrieves historical price data for a given trading symbol within a specified time range and interval.
-     *
-     * @param tradingSymbol The trading symbol or identifier for the instrument
-     * @param fromDate The start date for the historical data (inclusive)
-     * @param toDate The end date for the historical data (inclusive)
-     * @param interval The time interval for data points (e.g., "1d", "1h", "15m")
-     * @return Optional containing the historical data if found, empty otherwise
      */
-    Optional<HistoricalData> getHistoricalData(String tradingSymbol, Instant fromDate, Instant toDate, String interval);
+    Optional<HistoricalData> getHistoricalData(String tradingSymbol, Instant fromDate, Instant toDate, String interval, boolean isIndexSymbol);
+    
+    default Optional<HistoricalData> getHistoricalData(String tradingSymbol, Instant fromDate, Instant toDate, String interval) {
+        return getHistoricalData(tradingSymbol, fromDate, toDate, interval, false);
+    }
     
     /**
      * Retrieves the latest available historical data for a trading symbol with a specified lookback period and interval.
      *
      * @param tradingSymbol The trading symbol or identifier for the instrument
-     * @param lookbackPeriod The number of periods to look back (e.g., 30 for 30 days if interval is "1d")
-     * @param interval The time interval for data points (e.g., "1d", "1h", "15m")
+     * @param lookbackPeriod The number of periods to look back
+     * @param interval The time interval for data points
      * @return Optional containing the historical data if found, empty otherwise
      */
     Optional<HistoricalData> getRecentHistoricalData(String tradingSymbol, int lookbackPeriod, String interval);
 
     /**
-     * Retrieves the latest available historical data for a trading symbol with a specified lookback period and interval.
-     *
-     * @param tradingSymbol The trading symbol or identifier for the instrument
-     * @param lookbackPeriod The number of periods to look back (e.g., 30 for 30 days if interval is "1d")
-     * @param interval The time interval for data points (e.g., "1d", "1h", "15m")
-     * @return Optional containing the historical data if found, empty otherwise
+     * Saves historical data.
      */
     Optional<HistoricalData> saveHistoricalData(HistoricalData historicalData);
 }

@@ -258,8 +258,10 @@ public class StockIndicesService {
                         isStale = false;
                     } else {
                         // Check if outside market hours (IST) and less than 3 days old (weekend)
-                        java.time.LocalTime istTime = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                        boolean isMarketHours = istTime.isAfter(java.time.LocalTime.of(9, 10)) && istTime.isBefore(java.time.LocalTime.of(15, 45));
+                        java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                        java.time.DayOfWeek dayOfWeek = istNow.getDayOfWeek();
+                        boolean isWeekend = dayOfWeek == java.time.DayOfWeek.SATURDAY || dayOfWeek == java.time.DayOfWeek.SUNDAY;
+                        boolean isMarketHours = !isWeekend && istNow.toLocalTime().isAfter(java.time.LocalTime.of(9, 10)) && istNow.toLocalTime().isBefore(java.time.LocalTime.of(15, 45));
                         if (!isMarketHours && minutesOld < 3 * 24 * 60) {
                             isStale = false;
                         }
@@ -325,8 +327,10 @@ public class StockIndicesService {
                         }
 
                         if (isStale) {
-                            java.time.LocalTime istTime = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                            boolean isMarketHours = istTime.isAfter(java.time.LocalTime.of(9, 10)) && istTime.isBefore(java.time.LocalTime.of(15, 45));
+                            java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                            java.time.DayOfWeek dayOfWeek = istNow.getDayOfWeek();
+                            boolean isWeekend = dayOfWeek == java.time.DayOfWeek.SATURDAY || dayOfWeek == java.time.DayOfWeek.SUNDAY;
+                            boolean isMarketHours = !isWeekend && istNow.toLocalTime().isAfter(java.time.LocalTime.of(9, 10)) && istNow.toLocalTime().isBefore(java.time.LocalTime.of(15, 45));
                             if (!isMarketHours) {
                                 isStale = false; // Outside market hours, consider it fresh
                             }

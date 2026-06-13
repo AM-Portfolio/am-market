@@ -302,6 +302,7 @@ public class MarketDataService {
                         .continuous(continuous)
                         .additionalParams(additionalParams)
                         .targetProviderName(providerName)
+                        .isIndexSymbol(isIndexSymbol)
                         .producer(producer)
                         .build();
 
