@@ -120,19 +120,6 @@ public class MarketDataOrchestrator {
     }
 
     /**
-     * Streamer Start (e.g., 2:15 PM)
-     */
-    @Scheduled(cron = "0 15 14 ? * MON-FRI", zone = "Asia/Kolkata")
-    public void triggerStreamerStart() {
-        log.info("Orchestrator: Triggering Streamer Start");
-        if (streamerScheduler.isPresent()) {
-            streamerScheduler.get().executeStartStreaming();
-        } else {
-            log.warn("Orchestrator: StreamerScheduler is not present, skipping Streamer Start");
-        }
-    }
-
-    /**
      * Market Close Operations (e.g., 3:30 PM)
      * Stops Ingestion
      */
@@ -143,19 +130,6 @@ public class MarketDataOrchestrator {
             ingestionScheduler.get().stopIngestionJob();
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Ingestion Stop");
-        }
-    }
-
-    /**
-     * Streamer Stop (e.g., 4:00 PM)
-     */
-    @Scheduled(cron = "0 0 16 * * *", zone = "Asia/Kolkata")
-    public void triggerStreamerStop() {
-        log.info("Orchestrator: Triggering Streamer Stop");
-        if (streamerScheduler.isPresent()) {
-            streamerScheduler.get().executeStopStreaming();
-        } else {
-            log.warn("Orchestrator: StreamerScheduler is not present, skipping Streamer Stop");
         }
     }
 
