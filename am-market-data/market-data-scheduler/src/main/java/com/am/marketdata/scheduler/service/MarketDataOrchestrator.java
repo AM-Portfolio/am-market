@@ -239,7 +239,7 @@ public class MarketDataOrchestrator {
     /**
      * Redis Cache Cleanup (e.g., 2:00 AM)
      */
-    @Scheduled(cron = "${scheduler.redis.cleanup.cron:0 0 2 * * *}")
+    @Scheduled(cron = "${scheduler.redis.cleanup.cron:0 0 2 * * *}", zone = "Asia/Kolkata")
     public void triggerRedisCleanup() {
         log.info("Orchestrator: Triggering Redis Cleanup");
         if (redisCacheCleanupScheduler.isPresent()) {
