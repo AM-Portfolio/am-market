@@ -55,11 +55,11 @@ config:
     timezone: "Asia/Kolkata"
 
     cookie:
-      enabled: true
+      enabled: false
       refreshCron: "0 0 9-16 * * MON-FRI"
 
     stockIndices:
-      enabled: true
+      enabled: false
       morningFetchCron: "0 30 9 * * *"
       eveningFetchCron: "0 0 16 * * *"
       retry:

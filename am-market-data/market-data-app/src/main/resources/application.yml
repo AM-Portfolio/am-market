@@ -179,11 +179,11 @@ scheduler:
   timezone: ${SCHEDULER_TIMEZONE:Asia/Kolkata}
   # ── Cookie / NSE session ──────────────────────────────────────────────────
   cookie:
-    enabled: ${SCHEDULER_COOKIE_ENABLED:true}
+    enabled: ${SCHEDULER_COOKIE_ENABLED:false}
     refresh: "${SCHEDULER_COOKIE_REFRESH_CRON:0 0 9-16 * * MON-FRI}"
   # ── Stock-indices ─────────────────────────────────────────────────────────
   stock-indices:
-    enabled: ${SCHEDULER_STOCK_INDICES_ENABLED:true}
+    enabled: ${SCHEDULER_STOCK_INDICES_ENABLED:false}
     morning-fetch: "${SCHEDULER_STOCK_INDICES_MORNING_FETCH_CRON:0 30 9 * * *}"
     evening-fetch: "${SCHEDULER_STOCK_INDICES_EVENING_FETCH_CRON:0 0 16 * * *}"
     retry:
