@@ -167,9 +167,35 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                 // service
                 HistoricalData data = persistenceService.getHistoricalData(symbol, interval, fromDateStr, toDateStr, isIndexSymbol);
                 if (data != null && data.getDataPoints() != null && !data.getDataPoints().isEmpty()) {
-                    result.put(symbol, data);
-                    remainingSymbols.remove(symbol);
-                    log.debug("[DATABASE] Found historical data for symbol: {}", symbol);
+                    List<com.am.common.investment.model.historical.OHLCVTPoint> points = data.getDataPoints();
+                    
+                    // VALIDATION: Strict Date Range Check
+                    // Filter out database data that does not cover the full requested range
+                    // This prevents partial database hits (e.g., finding only 1 point)
+                    long requiredStartMs = fromDate.getTime();
+                    long requiredEndMs = toDate.getTime();
+                    long toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for holidays/weekends
+
+                    java.time.LocalDateTime firstPointTime = points.get(0).getTime();
+                    java.time.LocalDateTime lastPointTime = points.get(points.size() - 1).getTime();
+
+                    long dataStartMs = firstPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+                    long dataEndMs = lastPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+
+                    boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
+                    boolean missingRecentData = dataEndMs < (requiredEndMs - toleranceMs);
+
+                    if (missingEarlyData || missingRecentData) {
+                        log.info("[DATABASE_VALIDATION] Partial database data detected for {}. Discarding database entry to force fallback to provider. " +
+                                "Req: {} to {}, Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
+                                symbol, fromDateStr, toDateStr,
+                                firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
+                                missingEarlyData, missingRecentData);
+                    } else {
+                        result.put(symbol, data);
+                        remainingSymbols.remove(symbol);
+                        log.debug("[DATABASE] Found valid historical data for symbol: {}", symbol);
+                    }
                 }
             } catch (Exception e) {
                 log.warn("[DATABASE] Error retrieving historical data for symbol {}: {}", symbol, e.getMessage());
