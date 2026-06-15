@@ -192,6 +192,7 @@ scheduler:
       max-retries: ${SCHEDULER_STOCK_INDICES_RETRY_MAX_RETRIES:20}
   # ── Intra-day indices fetch ───────────────────────────────────────────────
   indices:
+    enabled: ${SCHEDULER_INDICES_ENABLED:false}
     fetch: "${SCHEDULER_INDICES_FETCH_CRON:0 */2 * * * *}"
   # ── Ingestion (live market-hours) ─────────────────────────────────────────
   ingestion:
