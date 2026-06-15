@@ -138,10 +138,20 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         Map<Instant, List<EquityPrice>> buckets = new HashMap<>();
         Instant firstTimestamp = prices.get(0).getTime();
         
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
+        java.time.ZonedDateTime firstZoned = firstTimestamp.atZone(zone);
+        boolean isDateUnit = !unit.isTimeBased();
+        
         for (EquityPrice price : prices) {
-            // Calculate which bucket this price belongs to
-            long diffUnits = unit.between(firstTimestamp, price.getTime()) / amount;
-            Instant bucketKey = firstTimestamp.plus(diffUnits * amount, unit);
+            Instant bucketKey;
+            if (isDateUnit && price.getTime() != null) {
+                long diffUnits = unit.between(firstZoned.toLocalDate(), price.getTime().atZone(zone).toLocalDate()) / amount;
+                java.time.LocalDate bucketDate = firstZoned.toLocalDate().plus(diffUnits * amount, unit);
+                bucketKey = bucketDate.atTime(firstZoned.toLocalTime()).atZone(zone).toInstant();
+            } else {
+                long diffUnits = unit.between(firstTimestamp, price.getTime()) / amount;
+                bucketKey = firstTimestamp.plus(diffUnits * amount, unit);
+            }
             
             // Add to the appropriate bucket
             buckets.computeIfAbsent(bucketKey, k -> new ArrayList<>()).add(price);

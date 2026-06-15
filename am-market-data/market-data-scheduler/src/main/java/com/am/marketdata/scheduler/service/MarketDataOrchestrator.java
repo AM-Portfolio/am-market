@@ -157,7 +157,7 @@ public class MarketDataOrchestrator {
     /**
      * Morning Stock Indices Fetch (e.g., 9:30 AM)
      */
-    @Scheduled(cron = "${scheduler.stock-indices.morning-fetch:0 30 9 * * *}", zone = "Asia/Kolkata")
+    // @Scheduled(cron = "${scheduler.stock-indices.morning-fetch:0 30 9 * * *}", zone = "Asia/Kolkata")
     public void triggerMorningStockIndicesFetch() {
         log.info("Orchestrator: Triggering Morning Stock Indices Fetch");
         if (stockIndicesSchedulerService.isPresent()) {
