@@ -2,17 +2,23 @@ package com.am.marketdata.scheduler;
 
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
-import com.marketdata.common.MarketDataProvider;
+import com.am.marketdata.common.model.events.PreviousCloseSnapshotEvent;
+import com.am.marketdata.scheduler.service.PreviousCloseMultiTimeframeService;
 import com.am.marketdata.service.MarketDataCacheService;
 import com.am.marketdata.service.SymbolOrchestratorService;
+import com.am.marketdata.service.kafka.producer.PreviousCloseSnapshotProducer;
 import com.am.marketdata.common.log.AppLogger;
+import com.marketdata.common.MarketDataProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -32,14 +38,20 @@ public class PreviousCloseScheduler {
     private final SymbolOrchestratorService symbolService;
     private final MarketDataProvider upstoxMarketDataProvider;
     private final MarketDataCacheService cacheService;
+    private final Optional<PreviousCloseSnapshotProducer> snapshotProducer;
+    private final PreviousCloseMultiTimeframeService multiTimeframeService;
 
     public PreviousCloseScheduler(
             SymbolOrchestratorService symbolService,
             @Qualifier("upstoxMarketDataProvider") MarketDataProvider upstoxMarketDataProvider,
-            MarketDataCacheService cacheService) {
+            MarketDataCacheService cacheService,
+            Optional<PreviousCloseSnapshotProducer> snapshotProducer,
+            PreviousCloseMultiTimeframeService multiTimeframeService) {
         this.symbolService = symbolService;
         this.upstoxMarketDataProvider = upstoxMarketDataProvider;
         this.cacheService = cacheService;
+        this.snapshotProducer = snapshotProducer;
+        this.multiTimeframeService = multiTimeframeService;
     }
 
     @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
@@ -93,12 +105,35 @@ public class PreviousCloseScheduler {
             // 4. Cache retrieved previousClose values to Redis (TTL 26 hours)
             if (quotes != null && !quotes.isEmpty()) {
                 int count = 0;
+                String snapshotDate = LocalDate.now(ZoneId.of("Asia/Kolkata")).toString();
                 for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
                     String symbol = entry.getKey();
                     OHLCQuote quote = entry.getValue();
                     if (quote != null && quote.getPreviousClose() != 0.0) {
+                        // Existing: cache 1D previous-close in Redis
                         cacheService.setPreviousClose(symbol, quote.getPreviousClose());
                         count++;
+
+                        // New: publish multi-timeframe snapshot to Kafka (fire-and-forget)
+                        snapshotProducer.ifPresent(producer -> {
+                            try {
+                                Map<String, Double> closeValues =
+                                        multiTimeframeService.buildPreviousCloseMap(
+                                                symbol, quote.getPreviousClose());
+                                PreviousCloseSnapshotEvent event = PreviousCloseSnapshotEvent.builder()
+                                        .source("Market-Data-Scheduler")
+                                        .id(symbol)
+                                        .stockName(symbol)
+                                        .snapshotDate(snapshotDate)
+                                        .previousCloseValues(closeValues)
+                                        .build();
+                                producer.publish(event);
+                            } catch (Exception ex) {
+                                log.warn("PreviousCloseScheduler",
+                                        "Failed to publish Kafka snapshot for symbol=" + symbol
+                                                + ": " + ex.getMessage());
+                            }
+                        });
                     }
                 }
                 log.info("PreviousCloseScheduler", "Successfully cached previous close for " + count + " symbols.");

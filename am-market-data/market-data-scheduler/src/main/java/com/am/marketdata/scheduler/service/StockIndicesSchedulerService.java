@@ -1,4 +1,4 @@
-package com.am.marketdata.scheduler.service;
+ package com.am.marketdata.scheduler.service;
 
 import com.am.marketdata.scraper.exception.CookieException;
 import com.am.marketdata.scraper.service.MarketDataProcessingService;
@@ -230,14 +230,25 @@ public class StockIndicesSchedulerService {
 
                 log.info("Found quote for index {}: lastPrice={}, openPrice={}", symbol, quote.getLastPrice(), quote.getOpenPrice());
 
+                double lastPrice = quote.getLastPrice() != null ? quote.getLastPrice() : 0.0;
+                double change = quote.getChange() != null ? quote.getChange() : 0.0;
+                double previousClose = quote.getPreviousClose() != null ? quote.getPreviousClose() : 0.0;
+                if (previousClose == 0.0 && lastPrice != 0.0) {
+                    previousClose = lastPrice - change;
+                }
+                double changePercent = quote.getChangePercent() != null ? quote.getChangePercent() : 0.0;
+                if (changePercent == 0.0 && previousClose != 0.0) {
+                    changePercent = (change / previousClose) * 100.0;
+                }
+
                 MarketData marketData = MarketData.builder()
-                    .last(quote.getLastPrice() != null ? quote.getLastPrice() : 0.0)
+                    .last(lastPrice)
                     .open(quote.getOpenPrice() != null ? quote.getOpenPrice() : 0.0)
                     .high(quote.getHighPrice() != null ? quote.getHighPrice() : 0.0)
                     .low(quote.getLowPrice() != null ? quote.getLowPrice() : 0.0)
-                    .previousClose(quote.getPreviousClose() != null ? quote.getPreviousClose() : 0.0)
-                    .variation(quote.getChange() != null ? quote.getChange() : 0.0)
-                    .percentChange(quote.getChangePercent() != null ? quote.getChangePercent() : 0.0)
+                    .previousClose(previousClose)
+                    .variation(change)
+                    .percentChange(changePercent)
                     .build();
 
                 MarketIndexIndices indexData = MarketIndexIndices.builder()
@@ -260,13 +271,13 @@ public class StockIndicesSchedulerService {
                             meta = new com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata();
                             mongoDoc.setMetadata(meta);
                         }
-                        meta.setLast(quote.getLastPrice() != null ? quote.getLastPrice() : 0.0);
+                        meta.setLast(lastPrice);
                         meta.setOpen(quote.getOpenPrice() != null ? quote.getOpenPrice() : 0.0);
                         meta.setHigh(quote.getHighPrice() != null ? quote.getHighPrice() : 0.0);
                         meta.setLow(quote.getLowPrice() != null ? quote.getLowPrice() : 0.0);
-                        meta.setPreviousClose(quote.getPreviousClose() != null ? quote.getPreviousClose() : 0.0);
-                        meta.setChange(quote.getChange() != null ? quote.getChange() : 0.0);
-                        meta.setPercChange(quote.getChangePercent() != null ? quote.getChangePercent() : 0.0);
+                        meta.setPreviousClose(previousClose);
+                        meta.setChange(change);
+                        meta.setPercChange(changePercent);
                         meta.setTimeVal(String.valueOf(System.currentTimeMillis()));
 
                         if (mongoDoc.getAudit() == null) {

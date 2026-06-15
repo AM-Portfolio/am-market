@@ -20,6 +20,7 @@ app:
     # Topic configuration
     topics:
       stock-price: ${STOKUPATE_TOPIC_NAME:am-stock-price-update}
+      previous-close-snapshot: ${AM_PREVIOUS_CLOSE_SNAPSHOT_TOPIC:am-previous-close-snapshot}
       market-data-ohlc-ingestion: ${MARKET_DATA_OHLC_INGESTION_TOPIC_NAME:market-data-ohlc-ingestion}
       market-data-historical-ingestion: ${MARKET_DATA_HISTORICAL_INGESTION_TOPIC_NAME:market-data-historical-ingestion}
       nse-indices: ${NSE_INDICES_TOPIC_NAME:am-nse-indices}
