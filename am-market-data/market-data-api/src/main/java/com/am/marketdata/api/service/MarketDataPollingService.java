@@ -14,6 +14,7 @@ import com.am.common.investment.model.historical.HistoricalData;
 import com.am.marketdata.service.MarketHoursService;
 import com.am.marketdata.service.websocket.service.StreamerManager;
 import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
+import com.am.marketdata.service.MarketDataCacheService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +41,7 @@ public class MarketDataPollingService {
     private final StreamerManager streamerManager;
     private final MarketDataMockService mockService;
     private final MarketDataProcessor processor;
+    private final MarketDataCacheService marketDataCacheService;
 
     /**
      * Helper to resolve symbols using InstrumentUtils
@@ -165,7 +167,16 @@ public class MarketDataPollingService {
                 }
             }).orTimeout(1500, TimeUnit.MILLISECONDS)
               .exceptionally(ex -> {
-                  log.warn("Live OHLC data fetch timed out or failed: " + ex.getMessage());
+                  log.warn("Live OHLC data fetch timed out or failed. Falling back to cached Redis values. Details: " + ex.getMessage());
+                  try {
+                      Map<String, OHLCQuote> cached = marketDataCacheService.getOHLCFromCache(new ArrayList<>(keys), TimeFrame.DAY);
+                      if (cached != null && !cached.isEmpty()) {
+                          log.info("Successfully recovered {} quotes from Redis cache after timeout.", cached.size());
+                          return cached;
+                      }
+                  } catch (Exception e) {
+                      log.error("Failed to retrieve fallback OHLC data from cache", e);
+                  }
                   return new HashMap<String, OHLCQuote>();
               });
 

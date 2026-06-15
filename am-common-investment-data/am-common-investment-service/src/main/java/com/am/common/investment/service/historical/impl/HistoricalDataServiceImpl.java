@@ -182,22 +182,33 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         // Use the first price for reference data
         EquityPrice reference = prices.get(0);
         
-        // Find OHLC values
-        double open = reference.getOhlcv().getOpen();
-        double close = prices.get(prices.size() - 1).getOhlcv().getClose();
+        // Find OHLC values with safety null checks to prevent NullPointerExceptions during unboxing
+        double open = (reference.getOhlcv() != null && reference.getOhlcv().getOpen() != null)
+                ? reference.getOhlcv().getOpen() : 0.0;
+        
+        double close = 0.0;
+        if (!prices.isEmpty()) {
+            com.am.common.investment.model.historical.EquityPrice lastPrice = prices.get(prices.size() - 1);
+            if (lastPrice.getOhlcv() != null && lastPrice.getOhlcv().getClose() != null) {
+                close = lastPrice.getOhlcv().getClose();
+            }
+        }
         
         double high = prices.stream()
+                .filter(p -> p.getOhlcv() != null && p.getOhlcv().getHigh() != null)
                 .mapToDouble(p -> p.getOhlcv().getHigh())
                 .max()
                 .orElse(0.0);
                 
         double low = prices.stream()
+                .filter(p -> p.getOhlcv() != null && p.getOhlcv().getLow() != null)
                 .mapToDouble(p -> p.getOhlcv().getLow())
                 .min()
                 .orElse(0.0);
                 
         long volume = prices.stream()
-                .mapToLong(p -> p.getOhlcv().getVolume() != null ? p.getOhlcv().getVolume() : 0L)
+                .filter(p -> p.getOhlcv() != null && p.getOhlcv().getVolume() != null)
+                .mapToLong(p -> p.getOhlcv().getVolume())
                 .sum();
         
         // Create the aggregated price
