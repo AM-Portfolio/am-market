@@ -198,11 +198,17 @@ public class StockIndicesSchedulerService {
             }
 
             List<String> instrumentKeys = new ArrayList<>(resolved.values());
+            log.info("Resolved instrument keys to fetch: {}", instrumentKeys);
             MarketQuoteResponse response = upstoxApiService.getLtp(instrumentKeys);
-            if (response == null || response.getData() == null || response.getData().isEmpty()) {
-                log.warn("Received empty quotes response from Upstox.");
+            if (response == null) {
+                log.warn("Received null response from Upstox API.");
                 return false;
             }
+            if (response.getData() == null) {
+                log.warn("Received response with null data from Upstox API. Status: {}", response.getStatus());
+                return false;
+            }
+            log.info("Upstox response data keys: {}", response.getData().keySet());
 
             List<MarketIndexIndices> indicesToSave = new ArrayList<>();
             for (Map.Entry<String, String> entry : resolved.entrySet()) {
@@ -210,8 +216,16 @@ public class StockIndicesSchedulerService {
                 String key = entry.getValue();
                 StockQuote quote = response.getData().get(key);
                 if (quote == null) {
+                    // Try alternative key format (e.g. colon instead of pipe)
+                    String altKey = key.replace('|', ':');
+                    quote = response.getData().get(altKey);
+                }
+                if (quote == null) {
+                    log.warn("No quote found in Upstox response for key: {} (altKey: {})", key, key.replace('|', ':'));
                     continue;
                 }
+
+                log.info("Found quote for index {}: lastPrice={}, openPrice={}", symbol, quote.getLastPrice(), quote.getOpenPrice());
 
                 MarketData marketData = MarketData.builder()
                     .last(quote.getLastPrice() != null ? quote.getLastPrice() : 0.0)
@@ -240,6 +254,7 @@ public class StockIndicesSchedulerService {
                 log.info("Successfully saved {} indices from Upstox and sent updates to Kafka.", indicesToSave.size());
                 return true;
             }
+            log.warn("No indices were saved because indicesToSave is empty.");
             return false;
         } catch (Exception e) {
             log.error("Failed to fetch/process indices from Upstox", e);
