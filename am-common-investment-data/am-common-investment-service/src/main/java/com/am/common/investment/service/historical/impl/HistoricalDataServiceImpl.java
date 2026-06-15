@@ -1,4 +1,4 @@
-package com.am.common.investment.service.historical.impl;
+  package com.am.common.investment.service.historical.impl;
 
 import com.am.common.investment.model.equity.EquityPrice;
 import com.am.common.investment.model.historical.HistoricalData;
@@ -188,7 +188,7 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         
         double close = 0.0;
         if (!prices.isEmpty()) {
-            com.am.common.investment.model.historical.EquityPrice lastPrice = prices.get(prices.size() - 1);
+            EquityPrice lastPrice = prices.get(prices.size() - 1);
             if (lastPrice.getOhlcv() != null && lastPrice.getOhlcv().getClose() != null) {
                 close = lastPrice.getOhlcv().getClose();
             }
