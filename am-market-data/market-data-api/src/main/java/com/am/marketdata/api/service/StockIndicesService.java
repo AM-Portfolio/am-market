@@ -82,8 +82,13 @@ public class StockIndicesService {
                 try {
                     // Skip REST fallback if WebSocket is active and streaming, UNLESS forceRefresh is requested
                     boolean isWebSocketActive = "UPSTOX".equalsIgnoreCase(redisCacheService.getActiveProvider());
-                    if (isWebSocketActive && !forceRefresh) {
-                        log.info(methodName, "WebSocket is active provider. Skipping REST fallback for: " + missingSymbols + " (relying purely on WS ticks)");
+                    java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                    java.time.DayOfWeek dayOfWeek = istNow.getDayOfWeek();
+                    boolean isWeekend = dayOfWeek == java.time.DayOfWeek.SATURDAY || dayOfWeek == java.time.DayOfWeek.SUNDAY;
+                    boolean isMarketHours = !isWeekend && istNow.toLocalTime().isAfter(java.time.LocalTime.of(9, 10)) && istNow.toLocalTime().isBefore(java.time.LocalTime.of(15, 45));
+
+                    if (isWebSocketActive && isMarketHours && !forceRefresh) {
+                        log.info(methodName, "WebSocket is active provider and market is open. Skipping REST fallback for: " + missingSymbols + " (relying purely on WS ticks)");
                     } else {
                         List<CompletableFuture<Void>> futures = new ArrayList<>();
                         for (String symbol : missingSymbols) {

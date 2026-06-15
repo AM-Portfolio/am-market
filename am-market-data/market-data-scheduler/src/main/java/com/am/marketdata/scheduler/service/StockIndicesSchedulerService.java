@@ -7,6 +7,8 @@ import com.am.marketdata.provider.upstox.UpstoxIndexIdentifier;
 import com.am.marketdata.provider.upstox.model.MarketQuoteResponse;
 import com.am.marketdata.provider.upstox.model.common.StockQuote;
 import com.am.common.investment.service.MarketIndexIndicesService;
+import com.am.common.investment.service.StockIndicesMarketDataService;
+import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.model.equity.MarketIndexIndices;
 import com.am.common.investment.model.equity.MarketData;
 import com.am.marketdata.scraper.config.NSEIndicesConfig;
@@ -48,6 +50,7 @@ public class StockIndicesSchedulerService {
     private final UpstoxApiService upstoxApiService;
     private final UpstoxIndexIdentifier upstoxIndexIdentifier;
     private final MarketIndexIndicesService marketIndexIndicesService;
+    private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final NSEIndicesConfig nseIndicesConfig;
     private final Optional<KafkaProducerService> kafkaProducer;
 
@@ -247,6 +250,38 @@ public class StockIndicesSchedulerService {
 
                 marketIndexIndicesService.save(indexData);
                 indicesToSave.add(indexData);
+
+                // Update MongoDB permanent StockIndicesMarketData collection
+                try {
+                    StockIndicesMarketData mongoDoc = stockIndicesMarketDataService.findByIndexSymbol(symbol);
+                    if (mongoDoc != null) {
+                        com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata meta = mongoDoc.getMetadata();
+                        if (meta == null) {
+                            meta = new com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata();
+                            mongoDoc.setMetadata(meta);
+                        }
+                        meta.setLast(quote.getLastPrice() != null ? quote.getLastPrice() : 0.0);
+                        meta.setOpen(quote.getOpenPrice() != null ? quote.getOpenPrice() : 0.0);
+                        meta.setHigh(quote.getHighPrice() != null ? quote.getHighPrice() : 0.0);
+                        meta.setLow(quote.getLowPrice() != null ? quote.getLowPrice() : 0.0);
+                        meta.setPreviousClose(quote.getPreviousClose() != null ? quote.getPreviousClose() : 0.0);
+                        meta.setChange(quote.getChange() != null ? quote.getChange() : 0.0);
+                        meta.setPercChange(quote.getChangePercent() != null ? quote.getChangePercent() : 0.0);
+                        meta.setTimeVal(String.valueOf(System.currentTimeMillis()));
+
+                        if (mongoDoc.getAudit() == null) {
+                            mongoDoc.setAudit(new com.am.common.investment.model.stockindice.AuditData());
+                        }
+                        mongoDoc.getAudit().setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Kolkata")));
+
+                        stockIndicesMarketDataService.save(mongoDoc);
+                        log.info("Successfully updated MongoDB StockIndicesMarketData for index symbol: {}", symbol);
+                    } else {
+                        log.warn("StockIndicesMarketData document not found in MongoDB for symbol: {}", symbol);
+                    }
+                } catch (Exception ex) {
+                    log.error("Failed to update MongoDB StockIndicesMarketData for symbol: {}", symbol, ex);
+                }
             }
 
             if (!indicesToSave.isEmpty()) {
