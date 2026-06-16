@@ -22,7 +22,6 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true", matchIfMissing = false)
-@ConditionalOnBean(KafkaTemplate.class)
 public class PreviousCloseSnapshotProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;

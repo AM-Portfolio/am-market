@@ -20,7 +20,6 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true", matchIfMissing = false)
-@ConditionalOnBean(KafkaTemplate.class)
 public class MarketDataProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
