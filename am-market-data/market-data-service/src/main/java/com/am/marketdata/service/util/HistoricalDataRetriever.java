@@ -226,8 +226,22 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         Map<String, HistoricalData> result = new HashMap<>();
         // Mapper not needed anymore as provider returns the correct model
 
+        int callCount = 0;
         for (String symbol : symbols) {
             try {
+                if ("upstox".equalsIgnoreCase(provider.getProviderName())) {
+                    if (callCount > 0) {
+                        try {
+                            Thread.sleep(200); // Respect Upstox rate limits (5 requests/sec)
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            log.warn("[PROVIDER] Interrupted during historical data fetch sleep");
+                            break;
+                        }
+                    }
+                    callCount++;
+                }
+
                 // Provider now returns the common HistoricalData model directly
                 HistoricalData historicalData = provider.getHistoricalData(symbol,
                         fromDate, toDate, interval, continuous, additionalParams);

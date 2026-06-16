@@ -4,8 +4,7 @@ import com.am.common.investment.model.historical.HistoricalData;
 import com.am.common.investment.model.historical.OHLCVTPoint;
 import com.am.marketdata.common.log.AppLogger;
 import com.am.marketdata.common.model.TimeFrame;
-import com.marketdata.common.MarketDataProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
+import com.am.marketdata.service.MarketDataService;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -52,11 +51,10 @@ public class PreviousCloseMultiTimeframeService {
     }
 
     private final AppLogger log = AppLogger.getLogger();
-    private final MarketDataProvider upstoxMarketDataProvider;
+    private final MarketDataService marketDataService;
 
-    public PreviousCloseMultiTimeframeService(
-            @Qualifier("upstoxMarketDataProvider") MarketDataProvider upstoxMarketDataProvider) {
-        this.upstoxMarketDataProvider = upstoxMarketDataProvider;
+    public PreviousCloseMultiTimeframeService(MarketDataService marketDataService) {
+        this.marketDataService = marketDataService;
     }
 
     /**
@@ -95,8 +93,8 @@ public class PreviousCloseMultiTimeframeService {
             Date from = toDate(targetDate.minusDays(LOOKBACK_BUFFER_DAYS));
             Date to   = toDate(targetDate.plusDays(1)); // inclusive of target date
 
-            HistoricalData data = upstoxMarketDataProvider.getHistoricalData(
-                    symbol, from, to, TimeFrame.DAY, false, null);
+            HistoricalData data = marketDataService.getHistoricalData(
+                    symbol, from, to, TimeFrame.DAY, false, null, "upstox");
 
             if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
                 log.warn("PreviousCloseMultiTimeframeService",
