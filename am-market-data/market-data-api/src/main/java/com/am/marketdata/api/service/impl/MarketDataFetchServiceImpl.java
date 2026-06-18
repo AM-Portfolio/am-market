@@ -150,18 +150,28 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 HistoricalDataFilterUtil.FilterParams filterParams = HistoricalDataFilterUtil
                         .extractFilterParams(additionalParams);
 
-                boolean isIndexSymbol = !fetchIndexStocks;
-                if (additionalParams != null && additionalParams.containsKey("isIndexSymbol")) {
-                    Object paramValue = additionalParams.get("isIndexSymbol");
-                    if (paramValue instanceof Boolean)
-                        isIndexSymbol = (Boolean) paramValue;
-                    else if (paramValue instanceof String)
-                        isIndexSymbol = Boolean.parseBoolean((String) paramValue);
+                // Partition symbols into stocks and indices to query with correct isIndexSymbol flags
+                Set<String> indexSymbols = new java.util.HashSet<>();
+                Set<String> stockSymbols = new java.util.HashSet<>();
+                for (String sym : resolvedSymbols) {
+                    if (sym.startsWith("NSE_EQ:")) {
+                        stockSymbols.add(sym);
+                    } else {
+                        indexSymbols.add(sym);
+                    }
                 }
 
-                Map<String, HistoricalData> batchResult = marketDataService.getHistoricalDataBatch(
-                        new ArrayList<>(resolvedSymbols), fromDate, toDate, interval, false, additionalParams, null,
-                        isIndexSymbol, forceRefresh);
+                Map<String, HistoricalData> batchResult = new java.util.HashMap<>();
+                if (!indexSymbols.isEmpty()) {
+                    batchResult.putAll(marketDataService.getHistoricalDataBatch(
+                            new ArrayList<>(indexSymbols), fromDate, toDate, interval, false, additionalParams, null,
+                            true, forceRefresh));
+                }
+                if (!stockSymbols.isEmpty()) {
+                    batchResult.putAll(marketDataService.getHistoricalDataBatch(
+                            new ArrayList<>(stockSymbols), fromDate, toDate, interval, false, additionalParams, null,
+                            false, forceRefresh));
+                }
 
                 int successCount = 0;
                 int totalDataPoints = 0;

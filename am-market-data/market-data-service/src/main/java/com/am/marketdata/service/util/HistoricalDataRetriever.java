@@ -232,7 +232,7 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                 if ("upstox".equalsIgnoreCase(provider.getProviderName())) {
                     if (callCount > 0) {
                         try {
-                            Thread.sleep(200); // Respect Upstox rate limits (5 requests/sec)
+                            Thread.sleep(300); // Respect Upstox rate limits (3 requests/sec to be safe)
                         } catch (InterruptedException ie) {
                             Thread.currentThread().interrupt();
                             log.warn("[PROVIDER] Interrupted during historical data fetch sleep");
