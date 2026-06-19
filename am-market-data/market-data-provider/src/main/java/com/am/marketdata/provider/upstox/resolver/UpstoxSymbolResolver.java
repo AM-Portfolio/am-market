@@ -113,8 +113,8 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             if (cleaned.contains("|")) {
                 cleaned = cleaned.substring(cleaned.indexOf("|") + 1);
             }
-            if (cleaned.startsWith("NSE:") || cleaned.startsWith("BSE:")) {
-                cleaned = cleaned.substring(4);
+            if (cleaned.contains(":")) {
+                cleaned = cleaned.substring(cleaned.indexOf(":") + 1);
             }
 
             // ISINs are 12-char alphanumeric codes starting with two uppercase letters (e.g. INE, IN2)
