@@ -73,8 +73,9 @@ jobs:
       language: 'java'
       working_directory: 'am-market-sdk/java-market-sdk'
       sdk_name: 'java-market-sdk'
-      action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
-      use_release_version: ${{ github.ref == 'refs/heads/main' }}
+      action: ${{ (github.event_name == 'pull_request' || contains(github.event.head_commit.message, 'bump version to next snapshot version')) && 'verify' || 'publish' }}
+      use_release_version: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+      advance_snapshot: true
     secrets: inherit
 
   publish-python-market:
@@ -89,7 +90,7 @@ jobs:
       language: 'python'
       working_directory: 'am-market-sdk/python-market-sdk'
       sdk_name: 'python-market-sdk'
-      action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
+      action: ${{ (github.event_name == 'pull_request' || contains(github.event.head_commit.message, 'bump version to next snapshot version')) && 'verify' || 'publish' }}
     secrets: inherit
 
   publish-flutter-market:
@@ -104,7 +105,7 @@ jobs:
       language: 'flutter'
       working_directory: 'am-market-sdk/flutter-market-sdk'
       sdk_name: 'flutter-market-sdk'
-      action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
+      action: ${{ (github.event_name == 'pull_request' || contains(github.event.head_commit.message, 'bump version to next snapshot version')) && 'verify' || 'publish' }}
     secrets: inherit
 
   # --- Parser SDKs ---
@@ -120,8 +121,9 @@ jobs:
       language: 'java'
       working_directory: 'am-market-sdk/java-parser-sdk'
       sdk_name: 'java-parser-sdk'
-      action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
-      use_release_version: ${{ github.ref == 'refs/heads/main' }}
+      action: ${{ (github.event_name == 'pull_request' || contains(github.event.head_commit.message, 'bump version to next snapshot version')) && 'verify' || 'publish' }}
+      use_release_version: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+      advance_snapshot: true
     secrets: inherit
 
   publish-python-parser:
@@ -136,7 +138,7 @@ jobs:
       language: 'python'
       working_directory: 'am-market-sdk/python-parser-sdk'
       sdk_name: 'python-parser-sdk'
-      action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
+      action: ${{ (github.event_name == 'pull_request' || contains(github.event.head_commit.message, 'bump version to next snapshot version')) && 'verify' || 'publish' }}
     secrets: inherit
 
   publish-flutter-parser:
@@ -151,5 +153,5 @@ jobs:
       language: 'flutter'
       working_directory: 'am-market-sdk/flutter-parser-sdk'
       sdk_name: 'flutter-parser-sdk'
-      action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
+      action: ${{ (github.event_name == 'pull_request' || contains(github.event.head_commit.message, 'bump version to next snapshot version')) && 'verify' || 'publish' }}
     secrets: inherit
