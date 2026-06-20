@@ -150,7 +150,7 @@ public class MarketDataPollingService {
 
         String timeFrame = request.getTimeFrame() != null ? request.getTimeFrame() : "1D";
         boolean isMarketOpen = marketHoursService.isMarketOpen();
-        boolean isMock = isMockProvider(request);
+        boolean isMock = isMockProvider(request, provider);
         StreamStrategy strategy = resolveStreamStrategy(request, provider, isMarketOpen, isMock);
 
         switch (strategy) {
@@ -197,12 +197,20 @@ public class MarketDataPollingService {
         return request.getStream() == null || Boolean.TRUE.equals(request.getStream());
     }
 
-    static boolean isMockProvider(StreamConnectRequest request) {
+    static boolean isMockProvider(StreamConnectRequest request, String resolvedProvider) {
         if (Boolean.TRUE.equals(request.getMockMode())) {
             return true;
         }
         String provider = request.getProvider();
-        return provider != null && "MOCK".equalsIgnoreCase(provider.trim());
+        if (provider != null && "MOCK".equalsIgnoreCase(provider.trim())) {
+            return true;
+        }
+        return resolvedProvider != null && "MOCK".equalsIgnoreCase(resolvedProvider.trim());
+    }
+
+    /** @deprecated use {@link #isMockProvider(StreamConnectRequest, String)} */
+    static boolean isMockProvider(StreamConnectRequest request) {
+        return isMockProvider(request, request.getProvider());
     }
 
     static StreamStrategy resolveStreamStrategy(StreamConnectRequest request, String provider,

@@ -18,7 +18,7 @@ class MarketDataPollingServiceStreamStrategyTest {
                 .stream(true)
                 .build();
 
-        assertTrue(MarketDataPollingService.isMockProvider(request));
+        assertTrue(MarketDataPollingService.isMockProvider(request, "MOCK"));
         assertEquals(MarketDataPollingService.StreamStrategy.MOCK_POLLING,
                 MarketDataPollingService.resolveStreamStrategy(request, "MOCK", false, true));
     }
@@ -42,7 +42,7 @@ class MarketDataPollingServiceStreamStrategyTest {
                 .stream(true)
                 .build();
 
-        assertTrue(MarketDataPollingService.isMockProvider(request));
+        assertTrue(MarketDataPollingService.isMockProvider(request, "MOCK"));
         assertEquals(MarketDataPollingService.StreamStrategy.MOCK_POLLING,
                 MarketDataPollingService.resolveStreamStrategy(request, "UPSTOX", true, true));
     }
@@ -55,6 +55,18 @@ class MarketDataPollingServiceStreamStrategyTest {
                 .build();
 
         assertEquals(MarketDataPollingService.StreamStrategy.SNAPSHOT_ONLY,
+                MarketDataPollingService.resolveStreamStrategy(request, "MOCK", false, true));
+    }
+
+    @Test
+    void serverDefaultMock_noProviderInRequest_startsMockPolling() {
+        StreamConnectRequest request = StreamConnectRequest.builder()
+                .instrumentKeys(List.of("NIFTY 50"))
+                .stream(true)
+                .build();
+
+        assertTrue(MarketDataPollingService.isMockProvider(request, "MOCK"));
+        assertEquals(MarketDataPollingService.StreamStrategy.MOCK_POLLING,
                 MarketDataPollingService.resolveStreamStrategy(request, "MOCK", false, true));
     }
 
