@@ -1,15 +1,11 @@
 """
 Mutual Fund Persistence Service - Handle MongoDB operations for mutual fund data
 """
-import sys
-from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-# Add parent directory to path to find external modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from am_common.mutual_fund_models import MutualFundPortfolio, PortfolioSummary, Holding
+from am_persistence.mongo_factory import get_async_mongo_client, release_service_mongo_refs
 
 
 class MutualFundService:
@@ -25,9 +21,9 @@ class MutualFundService:
             mongo_uri: MongoDB connection URI (defaults to settings.mongo_uri)
             db_name: Database name (defaults to settings.mongo_db)
         """
-        from am_configs.settings import settings
-        
-        self.mongo_uri = mongo_uri or settings.mongo_uri
+        from am_configs.settings import settings, get_mongo_uri
+
+        self.mongo_uri = mongo_uri or get_mongo_uri()
         self.db_name = db_name or settings.mongo_db
         self._client = None
         self._db = None
@@ -36,16 +32,9 @@ class MutualFundService:
     def _get_collection(self):
         """Lazy initialization of MongoDB connection"""
         if self._collection is None:
-            try:
-                import motor.motor_asyncio
-                self._client = motor.motor_asyncio.AsyncIOMotorClient(self.mongo_uri)
-                self._db = self._client[self.db_name]
-                self._collection = self._db.portfolios
-            except ImportError:
-                raise ImportError(
-                    "MongoDB support requires 'motor' package. "
-                    "Install with: pip install motor"
-                )
+            self._client = get_async_mongo_client(self.mongo_uri)
+            self._db = self._client[self.db_name]
+            self._collection = self._db.portfolios
         return self._collection
 
     @property
@@ -55,13 +44,14 @@ class MutualFundService:
             self._get_collection()  # Initialize connection
         return self._db
 
-    async def save_portfolio_with_id(self, portfolio: MutualFundPortfolio, custom_id: str) -> str:
+    async def save_portfolio_with_id(self, portfolio: MutualFundPortfolio, custom_id: str, user_id: Optional[str] = None) -> str:
         """
         Save a mutual fund portfolio with a specific custom ID (to match sheet ID)
         
         Args:
             portfolio: MutualFundPortfolio model instance
             custom_id: Custom ID to use (e.g., sheet file ID)
+            user_id: Optional user ID to associate
             
         Returns:
             str: The custom ID used for the document
@@ -73,6 +63,8 @@ class MutualFundService:
         doc["updated_at"] = datetime.now().isoformat()
         doc["_id"] = custom_id  # Use custom ID instead of auto-generated ObjectId
         doc["sheet_id"] = custom_id  # Also store as separate field for queries
+        if user_id:
+            doc["user_id"] = user_id
         
         try:
             # Try to insert with custom ID
@@ -96,12 +88,13 @@ class MutualFundService:
                 result = await collection.insert_one(doc)
                 return str(result.inserted_id)
 
-    async def save_portfolio(self, portfolio: MutualFundPortfolio) -> str:
+    async def save_portfolio(self, portfolio: MutualFundPortfolio, user_id: Optional[str] = None) -> str:
         """
         Save a mutual fund portfolio (auto-generated ID)
         
         Args:
             portfolio: MutualFundPortfolio model instance
+            user_id: Optional user ID to associate
             
         Returns:
             str: The database ID of the saved document
@@ -109,15 +102,18 @@ class MutualFundService:
         collection = self._get_collection()
         doc = portfolio.to_mongo_document()
         doc["updated_at"] = datetime.now().isoformat()
+        if user_id:
+            doc["user_id"] = user_id
         
         result = await collection.insert_one(doc)
         return str(result.inserted_id)
 
-    async def list_portfolios(self, fund_name: Optional[str] = None, limit: int = 50) -> List[PortfolioSummary]:
+    async def list_portfolios(self, user_id: Optional[str] = None, fund_name: Optional[str] = None, limit: int = 50) -> List[PortfolioSummary]:
         """
         List portfolios with optional filtering
         
         Args:
+            user_id: Optional user ID to filter by
             fund_name: Optional fund name to filter by
             limit: Max results
             
@@ -126,6 +122,8 @@ class MutualFundService:
         """
         collection = self._get_collection()
         query = {}
+        if user_id:
+            query["user_id"] = user_id
         if fund_name:
             # Case-insensitive partial match
             query["mutual_fund_name"] = {"$regex": fund_name, "$options": "i"}
@@ -144,10 +142,13 @@ class MutualFundService:
                 
         return results
 
-    async def get_all_portfolios(self, limit: int = 100) -> List[MutualFundPortfolio]:
+    async def get_all_portfolios(self, user_id: Optional[str] = None, limit: int = 100) -> List[MutualFundPortfolio]:
         """Get all portfolios with full details"""
         collection = self._get_collection()
-        cursor = collection.find({}).limit(limit)
+        query = {}
+        if user_id:
+            query["user_id"] = user_id
+        cursor = collection.find(query).limit(limit)
         results = []
         async for doc in cursor:
             try:
@@ -157,21 +158,26 @@ class MutualFundService:
                 continue
         return results
 
-    async def get_holdings_by_isin(self, isin_code: str) -> List[Dict[str, Any]]:
+    async def get_holdings_by_isin(self, isin_code: str, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Find all holdings across all portfolios matching an ISIN
         
         Args:
             isin_code: ISIN code to search for
+            user_id: Optional user ID to filter by
             
         Returns:
             List of holdings with fund context
         """
         collection = self._get_collection()
         
+        match_stage = {"portfolio_holdings.isin_code": isin_code}
+        if user_id:
+            match_stage["user_id"] = user_id
+            
         pipeline = [
             {"$unwind": "$portfolio_holdings"},
-            {"$match": {"portfolio_holdings.isin_code": isin_code}},
+            {"$match": match_stage},
             {"$project": {
                 "fund_name": "$mutual_fund_name",
                 "portfolio_date": "$portfolio_date",
@@ -222,12 +228,13 @@ class MutualFundService:
             )
         }
 
-    async def get_portfolio_by_id(self, portfolio_id: str) -> Optional[MutualFundPortfolio]:
+    async def get_portfolio_by_id(self, portfolio_id: str, user_id: Optional[str] = None) -> Optional[MutualFundPortfolio]:
         """
         Retrieve a portfolio by MongoDB document ID (supports both ObjectId and custom string IDs)
         
         Args:
             portfolio_id: MongoDB document ID (ObjectId string or custom string)
+            user_id: Optional user ID to filter by
             
         Returns:
             MutualFundPortfolio instance or None if not found
@@ -236,7 +243,10 @@ class MutualFundService:
         
         try:
             # First try as string ID (for custom IDs)
-            doc = await collection.find_one({"_id": portfolio_id})
+            query = {"_id": portfolio_id}
+            if user_id:
+                query["user_id"] = user_id
+            doc = await collection.find_one(query)
             if doc:
                 doc.pop("_id", None)
                 return MutualFundPortfolio(**doc)
@@ -244,7 +254,10 @@ class MutualFundService:
             # If not found, try as ObjectId (for auto-generated IDs)
             from bson import ObjectId
             try:
-                doc = await collection.find_one({"_id": ObjectId(portfolio_id)})
+                oid_query = {"_id": ObjectId(portfolio_id)}
+                if user_id:
+                    oid_query["user_id"] = user_id
+                doc = await collection.find_one(oid_query)
                 if doc:
                     doc.pop("_id", None)
                     return MutualFundPortfolio(**doc)
@@ -256,9 +269,8 @@ class MutualFundService:
         return None
 
     async def close(self):
-        """Close MongoDB connection"""
-        if self._client:
-            self._client.close()
+        """Release refs; shared Motor client closes on app shutdown."""
+        release_service_mongo_refs(self)
 
 
 # Factory function for easy instantiation

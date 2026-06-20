@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class ETFHoldingRecord(BaseModel):
     """Individual stock holding within an ETF"""
-    stock_name: str = Field(..., description="Name of the stock/instrument")
+    stock_name: Optional[str] = Field(None, description="Name of the stock/instrument")
     isin_code: Optional[str] = None
     percentage: Optional[float] = None
     market_value: Optional[float] = None

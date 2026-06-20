@@ -12,3 +12,6 @@ motor>=3.3.0
 together>=1.0.0
 httpx>=0.25.0
 python-multipart>=0.0.7
+PyJWT>=2.8.0
+cryptography>=42.0.0
+

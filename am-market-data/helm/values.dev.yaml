@@ -1,0 +1,107 @@
+# Dev Environment — am-market-data
+environment: dev
+replicaCount: 1
+
+service:
+  port: 8080
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# Vault configuration
+vault:
+  enabled: true
+  secretPaths:
+    postgres:
+      path: "apps/data/dev/infra/postgres"
+    mongodb:
+      path: "apps/data/dev/infra/mongodb"
+    redis:
+      path: "apps/data/dev/infra/redis"
+    influxdb:
+      path: "apps/data/dev/infra/influxdb"
+    kafka:
+      path: "apps/data/dev/infra/kafka"
+    market-data:
+      path: "apps/data/dev/services/am-market-data"
+    upstox:
+      path: "apps/data/dev/services/am-market-data"
+    scheduler-config:
+      path: "apps/data/dev/services/am-market-data-scheduler"
+    identity-oidc:
+      path: "apps/data/dev/services/am-identity"
+    service-oauth:
+      path: "apps/data/dev/services/am-market-data"
+
+hostAliases:
+  - ip: "203.174.22.129"
+    hostnames:
+      - "redis.asrax.in"
+      - "mongodb.asrax.in"
+      - "kafka.asrax.in"
+
+probes:
+  port: 8080
+  startup:
+    path: "/actuator/health"
+    failureThreshold: 30
+    periodSeconds: 10
+    timeoutSeconds: 10
+  liveness:
+    path: "/actuator/health"
+    timeoutSeconds: 10
+  readiness:
+    path: "/actuator/health"
+    timeoutSeconds: 10
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-dev-dev-global-cors@kubernetescrd,
+      am-apps-dev-dev-strip-prefix@kubernetescrd
+  hosts:
+    - host: am-dev.asrax.in
+      paths:
+        - path: /market
+          pathType: Prefix
+
+config:
+  batchSearch:
+    cacheEnabled: true
+    mongoQueryLimit: 0
+    maxCandidatesPerQuery: 100
+    internalBatchSize: 100
+
+  # Dev: disable live-market schedulers to prevent accidental ingestion.
+  # Re-enable individually via env.SCHEDULER_* vars if you need to test.
+  scheduler:
+    cookie:
+      enabled: false
+    stockIndices:
+      enabled: false
+    ingestion:
+      enabled: false
+      provider: "UPSTOX"
+      force: false
+      useWebsocket: true
+      pollEnabled: false
+      pollHistorical: false
+    redisCleanup:
+      enabled: false
+
+env:
+  SPRING_PROFILES_ACTIVE: "dev,security"
+  # These keys are missing from Vault (apps/data/dev/services/am-market-data-scheduler).
+  # Explicitly set here to prevent <no value> boolean parse crash on startup.
+  SCHEDULER_INGESTION_POLL_ENABLED: "false"
+  SCHEDULER_INGESTION_POLL_HISTORICAL: "false"
+  SCHEDULER_INGESTION_USE_WEBSOCKET: "true"

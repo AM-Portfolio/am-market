@@ -1,17 +1,48 @@
 env:
   ENVIRONMENT: "preprod"
   MONGO_DB: "mutual_funds"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  LOG_LEVEL: "INFO"
+  ETF_LIST_CACHE_MINUTES: "60"
+  ETF_HOLDINGS_CACHE_DAYS: "1"
 
 environment: preprod
 
 probes:
-  port: 8000
+  port: 8080
+  startup:
+    path: /health
+    timeoutSeconds: 10
+    failureThreshold: 30
+    periodSeconds: 10
   liveness:
     path: /health
+    timeoutSeconds: 10
   readiness:
     path: /health
+    timeoutSeconds: 10
 
 replicaCount: 1
+
+
+# Vault configuration
+vault:
+  secretPaths:
+    auth:
+      path: apps/data/preprod/services/am-auth
+    logging:
+      path: apps/data/preprod/services/logging
+    market:
+      path: apps/data/preprod/services/am-market-data
+    mongodb: 
+      path: "apps/data/preprod/infra/mongodb"
+    together:
+      path: "apps/data/preprod/infra/shared-api"
+    identity-oidc:
+      path: "apps/data/preprod/services/am-identity"
+    service-oauth:
+      path: "apps/data/preprod/services/am-parser"
+
 
 resources:
   limits:
@@ -21,6 +52,17 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-# Vault Configuration
-vault:
+ingress:
   enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-preprod-preprod-global-cors@kubernetescrd,
+      am-apps-preprod-preprod-strip-prefix@kubernetescrd
+  hosts:
+    - host: am-preprod.asrax.in
+      paths:
+        - path: /parser
+          pathType: Prefix

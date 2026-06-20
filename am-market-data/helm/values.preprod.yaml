@@ -1,6 +1,8 @@
 env:
-  SPRING_PROFILES_ACTIVE: "preprod"
-  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=preprod"
+  SPRING_PROFILES_ACTIVE: "preprod,security"
+  JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=preprod,security"
+  # JVM reads JAVA_TOOL_OPTIONS automatically (chart entrypoint did not expand JAVA_OPTS)
+  JAVA_TOOL_OPTIONS: "-Xms512m -Xmx768m"
 environment: preprod
 
 probes:
@@ -25,6 +27,32 @@ probes:
     timeoutSeconds: 5
     failureThreshold: 3
 
+# Vault configuration
+vault:
+  enabled: true
+  role: "am-backend-role"
+  secretPaths:
+    postgres:
+      path: "apps/data/preprod/infra/postgres"
+    mongodb:
+      path: "apps/data/preprod/infra/mongodb"
+    redis:
+      path: "apps/data/preprod/infra/redis"
+    influxdb:
+      path: "apps/data/preprod/infra/influxdb"
+    kafka:
+      path: "apps/data/preprod/infra/kafka"
+    market-data:
+      path: "apps/data/preprod/services/am-market-data"
+    upstox:
+      path: "apps/data/preprod/services/am-market-data"
+    scheduler-config:
+      path: "apps/data/preprod/services/am-market-data-scheduler"
+    identity-oidc:
+      path: "apps/data/preprod/services/am-identity"
+    service-oauth:
+      path: "apps/data/preprod/services/am-market-data"
+
 # Application Configuration
 config:
   marketData:
@@ -33,6 +61,62 @@ config:
     threadPoolSize: 5
     threadQueueCapacity: 10
     maxAgeMinutes: 15
+  batchSearch:
+    # Default true; set false only to bypass Redis batch_search:* cache while debugging
+    cacheEnabled: true
+    mongoQueryLimit: 0
+    maxCandidatesPerQuery: 100
+    internalBatchSize: 100
+
+  # ── Preprod scheduler — all enabled, production-identical crons ───────────
+  scheduler:
+    cookie:
+      enabled: true
+      refreshCron: "0 0 9-16 * * MON-FRI"
+    stockIndices:
+      enabled: true
+      morningFetchCron: "0 30 9 * * *"
+      eveningFetchCron: "0 0 16 * * *"
+      retry:
+        cron: "0 */15 * * * *"
+        intervalMinutes: 15
+        maxRetries: 20
+    indices:
+      fetchCron: "0 */2 * * * *"
+    ingestion:
+      enabled: true
+      provider: "UPSTOX"
+      force: false
+      useWebsocket: true
+      pollEnabled: false
+      pollHistorical: false
+      symbols: "NIFTY 50,NIFTY BANK"
+      startCron: "0 15 9 * * MON-FRI"
+      stopCron: "0 30 15 * * MON-FRI"
+    market:
+      start: "09:15"
+      end: "15:30"
+    historical:
+      syncCron: "0 15 7 * * *"
+    analysis:
+      dailyCron: "0 15 7 * * *"
+    stream:
+      startCron: "0 0 9 ? * MON-FRI"
+      stopCron: "0 30 15 ? * MON-FRI"
+    redisCleanup:
+      enabled: true
+      cron: "0 0 2 * * *"
+
+  # ── Redis TTLs — same as prod ─────────────────────────────────────────────
+  redis:
+    cleanupRetentionDays: 7
+    cleanupBatchSize: 1000
+    cacheTtl:
+      historical: 2592000
+      analysis: 2592000
+      intradayPast: 14400
+      intradayFuture: 86400
+      intradayBuffer: 14400
 
 # Service Configuration
 service:
@@ -47,15 +131,13 @@ ingress:
 # Resource Configuration (reduced for Kind)
 resources:
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 1000m
+    memory: 1536Mi
   requests:
     cpu: 250m
-    memory: 256Mi
+    memory: 512Mi
 
-# Vault Configuration (Inherited from base with dynamic aliases)
-vault:
-  enabled: true
+replicaCount: 1
 
 # Monitoring Configuration
 monitoring:

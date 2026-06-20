@@ -36,12 +36,12 @@ public class UpstoxSdkService {
             String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
             if (cachedToken != null && !cachedToken.isEmpty()) {
                 log.info("Found cached Access Token in Redis for SDK Service");
-                this.setAccessToken(cachedToken);
+                this.setAccessToken(sanitizeAccessToken(cachedToken));
             } else {
                 log.info("No cached Access Token found in Redis for SDK Service, checking configuration");
                 if (upstoxConfig.getAccessToken() != null && !upstoxConfig.getAccessToken().isEmpty()) {
                     log.info("Found Access Token in configuration for SDK Service");
-                    this.setAccessToken(upstoxConfig.getAccessToken());
+                    this.setAccessToken(sanitizeAccessToken(upstoxConfig.getAccessToken()));
                 } else {
                     log.warn("No Access Token found for SDK Service");
                 }
@@ -56,7 +56,27 @@ public class UpstoxSdkService {
     }
 
     public void setAccessToken(String accessToken) {
-        this.accessToken = accessToken;
+        this.accessToken = sanitizeAccessToken(accessToken);
+    }
+
+    /** Strip accidental JSON suffixes from env vars (e.g. {@code ...","extended_token":"...}). */
+    static String sanitizeAccessToken(String accessToken) {
+        if (accessToken == null) {
+            return null;
+        }
+        String token = accessToken.trim();
+        int jsonSuffix = token.indexOf("\",\"");
+        if (jsonSuffix > 0) {
+            token = token.substring(0, jsonSuffix);
+        }
+        if (token.startsWith("\"")) {
+            token = token.substring(1);
+        }
+        int closingQuote = token.indexOf('"');
+        if (closingQuote > 0) {
+            token = token.substring(0, closingQuote);
+        }
+        return token.trim();
     }
 
     /**
@@ -218,19 +238,18 @@ public class UpstoxSdkService {
     }
 
     /**
-     * Get historical candle data
-     *
-     * @param instrumentKey Instrument key (e.g. NSE_EQ|INE123...)
-     * @param interval      Interval (e.g. 1minute, day, 30minute)
-     * @param toDate        To date (YYYY-MM-DD or similar format required by API)
-     * @param fromDate      From date (YYYY-MM-DD)
-     * @return com.am.marketdata.provider.upstox.model.HistoricalDataResponse
+     * Get historical candle data via Upstox V3 SDK.
+     * <p>
+     * Uses {@code GET /v3/historical-candle/{key}/{unit}/{interval}/{to_date}} when
+     * {@code fromDate} is blank, otherwise
+     * {@code .../{to_date}/{from_date}}.
+     * Unit must be {@code minutes}, {@code days}, etc. (see API doc).
      */
     public com.am.marketdata.provider.upstox.model.HistoricalDataResponse getHistoricalCandleData(String instrumentKey,
             String unit, Integer interval, String toDate, String fromDate) {
         if (this.accessToken == null || this.accessToken.isEmpty()) {
             if (upstoxConfig.getAccessToken() != null) {
-                this.accessToken = upstoxConfig.getAccessToken();
+                this.accessToken = sanitizeAccessToken(upstoxConfig.getAccessToken());
             }
             if (this.accessToken == null || this.accessToken.isEmpty()) {
                 throw new IllegalStateException("Upstox Access token is not initialized");
@@ -238,7 +257,6 @@ public class UpstoxSdkService {
         }
 
         try {
-            // Initialize ApiClient
             ApiClient apiClient = new ApiClient();
             OAuth oAuth = (OAuth) apiClient.getAuthentication("OAUTH2");
             if (oAuth != null) {
@@ -248,20 +266,22 @@ public class UpstoxSdkService {
             }
 
             HistoryV3Api historyV3Api = new HistoryV3Api(apiClient);
+            boolean useDateRange = fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate);
 
-            log.info("Fetching historical data for key: {}, unit: {}, interval: {}, from: {}, to: {}", instrumentKey,
-                    unit, interval,
-                    fromDate, toDate);
-
-            // Call SDK
-            // Upstox V3 SDK typically expects: instrumentKey, interval (string), toDate,
-            // fromDate
-            // "unit" passed here is actually the interval string (e.g. "day", "minute")
-            // "interval" (int) is legacy/unused for V3 or merged into string.
-            // Correcting signature to match standard usage: getHistoricalCandleData1(key,
-            // intervalStr, to, from)
-            GetHistoricalCandleResponse sdkResponse = historyV3Api.getHistoricalCandleData1(instrumentKey, unit,
-                    interval, toDate, fromDate);
+            GetHistoricalCandleResponse sdkResponse;
+            if (useDateRange) {
+                log.info(
+                        "Fetching historical data (range) key={}, unit={}, interval={}, to={}, from={}",
+                        instrumentKey, unit, interval, toDate, fromDate);
+                sdkResponse = historyV3Api.getHistoricalCandleData1(
+                        instrumentKey, unit, interval, toDate, fromDate);
+            } else {
+                log.info(
+                        "Fetching historical data (to_date only) key={}, unit={}, interval={}, to={}",
+                        instrumentKey, unit, interval, toDate);
+                sdkResponse = historyV3Api.getHistoricalCandleData(
+                        instrumentKey, unit, interval, toDate);
+            }
 
             return mapToHistoricalDataResponse(sdkResponse);
         } catch (Exception e) {

@@ -3,11 +3,32 @@ Async Job API Endpoints
 Handles background processing with immediate response
 """
 
-from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 from typing import Optional, List
 import asyncio
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
+
+# Add am-platform-security library to PYTHONPATH dynamically
+resolved_parents = Path(__file__).resolve().parents
+if len(resolved_parents) > 3:
+    security_lib_path = resolved_parents[3] / "am-platform" / "libraries" / "am-platform-security"
+    if security_lib_path.exists() and str(security_lib_path) not in sys.path:
+        sys.path.insert(0, str(security_lib_path))
+
+try:
+    from am_platform_security import AuthContext, require_auth_context
+except ImportError:
+    from pydantic import BaseModel
+    class AuthContext(BaseModel):
+        subject: str = "anonymous"
+        claims: dict = {}
+    def require_auth_context():
+        def dependency():
+            return AuthContext(subject="anonymous")
+        return dependency
 
 from am_common.job_models import (
     JobResponse, JobStatusResponse, BackgroundJob, JobStatus, JobType, ExcelProcessingJob
@@ -16,6 +37,10 @@ from am_services.job_queue_service import get_job_queue
 from am_services.file_upload_service import FileUploadService
 from am_persistence.file_upload_repository import FileUploadRepository
 from am_persistence import create_mutual_fund_service
+from am_common.webhooks import normalize_callback_url
+from am_common.logging.request_logging import get_logger
+
+_log = get_logger("job_api")
 
 
 router = APIRouter(tags=["Background Jobs"])
@@ -26,7 +51,7 @@ async def upload_excel_async(
     file: UploadFile = File(...),
     parse_method: str = Form(default="together"),
     callback_url: Optional[str] = Form(default=None),
-    user_id: Optional[str] = Form(default=None)
+    context: AuthContext = Depends(require_auth_context())
 ):
     """
     Upload Excel file for async background processing
@@ -34,10 +59,7 @@ async def upload_excel_async(
     """
     try:
         # Initialize services with proper database connection
-        service_instance = create_mutual_fund_service(
-            mongo_uri="mongodb://admin:password123@localhost:27017",
-            db_name="mutual_funds"
-        )
+        service_instance = create_mutual_fund_service()
         repo = FileUploadRepository(service_instance.database)
         upload_service = FileUploadService()  # Uses default directories
         job_queue = await get_job_queue()
@@ -47,6 +69,7 @@ async def upload_excel_async(
         
         # Upload main file
         main_file_upload = await upload_service.save_uploaded_file(file)
+        main_file_upload.user_id = context.subject
         
         # Persist main file to database
         await repo.create_file_upload(main_file_upload)
@@ -57,21 +80,14 @@ async def upload_excel_async(
         
         # Persist sheet files to database
         for sheet_file in sheet_files:
+            sheet_file.user_id = context.subject
             await repo.create_file_upload(sheet_file)
         
         sheet_count = len(sheet_files)
         print(f"✅ Excel split into {sheet_count} sheets")
         
         # Step 2: Create background job for LLM processing
-        # Validate webhook URL if provided
-        normalized_callback = None
-        callback_note = None
-        if callback_url:
-            cb = callback_url.strip()
-            if cb.startswith("http://") or cb.startswith("https://"):
-                normalized_callback = cb
-            else:
-                callback_note = "Ignoring invalid callback_url (missing http/https)."
+        normalized_callback, callback_note = normalize_callback_url(callback_url)
         job_input = {
             "file_id": main_file_upload.file_id,
             "file_path": main_file_upload.file_path,
@@ -83,7 +99,7 @@ async def upload_excel_async(
             job_type=JobType.EXCEL_PROCESSING,
             input_data=job_input,
             callback_url=normalized_callback,
-            user_id=user_id
+            user_id=context.subject
         )
         
         # Estimate completion time (1.5 min per sheet average)
@@ -116,7 +132,10 @@ async def upload_excel_async(
 
 
 @router.get("/{job_id}/status", response_model=JobStatusResponse)
-async def get_job_status(job_id: str):
+async def get_job_status(
+    job_id: str,
+    context: AuthContext = Depends(require_auth_context())
+):
     """Get the current status of a background job"""
     try:
         job_queue = await get_job_queue()
@@ -126,6 +145,12 @@ async def get_job_status(job_id: str):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Job not found: {job_id}"
+            )
+        
+        if job.user_id and job.user_id != context.subject:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this job"
             )
         
         # Estimate remaining time
@@ -158,7 +183,10 @@ async def get_job_status(job_id: str):
 
 
 @router.get("/{job_id}/result")
-async def get_job_result(job_id: str):
+async def get_job_result(
+    job_id: str,
+    context: AuthContext = Depends(require_auth_context())
+):
     """Get the result of a completed job"""
     try:
         job_queue = await get_job_queue()
@@ -168,6 +196,12 @@ async def get_job_result(job_id: str):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Job not found: {job_id}"
+            )
+        
+        if job.user_id and job.user_id != context.subject:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this job"
             )
         
         if job.status == JobStatus.COMPLETED:
@@ -202,7 +236,10 @@ async def get_job_result(job_id: str):
 
 
 @router.delete("/{job_id}")
-async def cancel_job(job_id: str):
+async def cancel_job(
+    job_id: str,
+    context: AuthContext = Depends(require_auth_context())
+):
     """Cancel a pending or running job"""
     try:
         job_queue = await get_job_queue()
@@ -212,6 +249,12 @@ async def cancel_job(job_id: str):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Job not found: {job_id}"
+            )
+        
+        if job.user_id and job.user_id != context.subject:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to cancel this job"
             )
         
         if job.status in [JobStatus.COMPLETED, JobStatus.FAILED]:
@@ -240,8 +283,8 @@ async def cancel_job(job_id: str):
 @router.get("/")
 async def list_jobs(
     job_status: Optional[JobStatus] = None,
-    user_id: Optional[str] = None,
-    limit: int = 50
+    limit: int = 50,
+    context: AuthContext = Depends(require_auth_context())
 ):
     """List background jobs with optional filtering"""
     try:
@@ -251,8 +294,7 @@ async def list_jobs(
         query_filter = {}
         if job_status:
             query_filter["status"] = job_status
-        if user_id:
-            query_filter["user_id"] = user_id
+        query_filter["user_id"] = context.subject
         
         # Get jobs from database
         collection = job_queue.mutual_fund_service.database[job_queue.collection_name]

@@ -19,6 +19,9 @@ from am_common.job_models import BackgroundJob, JobStatus, JobType, JobProgress,
 from am_persistence.mutual_fund_service import create_mutual_fund_service
 from am_services.event_logger import EventLogger
 from am_common.event_models import EventType
+from am_common.logging.request_logging import get_logger
+
+log = get_logger("job_queue")
 
 
 class JobQueue:
@@ -56,7 +59,7 @@ class JobQueue:
         collection = self.mutual_fund_service.database[self.collection_name]
         await collection.insert_one(job.to_mongo_document())
         
-        print(f"✅ Created background job: {job_id} ({job_type})")
+        log.info("create_job: id=%s type=%s user=%s", job_id, job_type, user_id)
         # Log event
         await self.event_logger.emit(
             EventType.JOB_CREATED,
@@ -97,11 +100,11 @@ class JobQueue:
             ]
         }).to_list(None)
         
-        print(f"🔍 Found {len(stuck_jobs)} potentially stuck jobs")
-        
+        log.info("Found %s potentially stuck jobs", len(stuck_jobs))
+
         for job_doc in stuck_jobs:
             job_id = job_doc["_id"]
-            print(f"🚨 Recovering stuck job: {job_id}")
+            log.info("Recovering stuck job: %s", job_id)
             
             # Mark as failed with recovery message
             await collection.update_one(
@@ -139,7 +142,7 @@ class JobQueue:
                     }
                 }
             )
-            print(f"🔧 Fixed stuck job {job_id} - marked as failed")
+            log.info("Fixed stuck job %s - marked as failed", job_id)
         else:
             # Reset to pending to allow retry
             await collection.update_one(
@@ -156,7 +159,7 @@ class JobQueue:
                     }
                 }
             )
-            print(f"🔄 Reset job {job_id} to pending for retry")
+            log.info("Reset job %s to pending for retry", job_id)
     
     async def update_job_status(
         self, 
@@ -212,7 +215,11 @@ class JobQueue:
         # Basic validation to avoid exceptions on malformed URLs
         url = job.callback_url.strip()
         if not (url.startswith("http://") or url.startswith("https://")):
-            print(f"ℹ️ Skipping webhook for job {job_id}: invalid URL '{url}'. Include http:// or https://")
+            log.info(
+                "Skipping webhook for job %s: invalid URL '%s'. Include http:// or https://",
+                job_id,
+                url,
+            )
             try:
                 await self.event_logger.emit(
                     EventType.WEBHOOK_SKIPPED,
@@ -246,7 +253,7 @@ class JobQueue:
                     headers=headers,
                     timeout=30.0
                 )
-                print(f"✅ Webhook sent for job {job_id}: {response.status_code}")
+                log.info("Webhook sent for job %s: %s", job_id, response.status_code)
                 try:
                     await self.event_logger.emit(
                         EventType.WEBHOOK_SENT,
@@ -258,7 +265,7 @@ class JobQueue:
                     pass
                 
         except Exception as e:
-            print(f"❌ Failed to send webhook for job {job_id}: {e}")
+            log.warning("Failed to send webhook for job %s: %s", job_id, e)
             try:
                 await self.event_logger.emit(
                     EventType.WEBHOOK_FAILED,
@@ -272,7 +279,7 @@ class JobQueue:
     
     async def start_job_processor(self):
         """Start the background job processor"""
-        print("🚀 Starting background job processor...")
+        log.info("Starting background job processor")
         
         while True:
             try:
@@ -291,13 +298,13 @@ class JobQueue:
                         # Start processing the job
                         task = asyncio.create_task(self._process_job(pending_job))
                         self.running_jobs[pending_job.job_id] = task
-                        print(f"🔄 Started processing job: {pending_job.job_id}")
+                        log.info("Processing job: id=%s type=%s", pending_job.job_id, pending_job.job_type)
                 
                 # Wait before checking again
                 await asyncio.sleep(5)
                 
             except Exception as e:
-                print(f"❌ Error in job processor: {e}")
+                log.exception("Job processor loop error: %s", e)
                 await asyncio.sleep(10)
     
     async def _get_next_pending_job(self) -> Optional[BackgroundJob]:
@@ -328,7 +335,7 @@ class JobQueue:
                 raise ValueError(f"Unknown job type: {job.job_type}")
                 
         except Exception as e:
-            print(f"❌ Job {job.job_id} failed: {e}")
+            log.exception("Job %s failed: %s", job.job_id, e)
             await self.update_job_status(
                 job.job_id, 
                 JobStatus.FAILED, 
@@ -438,7 +445,7 @@ class JobQueue:
                 try:
                     if main_file.file_path and Path(main_file.file_path).exists():
                         Path(main_file.file_path).unlink()
-                        print(f"🧹 Deleted parent Excel from disk: {main_file.file_path}")
+                        log.info("Deleted parent Excel from disk: %s", main_file.file_path)
                         try:
                             await self.event_logger.emit(
                                 EventType.SHEET_DELETED_DISK,
@@ -450,7 +457,11 @@ class JobQueue:
                         except Exception:
                             pass
                 except Exception as parent_disk_err:
-                    print(f"⚠️  Could not delete parent Excel {main_file.file_path}: {parent_disk_err}")
+                    log.warning(
+                        "Could not delete parent Excel %s: %s",
+                        main_file.file_path,
+                        parent_disk_err,
+                    )
                 # Keep DB record for tracking
                 final_result["parent_deleted"] = {"disk": True, "db": False}
             
@@ -461,7 +472,7 @@ class JobQueue:
                 result=final_result
             )
             
-            print(f"✅ Excel processing job completed: {job.job_id}")
+            log.info("Excel processing job completed: %s", job.job_id)
             
         except Exception as e:
             await self.update_job_status(
@@ -475,6 +486,8 @@ class JobQueue:
         """Process ETF holdings fetching job with smart caching"""
         from am_etf.service import ETFService
         from am_etf.smart_holdings_service import SmartETFHoldingsService
+
+        log.info("_process_etf_holdings_job: job_id=%s", job.job_id)
         
         # Initialize services
         etf_service = ETFService()
@@ -485,7 +498,12 @@ class JobQueue:
         force_refresh = input_data.get("force_refresh", False)
         
         # Configure cache policy
-        holdings_service.set_cache_policy(expiry_days=1, force_refresh=force_refresh)
+        from am_configs.settings import settings
+
+        holdings_service.set_cache_policy(
+            expiry_days=settings.etf_holdings_cache_days,
+            force_refresh=force_refresh,
+        )
         
         try:
             if operation == "fetch_all_holdings":
@@ -534,7 +552,7 @@ class JobQueue:
                 progress.current_item = f"{symbol} ({isin})"
                 await self.update_job_status(job.job_id, JobStatus.RUNNING, progress=progress)
                 
-                print(f"🔄 Smart fetching holdings for {symbol}")
+                log.info("Smart fetching holdings for %s", symbol)
                 
                 result = await holdings_service.smart_fetch_and_store_holdings(
                     isin=isin,
@@ -567,8 +585,12 @@ class JobQueue:
                 result=final_result
             )
             
-            print(f"✅ ETF holdings job completed: {job.job_id}")
-            print(f"📊 Cache performance: {final_result.get('cache_hit_rate', 'N/A')} hit rate, {final_result.get('api_call_savings', 'N/A')}")
+            log.info(
+                "ETF holdings job completed: id=%s cache_hit=%s savings=%s",
+                job.job_id,
+                final_result.get("cache_hit_rate", "N/A"),
+                final_result.get("api_call_savings", "N/A"),
+            )
             
         except Exception as e:
             await self.update_job_status(
@@ -590,10 +612,11 @@ async def get_job_queue() -> JobQueue:
     """Get the global job queue instance"""
     global job_queue
     if job_queue is None:
-        import os
-        # Initialize with MongoDB connection from environment or default
-        from am_configs.settings import settings
-        mongodb_uri = settings.mongo_uri
+        from am_configs.settings import settings, refresh_settings_from_dotenv, get_mongo_uri
+
+        refresh_settings_from_dotenv()
+        mongodb_uri = get_mongo_uri()
+        log.info("job_queue mongo_target=%s", mongodb_uri.split("@")[-1] if "@" in mongodb_uri else mongodb_uri)
         db_name = settings.mongo_db
         job_queue = JobQueue(mongodb_uri, db_name)
         
@@ -601,6 +624,6 @@ async def get_job_queue() -> JobQueue:
         try:
             await job_queue.recover_stuck_jobs()
         except Exception as e:
-            print(f"⚠️  Warning: Could not recover stuck jobs: {e}")
+            log.warning("Could not recover stuck jobs: %s", e)
     
     return job_queue

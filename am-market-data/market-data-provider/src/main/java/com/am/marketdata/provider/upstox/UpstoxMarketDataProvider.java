@@ -217,7 +217,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             String fromDateStr = dateFormat.format(from);
             String toDateStr = dateFormat.format(to);
 
-            String unit = mapToUpstoxInterval(interval);
+            String v3Unit = mapToUpstoxV3Unit(interval);
             int intervalValue = getUpstoxIntervalValue(interval);
 
             // Resolve instrument key first as SDK works with keys
@@ -232,45 +232,17 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 instrumentKey = symbol;
             }
 
-            HistoricalDataResponse response = null;
-
-            // 1. Try SDK Service
+            HistoricalDataResponse response;
             try {
-                // Pass RAW instrument key to SDK, do not URL encode it manually as SDK handles
-                // it
-
                 log.info("getHistoricalData",
-                        "Fetching historical data via SDK for instrument key: " + instrumentKey + ", unit: " + unit
-                                + ", interval: " + intervalValue);
+                        "Fetching historical data via SDK for instrument key: " + instrumentKey + ", unit: " + v3Unit
+                                + ", interval: " + intervalValue + ", from: " + fromDateStr + ", to: " + toDateStr);
 
-                response = upstoxSdkService.getHistoricalCandleData(instrumentKey, unit,
-                        intervalValue, toDateStr,
-                        fromDateStr);
+                response = upstoxSdkService.getHistoricalCandleData(
+                        instrumentKey, v3Unit, intervalValue, toDateStr, fromDateStr);
             } catch (Exception e) {
-                log.warn("getHistoricalData", "Failed to fetch historical data via SDK: " +
-                        e.getMessage());
-            }
-
-            // 2. Try API Service if SDK failed or returned empty
-            if (response == null || response.getData() == null || response.getData().getCandles() == null
-                    || response.getData().getCandles().isEmpty()) {
-
-                // Encode key for API usage (manual URL construction)
-                String encodedKey = instrumentKey;
-                try {
-                    if (encodedKey != null) {
-                        encodedKey = java.net.URLEncoder
-                                .encode(encodedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
-                                .replace("+", "%20");
-                    }
-                } catch (Exception ex) {
-                    log.error("Failed to encode key for API fallback", ex);
-                }
-
-                log.info("getHistoricalData",
-                        "Fetching historical data via API for instrument key: " + encodedKey + ", unit: " + unit
-                                + ", interval: " + intervalValue + ",from: " + fromDateStr + ", to: " + toDateStr);
-                response = upstoxApiService.getHistoricalCandleData(encodedKey, unit, fromDateStr, toDateStr);
+                log.error("getHistoricalData", "Failed to fetch historical data via SDK: " + e.getMessage(), e);
+                return new HistoricalData();
             }
 
             // Map to Common HistoricalData model
@@ -356,35 +328,31 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
         }
     }
 
-    private String mapToUpstoxInterval(TimeFrame interval) {
-        if (interval == null)
-            return "minutes";
+    /**
+     * V3 historical candle path unit ({@code days}, {@code minutes}, …).
+     * See https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/
+     */
+    private String mapToUpstoxV3Unit(TimeFrame interval) {
+        if (interval == null) {
+            return "days";
+        }
         switch (interval) {
             case MINUTE:
-                return "minute";
             case FIVE_MINUTE:
-                return "minute";
+            case TEN_MINUTE:
             case FIFTEEN_MINUTE:
-                return "minute";
             case THIRTY_MINUTE:
-                return "minute";
+                return "minutes";
             case HOUR:
-                return "day"; // Upstox historical API might not support 'hour', defaulting to day or checking
-                              // docs. usually it's minute/day/week/month.
-                              // Wait, user logs show "day" working.
-                              // Upstox V2 intervals: 1minute, day, 30minute, etc are part of path? No, path
-                              // structure is /historical-candle/{key}/{interval}/{to}/{from}
-                              // Interval is string like '1minute', 'day', '30minute'.
-                              // But here we return "unit".
-                              // Let's stick to user request "Use singular".
+                return "hours";
             case DAY:
-                return "day";
+                return "days";
             case WEEK:
-                return "week";
+                return "weeks";
             case MONTH:
-                return "month";
+                return "months";
             default:
-                return "day";
+                return "days";
         }
     }
 
