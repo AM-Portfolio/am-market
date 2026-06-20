@@ -13,6 +13,8 @@ import com.am.marketdata.redis.util.CacheLoggingUtil;
 import com.am.marketdata.common.log.AppLogger;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.data.redis.core.RedisTemplate;
+import java.util.concurrent.TimeUnit;
 
 import java.util.Set;
 
@@ -37,10 +39,34 @@ public class MarketDataCacheService {
 
     private final StockCacheService stockCacheService;
     private final ObjectMapper objectMapper;
+    private final RedisTemplate<String, String> redisTemplate;
 
-    public MarketDataCacheService(StockCacheService stockCacheService, ObjectMapper objectMapper) {
+    public MarketDataCacheService(StockCacheService stockCacheService, ObjectMapper objectMapper, RedisTemplate<String, String> redisTemplate) {
         this.stockCacheService = stockCacheService;
         this.objectMapper = objectMapper;
+        this.redisTemplate = redisTemplate;
+    }
+
+    public Double getPreviousClose(String symbol) {
+        try {
+            String redisKey = "market:prev-close:" + symbol;
+            String value = redisTemplate.opsForValue().get(redisKey);
+            if (value != null) {
+                return Double.parseDouble(value);
+            }
+        } catch (Exception e) {
+            log.warn("getPreviousClose", "Failed to get previous close for symbol: " + symbol, e);
+        }
+        return null;
+    }
+
+    public void setPreviousClose(String symbol, double previousClose) {
+        try {
+            String redisKey = "market:prev-close:" + symbol;
+            redisTemplate.opsForValue().set(redisKey, String.valueOf(previousClose), 26, TimeUnit.HOURS);
+        } catch (Exception e) {
+            log.warn("setPreviousClose", "Failed to set previous close for symbol: " + symbol, e);
+        }
     }
 
     public void cacheOHLCData(Map<String, OHLCQuote> ohlcData, TimeFrame timeFrame) {
@@ -61,12 +87,17 @@ public class MarketDataCacheService {
                         : fullSymbol;
                 OHLCQuote quote = entry.getValue();
 
+                if (quote == null || quote.getOhlc() == null) {
+                    log.warn("cacheOHLCData", "Skipping symbol {} due to missing OHLC data", symbol);
+                    continue;
+                }
+
                 // Create OHLCV from OHLCQuote
                 OHLCV ohlcv = StockCacheService.createPricePoint(
                         LocalDateTime.now(),
                         quote.getOhlc().getOpen(),
                         quote.getOhlc().getHigh(),
-                        quote.getOhlc().getClose(),
+                        quote.getOhlc().getLow(),
                         quote.getOhlc().getClose(),
                         0L,
                         quote.getLastPrice());
@@ -97,6 +128,17 @@ public class MarketDataCacheService {
                 List<String> sampleKeys = cachedKeys.subList(0, Math.min(3, cachedKeys.size()));
                 log.info("cacheOHLCData", "Cached {} symbols with timeframe: {} for date: {}. Sample keys: {}",
                         ohlcData.size(), interval, today, sampleKeys);
+            }
+
+            // Also persist lastPrice + previousClose to market:latest-price:* so that
+            // subsequent cache reads can overlay previousClose correctly.
+            // The stock:intraday:* path does NOT store previousClose, so this is the only
+            // durable place for it.
+            try {
+                cacheLatestPrices(ohlcData);
+                log.debug("cacheOHLCData", "Also cached latest prices (incl. previousClose) for {} symbols", ohlcData.size());
+            } catch (Exception latestEx) {
+                log.warn("cacheOHLCData", "Failed to cache latest prices alongside OHLC data: {}", latestEx.getMessage());
             }
         } catch (Exception e) {
             // Use the specialized exception logging
@@ -147,10 +189,18 @@ public class MarketDataCacheService {
 
     public Map<String, OHLCQuote> getOHLCFromCache(List<String> tradingSymbols, TimeFrame timeFrame) {
         try {
-            // Clean symbols (remove NSE: prefix if present AND filter out index symbols)
-            // Clean symbols (remove NSE: prefix if present)
+            // Clean symbols (remove exchange prefixes)
             List<String> cleanSymbols = tradingSymbols.stream()
-                    .map(symbol -> symbol.replace("NSE:", "").replace("NSE_EQ:", ""))
+                    .map(symbol -> {
+                        String clean = symbol;
+                        if (clean.contains("|")) {
+                            clean = clean.substring(clean.indexOf("|") + 1);
+                        }
+                        if (clean.contains(":")) {
+                            clean = clean.substring(clean.indexOf(":") + 1);
+                        }
+                        return clean.toUpperCase().trim();
+                    })
                     .collect(Collectors.toList());
 
             if (cleanSymbols.isEmpty()) {
@@ -217,6 +267,12 @@ public class MarketDataCacheService {
                 // Log the cache hits with values
                 log.info("getOHLCFromCache", "Retrieved OHLC data from cache for {} symbols", result.size());
                 log.debug("getOHLCFromCache", "Retrieved values: {}", cacheHits);
+
+                // Overlay lastPrice and previousClose from Redis Path 2 (market:latest-price:*)
+                // These are written by cacheLatestPrices() on every WebSocket tick.
+                // The intraday bars (Path 1) do not store previousClose, so it defaults to 0.0.
+                // This overlay fixes both: fresh lastPrice on reload and non-zero previousClose.
+                overlayLatestPrices(result);
             }
 
             return result;
@@ -228,6 +284,49 @@ public class MarketDataCacheService {
         }
     }
 
+    /**
+     * Overlays the latest prices and previous close from the fast Redis cache onto the provided OHLC quotes.
+     * This is useful when fetching data from sources that might not have the absolute latest price or previous close.
+     * 
+     * @param result The map of OHLCQuotes to overlay with latest prices
+     */
+    public void overlayLatestPrices(Map<String, OHLCQuote> result) {
+        if (result == null || result.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
+            String symbol = entry.getKey();
+            if (symbol.contains("|")) {
+                symbol = symbol.substring(symbol.indexOf("|") + 1);
+            }
+            if (symbol.contains(":")) {
+                symbol = symbol.substring(symbol.indexOf(":") + 1);
+            }
+            symbol = symbol.toUpperCase().trim();
+            String latestKey = "market:latest-price:" + symbol;
+            try {
+                String json = redisTemplate.opsForValue().get(latestKey);
+                if (json != null) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> latestData = objectMapper.readValue(json, Map.class);
+                    double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
+                    double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
+                    OHLCQuote quote = entry.getValue();
+                    if (latestPrice > 0) {
+                        quote.setLastPrice(latestPrice);
+                    }
+                    if (prevClose > 0) {
+                        quote.setPreviousClose(prevClose);
+                    }
+                    log.debug("overlayLatestPrices",
+                            "Overlaid live prices for {}: lastPrice={}, previousClose={}", symbol, latestPrice, prevClose);
+                }
+            } catch (Exception ex) {
+                log.warn("overlayLatestPrices",
+                        "Failed to overlay latest price for symbol {}: {}", symbol, ex.getMessage());
+            }
+        }
+    }
     /**
      * Batch retrieval of historical data from cache for multiple symbols
      * 
@@ -687,5 +786,122 @@ public class MarketDataCacheService {
 
     public String getActiveProvider() {
         return stockCacheService.getActiveProvider();
+    }
+
+    /**
+     * Cache the latest streaming prices strictly in Redis with a 6-hour TTL.
+     * Normalized format is used.
+     */
+    public void cacheLatestPrices(Map<String, OHLCQuote> quotes) {
+        if (quotes == null || quotes.isEmpty()) {
+            return;
+        }
+
+        try {
+            for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
+                String rawSymbol = entry.getKey();
+                // Normalize symbol: e.g. NSE_INDEX|Nifty 50 -> NIFTY 50
+                String symbol = rawSymbol;
+                if (symbol.contains("|")) {
+                    symbol = symbol.substring(symbol.indexOf("|") + 1);
+                }
+                if (symbol.contains(":")) {
+                    symbol = symbol.substring(symbol.indexOf(":") + 1);
+                }
+                symbol = symbol.toUpperCase().trim();
+
+                OHLCQuote quote = entry.getValue();
+                if (quote == null) {
+                    continue;
+                }
+
+                double lastPrice = quote.getLastPrice();
+                double open = quote.getOhlc() != null ? quote.getOhlc().getOpen() : 0.0;
+                double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
+                double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
+                double previousClose = quote.getPreviousClose();
+                double change = lastPrice - previousClose;
+                double changePercent = previousClose != 0 ? (change / previousClose) * 100.0 : 0.0;
+
+                Map<String, Object> cacheData = new HashMap<>();
+                cacheData.put("symbol", symbol);
+                cacheData.put("lastPrice", lastPrice);
+                cacheData.put("open", open);
+                cacheData.put("high", high);
+                cacheData.put("low", low);
+                cacheData.put("previousClose", previousClose);
+                cacheData.put("change", change);
+                cacheData.put("changePercent", changePercent);
+                cacheData.put("updatedAt", System.currentTimeMillis());
+                cacheData.put("source", "UPSTOX_WS");
+
+                String json = objectMapper.writeValueAsString(cacheData);
+                String key = "market:latest-price:" + symbol;
+
+                // 6 hours TTL during market day fallback
+                redisTemplate.opsForValue().set(key, json, 6, TimeUnit.HOURS);
+            }
+        } catch (Exception e) {
+            log.error("cacheLatestPrices", "Error caching latest prices to Redis", e);
+        }
+    }
+
+    /**
+     * Retrieve the latest streaming prices strictly from Redis.
+     */
+    public Map<String, OHLCQuote> getLatestPrices(Set<String> symbols) {
+        if (symbols == null || symbols.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, OHLCQuote> result = new HashMap<>();
+        try {
+            for (String symbol : symbols) {
+                String cleanSymbol = symbol;
+                if (cleanSymbol.contains("|")) {
+                    cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf("|") + 1);
+                }
+                if (cleanSymbol.contains(":")) {
+                    cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf(":") + 1);
+                }
+                cleanSymbol = cleanSymbol.toUpperCase().trim();
+
+                String key = "market:latest-price:" + cleanSymbol;
+                String json = redisTemplate.opsForValue().get(key);
+                if (json != null) {
+                    Map<String, Object> map = objectMapper.readValue(json, Map.class);
+
+                    // Ignore Redis prices older than 15 minutes (900,000 ms)
+                    long updatedAt = ((Number) map.getOrDefault("updatedAt", 0L)).longValue();
+                    long ageMs = System.currentTimeMillis() - updatedAt;
+                    if (ageMs > 15 * 60 * 1000) {
+                        log.warn("getLatestPrices", "Redis price for " + cleanSymbol + " is stale (age: " + (ageMs / 1000) + "s). Ignoring.");
+                        continue;
+                    }
+
+                    double lastPrice = ((Number) map.getOrDefault("lastPrice", 0.0)).doubleValue();
+                    double open = ((Number) map.getOrDefault("open", 0.0)).doubleValue();
+                    double high = ((Number) map.getOrDefault("high", 0.0)).doubleValue();
+                    double low = ((Number) map.getOrDefault("low", 0.0)).doubleValue();
+                    double previousClose = ((Number) map.getOrDefault("previousClose", 0.0)).doubleValue();
+
+                    OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
+                    ohlc.setOpen(open);
+                    ohlc.setHigh(high);
+                    ohlc.setLow(low);
+                    ohlc.setClose(lastPrice);
+
+                    OHLCQuote quote = new OHLCQuote();
+                    quote.setLastPrice(lastPrice);
+                    quote.setOhlc(ohlc);
+                    quote.setPreviousClose(previousClose);
+
+                    result.put(symbol, quote);
+                }
+            }
+        } catch (Exception e) {
+            log.error("getLatestPrices", "Error fetching latest prices from Redis", e);
+        }
+        return result;
     }
 }

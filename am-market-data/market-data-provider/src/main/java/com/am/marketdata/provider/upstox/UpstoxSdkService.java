@@ -59,6 +59,27 @@ public class UpstoxSdkService {
         this.accessToken = sanitizeAccessToken(accessToken);
     }
 
+    private String getDynamicAccessToken() {
+        if (this.accessToken != null && !this.accessToken.isEmpty()) {
+            return this.accessToken;
+        }
+        
+        try {
+            String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
+            if (cachedToken != null && !cachedToken.isEmpty()) {
+                this.accessToken = sanitizeAccessToken(cachedToken);
+                return this.accessToken;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get access token from Redis in SDK service: {}", e.getMessage());
+        }
+        
+        if (upstoxConfig.getAccessToken() != null && !upstoxConfig.getAccessToken().isEmpty()) {
+            this.accessToken = sanitizeAccessToken(upstoxConfig.getAccessToken());
+        }
+        return this.accessToken;
+    }
+
     /** Strip accidental JSON suffixes from env vars (e.g. {@code ...","extended_token":"...}). */
     static String sanitizeAccessToken(String accessToken) {
         if (accessToken == null) {
@@ -89,14 +110,9 @@ public class UpstoxSdkService {
      */
     public GetMarketQuoteLastTradedPriceResponseV3 getLtp(List<String> instrumentKeys)
             throws ApiException {
-        if (this.accessToken == null || this.accessToken.isEmpty()) {
-            // Try to refresh from config one last time
-            if (upstoxConfig.getAccessToken() != null) {
-                this.accessToken = upstoxConfig.getAccessToken();
-            }
-            if (this.accessToken == null || this.accessToken.isEmpty()) {
-                throw new IllegalStateException("Upstox Access token is not initialized");
-            }
+        String token = getDynamicAccessToken();
+        if (token == null || token.isEmpty()) {
+            throw new IllegalStateException("Upstox Access token is not initialized");
         }
 
         if (instrumentKeys == null || instrumentKeys.isEmpty()) {
@@ -120,8 +136,12 @@ public class UpstoxSdkService {
 
         MarketQuoteV3Api marketQuoteV3Api = new MarketQuoteV3Api(apiClient);
 
-        // Join keys with comma
-        String symbolList = String.join(",", instrumentKeys);
+        // Normalize keys replacing colon with pipe
+        List<String> normalizedKeys = new java.util.ArrayList<>();
+        for (String key : instrumentKeys) {
+            normalizedKeys.add(key != null ? key.replace(":", "|") : null);
+        }
+        String symbolList = String.join(",", normalizedKeys);
 
         log.debug("Calling MarketQuoteV3Api.getLtp with symbols: {}", symbolList);
         return marketQuoteV3Api.getLtp(symbolList);
@@ -138,14 +158,9 @@ public class UpstoxSdkService {
      */
     public com.am.marketdata.provider.upstox.model.OHLCResponse getOhlc(List<String> instrumentKeys, String interval)
             throws ApiException {
-        if (this.accessToken == null || this.accessToken.isEmpty()) {
-            // Try to refresh from config one last time
-            if (upstoxConfig.getAccessToken() != null) {
-                this.accessToken = upstoxConfig.getAccessToken();
-            }
-            if (this.accessToken == null || this.accessToken.isEmpty()) {
-                throw new IllegalStateException("Upstox Access token is not initialized");
-            }
+        String token = getDynamicAccessToken();
+        if (token == null || token.isEmpty()) {
+            throw new IllegalStateException("Upstox Access token is not initialized");
         }
 
         if (instrumentKeys == null || instrumentKeys.isEmpty()) {
@@ -165,8 +180,12 @@ public class UpstoxSdkService {
 
         MarketQuoteV3Api marketQuoteV3Api = new MarketQuoteV3Api(apiClient);
 
-        // Join keys with comma
-        String symbolList = String.join(",", instrumentKeys);
+        // Normalize keys replacing colon with pipe
+        List<String> normalizedKeys = new java.util.ArrayList<>();
+        for (String key : instrumentKeys) {
+            normalizedKeys.add(key != null ? key.replace(":", "|") : null);
+        }
+        String symbolList = String.join(",", normalizedKeys);
 
         log.debug("Calling MarketQuoteV3Api.getOHLC with symbols: {} and interval: {}", symbolList, interval);
         log.debug("Access Token (masked): {}...",
@@ -247,13 +266,9 @@ public class UpstoxSdkService {
      */
     public com.am.marketdata.provider.upstox.model.HistoricalDataResponse getHistoricalCandleData(String instrumentKey,
             String unit, Integer interval, String toDate, String fromDate) {
-        if (this.accessToken == null || this.accessToken.isEmpty()) {
-            if (upstoxConfig.getAccessToken() != null) {
-                this.accessToken = sanitizeAccessToken(upstoxConfig.getAccessToken());
-            }
-            if (this.accessToken == null || this.accessToken.isEmpty()) {
-                throw new IllegalStateException("Upstox Access token is not initialized");
-            }
+        String token = getDynamicAccessToken();
+        if (token == null || token.isEmpty()) {
+            throw new IllegalStateException("Upstox Access token is not initialized");
         }
 
         try {
@@ -268,19 +283,21 @@ public class UpstoxSdkService {
             HistoryV3Api historyV3Api = new HistoryV3Api(apiClient);
             boolean useDateRange = fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate);
 
+            String normalizedKey = instrumentKey != null ? instrumentKey.replace(":", "|") : null;
+
             GetHistoricalCandleResponse sdkResponse;
             if (useDateRange) {
                 log.info(
                         "Fetching historical data (range) key={}, unit={}, interval={}, to={}, from={}",
-                        instrumentKey, unit, interval, toDate, fromDate);
+                        normalizedKey, unit, interval, toDate, fromDate);
                 sdkResponse = historyV3Api.getHistoricalCandleData1(
-                        instrumentKey, unit, interval, toDate, fromDate);
+                        normalizedKey, unit, interval, toDate, fromDate);
             } else {
                 log.info(
                         "Fetching historical data (to_date only) key={}, unit={}, interval={}, to={}",
-                        instrumentKey, unit, interval, toDate);
+                        normalizedKey, unit, interval, toDate);
                 sdkResponse = historyV3Api.getHistoricalCandleData(
-                        instrumentKey, unit, interval, toDate);
+                        normalizedKey, unit, interval, toDate);
             }
 
             return mapToHistoricalDataResponse(sdkResponse);

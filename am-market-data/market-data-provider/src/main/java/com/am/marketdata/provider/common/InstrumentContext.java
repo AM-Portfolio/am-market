@@ -53,6 +53,20 @@ public class InstrumentContext {
      * @return Trading symbol or instrument key if not found
      */
     public String getSymbol(String instrumentKey) {
-        return keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
+        if (instrumentKey == null) {
+            return null;
+        }
+        String symbol = keyToSymbolMap.get(instrumentKey);
+        if (symbol == null) {
+            // Try normalizing key (e.g. replacing colons with pipes)
+            String normalizedKey = instrumentKey.replace(':', '|');
+            symbol = keyToSymbolMap.get(normalizedKey);
+            if (symbol == null) {
+                // Try reverse normalization (replacing pipes with colons)
+                normalizedKey = instrumentKey.replace('|', ':');
+                symbol = keyToSymbolMap.get(normalizedKey);
+            }
+        }
+        return symbol != null ? symbol : instrumentKey;
     }
 }

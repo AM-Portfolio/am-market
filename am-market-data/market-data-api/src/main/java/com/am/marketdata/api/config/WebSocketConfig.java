@@ -29,7 +29,7 @@ public class WebSocketConfig implements WebSocketConfigurer, WebSocketMessageBro
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(marketDataWebSocketHandler, "/ws/market-data-stream")
-                .setAllowedOrigins("*");
+                .setAllowedOriginPatterns("*");
     }
 
     // STOMP WebSocket configuration (for SimpMessagingTemplate)

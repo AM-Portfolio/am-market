@@ -36,12 +36,15 @@ public class MarketDataWebSocketHandler extends TextWebSocketHandler implements 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String payload = message.getPayload();
-        log.info("Received message from session {}: {}", session.getId(), payload);
-
-        // Basic echo or command handling if needed (currently minimal)
+        
+        // Handle ping heartbeat explicitly and bypass INFO logging to prevent log spam
         if ("ping".equalsIgnoreCase(payload)) {
+            log.debug("Received heartbeat ping from session {}", session.getId());
             session.sendMessage(new TextMessage("pong"));
+            return;
         }
+
+        log.info("Received message from session {}: {}", session.getId(), payload);
     }
 
     @Override

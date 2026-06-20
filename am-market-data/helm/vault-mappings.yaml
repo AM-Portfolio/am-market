@@ -41,7 +41,7 @@ vault:
         UPSTOX_API_KEY: "UPSTOX_API_KEY"
         UPSTOX_SECRET_KEY: "UPSTOX_SECRET_KEY"
         UPSTOX_REDIRECT_URI: "UPSTOX_REDIRECT_URI"
-        UPSTOX_ACCESS_TOKEN: "UPSTOX_ACCESS_TOKEN"
+        UPSTOX_ACCESS_TOKEN: "UPSTOCK_ACCESS_TOKEN"
     scheduler-config:
       mappings:
         SCHEDULER_TIMEZONE: "scheduler_timezone"
@@ -84,11 +84,3 @@ vault:
         POSTGRES_USERNAME: "username"
         SPRING_DATASOURCE_PASSWORD: "password"
         SPRING_DATASOURCE_USERNAME: "username"
-    identity-oidc:
-      mappings:
-        OIDC_JWKS_URI: "OIDC_JWKS_URL"
-        OIDC_ISSUER_URI: "OIDC_ISSUER"
-    service-oauth:
-      mappings:
-        OAUTH2_CLIENT_ID: "AM_MARKET_CLIENT_ID"
-        OAUTH2_CLIENT_SECRET: "AM_MARKET_CLIENT_SECRET"

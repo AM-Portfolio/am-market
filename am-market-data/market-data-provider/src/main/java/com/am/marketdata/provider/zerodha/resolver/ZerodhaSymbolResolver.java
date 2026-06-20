@@ -71,8 +71,8 @@ public class ZerodhaSymbolResolver implements SymbolResolver {
         // Strip exchange prefix if present (e.g., NSE:RELIANCE -> RELIANCE)
         List<String> cleanedSymbols = symbols.stream()
                 .map(s -> {
-                    if (s.startsWith("NSE:") || s.startsWith("BSE:")) {
-                        return s.substring(4);
+                    if (s.contains(":")) {
+                        return s.substring(s.indexOf(":") + 1);
                     }
                     return s;
                 })

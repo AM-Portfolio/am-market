@@ -1,6 +1,6 @@
 env:
-  SPRING_PROFILES_ACTIVE: "preprod,security"
-  JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=preprod,security"
+  SPRING_PROFILES_ACTIVE: "preprod"
+  JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=preprod"
   # JVM reads JAVA_TOOL_OPTIONS automatically (chart entrypoint did not expand JAVA_OPTS)
   JAVA_TOOL_OPTIONS: "-Xms512m -Xmx768m"
 environment: preprod
@@ -13,7 +13,7 @@ probes:
     initialDelaySeconds: 0
     periodSeconds: 10
     timeoutSeconds: 5
-    failureThreshold: 18
+    failureThreshold: 60
 
   liveness:
     path: /actuator/health/liveness
@@ -48,10 +48,6 @@ vault:
       path: "apps/data/preprod/services/am-market-data"
     scheduler-config:
       path: "apps/data/preprod/services/am-market-data-scheduler"
-    identity-oidc:
-      path: "apps/data/preprod/services/am-identity"
-    service-oauth:
-      path: "apps/data/preprod/services/am-market-data"
 
 # Application Configuration
 config:
@@ -71,10 +67,10 @@ config:
   # ── Preprod scheduler — all enabled, production-identical crons ───────────
   scheduler:
     cookie:
-      enabled: true
+      enabled: false
       refreshCron: "0 0 9-16 * * MON-FRI"
     stockIndices:
-      enabled: true
+      enabled: false
       morningFetchCron: "0 30 9 * * *"
       eveningFetchCron: "0 0 16 * * *"
       retry:

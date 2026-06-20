@@ -1,0 +1,715 @@
+{
+  "info": {
+    "_postman_id": "c6a282f1-6789-4d32-8df2-ff2ea67f5b9d",
+    "name": "Market Data API",
+    "description": "Comprehensive Postman collection for testing the AM Portfolio Market Data API, including authentication, quotes, historical data, instruments, indices, and streaming connection management.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication & Sessions",
+      "item": [
+        {
+          "name": "Get Login URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/auth/login-url?provider=UPSTOX",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "auth",
+                "login-url"
+              ],
+              "query": [
+                {
+                  "key": "provider",
+                  "value": "UPSTOX",
+                  "description": "Broker provider (e.g. UPSTOX, ZERODHA)"
+                }
+              ]
+            },
+            "description": "Generates and returns the broker login URL for user authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Session",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/auth/session?request_token=YOUR_TOKEN_HERE&status=success",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "auth",
+                "session"
+              ],
+              "query": [
+                {
+                  "key": "request_token",
+                  "value": "YOUR_TOKEN_HERE",
+                  "description": "Request token returned from broker redirection"
+                },
+                {
+                  "key": "status",
+                  "value": "success"
+                }
+              ]
+            },
+            "description": "Creates an authenticated session using the authorization token returned from broker redirect."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Terminates the active broker session and clears access tokens."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Market Data & Quotes",
+      "item": [
+        {
+          "name": "Get Quotes (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/quotes?symbols=INFY,RELIANCE&timeFrame=5m&refresh=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "quotes"
+              ],
+              "query": [
+                {
+                  "key": "symbols",
+                  "value": "INFY,RELIANCE",
+                  "description": "Comma-separated list of instrument keys/symbols"
+                },
+                {
+                  "key": "timeFrame",
+                  "value": "5m",
+                  "description": "Timeframe (e.g. 5m, 15m, 1H, 1D)"
+                },
+                {
+                  "key": "refresh",
+                  "value": "false",
+                  "description": "Force live refresh from broker"
+                }
+              ]
+            },
+            "description": "Fetches current quotes for multiple symbols."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Quotes (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": \"INFY,RELIANCE\",\n  \"timeFrame\": \"1D\",\n  \"indexSymbol\": false,\n  \"forceRefresh\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/quotes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "quotes"
+              ]
+            },
+            "description": "POST version to retrieve quotes for a batch of symbols."
+          },
+          "response": []
+        },
+        {
+          "name": "Get OHLC Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": \"INFY,RELIANCE\",\n  \"timeFrame\": \"1D\",\n  \"indexSymbol\": false,\n  \"forceRefresh\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/ohlc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "ohlc"
+              ]
+            },
+            "description": "Gets Open-High-Low-Close data for multiple instruments."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Live Prices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/live-prices?symbols=INFY,RELIANCE&isIndexSymbol=false&refresh=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "live-prices"
+              ],
+              "query": [
+                {
+                  "key": "symbols",
+                  "value": "INFY,RELIANCE"
+                },
+                {
+                  "key": "isIndexSymbol",
+                  "value": "false"
+                },
+                {
+                  "key": "refresh",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Fetches current live price updates for active symbols."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Live LTP with Change",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/live-ltp?symbols=INFY,RELIANCE&timeframe=1D&isIndexSymbol=false&refresh=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "live-ltp"
+              ],
+              "query": [
+                {
+                  "key": "symbols",
+                  "value": "INFY,RELIANCE"
+                },
+                {
+                  "key": "timeframe",
+                  "value": "1D"
+                },
+                {
+                  "key": "isIndexSymbol",
+                  "value": "false"
+                },
+                {
+                  "key": "refresh",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Gets current LTP and calculates absolute and percentage changes based on previous close."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Option Chain",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/option-chain?symbol=INFY&refresh=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "option-chain"
+              ],
+              "query": [
+                {
+                  "key": "symbol",
+                  "value": "INFY",
+                  "description": "Underlying instrument symbol key"
+                },
+                {
+                  "key": "expiryDate",
+                  "value": "2026-06-25",
+                  "description": "Optional expiry date in yyyy-MM-dd format",
+                  "disabled": true
+                },
+                {
+                  "key": "refresh",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Retrieves the call and put option chain for a given underlying symbol."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Historical & Mutual Funds",
+      "item": [
+        {
+          "name": "Get Historical Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": \"INFY\",\n  \"interval\": \"day\",\n  \"from\": \"2026-01-01\",\n  \"to\": \"2026-05-27\",\n  \"forceRefresh\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/historical-data",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "historical-data"
+              ]
+            },
+            "description": "Retrieves historical price and volume data points for a specific date range."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Mutual Fund Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/mutual-fund/102868?refresh=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "mutual-fund",
+                "102868"
+              ],
+              "query": [
+                {
+                  "key": "refresh",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Fetches static details and current NAV for a specific mutual fund scheme code."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Mutual Fund NAV History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/mutual-fund/102868/history?from=2026-01-01&to=2026-05-27&refresh=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "mutual-fund",
+                "102868",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-05-27"
+                },
+                {
+                  "key": "refresh",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Retrieves historical NAV data points for the specified scheme code."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Indices & Instruments",
+      "item": [
+        {
+          "name": "Get Available Indices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/indices/available",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "indices",
+                "available"
+              ]
+            },
+            "description": "Retrieves the list of broad market and sector indices available on the NSE."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Latest Batch Indices Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  \"NIFTY 50\",\n  \"NIFTY BANK\",\n  \"NIFTY IT\"\n]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/indices/batch?forceRefresh=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "indices",
+                "batch"
+              ],
+              "query": [
+                {
+                  "key": "forceRefresh",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Gets real-time batch index values for a list of Index names."
+          },
+          "response": []
+        },
+        {
+          "name": "Search Instruments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"queries\": [\"INFY\"],\n  \"exchanges\": [\"NSE\"],\n  \"instrumentTypes\": [\"EQUITY\"],\n  \"provider\": \"UPSTOX\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/instruments/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "instruments",
+                "search"
+              ]
+            },
+            "description": "Performs filtered and semantic search across trading instruments database."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Instruments database from File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/instruments/update?provider=UPSTOX",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "instruments",
+                "update"
+              ],
+              "query": [
+                {
+                  "key": "provider",
+                  "value": "UPSTOX"
+                },
+                {
+                  "key": "filePath",
+                  "value": "data/upstock/instrument/NSE.json",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Triggers database update of instruments using local JSON files."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Symbols for Exchange",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/symbols/NSE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "symbols",
+                "NSE"
+              ]
+            },
+            "description": "Returns all available trading symbols registered on a given Exchange."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Streaming Management",
+      "item": [
+        {
+          "name": "Connect Stream",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrumentKeys\": [\"INFY\", \"RELIANCE\"],\n  \"mode\": \"FULL\",\n  \"timeFrame\": \"1D\",\n  \"isIndexSymbol\": false,\n  \"stream\": true,\n  \"provider\": \"UPSTOX\",\n  \"forcePolling\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/stream/connect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "stream",
+                "connect"
+              ]
+            },
+            "description": "Initiates a WebSocket stream for the given instruments."
+          },
+          "response": []
+        },
+        {
+          "name": "Initiate Stream (Structured)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrumentKeys\": [\"INFY\"],\n  \"mode\": \"FULL\",\n  \"timeFrame\": \"1D\",\n  \"isIndexSymbol\": false,\n  \"stream\": true,\n  \"provider\": \"UPSTOX\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/stream/initiate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "stream",
+                "initiate"
+              ]
+            },
+            "description": "Initiates streaming and returns a structured response object with initial values."
+          },
+          "response": []
+        },
+        {
+          "name": "Disconnect Stream",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/stream/disconnect?provider=UPSTOX",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "stream",
+                "disconnect"
+              ],
+              "query": [
+                {
+                  "key": "provider",
+                  "value": "UPSTOX"
+                }
+              ]
+            },
+            "description": "Closes the active WebSocket streaming channel for the specified provider."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Market Analysis",
+      "item": [
+        {
+          "name": "Get Top Movers & Gainers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/analysis/movers?type=gainers&limit=10&indexSymbol=NIFTY 50&expandIndices=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "analysis",
+                "movers"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "gainers",
+                  "description": "Type: gainers, losers, or all"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of results to return"
+                },
+                {
+                  "key": "indexSymbol",
+                  "value": "NIFTY 50",
+                  "description": "Index symbol (e.g. NIFTY 50, NIFTY BANK)"
+                },
+                {
+                  "key": "timeFrame",
+                  "value": "1D",
+                  "description": "Timeframe for analysis",
+                  "disabled": true
+                },
+                {
+                  "key": "expandIndices",
+                  "value": "false",
+                  "description": "Whether to expand index details"
+                }
+              ]
+            },
+            "description": "Retrieves top performing or worst performing stocks from the specified market index."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://am-dev.asrax.in/market",
+      "type": "string"
+    }
+  ]
+}

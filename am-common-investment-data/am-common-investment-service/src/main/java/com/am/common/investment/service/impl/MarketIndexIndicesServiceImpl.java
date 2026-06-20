@@ -55,4 +55,12 @@ public class MarketIndexIndicesServiceImpl implements MarketIndexIndicesService 
             .map(mapper::convertToModel)
             .collect(Collectors.toList());
     }
+
+    @Override
+    public List<MarketIndexIndices> getByIndexSymbolAndTimeBetween(String indexSymbol, java.time.Instant startTime, java.time.Instant endTime) {
+        logger.debug("Finding indices by symbol: {} between {} and {}", indexSymbol, startTime, endTime);
+        return marketIndexRepository.findByIndexSymbolAndTimeBetween(indexSymbol, startTime, endTime).stream()
+            .map(mapper::convertToModel)
+            .collect(Collectors.toList());
+    }
 }

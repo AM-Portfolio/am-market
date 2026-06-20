@@ -187,6 +187,10 @@ public class MarketDataService {
                 OHLCDataRetriever retriever = createOHLCDataRetriever(providerName, forceRefresh);
                 Map<String, OHLCQuote> result = retriever.retrieveData(tradingSymbols, timeFrame, forceRefresh);
 
+                if (result != null && !result.isEmpty()) {
+                    persistenceService.getMarketDataCacheService().overlayLatestPrices(result);
+                }
+
                 meterRegistry.counter("market.data.success.count", "operation", "getOHLC", "timeFrame", tfValue).increment();
                 flowLogger.complete(span, "provider", providerName, "resultCount", result != null ? result.size() : 0);
                 return result;
@@ -298,6 +302,7 @@ public class MarketDataService {
                         .continuous(continuous)
                         .additionalParams(additionalParams)
                         .targetProviderName(providerName)
+                        .isIndexSymbol(isIndexSymbol)
                         .producer(producer)
                         .build();
 

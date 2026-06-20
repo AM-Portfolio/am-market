@@ -157,15 +157,21 @@ public class MarketDataIngestionScheduler {
         return provider != null && "UPSTOX".equalsIgnoreCase(provider.trim());
     }
 
+    // Check if the current time is within Indian market trading hours.
+    // NOTE: Explicitly uses Asia/Kolkata timezone because the application container
+    // runtime is typically in UTC, which otherwise causes false "market closed" evaluations.
     private boolean isMarketOpen() {
-        LocalTime now = LocalTime.now();
-        LocalTime start = LocalTime.parse(marketStartTime);
-        LocalTime end = LocalTime.parse(marketEndTime);
+        java.time.LocalTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata")).toLocalTime();
+        java.time.LocalTime start = java.time.LocalTime.parse(marketStartTime);
+        java.time.LocalTime end = java.time.LocalTime.parse(marketEndTime);
         return now.isAfter(start) && now.isBefore(end);
     }
 
+    // Check if current day is a weekend.
+    // NOTE: Explicitly uses Asia/Kolkata timezone to avoid date offset issues (e.g., Friday night
+    // in India evaluating to Saturday in local system time depending on container configuration).
     private boolean isWeekend() {
-        java.time.DayOfWeek day = java.time.LocalDate.now().getDayOfWeek();
+        java.time.DayOfWeek day = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).getDayOfWeek();
         return day == java.time.DayOfWeek.SATURDAY || day == java.time.DayOfWeek.SUNDAY;
     }
 }

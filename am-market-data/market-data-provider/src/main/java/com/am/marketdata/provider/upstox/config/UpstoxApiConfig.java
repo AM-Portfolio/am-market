@@ -5,6 +5,7 @@ import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +15,7 @@ import com.am.marketdata.provider.upstox.UpstoxApiService;
 import com.am.marketdata.provider.upstox.UpstoxIndexIdentifier;
 import com.am.marketdata.provider.upstox.UpstoxMarketDataProvider;
 import com.am.marketdata.provider.upstox.UpstoxSdkService;
+import kong.unirest.Unirest;
 
 import java.time.Duration;
 
@@ -24,6 +26,35 @@ import java.time.Duration;
 @Configuration
 @EnableScheduling
 public class UpstoxApiConfig {
+
+    @Autowired
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        log.info("Configuring Unirest to use Spring Boot's Jackson ObjectMapper");
+        Unirest.config().setObjectMapper(new kong.unirest.ObjectMapper() {
+            @Override
+            public <T> T readValue(String value, Class<T> valueType) {
+                try {
+                    return objectMapper.readValue(value, valueType);
+                } catch (Exception e) {
+                    log.error("Unirest deserialization failed: {}", e.getMessage(), e);
+                    throw new RuntimeException(e);
+                }
+            }
+
+            @Override
+            public String writeValue(Object value) {
+                try {
+                    return objectMapper.writeValueAsString(value);
+                } catch (Exception e) {
+                    log.error("Unirest serialization failed: {}", e.getMessage(), e);
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+    }
 
     @Value("${market-data.upstox.api.max.retries:3}")
     private int maxRetries;

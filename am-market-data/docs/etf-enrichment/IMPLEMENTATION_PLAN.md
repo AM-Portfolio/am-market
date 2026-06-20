@@ -232,7 +232,7 @@ See full script in separate file.
 # .env or environment variables
 AM_MARKET_DATA_URL=http://localhost:8020
 ISIN_MIN_CONFIDENCE=0.85
-MONGO_URI=mongodb://admin:password123@localhost:27017
+MONGO_URI=mongodb://admin:<REDACTED_PASSWORD>@localhost:27017
 MONGO_DB=mutual_funds
 ```
 

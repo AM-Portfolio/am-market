@@ -22,7 +22,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -41,9 +43,13 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
     private static final String REDIS_KEY_ACCESS_TOKEN = "market_data:upstox:access_token";
 
+    private final Map<String, String> instrumentKeyToTradingSymbolMap = new java.util.concurrent.ConcurrentHashMap<>();
     private MarketDataStreamerV3 streamer;
     private StreamerListener listener;
     private boolean isConnected = false;
+    private volatile boolean isConnecting = false;
+    private java.util.concurrent.ScheduledFuture<?> connectionWatchdog;
+    private final java.util.concurrent.ScheduledExecutorService scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
 
     @Autowired
     public UpstoxMarketDataStreamer(
@@ -59,7 +65,24 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
     @Override
     public void connect() {
+        if (isConnected || isConnecting) {
+            log.info("UpstoxStreamer", "Already connected or connection attempt in progress. Skipping.");
+            return;
+        }
         try {
+            isConnecting = true;
+            
+            // Set safety watchdog to reset isConnecting in case handshake hangs indefinitely
+            if (connectionWatchdog != null) {
+                connectionWatchdog.cancel(false);
+            }
+            connectionWatchdog = scheduler.schedule(() -> {
+                if (isConnecting && !isConnected) {
+                    log.warn("UpstoxStreamer", "⚠️ Connection handshake watchdog triggered! Resetting connection lock.");
+                    isConnecting = false;
+                }
+            }, 15, java.util.concurrent.TimeUnit.SECONDS);
+
             log.info("UpstoxStreamer", "=== STARTING Upstox Market Data Streamer connection ===");
 
             // Get Access Token - Try Redis cache first, then config
@@ -93,6 +116,10 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                 public void onOpen() {
                     log.info("UpstoxStreamer", "✅ *** CONNECTION ESTABLISHED *** ✅");
                     isConnected = true;
+                    isConnecting = false;
+                    if (connectionWatchdog != null) {
+                        connectionWatchdog.cancel(false);
+                    }
                     if (listener != null) {
                         log.info("UpstoxStreamer", "Notifying listener of connection open");
                         listener.onOpen();
@@ -113,9 +140,41 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                         Map<String, com.am.marketdata.common.model.OHLCQuote> commonQuotes = v3Converter
                                 .convert(marketUpdate);
                         if (commonQuotes != null && !commonQuotes.isEmpty()) {
+                            Map<String, com.am.marketdata.common.model.OHLCQuote> mappedQuotes = new HashMap<>();
+                            for (Map.Entry<String, com.am.marketdata.common.model.OHLCQuote> entry : commonQuotes.entrySet()) {
+                                String instKey = entry.getKey();
+                                String tradingSymbol = instrumentKeyToTradingSymbolMap.get(instKey);
+                                if (tradingSymbol == null) {
+                                    String lookupKey = instKey;
+                                    if (lookupKey.contains("|")) {
+                                        lookupKey = lookupKey.substring(lookupKey.indexOf("|") + 1);
+                                    }
+                                    try {
+                                        InstrumentContext ctx = symbolResolver.resolveContext(List.of(lookupKey));
+                                        if (ctx.getKeyToSymbolMap() != null) {
+                                            for (Map.Entry<String, String> lookupEntry : ctx.getKeyToSymbolMap().entrySet()) {
+                                                if (lookupEntry.getKey().equalsIgnoreCase(instKey) || lookupEntry.getKey().endsWith(lookupKey)) {
+                                                    tradingSymbol = lookupEntry.getValue();
+                                                    instrumentKeyToTradingSymbolMap.put(instKey, tradingSymbol);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    } catch (Exception e) {
+                                        log.warn("UpstoxStreamer", "Failed dynamic symbol resolve: " + e.getMessage());
+                                    }
+                                }
+                                if (tradingSymbol == null) {
+                                    tradingSymbol = instKey;
+                                    if (tradingSymbol.contains("|")) {
+                                        tradingSymbol = tradingSymbol.substring(tradingSymbol.indexOf("|") + 1);
+                                    }
+                                }
+                                mappedQuotes.put(tradingSymbol, entry.getValue());
+                            }
                             log.debug("UpstoxStreamer",
-                                    "Converted " + commonQuotes.size() + " quotes, sending to listener");
-                            listener.onMessage(commonQuotes);
+                                    "Converted " + mappedQuotes.size() + " quotes, sending to listener");
+                            listener.onMessage(mappedQuotes);
                         } else {
                             log.debug("UpstoxStreamer",
                                     "Converter returned empty/null quotes (markets closed or LTP=0)");
@@ -129,6 +188,10 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
             streamer.setOnErrorListener(new OnErrorListener() {
                 @Override
                 public void onError(Throwable error) {
+                    if (error instanceof java.io.InterruptedIOException || error.getCause() instanceof InterruptedException) {
+                        log.info("UpstoxStreamer", "Streamer thread interrupted (normal during disconnect/reconnect).");
+                        return;
+                    }
                     log.error("UpstoxStreamer", "❌ ERROR in streamer: " + error.getMessage(), error);
                     if (listener != null)
                         listener.onError(error);
@@ -140,6 +203,10 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                 public void onClose(int code, String reason) {
                     log.info("UpstoxStreamer", "Connection Closed: " + code + " | Reason: " + reason);
                     isConnected = false;
+                    isConnecting = false;
+                    if (connectionWatchdog != null) {
+                        connectionWatchdog.cancel(false);
+                    }
                     if (listener != null)
                         listener.onClose();
                 }
@@ -154,6 +221,10 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
         } catch (Exception e) {
             log.error("UpstoxStreamer", "❌ FATAL: Failed to connect: " + e.getMessage(), e);
             isConnected = false;
+            isConnecting = false;
+            if (connectionWatchdog != null) {
+                connectionWatchdog.cancel(false);
+            }
             if (listener != null)
                 listener.onError(e);
         }
@@ -161,8 +232,12 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
     @Override
     public void disconnect() {
+        if (connectionWatchdog != null) {
+            connectionWatchdog.cancel(false);
+        }
         if (streamer != null) {
             log.info("UpstoxStreamer", "Disconnecting...");
+            isConnecting = false;
             streamer.disconnect();
             isConnected = false;
         }

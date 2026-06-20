@@ -7,7 +7,7 @@ INFRA_HOST: ${INFRA_HOST:localhost}
 #mongoDB Configuration
 MONGODB_DATABASE_NAME: ${MONGODB_DATABASE:market_data}
 MONGODB_USERNAME_INTERNAL: ${MONGODB_USERNAME:admin}
-MONGODB_PASSWORD_INTERNAL: ${MONGODB_PASSWORD:password123}
+MONGODB_PASSWORD_INTERNAL: ${MONGODB_PASSWORD:<REDACTED_PASSWORD>}
 
 # InfluxDB Configuration
 INFLUXDB_TOKEN_INTERNAL: ${INFLUXDB_TOKEN:my-super-secret-auth-token}
@@ -17,7 +17,7 @@ INFLUXDB_URL_INTERNAL: http://${INFRA_HOST}:8086
 
 # Redis Configuration
 REDIS_HOSTNAME: ${INFRA_HOST}
-REDIS_PASSWORD_INTERNAL: ${REDIS_PASSWORD:password123}
+REDIS_PASSWORD_INTERNAL: ${REDIS_PASSWORD:<REDACTED_PASSWORD>}
 REDIS_PORT: 6379
 
 # Grafana Configuration
@@ -179,11 +179,11 @@ scheduler:
   timezone: ${SCHEDULER_TIMEZONE:Asia/Kolkata}
   # ── Cookie / NSE session ──────────────────────────────────────────────────
   cookie:
-    enabled: ${SCHEDULER_COOKIE_ENABLED:true}
+    enabled: ${SCHEDULER_COOKIE_ENABLED:false}
     refresh: "${SCHEDULER_COOKIE_REFRESH_CRON:0 0 9-16 * * MON-FRI}"
   # ── Stock-indices ─────────────────────────────────────────────────────────
   stock-indices:
-    enabled: ${SCHEDULER_STOCK_INDICES_ENABLED:true}
+    enabled: ${SCHEDULER_STOCK_INDICES_ENABLED:false}
     morning-fetch: "${SCHEDULER_STOCK_INDICES_MORNING_FETCH_CRON:0 30 9 * * *}"
     evening-fetch: "${SCHEDULER_STOCK_INDICES_EVENING_FETCH_CRON:0 0 16 * * *}"
     retry:
@@ -192,6 +192,7 @@ scheduler:
       max-retries: ${SCHEDULER_STOCK_INDICES_RETRY_MAX_RETRIES:20}
   # ── Intra-day indices fetch ───────────────────────────────────────────────
   indices:
+    enabled: ${SCHEDULER_INDICES_ENABLED:false}
     fetch: "${SCHEDULER_INDICES_FETCH_CRON:0 */2 * * * *}"
   # ── Ingestion (live market-hours) ─────────────────────────────────────────
   ingestion:

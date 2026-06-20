@@ -3,6 +3,10 @@ INFRA_HOST: 100.72.208.15
 # Kafka Configuration
 KAFKA_BOOTSTRAP_SERVERS: localhost:9092 #${INFRA_HOST}:9092
 
+kafka:
+  consumer:
+    group-id: ${spring.profiles.active:dev}-market-data-service-group
+
 # Application-specific Kafka properties Here you can there you go
 app:
   kafka:
@@ -11,11 +15,12 @@ app:
     properties:
       securityProtocol: ${KAFKA_SECURITY_PROTOCOL:SASL_PLAINTEXT}
       saslMechanism: ${KAFKA_SASL_MECHANISM:SCRAM-SHA-256}
-      saslJaasConfig: org.apache.kafka.common.security.scram.ScramLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}";
+      saslJaasConfig: org.apache.kafka.common.security.scram.ScramLoginModule required username="${KAFKA_USERNAME:kafkaUser}" password="${KAFKA_PASSWORD:RatFGX^uXzgaq@B0Brx3*FNurq0clEHL}";
 
     # Topic configuration
     topics:
       stock-price: ${STOKUPATE_TOPIC_NAME:am-stock-price-update}
+      previous-close-snapshot: ${AM_PREVIOUS_CLOSE_SNAPSHOT_TOPIC:am-previous-close-snapshot}
       market-data-ohlc-ingestion: ${MARKET_DATA_OHLC_INGESTION_TOPIC_NAME:market-data-ohlc-ingestion}
       market-data-historical-ingestion: ${MARKET_DATA_HISTORICAL_INGESTION_TOPIC_NAME:market-data-historical-ingestion}
       nse-indices: ${NSE_INDICES_TOPIC_NAME:am-nse-indices}

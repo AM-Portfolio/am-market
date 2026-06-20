@@ -24,7 +24,6 @@ jobs:
       sdk_name: 'am-common-investment-data-lib'
       maven_repo_id: 'github'
       maven_repo_url: 'https://maven.pkg.github.com/AM-Portfolio/am-market'
-      action: ${{ (github.event_name == 'pull_request' || contains(github.event.head_commit.message, 'bump version to next snapshot version')) && 'verify' || 'publish' }}
-      use_release_version: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
-      advance_snapshot: true
+      action: ${{ github.event_name == 'pull_request' && 'verify' || 'publish' }}
+      use_release_version: ${{ github.ref == 'refs/heads/main' }}
     secrets: inherit

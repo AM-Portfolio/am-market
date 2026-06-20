@@ -20,10 +20,10 @@ config:
   # ── Prod scheduler — explicit for auditability ───────────────────────
   scheduler:
     cookie:
-      enabled: true
+      enabled: false
       refreshCron: "0 0 9-16 * * MON-FRI"
     stockIndices:
-      enabled: true
+      enabled: false
       morningFetchCron: "0 30 9 * * *"
       eveningFetchCron: "0 0 16 * * *"
       retry:
@@ -103,8 +103,6 @@ vault:
     upstock: "secret/data/prod/api/upstock"
     market-data: "secret/data/prod/services/am-market-data"
     scheduler-config: "secret/data/prod/services/am-market-data-scheduler"
-    identity-oidc: "secret/data/prod/services/am-identity"
-    service-oauth: "secret/data/prod/services/am-market-data"
 
 # Monitoring Configuration
 monitoring:
@@ -113,6 +111,3 @@ monitoring:
     scrape: true
     port: "8080"
     path: "/actuator/prometheus"
-
-env:
-  SPRING_PROFILES_ACTIVE: "prod,security"

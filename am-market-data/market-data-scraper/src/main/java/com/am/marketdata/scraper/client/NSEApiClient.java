@@ -65,7 +65,8 @@ public class NSEApiClient {
     }
 
     public NSEStockInsidicesData getStockIndices(String indexSymbol) {
-        return stockIndicesRequestTimer.record(() -> executeApiCall("/api/equity-stockIndices?index=" + indexSymbol,
+        String encodedSymbol = java.net.URLEncoder.encode(indexSymbol, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+        return stockIndicesRequestTimer.record(() -> executeApiCall("/api/equity-stockIndices?index=" + encodedSymbol,
                 NSEStockInsidicesData.class, this::logStockIndicesResponse));
     }
 

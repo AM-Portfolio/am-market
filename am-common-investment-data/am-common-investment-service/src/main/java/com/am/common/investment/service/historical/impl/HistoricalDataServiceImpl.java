@@ -1,4 +1,4 @@
-package com.am.common.investment.service.historical.impl;
+  package com.am.common.investment.service.historical.impl;
 
 import com.am.common.investment.model.equity.EquityPrice;
 import com.am.common.investment.model.historical.HistoricalData;
@@ -30,16 +30,52 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
     private static final Logger logger = LoggerFactory.getLogger(HistoricalDataServiceImpl.class);
     
     private final EquityService equityService;
+    private final com.am.common.investment.service.MarketIndexIndicesService marketIndexIndicesService;
     
     @Override
     public Optional<HistoricalData> getHistoricalData(String tradingSymbol, Instant fromDate, Instant toDate, String interval) {
-        logger.debug("Retrieving historical data for symbol: {}, from: {}, to: {}, interval: {}", 
-                tradingSymbol, fromDate, toDate, interval);
+        return getHistoricalData(tradingSymbol, fromDate, toDate, interval, false);
+    }
+
+    @Override
+    public Optional<HistoricalData> getHistoricalData(String tradingSymbol, Instant fromDate, Instant toDate, String interval, boolean isIndexSymbol) {
+        logger.debug("Retrieving historical data for symbol: {}, from: {}, to: {}, interval: {}, isIndexSymbol: {}", 
+                tradingSymbol, fromDate, toDate, interval, isIndexSymbol);
         
         long startTime = System.currentTimeMillis();
         
-        // Get price history from equity service
-        List<EquityPrice> prices = equityService.getPriceHistoryByKey(tradingSymbol, fromDate, toDate);
+        List<EquityPrice> prices;
+        if (isIndexSymbol) {
+            List<com.am.common.investment.model.equity.MarketIndexIndices> indices = 
+                marketIndexIndicesService.getByIndexSymbolAndTimeBetween(tradingSymbol, fromDate, toDate);
+            
+            prices = indices.stream().map(index -> {
+                com.am.common.investment.model.historical.OHLCVTPoint ohlcv = null;
+                if (index.getMarketData() != null) {
+                    ohlcv = com.am.common.investment.model.historical.OHLCVTPoint.builder()
+                        .open(index.getMarketData().getOpen() != null ? index.getMarketData().getOpen() : 0.0)
+                        .high(index.getMarketData().getHigh() != null ? index.getMarketData().getHigh() : 0.0)
+                        .low(index.getMarketData().getLow() != null ? index.getMarketData().getLow() : 0.0)
+                        .close(index.getMarketData().getLast() != null ? index.getMarketData().getLast() : 0.0)
+                        .volume(0L)
+                        .build();
+                }
+                
+                return com.am.common.investment.model.equity.EquityPrice.builder()
+                    .symbol(index.getIndexSymbol())
+                    .time(index.getTimestamp() != null ? index.getTimestamp().toInstant(java.time.ZoneOffset.UTC) : null)
+                    .lastPrice(index.getMarketData() != null && index.getMarketData().getLast() != null ? index.getMarketData().getLast() : 0.0)
+                    .ohlcv(ohlcv)
+                    .exchange("NSE")
+                    .currency("INR")
+                    .build();
+            })
+            .filter(price -> price.getTime() != null && price.getOhlcv() != null)
+            .collect(java.util.stream.Collectors.toList());
+        } else {
+            // Get price history from equity service
+            prices = equityService.getPriceHistoryByKey(tradingSymbol, fromDate, toDate);
+        }
         
         if (prices.isEmpty()) {
             logger.debug("No historical data found for symbol: {}", tradingSymbol);
@@ -102,10 +138,20 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         Map<Instant, List<EquityPrice>> buckets = new HashMap<>();
         Instant firstTimestamp = prices.get(0).getTime();
         
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
+        java.time.ZonedDateTime firstZoned = firstTimestamp.atZone(zone);
+        boolean isDateUnit = !unit.isTimeBased();
+        
         for (EquityPrice price : prices) {
-            // Calculate which bucket this price belongs to
-            long diffUnits = unit.between(firstTimestamp, price.getTime()) / amount;
-            Instant bucketKey = firstTimestamp.plus(diffUnits * amount, unit);
+            Instant bucketKey;
+            if (isDateUnit && price.getTime() != null) {
+                long diffUnits = unit.between(firstZoned.toLocalDate(), price.getTime().atZone(zone).toLocalDate()) / amount;
+                java.time.LocalDate bucketDate = firstZoned.toLocalDate().plus(diffUnits * amount, unit);
+                bucketKey = bucketDate.atTime(firstZoned.toLocalTime()).atZone(zone).toInstant();
+            } else {
+                long diffUnits = unit.between(firstTimestamp, price.getTime()) / amount;
+                bucketKey = firstTimestamp.plus(diffUnits * amount, unit);
+            }
             
             // Add to the appropriate bucket
             buckets.computeIfAbsent(bucketKey, k -> new ArrayList<>()).add(price);
@@ -146,22 +192,33 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         // Use the first price for reference data
         EquityPrice reference = prices.get(0);
         
-        // Find OHLC values
-        double open = reference.getOhlcv().getOpen();
-        double close = prices.get(prices.size() - 1).getOhlcv().getClose();
+        // Find OHLC values with safety null checks to prevent NullPointerExceptions during unboxing
+        double open = (reference.getOhlcv() != null && reference.getOhlcv().getOpen() != null)
+                ? reference.getOhlcv().getOpen() : 0.0;
+        
+        double close = 0.0;
+        if (!prices.isEmpty()) {
+            EquityPrice lastPrice = prices.get(prices.size() - 1);
+            if (lastPrice.getOhlcv() != null && lastPrice.getOhlcv().getClose() != null) {
+                close = lastPrice.getOhlcv().getClose();
+            }
+        }
         
         double high = prices.stream()
+                .filter(p -> p.getOhlcv() != null && p.getOhlcv().getHigh() != null)
                 .mapToDouble(p -> p.getOhlcv().getHigh())
                 .max()
                 .orElse(0.0);
                 
         double low = prices.stream()
+                .filter(p -> p.getOhlcv() != null && p.getOhlcv().getLow() != null)
                 .mapToDouble(p -> p.getOhlcv().getLow())
                 .min()
                 .orElse(0.0);
                 
         long volume = prices.stream()
-                .mapToLong(p -> p.getOhlcv().getVolume() != null ? p.getOhlcv().getVolume() : 0L)
+                .filter(p -> p.getOhlcv() != null && p.getOhlcv().getVolume() != null)
+                .mapToLong(p -> p.getOhlcv().getVolume())
                 .sum();
         
         // Create the aggregated price

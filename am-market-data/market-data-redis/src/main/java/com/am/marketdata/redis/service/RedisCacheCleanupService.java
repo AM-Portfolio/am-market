@@ -110,8 +110,10 @@ public class RedisCacheCleanupService {
             return 0;
         }
 
-        // TODO: Archive to database before deletion
-        // This will be implemented when we integrate with MarketDataPersistenceService
+        // Note: Explicit archiving before deletion is not required here because
+        // all incoming intraday and historical data is already persisted to MongoDB/InfluxDB
+        // in real-time by the service layer (MarketDataPersistenceService) at ingestion.
+        // This job simply purges the stale temporary cache keys from Redis.
 
         // Delete keys in batches
         int totalDeleted = 0;

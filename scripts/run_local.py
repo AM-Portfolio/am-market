@@ -5,167 +5,27 @@ import shutil
 import time
 from typing import List
 
-import sys
-import os
-import subprocess
-import shutil
-import time
-from typing import List
-
-# --- Auto-detect and run inside virtual environment ---
+# --- Bootstrap am-scripts ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
 repo_root = os.path.dirname(script_dir) # am-market
 am_repos_root = os.path.dirname(repo_root) # am-repos
-
-venv_dir = os.path.join(am_repos_root, ".venv")
-is_windows = os.name == "nt"
-venv_python = os.path.join(venv_dir, "Scripts", "python.exe") if is_windows else os.path.join(venv_dir, "bin", "python")
-
-# If we are not running from the venv_python, but it exists, re-execute under it
-current_python = os.path.abspath(sys.executable)
-target_python = os.path.abspath(venv_python)
-
-if os.path.exists(target_python) and current_python != target_python:
-    print(f"[VENV] Re-executing script using virtual environment Python: {venv_python}")
-    new_env = dict(os.environ)
-    new_env["PYTHONIOENCODING"] = "utf-8"
-    ret = subprocess.call([target_python] + sys.argv, env=new_env)
-    sys.exit(ret)
-
-# --- Bootstrap am-scripts ---
 am_scripts_src = os.path.join(am_repos_root, "am-scripts", "src")
 
 # Ensure am-scripts is in the python path
 if os.path.exists(am_scripts_src) and am_scripts_src not in sys.path:
     sys.path.insert(0, am_scripts_src)
     
-use_fallback = False
 try:
     from am_scripts.run_local import load_environment_variables, run_service
-    
-    def run_with_logging(cmd, cwd, env, log_name):
-        """Local wrapper for of run_with_logging imported from am_scripts."""
-        from am_scripts.run_local import run_with_logging as _run_with_logging
-        logs_dir = os.path.join(repo_root, "logs")
-        return _run_with_logging(cmd, cwd=cwd, env=env, logs_dir=logs_dir, log_name=log_name)
 except ImportError:
-    use_fallback = True
-    print(f"Info: am-scripts repository not found at {am_scripts_src}. Using local fallback execution.")
+    print(f"Error: am-scripts repository not found at {am_scripts_src}")
+    sys.exit(1)
 
-if use_fallback:
-    def load_environment_variables(service_dir: str, am_repos_root: str, repo_root: str) -> dict:
-        """Fallback implementation to load environment variables from .env files when am-scripts is not present."""
-        env = dict(os.environ)
-        
-        # Read service-specific .env files
-        am_env = env.get("AM_ENV", "preprod")
-        
-        candidates = [
-            os.path.join(service_dir, f".env.{am_env}"),
-            os.path.join(service_dir, ".env"),
-            os.path.join(repo_root, f".env.{am_env}"),
-            os.path.join(repo_root, ".env"),
-        ]
-        
-        env_file = None
-        for path in candidates:
-            if os.path.exists(path):
-                env_file = path
-                break
-                
-        if env_file:
-            print(f"SUCCESS: Environment variables loaded from {os.path.basename(env_file)} file")
-            try:
-                from dotenv import dotenv_values
-                env.update({k: v for k, v in dotenv_values(env_file).items() if v is not None})
-            except ImportError:
-                # Manual fallback parser
-                with open(env_file, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith("#"):
-                            continue
-                        if "=" not in line:
-                            continue
-                        k, v = line.split("=", 1)
-                        k = k.strip()
-                        v = v.strip()
-                        if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
-                            v = v[1:-1]
-                        env[k] = v
-        else:
-            print(f"Warning: No .env file found in {service_dir}")
-            
-        return env
-
-    def run_with_logging(cmd, cwd, env, log_name):
-        """Fallback run_with_logging implementation when am-scripts is not present."""
-        logs_dir = os.path.join(repo_root, "logs")
-        os.makedirs(logs_dir, exist_ok=True)
-        log_file_path = os.path.join(logs_dir, f"{log_name}.log")
-        
-        print(f"[RUN] Running command: {' '.join(cmd)}")
-        print(f"[LOG] Logging output to {log_file_path}")
-        
-        is_windows = os.name == "nt"
-        use_shell = is_windows and (cmd[0] in ["mvn", "npm", "flutter"])
-        
-        with open(log_file_path, "a", encoding="utf-8") as log_file:
-            log_file.write(f"\n\n=== Run starting at {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
-            log_file.write(f"Command: {' '.join(cmd)}\n")
-            log_file.write(f"Cwd: {cwd}\n\n")
-            log_file.flush()
-            
-            process = subprocess.Popen(
-                cmd,
-                cwd=cwd,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                shell=use_shell
-            )
-            
-            while True:
-                line = process.stdout.readline()
-                if not line and process.poll() is not None:
-                    break
-                if line:
-                    sys.stdout.write(line)
-                    sys.stdout.flush()
-                    log_file.write(line)
-                    log_file.flush()
-                    
-            process.wait()
-            return process.returncode
-
-    def run_service(service_name: str, service_dir: str, port: int, am_repos_root: str, repo_root: str, app_entry: str, log_name: str):
-        """Fallback run_service implementation when am-scripts is not present."""
-        print(f"--- Starting {service_name} on port {port} ---")
-        
-        merged_env = load_environment_variables(service_dir, am_repos_root, repo_root)
-        
-        # Ensure PYTHONPATH from os.environ is preserved/preferred if it was programmatically altered
-        if "PYTHONPATH" in os.environ:
-            merged_env["PYTHONPATH"] = os.environ["PYTHONPATH"]
-            
-        cmd = [
-            sys.executable, "-m", "uvicorn",
-            app_entry,
-            "--host", "0.0.0.0",
-            "--port", str(port)
-        ]
-        
-        # Add reload flags if dev environment
-        if merged_env.get("AM_ENV") == "dev" or os.environ.get("AM_ENV") == "dev":
-            cmd.append("--reload")
-            
-        try:
-            run_with_logging(cmd, cwd=service_dir, env=merged_env, log_name=log_name)
-        except KeyboardInterrupt:
-            print(f"\nStopped {service_name}.")
+def run_with_logging(cmd, cwd, env, log_name):
+    """Local wrapper for of run_with_logging imported from am_scripts."""
+    from am_scripts.run_local import run_with_logging as _run_with_logging
+    logs_dir = os.path.join(repo_root, "logs")
+    return _run_with_logging(cmd, cwd=cwd, env=env, logs_dir=logs_dir, log_name=log_name)
 
 def run_market():
     """Run AM Market Data (Java/Maven)."""
@@ -260,9 +120,6 @@ def build_market():
 def run_parser():
     """Run AM Parser (Python/FastAPI)."""
     target_dir = os.path.join(repo_root, "am-parser")
-    # Add am-platform-security library to PYTHONPATH
-    security_lib = os.path.join(am_repos_root, "am-platform", "libraries", "am-platform-security")
-    os.environ["PYTHONPATH"] = f"{target_dir}{';' if os.name == 'nt' else ':'}{security_lib}{';' if os.name == 'nt' else ':'}" + os.environ.get("PYTHONPATH", "")
     # am-parser uses am_api.api:app
     run_service("AM Parser API", target_dir, 8022, am_repos_root, repo_root, app_entry="am_api.api:app", log_name="am-parser")
 
@@ -335,8 +192,7 @@ def run_all():
     # 1. Start Parser (Python)
     parser_dir = os.path.join(repo_root, "am-parser")
     parser_env = load_environment_variables(parser_dir, am_repos_root, repo_root)
-    security_lib = os.path.join(am_repos_root, "am-platform", "libraries", "am-platform-security")
-    parser_env["PYTHONPATH"] = f"{parser_dir}{';' if os.name == 'nt' else ':'}{security_lib}{';' if os.name == 'nt' else ':'}" + parser_env.get("PYTHONPATH", "")
+    parser_env["PYTHONPATH"] = f"{parser_dir}{';' if os.name == 'nt' else ':'}" + parser_env.get("PYTHONPATH", "")
     p_parser = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "am_api.api:app", "--host", "0.0.0.0", "--port", "8022"],
         cwd=parser_dir, env=parser_env

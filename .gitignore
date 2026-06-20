@@ -8,6 +8,7 @@ market-data-analysis-py/.git/
 
 # Python
 __pycache__/
+*.py
 *.py[cod]
 *$py.class
 .venv/
@@ -61,32 +62,7 @@ build_log.txt
 !**/.env.example
 .env.secrets
 **/.env.secrets
+.env.secrets
 .env.local
 .env.deploy
-.env.preprod
-.env.dev
-
-# Vault / credential dumps (use map_env_from_vault_backup.py → local .env only)
-vault/backups/
-**/vault/backups/
-**/vault/*backup*.json
-credentials.json
-**/credentials.json
-*.pem
-*.p12
-*.key
-!**/src/test/**/*.key
-
-# Testing Python scripts
-trigger_prev_close_now.py
-am-market-data/check_pod_env.py
-am-market-data/curl_batch.py
-am-market-data/curl_batch_full.py
-am-market-data/curl_batch_missing.py
-am-market-data/curl_both.py
-am-market-data/db_check_docs.py
-am-market-data/get_batch_error.py
-am-market-data/get_exception_logs.py
-am-market-data/insert_missing_indices.py
-am-market-data/show_dbs_and_collections.py
-am-market-data/test_external_batch.py
+**/.env
