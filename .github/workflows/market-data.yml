@@ -14,8 +14,23 @@ on:
   workflow_dispatch:
 
 jobs:
+  install-common-lib:
+    name: Install Common Investment Lib
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Build and install am-common-investment-data
+        working-directory: am-common-investment-data
+        run: mvn clean install -DskipTests -B
+
   publish:
     name: Publish Market Data
+    needs: install-common-lib
     permissions:
       contents: read
       packages: write
