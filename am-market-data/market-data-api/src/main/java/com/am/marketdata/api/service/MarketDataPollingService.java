@@ -60,22 +60,35 @@ public class MarketDataPollingService {
 
     public void connectStream(java.util.List<String> instrumentKeys, String modeStr, String provider, String timeFrame,
             Boolean isIndexSymbol, boolean mockMode) {
-
-        // Orchestration Step 1: Resolve Symbols (Common Logic)
         Set<String> resolvedSymbols = resolveSymbols(instrumentKeys, false);
+        connectStream(resolvedSymbols, modeStr, provider, timeFrame, isIndexSymbol, mockMode);
+    }
+
+    /**
+     * Starts scheduled polling for resolved symbols (used by initiateStream after index expansion).
+     */
+    void connectStream(Set<String> resolvedSymbols, String modeStr, String provider, String timeFrame,
+            Boolean isIndexSymbol, boolean mockMode) {
+
+        if (resolvedSymbols == null || resolvedSymbols.isEmpty()) {
+            log.warn("connectStream called with no symbols; provider={}", provider);
+            return;
+        }
+
         log.info(
-                "Initiating stream simulation via polling for {} instruments (resolved from {}). Provider: {}, TimeFrame: {}, IsIndexSymbol: {}, MockMode: {}",
-                resolvedSymbols.size(), instrumentKeys.size(), provider, timeFrame, isIndexSymbol, mockMode);
+                "Initiating stream simulation via polling for {} instruments. Provider: {}, TimeFrame: {}, IsIndexSymbol: {}, MockMode: {}",
+                resolvedSymbols.size(), provider, timeFrame, isIndexSymbol, mockMode);
 
         String providerKey = provider != null ? provider.toUpperCase() : "UNKNOWN";
         final String finalTimeFrame = timeFrame != null ? timeFrame : "1D";
+        final Set<String> symbolsForPolling = Set.copyOf(resolvedSymbols);
 
         // Cancel existing stream if any for this provider
         disconnectStream(providerKey);
 
         // Initialize mock quotes if mockMode is enabled
         if (mockMode) {
-            mockService.initializeMockQuotes(resolvedSymbols);
+            mockService.initializeMockQuotes(symbolsForPolling);
         }
 
         Runnable pollingTask = () -> {
@@ -83,10 +96,10 @@ public class MarketDataPollingService {
                 log.debug("Polling cycle executing for provider: {}, mockMode: {}", providerKey, mockMode);
                 MarketDataUpdate update;
                 if (mockMode) {
-                    update = mockService.generateMockUpdate(resolvedSymbols);
+                    update = mockService.generateMockUpdate(symbolsForPolling);
                 } else {
                     update = fetchMarketDataUpdate(
-                            resolvedSymbols,
+                            symbolsForPolling,
                             finalTimeFrame,
                             isIndexSymbol,
                             providerKey,
@@ -94,7 +107,8 @@ public class MarketDataPollingService {
                 }
 
                 if (update != null) {
-                    log.debug("Broadcasting update via WebSocket handler. Quote count: {}",
+                    log.info("Broadcasting polling update for provider: {} quotes={}",
+                            providerKey,
                             update.getQuotes() != null ? update.getQuotes().size() : 0);
                     webSocketHandler.broadcast(update);
                     try {
@@ -116,20 +130,14 @@ public class MarketDataPollingService {
         ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(pollingTask, 0, intervalSeconds,
                 TimeUnit.SECONDS);
         activeStreams.put(providerKey, future);
-        log.info("Polling stream started for provider: {} with interval: {} seconds", providerKey, intervalSeconds);
+        log.info("Polling stream started for provider: {} with interval: {} seconds (mockMode={})",
+                providerKey, intervalSeconds, mockMode);
     }
 
-    public StreamConnectResponse initiateStream(
-            StreamConnectRequest request) {
-        // Use expandIndices from request (defaults to false if not provided)
+    public StreamConnectResponse initiateStream(StreamConnectRequest request) {
         boolean expandIndices = request.getExpandIndices() != null ? request.getExpandIndices() : false;
+        Set<String> resolvedSymbols = resolveSymbols(request.getInstrumentKeys(), expandIndices);
 
-        // Orchestration Step 1: Resolve Symbols
-        java.util.Set<String> resolvedSymbols = resolveSymbols(request.getInstrumentKeys(), expandIndices);
-
-        // FIX: Ensure the Index itself is included in the stream, even if
-        // resolvedSymbols expanded to constituents.
-        // The UI requires the Index value (e.g. "NIFTY 50") to update the cards.
         if (Boolean.TRUE.equals(request.getIsIndexSymbol())) {
             resolvedSymbols.addAll(request.getInstrumentKeys());
         }
@@ -137,88 +145,127 @@ public class MarketDataPollingService {
         log.info("Resolved {} symbols to {} for stream initiation",
                 request.getInstrumentKeys().size(), resolvedSymbols.size());
 
-        // Get active provider from factory
-        String provider = request.getProvider() != null && !request.getProvider().trim().isEmpty()
-                ? request.getProvider().toUpperCase()
-                : marketDataProviderFactory.getProvider().getProviderName().toUpperCase();
+        String provider = resolveProvider(request);
         log.info("Resolved provider for stream initiation: {}", provider);
 
         String timeFrame = request.getTimeFrame() != null ? request.getTimeFrame() : "1D";
-
-        // Check Market status
         boolean isMarketOpen = marketHoursService.isMarketOpen();
+        boolean isMock = isMockProvider(request, provider);
+        StreamStrategy strategy = resolveStreamStrategy(request, provider, isMarketOpen, isMock);
 
-        // Check if we should stream
-        // Stream requested AND Market is Open AND Upstox provider (since others use
-        // polling)
-        boolean streamRequested = request.getStream() == null || request.getStream(); // Default to true if null
-        boolean isUpstox = "UPSTOX".equalsIgnoreCase(provider);
-        boolean isMock = "MOCK".equalsIgnoreCase(provider) || Boolean.TRUE.equals(request.getMockMode());
-        boolean forcePolling = Boolean.TRUE.equals(request.getForcePolling());
-
-        // Decision Logic
-        boolean shouldStartLiveStream = streamRequested && isUpstox && isMarketOpen && !forcePolling && !isMock;
-        boolean shouldStartPollingStream = streamRequested && (forcePolling || !isUpstox || isMock);
-
-        // Logic for streaming vs fallback
-        if (shouldStartLiveStream) {
-            log.info("Market is OPEN - Initiating WebSocket stream via StreamerManager.");
-            streamerManager.subscribe(new java.util.HashSet<>(resolvedSymbols));
-        } else if (shouldStartPollingStream) {
-            // Simulated Stream (Polling)
-            log.info("Starting Polling Stream. Condition: ForcePolling={}, IsUpstox={}, MarketOpen={}, IsMock={}", forcePolling,
-                    isUpstox, isMarketOpen, isMock);
-            // Polling uses cache by default (forceRefresh=false) unless configured
-            // otherwise
-            connectStream(
-                    new ArrayList<>(resolvedSymbols),
-                    request.getMode(),
-                    isMock ? "MOCK" : provider,
-                    timeFrame,
-                    request.getIsIndexSymbol() != null ? request.getIsIndexSymbol() : false,
-                    isMock);
-        } else {
-            log.info(
-                    "Stream flag is false or Market Closed (Upstox) without ForcePolling. Skipping background stream.");
-        }
-
-        // Fetch initial data synchronously to return in response
-        // In mock mode: bypass external provider completely - use local persistence only
-        MarketDataUpdate initialData;
-        if (isMock) {
-            log.info("Mock mode: generating initial snapshot from local persistence (no external provider call).");
-            // Initialize mock quotes from local cache/db if not already done during connectStream
-            if (!shouldStartPollingStream) {
-                mockService.initializeMockQuotes(resolvedSymbols);
+        switch (strategy) {
+            case MOCK_POLLING -> {
+                log.info("MOCK provider: starting simulated polling stream for {} symbols (ignores market hours)",
+                        resolvedSymbols.size());
+                connectStream(resolvedSymbols, request.getMode(), "MOCK", timeFrame,
+                        request.getIsIndexSymbol() != null ? request.getIsIndexSymbol() : false,
+                        true);
             }
-            initialData = mockService.generateMockUpdate(resolvedSymbols);
-        } else {
-            initialData = fetchMarketDataUpdate(
-                    resolvedSymbols,
-                    timeFrame,
-                    request.getIsIndexSymbol(),
-                    provider,
-                    false);
+            case LIVE_STREAM -> {
+                log.info("Market is OPEN - Initiating WebSocket stream via StreamerManager.");
+                streamerManager.subscribe(new HashSet<>(resolvedSymbols));
+            }
+            case POLLING -> {
+                log.info("Starting polling stream for provider {} (marketOpen={}, forcePolling={})",
+                        provider, isMarketOpen, Boolean.TRUE.equals(request.getForcePolling()));
+                connectStream(resolvedSymbols, request.getMode(), provider, timeFrame,
+                        request.getIsIndexSymbol() != null ? request.getIsIndexSymbol() : false,
+                        false);
+            }
+            case SNAPSHOT_ONLY -> log.info(
+                    "Background stream skipped: stream={}, provider={}, marketOpen={}, mock={}",
+                    request.getStream(), provider, isMarketOpen, isMock);
         }
 
-        String message;
-        if (shouldStartLiveStream) {
-            message = "Stream connection initiated successfully (Live Market Framework).";
-        } else if (shouldStartPollingStream) {
-            if (isMock) {
-                message = "Stream connection initiated successfully (Active Mock/Simulation Framework).";
-            } else {
-                message = "Stream connection initiated successfully (Simulated/Polling Framework).";
-            }
-        } else {
-            message = "Market Closed. Fetched latest available data snapshot.";
-        }
+        MarketDataUpdate initialData = buildInitialSnapshot(resolvedSymbols, request, provider, timeFrame, isMock, strategy);
 
         return StreamConnectResponse.builder()
                 .status("SUCCESS")
-                .message(message)
+                .message(buildConnectMessage(strategy, isMock))
                 .data(initialData)
                 .build();
+    }
+
+    enum StreamStrategy {
+        MOCK_POLLING,
+        LIVE_STREAM,
+        POLLING,
+        SNAPSHOT_ONLY
+    }
+
+    static boolean isStreamRequested(StreamConnectRequest request) {
+        return request.getStream() == null || Boolean.TRUE.equals(request.getStream());
+    }
+
+    static boolean isMockProvider(StreamConnectRequest request, String resolvedProvider) {
+        if (Boolean.TRUE.equals(request.getMockMode())) {
+            return true;
+        }
+        String provider = request.getProvider();
+        if (provider != null && "MOCK".equalsIgnoreCase(provider.trim())) {
+            return true;
+        }
+        return resolvedProvider != null && "MOCK".equalsIgnoreCase(resolvedProvider.trim());
+    }
+
+    /** @deprecated use {@link #isMockProvider(StreamConnectRequest, String)} */
+    static boolean isMockProvider(StreamConnectRequest request) {
+        return isMockProvider(request, request.getProvider());
+    }
+
+    static StreamStrategy resolveStreamStrategy(StreamConnectRequest request, String provider,
+                                                boolean isMarketOpen, boolean isMock) {
+        if (!isStreamRequested(request)) {
+            return StreamStrategy.SNAPSHOT_ONLY;
+        }
+        if (isMock) {
+            return StreamStrategy.MOCK_POLLING;
+        }
+        boolean isUpstox = "UPSTOX".equalsIgnoreCase(provider);
+        boolean forcePolling = Boolean.TRUE.equals(request.getForcePolling());
+        if (isUpstox && isMarketOpen && !forcePolling) {
+            return StreamStrategy.LIVE_STREAM;
+        }
+        if (forcePolling || !isUpstox) {
+            return StreamStrategy.POLLING;
+        }
+        return StreamStrategy.SNAPSHOT_ONLY;
+    }
+
+    private String resolveProvider(StreamConnectRequest request) {
+        if (request.getProvider() != null && !request.getProvider().trim().isEmpty()) {
+            return request.getProvider().trim().toUpperCase();
+        }
+        return marketDataProviderFactory.getProvider().getProviderName().toUpperCase();
+    }
+
+    private MarketDataUpdate buildInitialSnapshot(Set<String> resolvedSymbols, StreamConnectRequest request,
+                                                  String provider, String timeFrame, boolean isMock,
+                                                  StreamStrategy strategy) {
+        if (isMock) {
+            log.info("Mock mode: generating initial snapshot from local persistence (no external provider call).");
+            if (strategy != StreamStrategy.MOCK_POLLING) {
+                mockService.initializeMockQuotes(resolvedSymbols);
+            }
+            return mockService.generateMockUpdate(resolvedSymbols);
+        }
+        return fetchMarketDataUpdate(
+                resolvedSymbols,
+                timeFrame,
+                request.getIsIndexSymbol(),
+                provider,
+                false);
+    }
+
+    private static String buildConnectMessage(StreamStrategy strategy, boolean isMock) {
+        return switch (strategy) {
+            case LIVE_STREAM -> "Stream connection initiated successfully (Live Market Framework).";
+            case MOCK_POLLING -> "Stream connection initiated successfully (Active Mock/Simulation Framework).";
+            case POLLING -> "Stream connection initiated successfully (Simulated/Polling Framework).";
+            case SNAPSHOT_ONLY -> isMock
+                    ? "Mock snapshot only; continuous stream was not requested."
+                    : "Market Closed. Fetched latest available data snapshot.";
+        };
     }
 
     public MarketDataUpdate fetchMarketDataUpdate(
