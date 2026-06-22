@@ -1,4 +1,7 @@
 # Production Environment Configuration
+env:
+  SPRING_PROFILES_ACTIVE: "prod,security"
+  JAVA_OPTS: "-Dspring.profiles.active=prod,security"
 environment: prod
 
 replicaCount: 1
@@ -103,6 +106,8 @@ vault:
     upstock: "secret/data/prod/api/upstock"
     market-data: "secret/data/prod/services/am-market-data"
     scheduler-config: "secret/data/prod/services/am-market-data-scheduler"
+    identity-oidc: "secret/data/prod/services/am-identity"
+    service-oauth: "secret/data/prod/services/am-market-data"
 
 # Monitoring Configuration
 monitoring:

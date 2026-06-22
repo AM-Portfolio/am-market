@@ -1,7 +1,12 @@
 env:
-  SPRING_PROFILES_ACTIVE: "dev"
-  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=dev"
+  SPRING_PROFILES_ACTIVE: "dev,security"
+  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=dev,security"
   JAVA_TOOL_OPTIONS: "-Xms512m -Xmx768m"
+  # These keys are missing from Vault (apps/data/dev/services/am-market-data-scheduler).
+  # Explicitly set here to prevent <no value> boolean parse crash on startup.
+  SCHEDULER_INGESTION_POLL_ENABLED: "false"
+  SCHEDULER_INGESTION_POLL_HISTORICAL: "false"
+  SCHEDULER_INGESTION_USE_WEBSOCKET: "true"
 
 probes:
   port: 8080
@@ -62,6 +67,10 @@ vault:
       path: "apps/data/dev/services/am-market-data"
     scheduler-config:
       path: "apps/data/dev/services/am-market-data-scheduler"
+    identity-oidc:
+      path: "apps/data/dev/services/am-identity"
+    service-oauth:
+      path: "apps/data/dev/services/am-market-data"
 
 monitoring:
   enabled: true

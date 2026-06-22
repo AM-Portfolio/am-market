@@ -84,3 +84,11 @@ vault:
         POSTGRES_USERNAME: "username"
         SPRING_DATASOURCE_PASSWORD: "password"
         SPRING_DATASOURCE_USERNAME: "username"
+    identity-oidc:
+      mappings:
+        OIDC_JWKS_URI: "OIDC_JWKS_URL"
+        OIDC_ISSUER_URI: "OIDC_ISSUER"
+    service-oauth:
+      mappings:
+        OAUTH2_CLIENT_ID: "AM_MARKET_CLIENT_ID"
+        OAUTH2_CLIENT_SECRET: "AM_MARKET_CLIENT_SECRET"
