@@ -265,8 +265,24 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             String todayStr = todayKolkata.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
                             boolean isTodayCandle = !candleDateStr.isEmpty() && candleDateStr.startsWith(todayStr);
                             
-                            if (isTodayCandle && candles.size() >= 2) {
-                                // Index 0 represents today's trading candle; previous close is yesterday's candle (index 1)
+                            // Self-correcting check: If the live quote's open and close exactly match the newest candle's open and close,
+                            // it means the live quote is still showing that newest candle's day (e.g., today is a weekend or market holiday).
+                            // In this case, the true previous close must be the next older candle in the list (index 1).
+                            boolean matchesNewestCandle = false;
+                            OHLCQuote liveQuote = result.get(symbol);
+                            if (liveQuote != null && liveQuote.getOhlc() != null && newestCandle.size() >= 5) {
+                                double liveOpen = liveQuote.getOhlc().getOpen();
+                                double liveClose = liveQuote.getOhlc().getClose();
+                                double candleOpen = parseDouble(newestCandle.get(1));
+                                double candleClose = parseDouble(newestCandle.get(4));
+                                if (liveOpen == candleOpen && liveClose == candleClose) {
+                                    matchesNewestCandle = true;
+                                }
+                            }
+
+                            if ((isTodayCandle || matchesNewestCandle) && candles.size() >= 2) {
+                                // Index 0 represents today's trading candle (or the last active trading day's candle on a holiday/weekend);
+                                // previous close is yesterday's (or the prior trading day's) candle at index 1
                                 java.util.List<Object> prevCandle = candles.get(1);
                                 if (prevCandle != null && prevCandle.size() >= 5) {
                                     Object closeObj = prevCandle.get(4);
