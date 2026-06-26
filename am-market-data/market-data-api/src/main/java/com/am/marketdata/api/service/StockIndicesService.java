@@ -72,9 +72,13 @@ public class StockIndicesService {
 
             // Fallback for missing symbols to marketDataCacheService.getLivePrices
             Set<String> missingSymbols = new HashSet<>();
-            for (String sym : requestedSymbols) {
-                if (!latestPrices.containsKey(sym) || latestPrices.get(sym).getLastPrice() == 0.0) {
-                    missingSymbols.add(sym);
+            if (forceRefresh) {
+                missingSymbols.addAll(requestedSymbols);
+            } else {
+                for (String sym : requestedSymbols) {
+                    if (!latestPrices.containsKey(sym) || latestPrices.get(sym).getLastPrice() == 0.0) {
+                        missingSymbols.add(sym);
+                    }
                 }
             }
 
