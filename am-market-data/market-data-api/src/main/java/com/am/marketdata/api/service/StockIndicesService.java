@@ -5,6 +5,7 @@ import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.marketdata.scraper.service.MarketDataProcessingService;
 import com.am.marketdata.service.MarketDataCacheService;
 import com.am.marketdata.common.model.OHLCQuote;
+import com.am.marketdata.common.model.TimeFrame;
 import com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
