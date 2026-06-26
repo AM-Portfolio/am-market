@@ -100,24 +100,10 @@ public class StockIndicesService {
                                 log.info(methodName, "🚀 [COALESCING] Initiating single flight live price fetch for symbol: " + sym);
                                 return CompletableFuture.supplyAsync(() -> {
                                     try {
-                                        // Use isIndexSymbol=true to fetch live index prices directly
-                                        Map<String, Object> liveResponse = marketDataCacheService.getLivePrices(Set.of(sym), true, forceRefresh);
-                                        if (liveResponse != null && liveResponse.get("prices") instanceof List) {
-                                            List<?> pricesList = (List<?>) liveResponse.get("prices");
-                                            if (!pricesList.isEmpty() && pricesList.get(0) instanceof com.am.common.investment.model.equity.EquityPrice) {
-                                                com.am.common.investment.model.equity.EquityPrice ep = (com.am.common.investment.model.equity.EquityPrice) pricesList.get(0);
-                                                OHLCQuote quote = new OHLCQuote();
-                                                quote.setLastPrice(ep.getLastPrice() != null ? ep.getLastPrice() : 0.0);
-                                                if (ep.getOhlcv() != null) {
-                                                    OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
-                                                    ohlc.setOpen(ep.getOhlcv().getOpen() != null ? ep.getOhlcv().getOpen() : 0.0);
-                                                    ohlc.setHigh(ep.getOhlcv().getHigh() != null ? ep.getOhlcv().getHigh() : 0.0);
-                                                    ohlc.setLow(ep.getOhlcv().getLow() != null ? ep.getOhlcv().getLow() : 0.0);
-                                                    ohlc.setClose(ep.getOhlcv().getClose() != null ? ep.getOhlcv().getClose() : 0.0);
-                                                    quote.setOhlc(ohlc);
-                                                }
-                                                return quote;
-                                            }
+                                        // Use getOHLC to fetch complete daily OHLC and previous close directly from provider
+                                        Map<String, OHLCQuote> ohlcResponse = marketDataCacheService.getOHLC(Set.of(sym), true, TimeFrame.DAY, forceRefresh);
+                                        if (ohlcResponse != null && ohlcResponse.containsKey(sym)) {
+                                            return ohlcResponse.get(sym);
                                         }
                                         return null;
                                     } catch (Exception e) {
