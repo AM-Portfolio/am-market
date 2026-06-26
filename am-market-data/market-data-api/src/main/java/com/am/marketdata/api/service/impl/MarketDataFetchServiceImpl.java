@@ -371,7 +371,10 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             boolean forceRefresh) {
 
         // Fallback for Index Symbols when Market is Closed
-        if (isIndexSymbol && !marketHoursService.isMarketOpen()) {
+        // We only use this MongoDB fallback if we are NOT performing a force refresh.
+        // If forceRefresh is true, we want to bypass this block and contact the Upstox API
+        // directly to fetch the fresh, accurate End-of-Day (EOD) prices.
+        if (isIndexSymbol && !marketHoursService.isMarketOpen() && !forceRefresh) {
             log.info("Market is closed. Fetching OHLC for index symbols from MongoDB fallback: {}", symbols);
             Map<String, OHLCQuote> fallbackData = new HashMap<>();
             for (String symbol : symbols) {
