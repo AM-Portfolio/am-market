@@ -75,7 +75,7 @@ public class MarketDataMockService {
     }
 
     /**
-     * Generates standard ticking update with slight random fluctuations (e.g. ±0.05%)
+     * Generates standard ticking update with random fluctuations (±0.5% per tick)
      *
      * @param symbols Set of symbols to mock
      * @return MarketDataUpdate object
@@ -100,14 +100,14 @@ public class MarketDataMockService {
                 low = lastQuote.getLow();
             } else {
                 prevClose = getBasePriceForSymbol(symbol);
-                lastPrice = prevClose * (1 + (random.nextDouble() - 0.5) * 0.001);
+                lastPrice = prevClose * (1 + (random.nextDouble() - 0.5) * 0.01);
                 open = prevClose;
                 high = Math.max(open, lastPrice);
                 low = Math.min(open, lastPrice);
             }
 
-            // Apply a small random walk fluctuation (-0.05% to +0.05%)
-            double pctChange = (random.nextDouble() - 0.5) * 0.001;
+            // Apply random walk fluctuation (±0.5% per tick for visible mock streaming)
+            double pctChange = (random.nextDouble() - 0.5) * 0.01;
             lastPrice = lastPrice * (1 + pctChange);
             lastPrice = BigDecimal.valueOf(lastPrice).setScale(2, RoundingMode.HALF_UP).doubleValue();
 
