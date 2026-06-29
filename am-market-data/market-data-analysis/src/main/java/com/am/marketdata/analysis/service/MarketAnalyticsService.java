@@ -110,7 +110,25 @@ public class MarketAnalyticsService {
 
             // Filter data points by time range for each symbol
             if (response.getData() != null) {
-                long minTime = from.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+                // [1D Timeframe Chart Optimization]
+                // 1. Detect if today is a weekend. If so, roll back the query date target to Friday.
+                //    This prevents the chart from being empty when viewed on a Saturday or Sunday.
+                java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                java.time.DayOfWeek day = istNow.getDayOfWeek();
+                java.time.LocalDate targetDate = istNow.toLocalDate();
+                if (day == java.time.DayOfWeek.SATURDAY) {
+                    targetDate = targetDate.minusDays(1);
+                } else if (day == java.time.DayOfWeek.SUNDAY) {
+                    targetDate = targetDate.minusDays(2);
+                }
+
+                // 2. Bound the filter to the starting bell of the active market session (9:15 AM IST).
+                //    By using 9:15 AM today/Friday instead of "now - 24 hours" (which points to yesterday afternoon),
+                //    we preserve today's complete intraday chart progression rather than stripping out all daily candles.
+                java.time.LocalDateTime filterFrom = "1D".equalsIgnoreCase(range)
+                        ? targetDate.atTime(9, 15)
+                        : from;
+                long minTime = filterFrom.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
 
                 response.getData().forEach((s, symbolData) -> {
                     if (symbolData != null && symbolData.getDataPoints() != null) {
