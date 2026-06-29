@@ -122,15 +122,16 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             // late)
             // 2. Data End must be >= Request End - Tolerance (Data shouldn't end too early)
 
-            boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
+            long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
             long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
+            boolean missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
             boolean missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
 
             if (missingEarlyData || missingRecentData) {
                 log.info("[CACHE_VALIDATION] Partial cache hit detected for {}. Invalidating cache entry. " +
-                        "Req: {} to {} (validation target: {}), Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
+                        "Req: {} to {} (validation target: {} to {}), Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
                         symbol, fromDateStr, toDateStr,
-                        new java.sql.Timestamp(validationEndMs),
+                        new java.sql.Timestamp(validationStartMs), new java.sql.Timestamp(validationEndMs),
                         firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
                         missingEarlyData, missingRecentData);
                 keysToRemove.add(symbol);
@@ -206,15 +207,16 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     long dataStartMs = firstPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
                     long dataEndMs = lastPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
 
-                    boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
+                    long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
                     long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
+                    boolean missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
                     boolean missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
 
                     if (missingEarlyData || missingRecentData) {
                         log.info("[DATABASE_VALIDATION] Partial database data detected for {}. Discarding database entry to force fallback to provider. " +
-                                "Req: {} to {} (validation target: {}), Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
+                                "Req: {} to {} (validation target: {} to {}), Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
                                 symbol, fromDateStr, toDateStr,
-                                new java.sql.Timestamp(validationEndMs),
+                                new java.sql.Timestamp(validationStartMs), new java.sql.Timestamp(validationEndMs),
                                 firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
                                 missingEarlyData, missingRecentData);
                     } else {
@@ -432,16 +434,35 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         }
     }
 
+    private long getFirstExpectedCandleTimeMs(long requestedFromDateMs) {
+        java.time.ZonedDateTime requestDateTime = java.time.Instant.ofEpochMilli(requestedFromDateMs)
+                .atZone(java.time.ZoneId.of("Asia/Kolkata"));
+        java.time.LocalDate requestDate = requestDateTime.toLocalDate();
+        
+        // Roll forward to Monday if start date is on weekend
+        java.time.LocalDate targetDate = requestDate;
+        if (requestDate.getDayOfWeek() == java.time.DayOfWeek.SATURDAY) {
+            targetDate = requestDate.plusDays(2);
+        } else if (requestDate.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            targetDate = requestDate.plusDays(1);
+        }
+        
+        java.time.LocalDateTime startDateTime = java.time.LocalDateTime.of(targetDate, java.time.LocalTime.of(9, 15));
+        return startDateTime.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+    }
+
     private long getLastExpectedCandleTimeMs(long requestedToDateMs) {
         java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+        java.time.LocalDate requestedDate = java.time.Instant.ofEpochMilli(requestedToDateMs)
+                .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
+        java.time.LocalDate today = now.toLocalDate();
         
-        // If the requested end date is in the past, we expect data up to that date
-        if (requestedToDateMs < now.toInstant().toEpochMilli()) {
+        // If the requested date is strictly in the past (before today), expect full data for it
+        if (requestedDate.isBefore(today)) {
             return requestedToDateMs;
         }
         
         // Otherwise, cap expected end time based on the active trading session
-        java.time.LocalDate today = now.toLocalDate();
         java.time.LocalTime time = now.toLocalTime();
         
         // Determine the target date for the latest candles
