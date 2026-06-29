@@ -91,10 +91,10 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         // to force fallback fetching from the provider when 5m candles are missing.
         long toleranceMs;
         String val = interval.getApiValue().toLowerCase();
-        if (!isIndexSymbol && (val.contains("m") || val.contains("h"))) {
-            toleranceMs = 30L * 60 * 1000; // 30 minutes tolerance for intraday candles for stocks
+        if (val.contains("m") || val.contains("h")) {
+            toleranceMs = 30L * 60 * 1000; // 30 minutes tolerance for intraday candles
         } else {
-            toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for index symbols & daily/weekly/monthly charts
+            toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for daily/weekly/monthly charts
         }
 
         List<String> keysToRemove = new ArrayList<>();
@@ -192,10 +192,10 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     // daily scheduler snapshots and fallback to the provider.
                     long toleranceMs;
                     String val = interval.getApiValue().toLowerCase();
-                    if (!isIndexSymbol && (val.contains("m") || val.contains("h"))) {
-                        toleranceMs = 30L * 60 * 1000; // 30 minutes tolerance for intraday candles for stocks
+                    if (val.contains("m") || val.contains("h")) {
+                        toleranceMs = 30L * 60 * 1000; // 30 minutes tolerance for intraday candles
                     } else {
-                        toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for index symbols & daily/weekly/monthly charts
+                        toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for daily/weekly/monthly charts
                     }
 
                     java.time.LocalDateTime firstPointTime = points.get(0).getTime();

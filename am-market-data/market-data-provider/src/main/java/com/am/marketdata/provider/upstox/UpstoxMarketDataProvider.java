@@ -423,8 +423,25 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             String fromDateStr = dateFormat.format(from);
             String toDateStr = dateFormat.format(to);
 
-            String v3Unit = mapToUpstoxV3Unit(interval);
-            int intervalValue = getUpstoxIntervalValue(interval);
+            boolean requiresAggregation = false;
+            int targetMinutes = 1;
+
+            if (interval == TimeFrame.FIVE_MINUTE) {
+                requiresAggregation = true;
+                targetMinutes = 5;
+            } else if (interval == TimeFrame.TEN_MINUTE) {
+                requiresAggregation = true;
+                targetMinutes = 10;
+            } else if (interval == TimeFrame.FIFTEEN_MINUTE) {
+                requiresAggregation = true;
+                targetMinutes = 15;
+            } else if (interval == TimeFrame.HOUR) {
+                requiresAggregation = true;
+                targetMinutes = 60;
+            }
+
+            String v3Unit = requiresAggregation ? "minutes" : mapToUpstoxV3Unit(interval);
+            int intervalValue = requiresAggregation ? 1 : getUpstoxIntervalValue(interval);
 
             // Resolve instrument key first as SDK works with keys
             List<String> symbolsList = Collections.singletonList(symbol);
@@ -497,14 +514,75 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
                     dataPoints.add(point);
                 }
-                historicalData.setDataPoints(dataPoints);
-            }
 
+                if (requiresAggregation) {
+                    List<OHLCVTPoint> aggregatedPoints = aggregateCandles(dataPoints, targetMinutes);
+                    historicalData.setDataPoints(aggregatedPoints);
+                    log.info("getHistoricalData", "Aggregated " + dataPoints.size() + " 1m candles into "
+                            + aggregatedPoints.size() + " " + interval.getApiValue() + " candles.");
+                } else {
+                    historicalData.setDataPoints(dataPoints);
+                }
+            }
             return historicalData;
         } catch (Exception e) {
             log.error("getHistoricalData", "Error fetching Upstox historical data", e);
             return new HistoricalData();
         }
+    }
+
+    private List<OHLCVTPoint> aggregateCandles(List<OHLCVTPoint> oneMinCandles, int targetMinutes) {
+        if (oneMinCandles == null || oneMinCandles.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Sort candles by timestamp ascending to ensure correct aggregation order
+        oneMinCandles.sort(Comparator.comparing(OHLCVTPoint::getTime));
+
+        List<OHLCVTPoint> aggregated = new ArrayList<>();
+        int i = 0;
+        int n = oneMinCandles.size();
+
+        while (i < n) {
+            OHLCVTPoint first = oneMinCandles.get(i);
+            java.time.LocalDateTime bucketStart = first.getTime();
+
+            double open = first.getOpen();
+            double high = first.getHigh();
+            double low = first.getLow();
+            double close = first.getClose();
+            long volume = first.getVolume();
+
+            int count = 1;
+            i++;
+            while (i < n && count < targetMinutes) {
+                OHLCVTPoint next = oneMinCandles.get(i);
+                long diffMinutes = java.time.Duration.between(bucketStart, next.getTime()).toMinutes();
+                if (diffMinutes >= targetMinutes) {
+                    break;
+                }
+
+                high = Math.max(high, next.getHigh());
+                low = Math.min(low, next.getLow());
+                close = next.getClose();
+                volume += next.getVolume();
+
+                i++;
+                count++;
+            }
+
+            OHLCVTPoint aggregatedPoint = new OHLCVTPoint();
+            aggregatedPoint.setTime(bucketStart);
+            aggregatedPoint.setOpen(open);
+            aggregatedPoint.setHigh(high);
+            aggregatedPoint.setLow(low);
+            aggregatedPoint.setClose(close);
+            aggregatedPoint.setVolume(volume);
+
+            aggregated.add(aggregatedPoint);
+        }
+
+        return aggregated;
     }
 
     private int getUpstoxIntervalValue(TimeFrame interval) {
