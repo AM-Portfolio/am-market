@@ -1,5 +1,7 @@
 package com.am.marketdata.analysis.service;
 
+// Trigger Push CI Action
+
 import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.model.stockindice.StockData;
 import com.am.marketdata.analysis.util.StockDataEnricher;
