@@ -83,7 +83,19 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         // year is requested)
         long requiredStartMs = fromDate.getTime();
         long requiredEndMs = toDate.getTime();
-        long toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for holidays/weekends
+        
+        // [Intraday validation threshold fix]
+        // Indices are stored as daily snapshots (only 2 scheduler points per day) in the database.
+        // If the user requests 5m or 1H candles, a 7-day tolerance would allow daily snapshots to pass validation,
+        // skipping Upstox fallback. We resolve this by using a strict 30-minute tolerance for intraday intervals
+        // to force fallback fetching from the provider when 5m candles are missing.
+        long toleranceMs;
+        String val = interval.getApiValue().toLowerCase();
+        if (val.contains("m") || val.contains("h")) {
+            toleranceMs = 30L * 60 * 1000; // 30 minutes tolerance for intraday candles
+        } else {
+            toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for daily/weekly/monthly charts
+        }
 
         List<String> keysToRemove = new ArrayList<>();
 
@@ -174,7 +186,17 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     // This prevents partial database hits (e.g., finding only 1 point)
                     long requiredStartMs = fromDate.getTime();
                     long requiredEndMs = toDate.getTime();
-                    long toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for holidays/weekends
+                    
+                    // [Intraday validation threshold fix]
+                    // Strict 30-minute tolerance check for intraday candles to discard incomplete
+                    // daily scheduler snapshots and fallback to the provider.
+                    long toleranceMs;
+                    String val = interval.getApiValue().toLowerCase();
+                    if (val.contains("m") || val.contains("h")) {
+                        toleranceMs = 30L * 60 * 1000; // 30 minutes tolerance for intraday candles
+                    } else {
+                        toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for daily/weekly/monthly charts
+                    }
 
                     java.time.LocalDateTime firstPointTime = points.get(0).getTime();
                     java.time.LocalDateTime lastPointTime = points.get(points.size() - 1).getTime();
