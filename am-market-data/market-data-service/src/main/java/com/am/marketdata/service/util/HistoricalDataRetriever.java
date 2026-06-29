@@ -91,8 +91,10 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         // to force fallback fetching from the provider when 5m candles are missing.
         long toleranceMs;
         String val = interval.getApiValue().toLowerCase();
-        if (val.contains("m") || val.contains("h")) {
-            toleranceMs = 30L * 60 * 1000; // 30 minutes tolerance for intraday candles
+        if (val.contains("m")) {
+            toleranceMs = 30L * 60 * 1000; // 30 minutes for minute-level candles
+        } else if (val.contains("h")) {
+            toleranceMs = 8L * 60 * 60 * 1000; // 8 hours for hourly candles (covers full trading session)
         } else {
             toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for daily/weekly/monthly charts
         }
@@ -195,10 +197,12 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     // daily scheduler snapshots and fallback to the provider.
                     long toleranceMs;
                     String val = interval.getApiValue().toLowerCase();
-                    if (val.contains("m") || val.contains("h")) {
-                        toleranceMs = 30L * 60 * 1000; // 30 minutes tolerance for intraday candles
+                    if (val.contains("m")) {
+                        toleranceMs = 30L * 60 * 1000; // 30 minutes for minute-level candles
+                    } else if (val.contains("h")) {
+                        toleranceMs = 8L * 60 * 60 * 1000; // 8 hours for hourly candles (covers full trading session)
                     } else {
-                        toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for daily/weekly/monthly charts
+                        toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days for daily/weekly/monthly charts
                     }
 
                     java.time.LocalDateTime firstPointTime = points.get(0).getTime();
@@ -480,6 +484,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             targetDate = today.minusDays(1);
             if (targetDate.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
                 targetDate = targetDate.minusDays(2);
+            } else if (targetDate.getDayOfWeek() == java.time.DayOfWeek.MONDAY) {
+                targetDate = targetDate.minusDays(3);
             }
         }
         
