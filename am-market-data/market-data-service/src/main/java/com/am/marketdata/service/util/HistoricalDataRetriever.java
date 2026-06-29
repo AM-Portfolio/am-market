@@ -123,12 +123,14 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             // 2. Data End must be >= Request End - Tolerance (Data shouldn't end too early)
 
             boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
-            boolean missingRecentData = dataEndMs < (requiredEndMs - toleranceMs);
+            long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
+            boolean missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
 
             if (missingEarlyData || missingRecentData) {
                 log.info("[CACHE_VALIDATION] Partial cache hit detected for {}. Invalidating cache entry. " +
-                        "Req: {} to {}, Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
+                        "Req: {} to {} (validation target: {}), Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
                         symbol, fromDateStr, toDateStr,
+                        new java.sql.Timestamp(validationEndMs),
                         firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
                         missingEarlyData, missingRecentData);
                 keysToRemove.add(symbol);
@@ -205,12 +207,14 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     long dataEndMs = lastPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
 
                     boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
-                    boolean missingRecentData = dataEndMs < (requiredEndMs - toleranceMs);
+                    long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
+                    boolean missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
 
                     if (missingEarlyData || missingRecentData) {
                         log.info("[DATABASE_VALIDATION] Partial database data detected for {}. Discarding database entry to force fallback to provider. " +
-                                "Req: {} to {}, Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
+                                "Req: {} to {} (validation target: {}), Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
                                 symbol, fromDateStr, toDateStr,
+                                new java.sql.Timestamp(validationEndMs),
                                 firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
                                 missingEarlyData, missingRecentData);
                     } else {
@@ -426,6 +430,46 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     isIndexSymbol,
                     producer);
         }
+    }
+
+    private long getLastExpectedCandleTimeMs(long requestedToDateMs) {
+        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+        
+        // If the requested end date is in the past, we expect data up to that date
+        if (requestedToDateMs < now.toInstant().toEpochMilli()) {
+            return requestedToDateMs;
+        }
+        
+        // Otherwise, cap expected end time based on the active trading session
+        java.time.LocalDate today = now.toLocalDate();
+        java.time.LocalTime time = now.toLocalTime();
+        
+        // Determine the target date for the latest candles
+        java.time.LocalDate targetDate = today;
+        
+        // If it's weekend, roll back to Friday
+        if (today.getDayOfWeek() == java.time.DayOfWeek.SATURDAY) {
+            targetDate = today.minusDays(1);
+        } else if (today.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            targetDate = today.minusDays(2);
+        } else if (today.getDayOfWeek() == java.time.DayOfWeek.MONDAY && time.isBefore(java.time.LocalTime.of(9, 15))) {
+            targetDate = today.minusDays(3);
+        } else if (time.isBefore(java.time.LocalTime.of(9, 15))) {
+            targetDate = today.minusDays(1);
+            if (targetDate.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+                targetDate = targetDate.minusDays(2);
+            }
+        }
+        
+        // Determine the target time
+        java.time.LocalDateTime targetDateTime;
+        if (today.equals(targetDate) && time.isAfter(java.time.LocalTime.of(9, 15)) && time.isBefore(java.time.LocalTime.of(15, 30))) {
+            targetDateTime = java.time.LocalDateTime.of(targetDate, time);
+        } else {
+            targetDateTime = java.time.LocalDateTime.of(targetDate, java.time.LocalTime.of(15, 30));
+        }
+        
+        return targetDateTime.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
     }
 
     /**
