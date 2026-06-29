@@ -286,7 +286,7 @@ public class UpstoxSdkService {
             String normalizedKey = instrumentKey != null ? instrumentKey.replace(":", "|") : null;
 
             java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
-            boolean isQueryingToday = toDate != null && toDate.equals(today.toString());
+            boolean isQueryingToday = toDate != null && !java.time.LocalDate.parse(toDate).isBefore(today);
 
             if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
                 log.info(
