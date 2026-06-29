@@ -285,6 +285,18 @@ public class UpstoxSdkService {
 
             String normalizedKey = instrumentKey != null ? instrumentKey.replace(":", "|") : null;
 
+            java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+            boolean isQueryingToday = toDate != null && toDate.equals(today.toString());
+
+            if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
+                log.info(
+                        "Fetching live intraday data key={}, interval=1minute",
+                        normalizedKey);
+                com.upstox.api.GetIntraDayCandleResponse intradayResponse = historyV3Api.getIntraDayCandleData(
+                        normalizedKey, "1minute", 2);
+                return mapIntradayToHistoricalDataResponse(intradayResponse);
+            }
+
             GetHistoricalCandleResponse sdkResponse;
             if (useDateRange) {
                 log.info(
@@ -309,6 +321,23 @@ public class UpstoxSdkService {
 
     private com.am.marketdata.provider.upstox.model.HistoricalDataResponse mapToHistoricalDataResponse(
             GetHistoricalCandleResponse sdkResponse) {
+        com.am.marketdata.provider.upstox.model.HistoricalDataResponse response = new com.am.marketdata.provider.upstox.model.HistoricalDataResponse();
+
+        if (sdkResponse != null && sdkResponse.getStatus() != null) {
+            response.setStatus(sdkResponse.getStatus().toString());
+        }
+
+        if (sdkResponse != null && sdkResponse.getData() != null && sdkResponse.getData().getCandles() != null) {
+            com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload dataPayload = new com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload();
+            dataPayload.setCandles(sdkResponse.getData().getCandles());
+            response.setData(dataPayload);
+        }
+
+        return response;
+    }
+
+    private com.am.marketdata.provider.upstox.model.HistoricalDataResponse mapIntradayToHistoricalDataResponse(
+            com.upstox.api.GetIntraDayCandleResponse sdkResponse) {
         com.am.marketdata.provider.upstox.model.HistoricalDataResponse response = new com.am.marketdata.provider.upstox.model.HistoricalDataResponse();
 
         if (sdkResponse != null && sdkResponse.getStatus() != null) {
