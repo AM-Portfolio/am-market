@@ -214,10 +214,11 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
 
                     if (missingEarlyData || missingRecentData) {
                         log.info("[DATABASE_VALIDATION] Partial database data detected for {}. Discarding database entry to force fallback to provider. " +
-                                "Req: {} to {} (validation target: {} to {}), Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
+                                "Req: {} to {} (validation target: {} to {}), Found: {} to {} (lastTime={}, dataEndMs={}, validationEndMs={}, toleranceMs={}). MissingEarly: {}, MissingRecent: {}",
                                 symbol, fromDateStr, toDateStr,
                                 new java.sql.Timestamp(validationStartMs), new java.sql.Timestamp(validationEndMs),
                                 firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
+                                lastPointTime, dataEndMs, validationEndMs, toleranceMs,
                                 missingEarlyData, missingRecentData);
                     } else {
                         result.put(symbol, data);
