@@ -128,14 +128,13 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
             long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
             
-            // For intraday: check if first candle date is after the expected start date.
-            // This prevents false discards if the first candle is slightly after 09:15 (e.g. 09:16).
+            // [Flexible Start Check - Intraday]
+            // We disable start-time checks for intraday intervals to show whatever data exists,
+            // preventing discards if the ingestion starts slightly late.
+            // For daily/weekly/monthly charts, we keep the original tolerance check.
             boolean missingEarlyData;
             if (isIntraday) {
-                java.time.LocalDate firstCandleDate = firstPointTime.toLocalDate();
-                java.time.LocalDate validationStartDate = java.time.Instant.ofEpochMilli(validationStartMs)
-                        .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
-                missingEarlyData = firstCandleDate.isAfter(validationStartDate);
+                missingEarlyData = false;
             } else {
                 missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
             }
@@ -244,14 +243,13 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
                     long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
                     
-                    // For intraday: check if first candle date is after the expected start date.
-                    // This prevents false discards if the first candle is slightly after 09:15 (e.g. 09:16).
+                    // [Flexible Start Check - Intraday]
+                    // We disable start-time checks for intraday intervals to show whatever data exists,
+                    // preventing discards if the ingestion starts slightly late.
+                    // For daily/weekly/monthly charts, we keep the original tolerance check.
                     boolean missingEarlyData;
                     if (isIntraday) {
-                        java.time.LocalDate firstCandleDate = firstPointTime.toLocalDate();
-                        java.time.LocalDate validationStartDate = java.time.Instant.ofEpochMilli(validationStartMs)
-                                .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
-                        missingEarlyData = firstCandleDate.isAfter(validationStartDate);
+                        missingEarlyData = false;
                     } else {
                         missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
                     }
