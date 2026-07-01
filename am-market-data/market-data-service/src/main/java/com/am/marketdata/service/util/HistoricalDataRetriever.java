@@ -367,21 +367,19 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             return;
         }
 
-        String methodName = "saveDataAsync";
         try {
-            log.info(methodName, "[PROVIDER_ASYNC] Sending {} historical data records to KAFKA for ingestion",
+            log.info("[PROVIDER_ASYNC] Sending {} historical data records to KAFKA for ingestion",
                     data.size());
 
             if (producer != null) {
                 // Use producer to send to Kafka (Fire and Forget)
                 producer.sendHistoricalData(data, this.interval, targetProviderName);
-                log.info(methodName, "[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
+                log.info("[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
             } else {
-                log.warn(methodName, "[PROVIDER_ASYNC] Skipping Kafka ingestion (Kafka disabled/Producer null)");
+                log.warn("[PROVIDER_ASYNC] Skipping Kafka ingestion (Kafka disabled/Producer null)");
             }
         } catch (Exception e) {
-            log.error(methodName,
-                    "[PROVIDER_ASYNC] FAILED to send historical data to KAFKA: " + e.getMessage(), e);
+            log.error("[PROVIDER_ASYNC] FAILED to send historical data to KAFKA: " + e.getMessage(), e);
         }
     }
 
