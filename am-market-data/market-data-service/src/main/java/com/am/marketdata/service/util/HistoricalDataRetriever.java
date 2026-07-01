@@ -127,7 +127,18 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
 
             long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
             long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
-            boolean missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
+            
+            // For intraday: check if first candle date is after the expected start date.
+            // This prevents false discards if the first candle is slightly after 09:15 (e.g. 09:16).
+            boolean missingEarlyData;
+            if (isIntraday) {
+                java.time.LocalDate firstCandleDate = firstPointTime.toLocalDate();
+                java.time.LocalDate validationStartDate = java.time.Instant.ofEpochMilli(validationStartMs)
+                        .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
+                missingEarlyData = firstCandleDate.isAfter(validationStartDate);
+            } else {
+                missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
+            }
 
             // [Intraday Recent-Data Check - Date Comparison]
             // The DB scheduler saves only 1-2 candles per day (morning snapshot).
@@ -232,7 +243,18 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
 
                     long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
                     long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
-                    boolean missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
+                    
+                    // For intraday: check if first candle date is after the expected start date.
+                    // This prevents false discards if the first candle is slightly after 09:15 (e.g. 09:16).
+                    boolean missingEarlyData;
+                    if (isIntraday) {
+                        java.time.LocalDate firstCandleDate = firstPointTime.toLocalDate();
+                        java.time.LocalDate validationStartDate = java.time.Instant.ofEpochMilli(validationStartMs)
+                                .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
+                        missingEarlyData = firstCandleDate.isAfter(validationStartDate);
+                    } else {
+                        missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
+                    }
 
                     // [Intraday Recent-Data Check - Date Comparison]
                     // The DB scheduler saves only 1-2 candles per day (morning snapshot).
