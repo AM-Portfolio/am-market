@@ -89,14 +89,15 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         // If the user requests 5m or 1H candles, a 7-day tolerance would allow daily snapshots to pass validation,
         // skipping Upstox fallback. We resolve this by using a strict 30-minute tolerance for intraday intervals
         // to force fallback fetching from the provider when 5m candles are missing.
+        // Tolerance is only used for daily/weekly/monthly intervals.
+        // For intraday (5m, 1H), we use date-based comparison instead (see below).
         long toleranceMs;
         String val = interval.getApiValue().toLowerCase();
-        if (val.contains("m")) {
-            toleranceMs = 30L * 60 * 1000; // 30 minutes for minute-level candles
-        } else if (val.contains("h")) {
-            toleranceMs = 8L * 60 * 60 * 1000; // 8 hours for hourly candles (covers full trading session)
-        } else {
+        boolean isIntraday = val.contains("m") || val.contains("h");
+        if (!isIntraday) {
             toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for daily/weekly/monthly charts
+        } else {
+            toleranceMs = 0; // Not used for intraday — date comparison is used instead
         }
 
         List<String> keysToRemove = new ArrayList<>();
@@ -127,7 +128,24 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
             long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
             boolean missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
-            boolean missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
+
+            // [Intraday Recent-Data Check - Date Comparison]
+            // The DB scheduler saves only 1-2 candles per day (morning snapshot).
+            // So the last 5m or 1H candle may be at 09:38 AM even though market closes at 15:30.
+            // Comparing raw timestamps would flag this as missing (gap = 5h52m > any small tolerance).
+            // Fix: for intraday intervals, check only the DATE of the last candle vs the validation target date.
+            //   - Last candle from correct trading date -> valid, no matter what time -> accept.
+            //   - Last candle from a previous date -> genuinely stale -> reject, fallback to Upstox.
+            boolean missingRecentData;
+            if (isIntraday) {
+                java.time.LocalDate lastCandleDate = lastPointTime.toLocalDate();
+                java.time.LocalDate validationEndDate = java.time.Instant.ofEpochMilli(validationEndMs)
+                        .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
+                missingRecentData = lastCandleDate.isBefore(validationEndDate);
+            } else {
+                // For daily/weekly/monthly candles: use 7-day tolerance timestamp comparison
+                missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
+            }
 
             if (missingEarlyData || missingRecentData) {
                 log.info("[CACHE_VALIDATION] Partial cache hit detected for {}. Invalidating cache entry. " +
@@ -195,14 +213,15 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     // [Intraday validation threshold fix]
                     // Strict 30-minute tolerance check for intraday candles to discard incomplete
                     // daily scheduler snapshots and fallback to the provider.
+                    // Tolerance is only used for daily/weekly/monthly intervals.
+                    // For intraday (5m, 1H), we use date-based comparison instead (see below).
                     long toleranceMs;
                     String val = interval.getApiValue().toLowerCase();
-                    if (val.contains("m")) {
-                        toleranceMs = 30L * 60 * 1000; // 30 minutes for minute-level candles
-                    } else if (val.contains("h")) {
-                        toleranceMs = 8L * 60 * 60 * 1000; // 8 hours for hourly candles (covers full trading session)
-                    } else {
+                    boolean isIntraday = val.contains("m") || val.contains("h");
+                    if (!isIntraday) {
                         toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days for daily/weekly/monthly charts
+                    } else {
+                        toleranceMs = 0; // Not used for intraday - date comparison is used instead
                     }
 
                     java.time.LocalDateTime firstPointTime = points.get(0).getTime();
@@ -214,7 +233,24 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
                     long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
                     boolean missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
-                    boolean missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
+
+                    // [Intraday Recent-Data Check - Date Comparison]
+                    // The DB scheduler saves only 1-2 candles per day (morning snapshot).
+                    // So the last 5m or 1H candle may be at 09:38 AM even though market closes at 15:30.
+                    // Comparing raw timestamps would flag this as missing (gap = 5h52m > any small tolerance).
+                    // Fix: for intraday intervals, check only the DATE of the last candle vs the validation target date.
+                    //   - Last candle from correct trading date -> valid, no matter what time -> accept.
+                    //   - Last candle from a previous date -> genuinely stale -> reject, fallback to Upstox.
+                    boolean missingRecentData;
+                    if (isIntraday) {
+                        java.time.LocalDate lastCandleDate = lastPointTime.toLocalDate();
+                        java.time.LocalDate validationEndDate = java.time.Instant.ofEpochMilli(validationEndMs)
+                                .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
+                        missingRecentData = lastCandleDate.isBefore(validationEndDate);
+                    } else {
+                        // For daily/weekly/monthly candles: use 7-day tolerance timestamp comparison
+                        missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
+                    }
 
                     if (missingEarlyData || missingRecentData) {
                         log.info("[DATABASE_VALIDATION] Partial database data detected for {}. Discarding database entry to force fallback to provider. " +
