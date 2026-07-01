@@ -70,6 +70,14 @@ public class MarketAnalyticsService {
                 interval = "1D";
                 from = to.minusMonths(1);
                 break;
+            case "3M":
+                interval = "1D";
+                from = to.minusMonths(3);
+                break;
+            case "6M":
+                interval = "1D";
+                from = to.minusMonths(6);
+                break;
             case "5Y":
                 interval = "1W";
                 from = to.minusYears(5);
@@ -110,7 +118,10 @@ public class MarketAnalyticsService {
                                 .getDataPoints().stream()
                                 .filter(p -> {
                                     try {
-                                        long timestamp = p.getTime().atZone(java.time.ZoneId.systemDefault())
+                                        // Fix: Use Asia/Kolkata timezone to parse data point timestamp instead of server's local systemDefault().
+                                        // This ensures that the comparison with minTime (which is computed in Asia/Kolkata)
+                                        // is done using the same timezone context, avoiding data point drop-offs due to timezone mismatch.
+                                        long timestamp = p.getTime().atZone(java.time.ZoneId.of("Asia/Kolkata"))
                                                 .toInstant()
                                                 .toEpochMilli();
                                         return timestamp >= minTime;

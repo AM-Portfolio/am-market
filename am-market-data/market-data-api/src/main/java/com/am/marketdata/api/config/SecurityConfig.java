@@ -18,7 +18,6 @@ import jakarta.annotation.PostConstruct;
 
 @Configuration
 @EnableWebSecurity
-@ConditionalOnProperty(prefix = "am.security", name = "enabled", havingValue = "false", matchIfMissing = true)
 public class SecurityConfig {
 
     private final AppLogger log = AppLogger.getLogger();
@@ -75,6 +74,7 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/v3/api-docs.yaml",
+                                "/ws/**",
                                 "/v1/market-data/auth/**")
                         .permitAll()
                         .requestMatchers("/v1/**").authenticated()

@@ -37,6 +37,7 @@ public class SmartStockService {
         Map<String, OHLCQuote> currentQuotes = getSmartQuotes(symbols);
 
         if (timeFrame == null || timeFrame == TimeFrame.DAY) {
+            backfillPreviousCloseForDay(currentQuotes);
             return currentQuotes; // Default behavior
         }
 
@@ -112,8 +113,14 @@ public class SmartStockService {
                 return current.minusWeeks(1);
             case MONTH:
                 return current.minusMonths(1);
+            case THREE_MONTH:
+                return current.minusMonths(3);
+            case SIX_MONTH:
+                return current.minusMonths(6);
             case YEAR:
                 return current.minusYears(1);
+            case FIVE_YEAR:
+                return current.minusYears(5);
             default:
                 return current.minusDays(1);
         }
@@ -215,5 +222,82 @@ public class SmartStockService {
         }
 
         return quotes;
+    }
+
+    private void backfillPreviousCloseForDay(Map<String, OHLCQuote> quotes) {
+        if (quotes == null || quotes.isEmpty()) {
+            return;
+        }
+
+        List<String> symbolsNeedingPrevClose = quotes.entrySet().stream()
+                .filter(e -> e.getValue() != null && e.getValue().getPreviousClose() == 0.0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+
+        if (symbolsNeedingPrevClose.isEmpty()) {
+            return;
+        }
+
+        log.info("backfillPreviousCloseForDay", "Backfilling previousClose for " + symbolsNeedingPrevClose.size() + " symbols");
+
+        try {
+            LocalDate to = LocalDate.now();
+            LocalDate from = to.minusDays(7); // Fetch 7 days of daily history to safely cover holidays/weekends
+            Date fromDate = Date.from(from.atStartOfDay(ZoneId.systemDefault()).toInstant());
+            Date toDate = Date.from(to.atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+            Map<String, com.am.common.investment.model.historical.HistoricalData> historyMap = marketDataService
+                    .getHistoricalDataBatch(
+                            symbolsNeedingPrevClose,
+                            fromDate,
+                            toDate,
+                            TimeFrame.DAY,
+                            false,
+                            null,
+                            null,
+                            false,
+                            false // Cache/DB fallback only, no provider calls
+                    );
+
+            if (historyMap != null) {
+                LocalDate today = LocalDate.now();
+                // Create a normalized map for easier lookup (ignoring exchange prefix)
+                Map<String, com.am.common.investment.model.historical.HistoricalData> normalizedHistory = new HashMap<>();
+                historyMap.forEach((k, v) -> {
+                    String cleanKey = k.contains(":") ? k.substring(k.indexOf(":") + 1) : k;
+                    normalizedHistory.put(cleanKey.toUpperCase(), v);
+                });
+
+                quotes.forEach((symbol, quote) -> {
+                    if (quote != null && quote.getPreviousClose() == 0.0) {
+                        String cleanSymbol = symbol.contains(":") ? symbol.substring(symbol.indexOf(":") + 1) : symbol;
+                        var history = normalizedHistory.get(cleanSymbol.toUpperCase());
+                        if (history != null && history.getDataPoints() != null && !history.getDataPoints().isEmpty()) {
+                            var points = history.getDataPoints();
+                            var lastPoint = points.get(points.size() - 1);
+                            LocalDate lastPointDate = lastPoint.getTime().toLocalDate();
+
+                            double prevClose = 0.0;
+                            if (lastPointDate.equals(today)) {
+                                if (points.size() >= 2) {
+                                    prevClose = points.get(points.size() - 2).getClose();
+                                } else {
+                                    prevClose = lastPoint.getClose();
+                                }
+                            } else {
+                                prevClose = lastPoint.getClose();
+                            }
+
+                            if (prevClose > 0) {
+                                quote.setPreviousClose(prevClose);
+                                log.debug("backfillPreviousCloseForDay", "Backfilled previousClose for " + symbol + ": " + prevClose);
+                            }
+                        }
+                    }
+                });
+            }
+        } catch (Exception e) {
+            log.error("backfillPreviousCloseForDay", "Error backfilling previousClose", e);
+        }
     }
 }

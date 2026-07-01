@@ -61,7 +61,6 @@ public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepos
 
     @Override
     public List<MarketIndexIndicesMeasurement> findByKey(String key) {
-        String escapedKey = key.replace(" ", "\\ ");
         String query = String.format(
             "from(bucket: \"%s\") " +
             "|> range(start: -30d) " +
@@ -71,7 +70,7 @@ public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepos
             "        columnKey: [\"_field\"], " +
             "        valueColumn: \"_value\") " +
             "|> last()",
-            bucket, MEASUREMENT_NAME, escapedKey
+            bucket, MEASUREMENT_NAME, key
         );
 
         logger.debug("Executing findByKey query: measurement=market_index, key={}", key);
@@ -87,6 +86,37 @@ public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepos
                 m.setKey(key);
                 m.setIndex(m.getIndex());
                 m.setIndexSymbol(m.getIndexSymbol());
+            });
+        }
+
+        return results;
+    }
+
+    @Override
+    public List<MarketIndexIndicesMeasurement> findByIndexSymbolAndTimeBetween(String indexSymbol, Instant startTime, Instant endTime) {
+        String query = String.format(
+            "from(bucket: \"%s\") " +
+            "|> range(start: %s, stop: %s) " +
+            "|> filter(fn: (r) => r._measurement == \"%s\") " +
+            "|> filter(fn: (r) => r.indexSymbol == \"%s\") " +
+            "|> pivot(rowKey: [\"_time\"], " +
+            "        columnKey: [\"_field\"], " +
+            "        valueColumn: \"_value\") ",
+            bucket, startTime, endTime, MEASUREMENT_NAME, indexSymbol
+        );
+
+        logger.debug("Executing findByIndexSymbolAndTimeBetween query: measurement=market_index, indexSymbol={}, start: {}, end: {}", indexSymbol, startTime, endTime);
+        logger.debug("Query: {}", query);
+
+        QueryApi queryApi = influxDBClient.getQueryApi();
+        List<MarketIndexIndicesMeasurement> results = queryApi.query(query, MarketIndexIndicesMeasurement.class);
+        logger.debug("Found {} results for indexSymbol={}", results.size(), indexSymbol);
+
+        if (!results.isEmpty()) {
+            results.forEach(m -> {
+                m.setIndexSymbol(indexSymbol);
+                m.setIndex(m.getIndex());
+                m.setKey(m.getKey());
             });
         }
 

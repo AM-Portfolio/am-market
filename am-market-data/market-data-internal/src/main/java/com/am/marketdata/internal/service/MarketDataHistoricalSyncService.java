@@ -338,25 +338,12 @@ public class MarketDataHistoricalSyncService {
 
                     // Success
                     result.successCount++;
-                    updateStatus(symbol, toDate.minusDays(0)); // Start of today? or Yesterday?
-                    // Usually we consider data synced up to "yesterday" if we ran in morning.
-                    // But if market is open/closed, let's just mark the date we fetched.
-                    // If we fetched "to" date, we mark "to". (Since toDate is NOT inclusive in some
-                    // APIs, but here we passed it)
-                    // MarketDataFetchService usually treats 'to' as inclusive.
-                    // We mark 'toDate' as synced.
-                    // Wait, if toDate is today, and market is open?
-                    // The job runs at 7:15 AM. Market is closed. So "Today" effectively means "data
-                    // up to yesterday close".
-                    // Actually, if we fetch with to=Today 7:15 AM, provider gives up to Yesterday
-                    // Close.
-                    // So we can mark "Yesterday" as the last sync date.
-                    // Let's use `toDate.minusDays(1)` to be safe if running early morning.
-                    // Actually, let's mark the date of the LAST candle we got.
-                    // But that requires parsing the candle.
-                    // Simple logic: we asked for data up to `toDate`. If success, we mark `toDate`
-                    // (or `toDate -1` since job is pre-market).
-                    // Let's mark `toDate.minusDays(1)`.
+                    LocalDate statusDate = toDate;
+                    if (dataMap.get(symbol).getDataPoints() != null && !dataMap.get(symbol).getDataPoints().isEmpty()) {
+                        var points = dataMap.get(symbol).getDataPoints();
+                        statusDate = points.get(points.size() - 1).getTime().toLocalDate();
+                    }
+                    updateStatus(symbol, statusDate);
 
                 } else {
                     // Fail or Empty

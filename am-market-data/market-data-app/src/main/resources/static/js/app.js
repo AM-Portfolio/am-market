@@ -100,6 +100,7 @@ async function getLoginUrl() {
 }
 
 // --- WebSocket Logic ---
+let pingInterval = null;
 
 function connectWebSocket() {
     if (socket) return;
@@ -107,10 +108,29 @@ function connectWebSocket() {
 
     try {
         socket = new WebSocket(url);
-        socket.onopen = () => updateStatus(true);
-        socket.onclose = () => { updateStatus(false); socket = null; setTimeout(connectWebSocket, 5000); }; // Auto-reconnect
-        socket.onerror = (e) => log("WebSocket Error", "error");
-        socket.onmessage = (event) => handleMessage(event.data);
+        socket.onopen = () => {
+            updateStatus(true);
+            // Start a 30s heartbeat to keep connection alive through reverse proxies
+            pingInterval = setInterval(() => {
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send("ping");
+                }
+            }, 30000);
+        };
+        socket.onclose = () => { 
+            updateStatus(false); 
+            socket = null; 
+            if (pingInterval) clearInterval(pingInterval);
+            setTimeout(connectWebSocket, 5000); // Auto-reconnect
+        };
+        socket.onerror = (e) => {
+            log("WebSocket Error", "error");
+            if (pingInterval) clearInterval(pingInterval);
+        };
+        socket.onmessage = (event) => {
+            if (event.data === "pong") return; // Ignore pong replies
+            handleMessage(event.data);
+        };
     } catch (e) {
         log(`WS Connection Failed: ${e.message}`, "error");
     }

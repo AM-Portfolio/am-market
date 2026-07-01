@@ -6,6 +6,7 @@ import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.log.AppLogger;
 import com.am.marketdata.common.service.MarketDataPublisher;
 import com.am.marketdata.service.MarketDataPersistenceService;
+import com.am.marketdata.service.MarketDataCacheService;
 import com.am.marketdata.service.SymbolOrchestratorService;
 import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
 import java.util.List;
@@ -39,6 +40,7 @@ public class StreamerManager implements StreamerListener {
     private final MarketDataProcessor processor;
     private final SymbolOrchestratorService symbolService;
     private final MarketDataPublisher publisher; // For WebSocket broadcasting
+    private final MarketDataCacheService cacheService;
 
     private Set<String> subscribedSymbols = new HashSet<>();
     private static final String DEFAULT_MODE = "full";
@@ -48,12 +50,14 @@ public class StreamerManager implements StreamerListener {
             MarketDataPersistenceService persistenceService,
             MarketDataProcessor processor,
             SymbolOrchestratorService symbolService,
-            MarketDataPublisher publisher) {
+            MarketDataPublisher publisher,
+            MarketDataCacheService cacheService) {
         this.streamer = streamer;
         this.persistenceService = persistenceService;
         this.processor = processor;
         this.symbolService = symbolService;
         this.publisher = publisher;
+        this.cacheService = cacheService;
     }
 
     // @PostConstruct
@@ -64,12 +68,19 @@ public class StreamerManager implements StreamerListener {
 
     public void refreshSubscriptions() {
         Set<String> symbols = symbolService.findDistinctSymbols();
-        if (symbols != null && !symbols.isEmpty()) {
+        if (symbols == null) {
+            symbols = new HashSet<>();
+        }
+        
+        // Load and merge index symbols from the configuration file so we stream index ticks too
+        symbols.addAll(loadIndicesFromYaml());
+
+        if (!symbols.isEmpty()) {
             this.subscribedSymbols.clear();
             this.subscribedSymbols.addAll(symbols);
 
             log.info("StreamerManager",
-                    "Refreshed subscriptions with " + subscribedSymbols.size() + " instrument keys");
+                    "Refreshed subscriptions with " + subscribedSymbols.size() + " instrument keys (including indices)");
 
             // Actually subscribe if connected
             if (streamer.isConnected()) {
@@ -165,16 +176,51 @@ public class StreamerManager implements StreamerListener {
 
         log.info("StreamerManager", "Fallback data received: " + ohlcData.size() + " quotes");
 
-        // TODO: Implement WebSocket publishing when publisher supports batch publishing
-        // For now, data is fetched and cached, available for API calls
-
         try {
+            // Build QuoteChange map from OHLC data and broadcast to all connected WS clients
+            Map<String, MarketDataUpdate.QuoteChange> quotes = new HashMap<>();
+            for (Map.Entry<String, com.am.marketdata.common.model.OHLCQuote> entry : ohlcData.entrySet()) {
+                String symbol = entry.getKey();
+                com.am.marketdata.common.model.OHLCQuote quote = entry.getValue();
+                if (quote != null) {
+                    double lastPrice = quote.getLastPrice();
+                    double open = quote.getOhlc() != null ? quote.getOhlc().getOpen() : 0.0;
+                    double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
+                    double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
+                    double close = quote.getOhlc() != null ? quote.getOhlc().getClose() : 0.0;
+                    double prevClose = quote.getPreviousClose();
+                    double change = lastPrice - prevClose;
+                    double changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0.0;
+
+                    quotes.put(symbol, MarketDataUpdate.QuoteChange.builder()
+                            .lastPrice(lastPrice)
+                            .open(open)
+                            .high(high)
+                            .low(low)
+                            .close(close)
+                            .previousClose(prevClose)
+                            .change(change)
+                            .changePercent(changePercent)
+                            .build());
+                }
+            }
+
+            // Broadcast to all connected WebSocket clients (frontend price widgets)
+            if (!quotes.isEmpty()) {
+                MarketDataUpdate update = MarketDataUpdate.builder()
+                        .timestamp(System.currentTimeMillis())
+                        .quotes(quotes)
+                        .build();
+                publisher.publish(update);
+            }
+
+            // Also process for Kafka / persistence
             processor.processUpdate(ohlcData);
         } catch (Exception e) {
             log.error("StreamerManager", "Error processing fallback data for persistence/Kafka", e);
         }
 
-        log.info("StreamerManager", "✅ Fallback data processed successfully (cached for API access)");
+        log.info("StreamerManager", "Fallback data processed and broadcast successfully");
     }
 
     private void connectAndSubscribe() {
@@ -209,7 +255,8 @@ public class StreamerManager implements StreamerListener {
         // Service layer expects ONLY common DTOs (UpstoxFeedResponse)
         // Provider layer is responsible for converting proto → common DTO
 
-        // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 or Map<String, OHLCQuote>
+        // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 or Map<String,
+        // OHLCQuote>
         if (message instanceof MarketUpdateV3) {
             try {
                 processUpdateForPublisher((MarketUpdateV3) message);
@@ -230,7 +277,20 @@ public class StreamerManager implements StreamerListener {
                         double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
                         double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
                         double close = quote.getOhlc() != null ? quote.getOhlc().getClose() : 0.0;
-                        double prevClose = quote.getPreviousClose();
+                        // 1. Prioritize the official adjusted previousClose from the Redis cache
+                        Double prevClose = cacheService.getPreviousClose(symbol);
+                        
+                        // 2. Fall back to the streaming tick's previousClose if the cache is empty
+                        if (prevClose == null || prevClose == 0.0) {
+                            prevClose = quote.getPreviousClose();
+                            // Dynamically populate Redis so subsequent updates don't hit the fallback logic
+                            if (prevClose != null && prevClose != 0.0) {
+                                cacheService.setPreviousClose(symbol, prevClose);
+                            }
+                        } else {
+                            // Sync the correct close value back into the quote object
+                            quote.setPreviousClose(prevClose);
+                        }
 
                         double change = lastPrice - prevClose;
                         double changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0.0;
@@ -247,6 +307,14 @@ public class StreamerManager implements StreamerListener {
                                 .build();
                         quotes.put(symbol, changeObj);
                     }
+                }
+
+                // Cache live tick prices (lastPrice + previousClose) to Redis Path 2
+                // market:latest-price:<SYMBOL> so that page refreshes pick up the latest price.
+                try {
+                    cacheService.cacheLatestPrices(ohlcMap);
+                } catch (Exception e) {
+                    log.error("StreamerManager", "Error caching latest prices to Redis", e);
                 }
 
                 if (!quotes.isEmpty()) {
@@ -276,6 +344,12 @@ public class StreamerManager implements StreamerListener {
     @Override
     public void onError(Throwable error) {
         log.error("StreamerManager", "Streamer Error: " + error.getMessage(), error);
+        // Introduce a cooling period so it doesn't spin in a rapid loop
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Override
@@ -313,5 +387,49 @@ public class StreamerManager implements StreamerListener {
         } catch (Exception e) {
             // log.warn("StreamerManager", "Error processing update for publisher", e);
         }
+    }
+
+    /**
+     * Dynamically reads all index symbols configured in nseindices.yml on the classpath.
+     * Parses standard YAML list elements formatted as `- "INDEX NAME"`.
+     * If the file cannot be read, falls back to a list of major benchmark indices.
+     */
+    private List<String> loadIndicesFromYaml() {
+        List<String> indices = new java.util.ArrayList<>();
+        try {
+            org.springframework.core.io.ClassPathResource resource = new org.springframework.core.io.ClassPathResource("nseindices.yml");
+            if (resource.exists()) {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(resource.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        // Look for list items: - "NIFTY BANK" or - NIFTY BANK
+                        if (line.startsWith("-")) {
+                            String index = line.substring(1).trim()
+                                    .replace("\"", "")
+                                    .replace("'", "");
+                            if (!index.isEmpty()) {
+                                indices.add(index);
+                            }
+                        }
+                    }
+                }
+                log.info("StreamerManager", "Loaded " + indices.size() + " indices dynamically from nseindices.yml for streaming.");
+            } else {
+                log.warn("StreamerManager", "nseindices.yml not found on classpath, using default fallback list.");
+            }
+        } catch (Exception e) {
+            log.error("StreamerManager", "Failed to parse nseindices.yml dynamically for streaming: " + e.getMessage(), e);
+        }
+
+        // Fallback list of major indices if the file read fails
+        if (indices.isEmpty()) {
+            indices.addAll(java.util.Arrays.asList(
+                "NIFTY 50", "NIFTY BANK", "NIFTY IT", "NIFTY NEXT 50", "NIFTY MIDCAP 50",
+                "NIFTY INFRA", "NIFTY FMCG", "NIFTY METAL", "NIFTY REALTY", "NIFTY ENERGY"
+            ));
+        }
+        return indices;
     }
 }

@@ -128,14 +128,13 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             result.remove(key);
         }
 
-        // Remove all symbols found in VALID cache from remainingSymbols
         if (!result.isEmpty()) {
             remainingSymbols.removeAll(result.keySet());
-            log.info("[CACHE] Found valid historical data for {}/{} symbols in cache",
-                    result.size(), allSymbols.size());
+            log.info("[CACHE] Found valid historical data for {}/{} symbols interval={}",
+                    result.size(), allSymbols.size(), interval.getApiValue());
         }
 
-        log.info("[CACHE] {} symbols remaining after cache lookup", remainingSymbols.size());
+        log.info("[CACHE] {} symbols remaining after cache lookup interval={}", remainingSymbols.size(), interval.getApiValue());
 
         return result;
     }
@@ -166,19 +165,45 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             try {
                 // Force database lookup by setting forceRefresh to true in the persistence
                 // service
-                HistoricalData data = persistenceService.getHistoricalData(symbol, interval, fromDateStr, toDateStr);
+                HistoricalData data = persistenceService.getHistoricalData(symbol, interval, fromDateStr, toDateStr, isIndexSymbol);
                 if (data != null && data.getDataPoints() != null && !data.getDataPoints().isEmpty()) {
-                    result.put(symbol, data);
-                    remainingSymbols.remove(symbol);
-                    log.debug("[DATABASE] Found historical data for symbol: {}", symbol);
+                    List<com.am.common.investment.model.historical.OHLCVTPoint> points = data.getDataPoints();
+                    
+                    // VALIDATION: Strict Date Range Check
+                    // Filter out database data that does not cover the full requested range
+                    // This prevents partial database hits (e.g., finding only 1 point)
+                    long requiredStartMs = fromDate.getTime();
+                    long requiredEndMs = toDate.getTime();
+                    long toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for holidays/weekends
+
+                    java.time.LocalDateTime firstPointTime = points.get(0).getTime();
+                    java.time.LocalDateTime lastPointTime = points.get(points.size() - 1).getTime();
+
+                    long dataStartMs = firstPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+                    long dataEndMs = lastPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+
+                    boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
+                    boolean missingRecentData = dataEndMs < (requiredEndMs - toleranceMs);
+
+                    if (missingEarlyData || missingRecentData) {
+                        log.info("[DATABASE_VALIDATION] Partial database data detected for {}. Discarding database entry to force fallback to provider. " +
+                                "Req: {} to {}, Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
+                                symbol, fromDateStr, toDateStr,
+                                firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
+                                missingEarlyData, missingRecentData);
+                    } else {
+                        result.put(symbol, data);
+                        remainingSymbols.remove(symbol);
+                        log.debug("[DATABASE] Found valid historical data for symbol: {}", symbol);
+                    }
                 }
             } catch (Exception e) {
                 log.warn("[DATABASE] Error retrieving historical data for symbol {}: {}", symbol, e.getMessage());
             }
         }
 
-        log.info("[DATABASE] Found historical data for {} symbols in database", result.size());
-        log.info("[DATABASE] {} symbols remaining after database lookup", remainingSymbols.size());
+        log.info("[DATABASE] Found historical data for {} symbols in database interval={}", result.size(), interval.getApiValue());
+        log.info("[DATABASE] {} symbols remaining after database lookup interval={}", remainingSymbols.size(), interval.getApiValue());
 
         return result;
     }
@@ -201,8 +226,22 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         Map<String, HistoricalData> result = new HashMap<>();
         // Mapper not needed anymore as provider returns the correct model
 
+        int callCount = 0;
         for (String symbol : symbols) {
             try {
+                if ("upstox".equalsIgnoreCase(provider.getProviderName())) {
+                    if (callCount > 0) {
+                        try {
+                            Thread.sleep(300); // Respect Upstox rate limits (3 requests/sec to be safe)
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            log.warn("[PROVIDER] Interrupted during historical data fetch sleep");
+                            break;
+                        }
+                    }
+                    callCount++;
+                }
+
                 // Provider now returns the common HistoricalData model directly
                 HistoricalData historicalData = provider.getHistoricalData(symbol,
                         fromDate, toDate, interval, continuous, additionalParams);
@@ -223,9 +262,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             }
         }
 
-        log.info("[PROVIDER] Successfully fetched historical data for {}/{} symbols",
-                result.size(), symbols.size());
-
+        log.info("[PROVIDER] Successfully fetched historical data for {}/{} symbols interval={} provider={}",
+                result.size(), symbols.size(), interval.getApiValue(), provider.getProviderName());
         return result;
     }
 

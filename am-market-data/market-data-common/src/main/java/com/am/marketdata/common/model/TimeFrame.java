@@ -18,7 +18,10 @@ public enum TimeFrame {
     DAY("1D", "60minute", "1d"),
     WEEK("1W", "60minute", "week", true, 7), // Weekly - requires aggregation from daily data
     MONTH("1M", "60minute", "month", true, 30), // Monthly - requires aggregation from daily data
-    YEAR("1Y", "60minute", "year", true, 365);
+    THREE_MONTH("3M", "day", "day", true, 90),
+    SIX_MONTH("6M", "day", "day", true, 180),
+    YEAR("1Y", "60minute", "year", true, 365),
+    FIVE_YEAR("5Y", "week", "week", true, 1825);
 
     private final String userValue;
     private final String zerodhaValue;
@@ -100,7 +103,10 @@ public enum TimeFrame {
                 return HOUR;
             case WEEK:
             case MONTH:
+            case THREE_MONTH:
+            case SIX_MONTH:
             case YEAR:
+            case FIVE_YEAR:
                 return DAY;
             default:
                 return this;

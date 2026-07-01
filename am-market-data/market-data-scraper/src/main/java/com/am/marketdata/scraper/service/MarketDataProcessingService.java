@@ -398,10 +398,12 @@ public class MarketDataProcessingService {
 
             LocalDateTime marketTime = LocalDateTime.parse(tradeDate, MARKET_STATUS_DATE_FORMAT);
             LocalDateTime now = LocalDateTime.now(ZoneId.systemDefault());
-            long minutesOld = java.time.Duration.between(marketTime, now).toMinutes();
+            
+            // Allow data up to 7 days old to account for weekends and long holidays
+            long daysOld = java.time.Duration.between(marketTime, now).toDays();
 
-            if (minutesOld > maxDataAgeMinutes) {
-                log.warn("Stock indices data is too old: {} minutes", minutesOld);
+            if (daysOld > 7) {
+                log.warn("Stock indices data is too old: {} days. Rejecting.", daysOld);
                 return false;
             }
         } catch (Exception e) {

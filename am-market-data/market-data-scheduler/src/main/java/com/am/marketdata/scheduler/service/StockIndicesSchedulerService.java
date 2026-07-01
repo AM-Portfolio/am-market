@@ -1,9 +1,24 @@
-package com.am.marketdata.scheduler.service;
+ package com.am.marketdata.scheduler.service;
 
 import com.am.marketdata.scraper.exception.CookieException;
 import com.am.marketdata.scraper.service.MarketDataProcessingService;
+import com.am.marketdata.provider.upstox.UpstoxApiService;
+import com.am.marketdata.provider.upstox.UpstoxIndexIdentifier;
+import com.am.marketdata.provider.upstox.model.MarketQuoteResponse;
+import com.am.marketdata.provider.upstox.model.common.StockQuote;
+import com.am.common.investment.service.MarketIndexIndicesService;
+import com.am.common.investment.service.StockIndicesMarketDataService;
+import com.am.common.investment.model.stockindice.StockIndicesMarketData;
+import com.am.common.investment.model.equity.MarketIndexIndices;
+import com.am.common.investment.model.equity.MarketData;
+import com.am.marketdata.scraper.config.NSEIndicesConfig;
+import com.am.marketdata.kafka.producer.KafkaProducerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -32,6 +47,12 @@ public class StockIndicesSchedulerService {
 
     // Dependent service from scraper module
     private final MarketDataProcessingService marketDataProcessingService;
+    private final UpstoxApiService upstoxApiService;
+    private final UpstoxIndexIdentifier upstoxIndexIdentifier;
+    private final MarketIndexIndicesService marketIndexIndicesService;
+    private final StockIndicesMarketDataService stockIndicesMarketDataService;
+    private final NSEIndicesConfig nseIndicesConfig;
+    private final Optional<KafkaProducerService> kafkaProducer;
 
     private final AtomicBoolean morningFetchCompleted = new AtomicBoolean(false);
     private final AtomicBoolean eveningFetchCompleted = new AtomicBoolean(false);
@@ -121,14 +142,13 @@ public class StockIndicesSchedulerService {
      */
     private void fetchStockIndicesWithRetry(boolean isMorningSession) {
         try {
-            log.info("Attempting to fetch stock indices data (session: {})",
+            log.info("Attempting to fetch stock indices data from Upstox (session: {})",
                     isMorningSession ? "morning" : "evening");
 
-            // Attempt to fetch and process stock indices
-            boolean success = marketDataProcessingService.fetchAndProcessStockIndicesOnly();
+            boolean success = fetchAndProcessStockIndicesFromUpstox();
 
             if (success) {
-                log.info("Successfully fetched and processed stock indices data (session: {})",
+                log.info("Successfully fetched and processed stock indices data from Upstox (session: {})",
                         isMorningSession ? "morning" : "evening");
 
                 // Mark the appropriate session as completed
@@ -143,31 +163,148 @@ public class StockIndicesSchedulerService {
             } else {
                 // Increment retry count on failure
                 currentRetryCount++;
-                log.warn("Failed to fetch stock indices data (session: {}). Will retry in {} minutes. Attempt {}/{}",
+                log.warn("Failed to fetch stock indices data from Upstox (session: {}). Will retry in {} minutes. Attempt {}/{}",
                         isMorningSession ? "morning" : "evening",
                         retryIntervalMinutes,
                         currentRetryCount,
                         maxRetries);
             }
-        } catch (CookieException e) {
-            currentRetryCount++;
-            log.error(
-                    "Cookie error during stock indices fetch (session: {}): {}. Will retry in {} minutes. Attempt {}/{}",
-                    isMorningSession ? "morning" : "evening",
-                    e.getMessage(),
-                    retryIntervalMinutes,
-                    currentRetryCount,
-                    maxRetries);
         } catch (Exception e) {
             currentRetryCount++;
             log.error(
-                    "Unexpected error during stock indices fetch (session: {}): {}. Will retry in {} minutes. Attempt {}/{}",
+                    "Unexpected error during stock indices fetch from Upstox (session: {}): {}. Will retry in {} minutes. Attempt {}/{}",
                     isMorningSession ? "morning" : "evening",
                     e.getMessage(),
                     retryIntervalMinutes,
                     currentRetryCount,
                     maxRetries,
                     e);
+        }
+    }
+
+    private boolean fetchAndProcessStockIndicesFromUpstox() {
+        try {
+            log.info("Fetching stock indices using Upstox API...");
+            List<String> allIndices = new ArrayList<>();
+            if (nseIndicesConfig.getBroadMarketIndices() != null) {
+                allIndices.addAll(nseIndicesConfig.getBroadMarketIndices());
+            }
+            if (nseIndicesConfig.getSectorIndices() != null) {
+                allIndices.addAll(nseIndicesConfig.getSectorIndices());
+            }
+
+            // Map symbols to instrument keys
+            Map<String, String> resolved = upstoxIndexIdentifier.resolveIndices(allIndices);
+            if (resolved.isEmpty()) {
+                log.warn("No index symbols resolved to Upstox instrument keys.");
+                return false;
+            }
+
+            List<String> instrumentKeys = new ArrayList<>(resolved.values());
+            log.info("Resolved instrument keys to fetch: {}", instrumentKeys);
+            MarketQuoteResponse response = upstoxApiService.getLtp(instrumentKeys);
+            if (response == null) {
+                log.warn("Received null response from Upstox API.");
+                return false;
+            }
+            if (response.getData() == null) {
+                log.warn("Received response with null data from Upstox API. Status: {}", response.getStatus());
+                return false;
+            }
+            log.info("Upstox response data keys: {}", response.getData().keySet());
+
+            List<MarketIndexIndices> indicesToSave = new ArrayList<>();
+            for (Map.Entry<String, String> entry : resolved.entrySet()) {
+                String symbol = entry.getKey();
+                String key = entry.getValue();
+                StockQuote quote = response.getData().get(key);
+                if (quote == null) {
+                    // Try alternative key format (e.g. colon instead of pipe)
+                    String altKey = key.replace('|', ':');
+                    quote = response.getData().get(altKey);
+                }
+                if (quote == null) {
+                    log.warn("No quote found in Upstox response for key: {} (altKey: {})", key, key.replace('|', ':'));
+                    continue;
+                }
+
+                log.info("Found quote for index {}: lastPrice={}, openPrice={}", symbol, quote.getLastPrice(), quote.getOpenPrice());
+
+                double lastPrice = quote.getLastPrice() != null ? quote.getLastPrice() : 0.0;
+                double change = quote.getChange() != null ? quote.getChange() : 0.0;
+                double previousClose = quote.getPreviousClose() != null ? quote.getPreviousClose() : 0.0;
+                if (previousClose == 0.0 && lastPrice != 0.0) {
+                    previousClose = lastPrice - change;
+                }
+                double changePercent = quote.getChangePercent() != null ? quote.getChangePercent() : 0.0;
+                if (changePercent == 0.0 && previousClose != 0.0) {
+                    changePercent = (change / previousClose) * 100.0;
+                }
+
+                MarketData marketData = MarketData.builder()
+                    .last(lastPrice)
+                    .open(quote.getOpenPrice() != null ? quote.getOpenPrice() : 0.0)
+                    .high(quote.getHighPrice() != null ? quote.getHighPrice() : 0.0)
+                    .low(quote.getLowPrice() != null ? quote.getLowPrice() : 0.0)
+                    .previousClose(previousClose)
+                    .variation(change)
+                    .percentChange(changePercent)
+                    .build();
+
+                MarketIndexIndices indexData = MarketIndexIndices.builder()
+                    .key(key)
+                    .indexSymbol(symbol)
+                    .index(symbol)
+                    .marketData(marketData)
+                    .timestamp(LocalDateTime.now(ZoneId.of("Asia/Kolkata")))
+                    .build();
+
+                marketIndexIndicesService.save(indexData);
+                indicesToSave.add(indexData);
+
+                // Update MongoDB permanent StockIndicesMarketData collection
+                try {
+                    StockIndicesMarketData mongoDoc = stockIndicesMarketDataService.findByIndexSymbol(symbol);
+                    if (mongoDoc != null) {
+                        com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata meta = mongoDoc.getMetadata();
+                        if (meta == null) {
+                            meta = new com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata();
+                            mongoDoc.setMetadata(meta);
+                        }
+                        meta.setLast(lastPrice);
+                        meta.setOpen(quote.getOpenPrice() != null ? quote.getOpenPrice() : 0.0);
+                        meta.setHigh(quote.getHighPrice() != null ? quote.getHighPrice() : 0.0);
+                        meta.setLow(quote.getLowPrice() != null ? quote.getLowPrice() : 0.0);
+                        meta.setPreviousClose(previousClose);
+                        meta.setChange(change);
+                        meta.setPercChange(changePercent);
+                        meta.setTimeVal(String.valueOf(System.currentTimeMillis()));
+
+                        if (mongoDoc.getAudit() == null) {
+                            mongoDoc.setAudit(new com.am.common.investment.model.stockindice.AuditData());
+                        }
+                        mongoDoc.getAudit().setUpdatedAt(LocalDateTime.now(ZoneId.of("Asia/Kolkata")));
+
+                        stockIndicesMarketDataService.save(mongoDoc);
+                        log.info("Successfully updated MongoDB StockIndicesMarketData for index symbol: {}", symbol);
+                    } else {
+                        log.warn("StockIndicesMarketData document not found in MongoDB for symbol: {}", symbol);
+                    }
+                } catch (Exception ex) {
+                    log.error("Failed to update MongoDB StockIndicesMarketData for symbol: {}", symbol, ex);
+                }
+            }
+
+            if (!indicesToSave.isEmpty()) {
+                kafkaProducer.ifPresent(producer -> producer.sendIndicesUpdate(indicesToSave));
+                log.info("Successfully saved {} indices from Upstox and sent updates to Kafka.", indicesToSave.size());
+                return true;
+            }
+            log.warn("No indices were saved because indicesToSave is empty.");
+            return false;
+        } catch (Exception e) {
+            log.error("Failed to fetch/process indices from Upstox", e);
+            return false;
         }
     }
 

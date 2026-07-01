@@ -31,6 +31,7 @@ public class MarketDataAdminController {
     private final MarketDataIngestionService ingestionService;
     private final com.am.marketdata.scheduler.service.MarketDataOrchestrator orchestrator;
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+    private final com.am.marketdata.scheduler.PreviousCloseScheduler previousCloseScheduler;
 
     @GetMapping("/logs/{jobId}")
     public ResponseEntity<IngestionJobLog> getJobDetails(@PathVariable String jobId) {
@@ -166,5 +167,24 @@ public class MarketDataAdminController {
         log.info("Manual trigger: Market Close/Ingestion Stop");
         orchestrator.triggerIngestionStop(); // Orchestrator method for market close/stop ingestion
         return ResponseEntity.ok("Triggered Market Close/Ingestion Stop");
+    }
+    /**
+     * Exposes a manual administrative endpoint to force-refresh the previousClose cache.
+     * Useful to warm up/repopulate the Redis cache with correct previousClose prices from Upstox
+     * without waiting for the daily scheduled job at 8:00 AM.
+     * Runs asynchronously in a separate background thread to prevent HTTP request blocking
+     * due to rate-limiting delays (100ms per backfill request to Upstox).
+     */
+    @PostMapping("/scheduler/prev-close/trigger")
+    public ResponseEntity<String> triggerPreviousCloseFetch() {
+        log.info("Manual trigger: Previous Close Fetch and Cache");
+        new Thread(() -> {
+            try {
+                previousCloseScheduler.fetchAndCachePreviousClose();
+            } catch (Exception e) {
+                log.error("Failed to run manually triggered previous close fetch", e);
+            }
+        }, "manual-prev-close-trigger-thread").start();
+        return ResponseEntity.ok("Triggered previous close cache refresh in background");
     }
 }

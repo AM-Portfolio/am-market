@@ -99,6 +99,7 @@ public class StockIndicesMapper {
                 .high(metadata.getHigh())
                 .low(metadata.getLow())
                 .previousClose(metadata.getPreviousClose())
+                .last(metadata.getLast())
                 .change(metadata.getChange())
                 .percChange(metadata.getPercChange())
                 .build();
