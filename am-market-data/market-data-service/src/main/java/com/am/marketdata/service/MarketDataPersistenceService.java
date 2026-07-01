@@ -433,8 +433,8 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             // If not in cache or cache range is invalid, try to get from database
             log.debug("No valid historical data found in cache, fetching from database for symbol: {}", symbol);
 
-            // Map interval to the format expected by the database service
-            String mappedInterval = interval.name().toLowerCase();
+            // Map interval to the format expected by the database service (e.g. "5m", "1H") rather than enum name ("five_minute")
+            String mappedInterval = interval.getApiValue();
 
             // Get historical data from database using HistoricalDataService
             // Convert LocalDate to Instant at the start of the day in UTC
