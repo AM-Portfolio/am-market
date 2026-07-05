@@ -561,7 +561,7 @@ public class MarketDataService {
                 result.addAll(cachedPrices);
 
                 // Remove symbols found in cache from remaining
-                cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE:", "")));
+                cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE_EQ:", "").replace("NSE:", "")));
 
                 log.info("[CACHE] {} symbols remaining after cache lookup", remainingSymbols.size());
             } else {

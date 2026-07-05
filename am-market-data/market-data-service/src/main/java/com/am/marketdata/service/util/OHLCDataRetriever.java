@@ -58,7 +58,7 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
             log.info("[CACHE] Found {} OHLC quotes in cache for timeFrame {}", cachedData.size(), tfValue);
 
             // Remove found symbols from the remaining set
-            cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE:", "")));
+            cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE_EQ:", "").replace("NSE:", "")));
 
             log.info("[CACHE] {} symbols remaining after cache lookup for timeFrame {}", remainingSymbols.size(),
                     tfValue);
@@ -97,7 +97,7 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
             log.info("[DATABASE] Found {} OHLC quotes in database for timeFrame {}", dbData.size(), tfValue);
 
             // Remove found symbols from the remaining set
-            dbData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE:", "")));
+            dbData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE_EQ:", "").replace("NSE:", "")));
 
             log.info("[DATABASE] {} symbols remaining after database lookup for timeFrame {}", remainingSymbols.size(),
                     tfValue);
