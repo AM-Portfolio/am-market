@@ -305,6 +305,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
             "|> range(start: %s) " +
             "|> filter(fn: (r) => r._measurement == \"equity\") " +
             "|> filter(fn: (r) => contains(value: r.symbol, set: [%s])) " +
+            "|> last() " +
             "|> pivot(rowKey: [\"_time\"], " +
             "        columnKey: [\"_field\"], " +
             "        valueColumn: \"_value\") ",
@@ -334,6 +335,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
             "|> range(start: %s) " +
             "|> filter(fn: (r) => r._measurement == \"equity\") " +
             "|> filter(fn: (r) => contains(value: r.isin, set: [%s])) " +
+            "|> last() " +
             "|> pivot(rowKey: [\"_time\"], " +
             "        columnKey: [\"_field\"], " +
             "        valueColumn: \"_value\") ",
