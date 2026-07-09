@@ -73,6 +73,7 @@ public class PreviousCloseScheduler {
 
     // Run at 8:00 AM IST daily
     @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "previousCloseFetchJob", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void fetchAndCachePreviousClose() {
         // Skip fetching if it's a weekend (Saturday or Sunday) in India
         if (isWeekend()) {
