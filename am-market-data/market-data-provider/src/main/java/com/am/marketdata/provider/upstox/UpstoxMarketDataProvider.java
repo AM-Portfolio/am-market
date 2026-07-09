@@ -210,9 +210,42 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 return;
             }
 
+            // 1. Try to load previousClose from local database in batch (very fast < 10ms)
+            try {
+                com.am.common.investment.service.EquityService equityService =
+                        com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.common.investment.service.EquityService.class);
+                if (equityService != null) {
+                    List<com.am.common.investment.model.equity.EquityPrice> dbPrices =
+                            equityService.getPricesByTradingSymbols(symbolsNeedingPrevClose);
+                    if (dbPrices != null) {
+                        for (com.am.common.investment.model.equity.EquityPrice dbPrice : dbPrices) {
+                            if (dbPrice.getPreviousClose() != null && dbPrice.getPreviousClose() > 0) {
+                                String symbol = dbPrice.getSymbol();
+                                if (result.containsKey(symbol)) {
+                                    result.get(symbol).setPreviousClose(dbPrice.getPreviousClose());
+                                    log.debug("backfillPreviousClose", "Loaded previousClose from DB for " + symbol + ": " + dbPrice.getPreviousClose());
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception dbEx) {
+                log.warn("backfillPreviousClose", "Failed to retrieve previousClose from database: " + dbEx.getMessage());
+            }
+
+            // 2. Filter remaining symbols that still have previousClose == 0.0 for API fallback
+            List<String> remainingSymbols = result.entrySet().stream()
+                    .filter(e -> e.getValue().getPreviousClose() == 0.0)
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+
+            if (remainingSymbols.isEmpty()) {
+                return;
+            }
+
             log.info("backfillPreviousClose",
-                    "Backfilling previousClose via historical API for {} symbols: {}",
-                    symbolsNeedingPrevClose.size(), symbolsNeedingPrevClose);
+                    "Backfilling previousClose via historical API for {} remaining symbols: {}",
+                    remainingSymbols.size(), remainingSymbols);
 
             java.time.LocalDate today = java.time.LocalDate.now();
             String toDate = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
@@ -220,7 +253,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             String fromDate = today.minusDays(5).format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
 
             int callCount = 0;
-            for (String symbol : symbolsNeedingPrevClose) {
+            for (String symbol : remainingSymbols) {
                 try {
                     if (callCount > 0) {
                         try {
