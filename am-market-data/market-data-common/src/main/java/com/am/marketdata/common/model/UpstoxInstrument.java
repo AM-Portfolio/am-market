@@ -68,6 +68,7 @@ public class UpstoxInstrument {
     @Field("freeze_quantity")
     private Double freezeQuantity;
 
+    @Indexed
     @JsonProperty("trading_symbol")
     @Field("trading_symbol")
     private String tradingSymbol;
