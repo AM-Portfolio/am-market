@@ -31,6 +31,7 @@ public class MarketDataEodSyncScheduler {
      * TimeZone: "Asia/Kolkata"
      */
     @Scheduled(cron = "0 40 15 * * MON-FRI", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketEodSyncJob", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void syncEodIndexPrices() {
         String methodName = "syncEodIndexPrices";
         log.info(methodName, "Starting EOD Index Price Sync Scheduler to persist Redis prices to MongoDB");
