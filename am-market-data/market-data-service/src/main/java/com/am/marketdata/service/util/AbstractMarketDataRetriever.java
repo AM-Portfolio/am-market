@@ -150,7 +150,14 @@ public abstract class AbstractMarketDataRetriever<K, T> {
                 case DATABASE:
                     // Check InfluxDB for symbols still missing after the cache lookup.
                     // Symbols found here are removed from remainingKeys.
-                    sourceData = retrieveFromDatabase(remainingKeys, timeFrame);
+                    // OPTIMIZATION: InfluxDB queries are slow and timeout frequently on dev env for small sets of keys.
+                    // If there are only a few keys remaining (e.g. <= 5 keys), bypass InfluxDB lookup and go directly to Provider.
+                    if (remainingKeys.size() <= 5) {
+                        log.info("[DATABASE] Bypassing InfluxDB query because remaining keys count is small ({}) to prevent database timeouts", remainingKeys.size());
+                        sourceData = Collections.emptyMap();
+                    } else {
+                        sourceData = retrieveFromDatabase(remainingKeys, timeFrame);
+                    }
                     break;
                 case PROVIDER:
                     // Call the external broker API for any symbols still not resolved.

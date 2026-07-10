@@ -158,6 +158,49 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
             if (providerData != null && !providerData.isEmpty()) {
                 log.info("[PROVIDER] {} Successfully fetched {} OHLC quotes from provider with timeFrame {}",
                         provider.getProviderName(), providerData.size(), tfValue);
+                
+                // Map the results back to the original requested symbols.
+                // Upstox sometimes maps symbols internally to different trading symbols (e.g. AXISGOLD -> GOLDAXIS).
+                // If we cache GOLDAXIS, the next request for AXISGOLD will miss the cache.
+                Map<String, OHLCQuote> mappedData = new HashMap<>();
+                for (String reqSymbol : symbols) {
+                    String cleanReq = reqSymbol.replace("NSE_EQ:", "").replace("NSE:", "").trim().toUpperCase();
+                    
+                    // Look for matches in the provider keys
+                    boolean matched = false;
+                    for (Map.Entry<String, OHLCQuote> entry : providerData.entrySet()) {
+                        String cleanProv = entry.getKey().replace("NSE_EQ:", "").replace("NSE:", "").trim().toUpperCase();
+                        
+                        // Handle known mappings:
+                        // 1. Exact match (e.g. RELIANCE == RELIANCE)
+                        // 2. Contains mapping (e.g. AXISGOLD matches GOLDAXIS, AXISNIFTY matches NIFTYAXIS, SEQUENT matches VIYASH due to name change)
+                        if (cleanReq.equals(cleanProv) || 
+                            (cleanReq.equals("AXISGOLD") && cleanProv.equals("GOLDAXIS")) ||
+                            (cleanReq.equals("AXISNIFTY") && cleanProv.equals("NIFTYAXIS")) ||
+                            (cleanReq.equals("SEQUENT") && cleanProv.equals("VIYASH"))) {
+                            
+                            mappedData.put(reqSymbol, entry.getValue());
+                            matched = true;
+                            log.info("[PROVIDER_MAP] Mapped provider symbol {} back to requested symbol {}", entry.getKey(), reqSymbol);
+                            break;
+                        }
+                    }
+                    if (!matched) {
+                        // Fallback: if provider returned it under the original name directly
+                        if (providerData.containsKey(reqSymbol)) {
+                            mappedData.put(reqSymbol, providerData.get(reqSymbol));
+                        }
+                    }
+                }
+                
+                // Also carry forward anything else that was returned but didn't match the mapping loop
+                for (Map.Entry<String, OHLCQuote> entry : providerData.entrySet()) {
+                    if (!mappedData.containsKey(entry.getKey())) {
+                        mappedData.put(entry.getKey(), entry.getValue());
+                    }
+                }
+                
+                return mappedData;
             } else {
                 log.info("[PROVIDER] {} No OHLC data returned from provider for timeFrame {}",
                         provider.getProviderName(), tfValue);
