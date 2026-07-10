@@ -51,8 +51,15 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
         log.info("[CACHE] Attempting to fetch OHLC data from cache for {} symbols with timeFrame {}",
                 remainingSymbols.size(), tfValue);
 
-        // Pass timeFrame to persistence service if it supports it
-        Map<String, OHLCQuote> cachedData = persistenceService.getOHLCData(allSymbols, timeFrame, false);
+        // Call the cache service DIRECTLY (Redis-only).
+        // IMPORTANT: Do NOT use persistenceService.getOHLCData(false) here.
+        // That method first reads Redis, then queries InfluxDB for any remaining symbols —
+        // and if the InfluxDB query times out (~23s), it catches the exception and returns
+        // emptyMap(), losing all the Redis results we already had. The DATABASE step below
+        // already handles the InfluxDB lookup for whatever Redis misses.
+        Map<String, OHLCQuote> cachedData = persistenceService
+                .getMarketDataCacheService()
+                .getOHLCFromCache(allSymbols, timeFrame);
 
         if (cachedData != null && !cachedData.isEmpty()) {
             log.info("[CACHE] Found {} OHLC quotes in cache for timeFrame {}", cachedData.size(), tfValue);
