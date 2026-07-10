@@ -309,7 +309,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
             "|> pivot(rowKey: [\"_time\"], " +
             "        columnKey: [\"_field\"], " +
             "        valueColumn: \"_value\") ",
-            influxDBConfig.getBucket(), parseRange(rangeConfig.getDefaultRange()), symbolList
+            influxDBConfig.getBucket(), parseRange(rangeConfig.getHistoryRange()), symbolList
         );
 
         logger.debug("Executing findByTradingSymbolIn query for symbols: {}", tradingSymbols);
@@ -339,7 +339,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
             "|> pivot(rowKey: [\"_time\"], " +
             "        columnKey: [\"_field\"], " +
             "        valueColumn: \"_value\") ",
-            influxDBConfig.getBucket(), parseRange(rangeConfig.getDefaultRange()), isinList
+            influxDBConfig.getBucket(), parseRange(rangeConfig.getHistoryRange()), isinList
         );
 
         logger.debug("Executing findByIsinIn query for ISINs: {}", isins);
