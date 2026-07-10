@@ -116,3 +116,6 @@ monitoring:
     scrape: true
     port: "8080"
     path: "/actuator/prometheus"
+
+# Triggering rebuild to consume latest published common library
+
