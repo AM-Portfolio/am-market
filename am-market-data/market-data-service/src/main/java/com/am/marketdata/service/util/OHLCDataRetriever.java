@@ -57,8 +57,26 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
         if (cachedData != null && !cachedData.isEmpty()) {
             log.info("[CACHE] Found {} OHLC quotes in cache for timeFrame {}", cachedData.size(), tfValue);
 
-            // Remove found symbols from the remaining set
-            cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE_EQ:", "").replace("NSE:", "")));
+            // Build a set of clean cached symbol names (stripped of any exchange prefix and trimmed).
+            // The cache returns clean names like "MARUTI" but remainingSymbols may contain symbols
+            // with leading spaces (" MARUTI") from comma-separated parsing, or with exchange prefixes
+            // ("NSE_EQ:MARUTI"). A direct Set.remove("MARUTI") would silently fail for " MARUTI",
+            // leaving all symbols "remaining" and causing the provider to be called for 100 symbols
+            // instead of just the 4 that are truly missing from Redis.
+            Set<String> cleanCacheHits = cachedData.keySet().stream()
+                    .map(s -> s.replace("NSE_EQ:", "").replace("NSE:", "").trim().toUpperCase())
+                    .collect(java.util.stream.Collectors.toSet());
+
+            // Remove the ORIGINAL-format keys from remainingSymbols by comparing their clean form.
+            // Using an iterator to safely remove while iterating.
+            java.util.Iterator<String> iter = remainingSymbols.iterator();
+            while (iter.hasNext()) {
+                String key = iter.next();
+                String cleanKey = key.replace("NSE_EQ:", "").replace("NSE:", "").trim().toUpperCase();
+                if (cleanCacheHits.contains(cleanKey)) {
+                    iter.remove(); // safely removes the ORIGINAL key (e.g., " MARUTI")
+                }
+            }
 
             log.info("[CACHE] {} symbols remaining after cache lookup for timeFrame {}", remainingSymbols.size(),
                     tfValue);
@@ -68,6 +86,7 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
 
         return cachedData != null ? cachedData : Collections.emptyMap();
     }
+
 
     /**
      * Retrieve OHLC data from database
