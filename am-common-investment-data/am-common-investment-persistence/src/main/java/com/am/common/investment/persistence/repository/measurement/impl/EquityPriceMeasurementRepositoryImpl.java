@@ -312,9 +312,11 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
             influxDBConfig.getBucket(), parseRange(rangeConfig.getHistoryRange()), symbolFilter
         );
 
-        logger.debug("Executing findByTradingSymbolIn query for symbols: {}", tradingSymbols);
+        logger.info("Executing findByTradingSymbolIn query. Query: {}", query);
+        long startTime = System.currentTimeMillis();
         List<EquityPriceMeasurement> results = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
-        logger.debug("Found {} results for trading symbols", results.size());
+        long duration = System.currentTimeMillis() - startTime;
+        logger.info("Found {} results for trading symbols in {}ms", results.size(), duration);
         
         return results;
     }
@@ -342,9 +344,11 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
             influxDBConfig.getBucket(), parseRange(rangeConfig.getHistoryRange()), isinFilter
         );
 
-        logger.debug("Executing findByIsinIn query for ISINs: {}", isins);
+        logger.info("Executing findByIsinIn query. Query: {}", query);
+        long startTime = System.currentTimeMillis();
         List<EquityPriceMeasurement> results = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
-        logger.debug("Found {} results for ISINs", results.size());
+        long duration = System.currentTimeMillis() - startTime;
+        logger.info("Found {} results for ISINs in {}ms", results.size(), duration);
         
         return results;
     }
