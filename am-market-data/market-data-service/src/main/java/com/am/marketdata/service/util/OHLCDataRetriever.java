@@ -200,10 +200,39 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
                     }
                 }
                 
+                // OPTIMIZATION: Cache placeholders for any requested symbols that the provider failed to return.
+                // This prevents subsequent requests from repeatedly hitting the slow provider for invalid/empty symbols.
+                for (String reqSymbol : symbols) {
+                    if (!mappedData.containsKey(reqSymbol)) {
+                        log.warn("[PROVIDER_MAP] Provider returned no data for symbol {}. Caching empty placeholder to prevent repeat calls.", reqSymbol);
+                        mappedData.put(reqSymbol, OHLCQuote.builder()
+                                .lastPrice(0.0)
+                                .previousClose(0.0)
+                                .ohlc(OHLCQuote.OHLC.builder()
+                                        .open(0.0)
+                                        .high(0.0)
+                                        .low(0.0)
+                                        .close(0.0)
+                                        .build())
+                                .build());
+                    }
+                }
+                
                 return mappedData;
             } else {
                 log.info("[PROVIDER] {} No OHLC data returned from provider for timeFrame {}",
                         provider.getProviderName(), tfValue);
+                
+                // If the provider returned absolutely nothing, cache placeholders for all requested symbols
+                Map<String, OHLCQuote> placeholders = new HashMap<>();
+                for (String reqSymbol : symbols) {
+                    placeholders.put(reqSymbol, OHLCQuote.builder()
+                            .lastPrice(0.0)
+                            .previousClose(0.0)
+                            .ohlc(OHLCQuote.OHLC.builder().open(0.0).high(0.0).low(0.0).close(0.0).build())
+                            .build());
+                }
+                return placeholders;
             }
 
             return providerData != null ? providerData : Collections.emptyMap();
