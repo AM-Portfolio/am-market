@@ -323,6 +323,17 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         dateFormat.format(toDate));
             } else {
                 toDate = dateFormat.parse(request.getTo());
+                // [Inclusive toDate Fix]
+                // SimpleDateFormat.parse("yyyy-MM-dd") returns midnight (00:00:00.000) of that day.
+                // This excludes all data points generated during the market hours of that day.
+                // We adjust toDate to the end of the day (23:59:59.999) to make the query fully inclusive of the target day.
+                java.util.Calendar cal = java.util.Calendar.getInstance();
+                cal.setTime(toDate);
+                cal.set(java.util.Calendar.HOUR_OF_DAY, 23);
+                cal.set(java.util.Calendar.MINUTE, 59);
+                cal.set(java.util.Calendar.SECOND, 59);
+                cal.set(java.util.Calendar.MILLISECOND, 999);
+                toDate = cal.getTime();
             }
         } catch (ParseException e) {
             return HistoricalDataResponseV1.builder()

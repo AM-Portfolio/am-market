@@ -97,17 +97,17 @@ postgresql:
 vault:
   enabled: true
   secretPaths:
-    postgres: "secret/data/prod/infra/postgres"
-    mongodb: "secret/data/prod/infra/mongodb"
-    redis: "secret/data/prod/infra/redis"
-    influxdb: "secret/data/prod/infra/influxdb"
-    kafka: "secret/data/prod/infra/kafka"
-    zerodha: "secret/data/prod/api/zerodha"
-    upstock: "secret/data/prod/api/upstock"
-    market-data: "secret/data/prod/services/am-market-data"
-    scheduler-config: "secret/data/prod/services/am-market-data-scheduler"
-    identity-oidc: "secret/data/prod/services/am-identity"
-    service-oauth: "secret/data/prod/services/am-market-data"
+    postgres: "apps/data/prod/infra/postgres"
+    mongodb: "apps/data/prod/infra/mongodb"
+    redis: "apps/data/prod/infra/redis"
+    influxdb: "apps/data/prod/infra/influxdb"
+    kafka: "apps/data/prod/infra/kafka"
+    zerodha: "apps/data/prod/api/zerodha"
+    upstock: "apps/data/prod/api/upstock"
+    market-data: "apps/data/prod/services/am-market-data"
+    scheduler-config: "apps/data/prod/services/am-market-data-scheduler"
+    identity-oidc: "apps/data/prod/services/am-identity"
+    service-oauth: "apps/data/prod/services/am-market-data"
 
 # Monitoring Configuration
 monitoring:
@@ -116,3 +116,6 @@ monitoring:
     scrape: true
     port: "8080"
     path: "/actuator/prometheus"
+
+# Triggering rebuild to consume latest published common library
+
