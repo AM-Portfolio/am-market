@@ -24,7 +24,7 @@ service:
   type: ClusterIP
   port: 8080
 
-# Dual-host like identity / market-data until Phase 4
+# Preprod app host only — am.asrax.in reserved for prod
 ingress:
   enabled: true
   className: "traefik"
@@ -36,10 +36,6 @@ ingress:
       am-apps-preprod-strip-prefix-apps@kubernetescrd
   hosts:
     - host: am-preprod.asrax.in
-      paths:
-        - path: /parser
-          pathType: Prefix
-    - host: am.asrax.in
       paths:
         - path: /parser
           pathType: Prefix
