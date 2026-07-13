@@ -50,8 +50,7 @@ vault:
   secretPaths:
     auth:
       path: apps/data/prod/services/am-auth
-    logging:
-      path: apps/data/prod/services/logging
+    # logging path not present in prod Vault yet — omit so init does not hang
     market:
       path: apps/data/prod/services/am-market-data
     mongodb:
