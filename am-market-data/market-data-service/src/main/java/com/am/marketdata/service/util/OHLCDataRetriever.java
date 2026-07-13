@@ -234,8 +234,6 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
                 }
                 return placeholders;
             }
-
-            return providerData != null ? providerData : Collections.emptyMap();
         } catch (Exception e) {
             log.error(provider.getProviderName() + " Error fetching OHLC data for timeFrame {}: {}",
                     tfValue, e.getMessage(), e);
