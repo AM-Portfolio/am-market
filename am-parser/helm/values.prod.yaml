@@ -1,6 +1,19 @@
-environment: prod
+# Production — am-parser
+# Service-level Ingress (same model as am-identity / am-market-data).
 
+environment: prod
 replicaCount: 1
+
+env:
+  ENVIRONMENT: "prod"
+  MONGO_DB: "mutual_funds"
+
+probes:
+  port: 8080
+  liveness:
+    path: /health
+  readiness:
+    path: /health
 
 resources:
   limits:
@@ -10,14 +23,34 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-# Vault Configuration (Prod Override)
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-prod-global-cors@kubernetescrd
+  hosts:
+    - host: am.asrax.in
+      paths:
+        - path: /parser
+          pathType: Prefix
+
 vault:
+  enabled: true
   secretPaths:
     mongodb:
-      path: "secret/data/prod/infra/mongodb"
+      path: "apps/data/prod/infra/mongodb"
     together:
-      path: "secret/data/prod/api/together"
-
-env:
-  ENVIRONMENT: "prod"
-  MONGO_DB: "mutual_funds"
+      path: "apps/data/prod/infra/shared-api"
+    identity:
+      path: "apps/data/prod/services/am-identity"
+    market:
+      path: "apps/data/prod/services/am-market-data"
+    oauth:
+      path: "apps/data/prod/services/am-parser"

@@ -11,20 +11,14 @@ image:
   pullPolicy: Always
   tag: "latest"
 
+# Service-owned Ingress (same pattern as am-identity). Env values set hosts/paths.
 ingress:
   enabled: false
-  className: "nginx"
+  className: "traefik"
+  hosts: []
 
 security:
   automountServiceAccountToken: true
-  annotations:
-    kubernetes.io/ingress.class: nginx
-  hosts:
-    - host: market-data.local
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
 
 resources:
   limits:
@@ -34,31 +28,14 @@ resources:
     cpu: 200m
     memory: 512Mi
 
-# Vault configuration
+# Vault paths are set per-env in values.<env>.yaml (never hardcode one env here).
 vault:
   enabled: true
   role: "am-backend-role"
-  secretPaths:
-    postgres:
-      path: "apps/data/preprod/infra/postgres"
-    mongodb: 
-      path: "apps/data/preprod/infra/mongodb"
-    redis: 
-      path: "apps/data/preprod/infra/redis"
-    influxdb: 
-      path: "apps/data/preprod/infra/influxdb"
-    jwt:
-      path: "apps/data/preprod/services/am-market-data"
-    kafka: 
-      path: "apps/data/preprod/infra/kafka"
-    zerodha:
-      path: "apps/data/preprod/services/am-market-data"
-    upstox: 
-      path: "apps/data/preprod/services/am-market-data"
+  secretPaths: {}
 
 # Application specific configuration
 config:
   marketData:
     maxRetries: 5
     retryDelayMs: 2000
-  env: "preprod"

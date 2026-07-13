@@ -1,5 +1,5 @@
 replicaCount: 1
-port: 8000
+port: 8080
 language: python
 
 security:
@@ -12,6 +12,13 @@ global:
 image:
   repository: am-parser
   pullPolicy: Always
+
+# Service-owned Ingress (same model as am-identity / am-market-data).
+# Hosts/paths set per-env in values.<env>.yaml.
+ingress:
+  enabled: false
+  className: "traefik"
+  hosts: []
 
 resources:
   limits:
@@ -29,14 +36,8 @@ securityContext:
     drop:
       - ALL
 
-# Vault configuration
+# Vault paths are set per-env in values.<env>.yaml
 vault:
   enabled: true
   role: "am-backend-role"
-  secretPaths:
-    mongodb: 
-      path: "apps/data/preprod/infra/mongodb"
-    together:
-      path: "apps/data/preprod/infra/shared-api"
-
-environment: preprod
+  secretPaths: {}

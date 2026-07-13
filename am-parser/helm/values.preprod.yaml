@@ -1,17 +1,16 @@
+environment: preprod
+replicaCount: 1
+
 env:
   ENVIRONMENT: "preprod"
   MONGO_DB: "mutual_funds"
 
-environment: preprod
-
 probes:
-  port: 8000
+  port: 8080
   liveness:
     path: /health
   readiness:
     path: /health
-
-replicaCount: 1
 
 resources:
   limits:
@@ -21,6 +20,40 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-# Vault Configuration
+service:
+  type: ClusterIP
+  port: 8080
+
+# Dual-host like identity / market-data until Phase 4
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-preprod-global-cors@kubernetescrd,
+      am-apps-preprod-strip-prefix-apps@kubernetescrd
+  hosts:
+    - host: am-preprod.asrax.in
+      paths:
+        - path: /parser
+          pathType: Prefix
+    - host: am.asrax.in
+      paths:
+        - path: /parser
+          pathType: Prefix
+
 vault:
   enabled: true
+  secretPaths:
+    mongodb:
+      path: "apps/data/preprod/infra/mongodb"
+    together:
+      path: "apps/data/preprod/infra/shared-api"
+    identity:
+      path: "apps/data/preprod/services/am-identity"
+    market:
+      path: "apps/data/preprod/services/am-market-data"
+    oauth:
+      path: "apps/data/preprod/services/am-parser"

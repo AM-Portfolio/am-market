@@ -1,0 +1,67 @@
+env:
+  SPRING_PROFILES_ACTIVE: "dev"
+  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=dev"
+environment: dev
+
+replicaCount: 1
+
+probes:
+  port: 8080
+  liveness:
+    path: /actuator/health/liveness
+  readiness:
+    path: /actuator/health/readiness
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-dev-dev-global-cors@kubernetescrd,
+      am-apps-dev-dev-strip-prefix@kubernetescrd
+  hosts:
+    - host: am-dev.asrax.in
+      paths:
+        - path: /market
+          pathType: Prefix
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+vault:
+  enabled: true
+  secretPaths:
+    postgres:
+      path: "apps/data/dev/infra/postgres"
+    mongodb:
+      path: "apps/data/dev/infra/mongodb"
+    redis:
+      path: "apps/data/dev/infra/redis"
+    influxdb:
+      path: "apps/data/dev/infra/influxdb"
+    kafka:
+      path: "apps/data/dev/infra/kafka"
+    jwt:
+      path: "apps/data/dev/services/am-market-data"
+    zerodha:
+      path: "apps/data/dev/services/am-market-data"
+    upstox:
+      path: "apps/data/dev/services/am-market-data"
+
+monitoring:
+  enabled: true
+  prometheus:
+    scrape: true
+    port: "8080"
+    path: "/actuator/prometheus"

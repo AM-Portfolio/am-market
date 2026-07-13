@@ -1,9 +1,20 @@
-# Production Environment Configuration
-environment: prod
+# Production — am-market-data
+# Service-level Ingress (same model as am-identity), not central am-infra ingress.
 
+environment: prod
 replicaCount: 1
 
-# Application Configuration
+env:
+  SPRING_PROFILES_ACTIVE: "prod"
+  JAVA_OPTS: "-Xms512m -Xmx1024m -Dspring.profiles.active=prod"
+
+probes:
+  port: 8080
+  liveness:
+    path: /actuator/health/liveness
+  readiness:
+    path: /actuator/health/readiness
+
 config:
   marketData:
     maxRetries: 3
@@ -12,17 +23,24 @@ config:
     threadQueueCapacity: 10
     maxAgeMinutes: 15
 
-# Service Configuration
 service:
   type: ClusterIP
   port: 8080
 
-# Ingress Configuration
 ingress:
   enabled: true
-  ipAddress: 20.59.109.241
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-prod-global-cors@kubernetescrd
+  hosts:
+    - host: am.asrax.in
+      paths:
+        - path: /market
+          pathType: Prefix
 
-# Resource Configuration
 resources:
   limits:
     cpu: 1000m
@@ -31,23 +49,29 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-# PostgreSQL Configuration (Inherited from Vault)
 postgresql:
   enabled: false
 
-# Vault Configuration (Standardised for Prod)
 vault:
   enabled: true
   secretPaths:
-    postgres: "secret/data/prod/infra/postgres"
-    mongodb: "secret/data/prod/infra/mongodb"
-    redis: "secret/data/prod/infra/redis"
-    influxdb: "secret/data/prod/infra/influxdb"
-    kafka: "secret/data/prod/infra/kafka"
-    zerodha: "secret/data/prod/api/zerodha"
-    upstock: "secret/data/prod/api/upstock"
+    postgres:
+      path: "apps/data/prod/infra/postgres"
+    mongodb:
+      path: "apps/data/prod/infra/mongodb"
+    redis:
+      path: "apps/data/prod/infra/redis"
+    influxdb:
+      path: "apps/data/prod/infra/influxdb"
+    kafka:
+      path: "apps/data/prod/infra/kafka"
+    jwt:
+      path: "apps/data/prod/services/am-market-data"
+    zerodha:
+      path: "apps/data/prod/services/am-market-data"
+    upstox:
+      path: "apps/data/prod/services/am-market-data"
 
-# Monitoring Configuration
 monitoring:
   enabled: true
   prometheus:

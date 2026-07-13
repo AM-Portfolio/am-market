@@ -1,6 +1,16 @@
 environment: dev
-
 replicaCount: 1
+
+env:
+  ENVIRONMENT: "dev"
+  MONGO_DB: "mutual_funds"
+
+probes:
+  port: 8080
+  liveness:
+    path: /health
+  readiness:
+    path: /health
 
 resources:
   limits:
@@ -10,8 +20,38 @@ resources:
     cpu: 100m
     memory: 128Mi
 
-# Vault Configuration (Dev Override)
+service:
+  type: ClusterIP
+  port: 8080
+
+# Matches live am-apps-dev ingress (parser-strip-prefix middleware)
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-dev-dev-global-cors@kubernetescrd,
+      am-apps-dev-parser-strip-prefix@kubernetescrd
+  hosts:
+    - host: am-dev.asrax.in
+      paths:
+        - path: /parser
+          pathType: Prefix
+        - path: /market/parser
+          pathType: Prefix
+
 vault:
+  enabled: true
   secretPaths:
-    mongodb: "secret/data/dev/infra/mongodb"
-    together: "secret/data/dev/api/together"
+    mongodb:
+      path: "apps/data/dev/infra/mongodb"
+    together:
+      path: "apps/data/dev/infra/shared-api"
+    identity:
+      path: "apps/data/dev/services/am-identity"
+    market:
+      path: "apps/data/dev/services/am-market-data"
+    oauth:
+      path: "apps/data/dev/services/am-parser"
