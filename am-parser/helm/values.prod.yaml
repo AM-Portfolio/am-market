@@ -7,6 +7,10 @@ replicaCount: 1
 env:
   ENVIRONMENT: "prod"
   MONGO_DB: "mutual_funds"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  LOG_LEVEL: "INFO"
+  ETF_LIST_CACHE_MINUTES: "60"
+  ETF_HOLDINGS_CACHE_DAYS: "1"
 
 probes:
   port: 8080
@@ -44,13 +48,17 @@ ingress:
 vault:
   enabled: true
   secretPaths:
+    auth:
+      path: apps/data/prod/services/am-auth
+    logging:
+      path: apps/data/prod/services/logging
+    market:
+      path: apps/data/prod/services/am-market-data
     mongodb:
       path: "apps/data/prod/infra/mongodb"
     together:
       path: "apps/data/prod/infra/shared-api"
-    identity:
+    identity-oidc:
       path: "apps/data/prod/services/am-identity"
-    market:
-      path: "apps/data/prod/services/am-market-data"
-    oauth:
+    service-oauth:
       path: "apps/data/prod/services/am-parser"

@@ -74,6 +74,7 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/v3/api-docs.yaml",
+                                "/ws/**",
                                 "/v1/market-data/auth/**")
                         .permitAll()
                         .requestMatchers("/v1/**").authenticated()

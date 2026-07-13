@@ -68,9 +68,13 @@ WORKDIR /app
 # Copy the built JAR from build stage
 COPY --from=build /build/am-market-data/market-data-app/target/*.jar app.jar
 
-# Install curl for healthcheck
+# Install curl, Google Chrome for Selenium scraper, and set timezone
 RUN apt-get update && \
-  apt-get install -y curl && \
+  apt-get install -y curl wget gnupg2 && \
+  wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+  sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
+  apt-get update && \
+  apt-get install -y google-chrome-stable && \
   rm -rf /var/lib/apt/lists/* && \
   # Set timezone
   ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime

@@ -54,6 +54,12 @@ public class UpstoxIndexIdentifier {
                         }
                     }
                 }
+
+                // Add custom aliases for UI symbols that differ from Upstox instrument keys
+                indexKeyMap.put("NIFTY PHARMACEUTICALS", "NSE_INDEX|Nifty Pharma");
+                indexKeyMap.put("NIFTY FIN SERVICES", "NSE_INDEX|Nifty Fin Service");
+                indexKeyMap.put("NIFTY CONSR DURABLE", "NSE_INDEX|NIFTY CONSR DURBL");
+
                 log.info("Loaded {} Upstox Index Identifiers", indexKeyMap.size());
             }
         } catch (Exception e) {
@@ -65,8 +71,11 @@ public class UpstoxIndexIdentifier {
         if (name == null)
             return null;
         String cleanName = name.toUpperCase();
-        if (cleanName.startsWith("NSE:") || cleanName.startsWith("BSE:")) {
-            cleanName = cleanName.substring(4);
+        if (cleanName.contains("|")) {
+            cleanName = cleanName.substring(cleanName.indexOf("|") + 1);
+        }
+        if (cleanName.contains(":")) {
+            cleanName = cleanName.substring(cleanName.indexOf(":") + 1);
         }
         return indexKeyMap.get(cleanName);
     }

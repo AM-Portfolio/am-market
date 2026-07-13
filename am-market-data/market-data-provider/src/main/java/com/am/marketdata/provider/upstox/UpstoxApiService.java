@@ -56,7 +56,7 @@ public class UpstoxApiService {
             String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
             if (cachedToken != null && !cachedToken.isEmpty()) {
                 log.info("Found cached Access Token in Redis, applying to configuration");
-                setAccessToken(cachedToken);
+                setAccessToken(UpstoxSdkService.sanitizeAccessToken(cachedToken));
             } else {
                 log.info("No cached Access Token found in Redis, checking configuration");
                 if (upstoxConfig.getAccessToken() != null && !upstoxConfig.getAccessToken().isEmpty()) {
@@ -65,7 +65,7 @@ public class UpstoxApiService {
                     // triggering side effects
                     // But setAccessToken updates local field and config.
                     // Since it's already in config, we just need to update local field.
-                    this.accessToken = upstoxConfig.getAccessToken();
+                    this.accessToken = UpstoxSdkService.sanitizeAccessToken(upstoxConfig.getAccessToken());
                 } else {
                     log.warn("No Access Token found in Redis or Configuration");
                 }
@@ -75,7 +75,7 @@ public class UpstoxApiService {
             // Fallback to config even on exception
             if (upstoxConfig.getAccessToken() != null && !upstoxConfig.getAccessToken().isEmpty()) {
                 log.info("Found Access Token in configuration (fallback)");
-                this.accessToken = upstoxConfig.getAccessToken();
+                this.accessToken = UpstoxSdkService.sanitizeAccessToken(upstoxConfig.getAccessToken());
             }
         }
     }
@@ -86,7 +86,7 @@ public class UpstoxApiService {
     }
 
     public Object generateSession(String code) {
-        log.info("Generating Upstox session for code: {}", code);
+        log.info("Generating Upstox session codePresent={}", code != null && !code.isEmpty());
         try {
             // Manual Token Exchange using Kong Unirest as used in UpStockClient
             kong.unirest.HttpResponse<String> response = kong.unirest.Unirest
@@ -101,7 +101,8 @@ public class UpstoxApiService {
 
             if (response.getStatus() == 200) {
                 String body = response.getBody();
-                log.info("Successfully generated Upstox session");
+                log.info("Successfully generated Upstox session tokenLength={}", 
+                        (body != null && body.contains("access_token")) ? "PRESENT" : "MISSING");
 
                 try {
                     // Parse response to extract access_token
@@ -133,7 +134,7 @@ public class UpstoxApiService {
     }
 
     public void setAccessToken(String accessToken) {
-        this.accessToken = accessToken;
+        this.accessToken = UpstoxSdkService.sanitizeAccessToken(accessToken);
         if (upstoxConfig != null) {
             upstoxConfig.setAccessToken(accessToken);
         }

@@ -38,7 +38,8 @@ public class MarketDataOrchestrator {
     public void triggerIndicesDataProcessing() {
         log.info("Orchestrator: Triggering Indices Data Processing");
         if (cookieScheduler.isPresent()) {
-            // cookieScheduler.get().executeIndicesDataProcessing();
+            // Uncommented to enable scheduled indices data processing and cookie checks
+            cookieScheduler.get().executeIndicesDataProcessing();
         } else {
             log.warn("Orchestrator: CookieScheduler is not present, skipping Indices Data Processing");
         }
@@ -54,7 +55,8 @@ public class MarketDataOrchestrator {
     public void triggerStockIndicesRetry() {
         log.info("Orchestrator: Triggering Stock Indices Retry Check");
         if (stockIndicesSchedulerService.isPresent()) {
-            // stockIndicesSchedulerService.get().executeRetryJob();
+            // Uncommented to enable automatic retry of failed stock indices data fetches
+            stockIndicesSchedulerService.get().executeRetryJob();
         } else {
             log.warn("Orchestrator: StockIndicesSchedulerService is not present, skipping Stock Indices Retry");
         }
@@ -74,7 +76,8 @@ public class MarketDataOrchestrator {
     public void triggerCookieRefresh() {
         log.info("Orchestrator: Triggering Cookie Refresh (Market Hours)");
         if (cookieScheduler.isPresent()) {
-            // cookieScheduler.get().executeCookieRefresh();
+            // Uncommented to ensure NSE cookies are refreshed periodically during market hours
+            cookieScheduler.get().executeCookieRefresh();
         } else {
             log.warn("Orchestrator: CookieScheduler is not present, skipping Cookie Refresh");
         }
@@ -107,19 +110,16 @@ public class MarketDataOrchestrator {
      * Starts Ingestion
      */
     @Scheduled(cron = "${scheduler.ingestion.start-cron:0 15 9 * * MON-FRI}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_ingestionStart", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerMarketOpenJobs() {
         log.info("Orchestrator: Triggering Market Open Jobs");
         if (ingestionScheduler.isPresent()) {
-            // ingestionScheduler.get().startIngestionJob();
+            ingestionScheduler.get().startIngestionJob();
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Market Open Jobs");
         }
     }
 
-    /**
-     * Streamer Start (e.g., 2:15 PM)
-     */
-    @Scheduled(cron = "0 15 14 ? * MON-FRI", zone = "Asia/Kolkata")
     public void triggerStreamerStart() {
         log.info("Orchestrator: Triggering Streamer Start");
         if (streamerScheduler.isPresent()) {
@@ -129,24 +129,6 @@ public class MarketDataOrchestrator {
         }
     }
 
-    /**
-     * Market Close Operations (e.g., 3:30 PM)
-     * Stops Ingestion
-     */
-    @Scheduled(cron = "${scheduler.ingestion.stop-cron:0 30 15 * * MON-FRI}", zone = "Asia/Kolkata")
-    public void triggerIngestionStop() {
-        log.info("Orchestrator: Triggering Ingestion Stop");
-        if (ingestionScheduler.isPresent()) {
-            // ingestionScheduler.get().stopIngestionJob();
-        } else {
-            log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Ingestion Stop");
-        }
-    }
-
-    /**
-     * Streamer Stop (e.g., 4:00 PM)
-     */
-    @Scheduled(cron = "0 0 16 * * *", zone = "Asia/Kolkata")
     public void triggerStreamerStop() {
         log.info("Orchestrator: Triggering Streamer Stop");
         if (streamerScheduler.isPresent()) {
@@ -157,16 +139,32 @@ public class MarketDataOrchestrator {
     }
 
     /**
+     * Market Close Operations (e.g., 3:30 PM)
+     * Stops Ingestion
+     */
+    @Scheduled(cron = "${scheduler.ingestion.stop-cron:0 30 15 * * MON-FRI}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_ingestionStop", lockAtMostFor = "15m", lockAtLeastFor = "1m")
+    public void triggerIngestionStop() {
+        log.info("Orchestrator: Triggering Ingestion Stop");
+        if (ingestionScheduler.isPresent()) {
+            ingestionScheduler.get().stopIngestionJob();
+        } else {
+            log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Ingestion Stop");
+        }
+    }
+
+    /**
      * Morning Stock Indices Fetch (e.g., 9:30 AM)
      */
     /**
      * Morning Stock Indices Fetch (e.g., 9:30 AM)
      */
-    @Scheduled(cron = "${scheduler.stock-indices.morning-fetch:0 30 9 * * *}", zone = "Asia/Kolkata")
+    // @Scheduled(cron = "${scheduler.stock-indices.morning-fetch:0 30 9 * * *}", zone = "Asia/Kolkata")
     public void triggerMorningStockIndicesFetch() {
         log.info("Orchestrator: Triggering Morning Stock Indices Fetch");
         if (stockIndicesSchedulerService.isPresent()) {
-            // stockIndicesSchedulerService.get().executeMorningStockIndicesFetch();
+            // Uncommented to trigger morning fetch of stock indices data
+            stockIndicesSchedulerService.get().executeMorningStockIndicesFetch();
         } else {
             log.warn("Orchestrator: StockIndicesSchedulerService is not present, skipping Morning Stock Indices Fetch");
         }
@@ -179,10 +177,12 @@ public class MarketDataOrchestrator {
      * Evening Stock Indices Fetch (e.g., 4:00 PM)
      */
     @Scheduled(cron = "${scheduler.stock-indices.evening-fetch:0 0 16 * * *}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_eveningFetch", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerEveningStockIndicesFetch() {
         log.info("Orchestrator: Triggering Evening Stock Indices Fetch");
         if (stockIndicesSchedulerService.isPresent()) {
-            // stockIndicesSchedulerService.get().executeEveningStockIndicesFetch();
+            // Uncommented to trigger evening fetch of stock indices data
+            stockIndicesSchedulerService.get().executeEveningStockIndicesFetch();
         } else {
             log.warn("Orchestrator: StockIndicesSchedulerService is not present, skipping Evening Stock Indices Fetch");
         }
@@ -207,11 +207,12 @@ public class MarketDataOrchestrator {
     /**
      * Historical Data Sync (e.g. 7:15 AM)
      */
-    @Scheduled(cron = "${scheduler.historical.sync-cron:0 15 7 * * *}")
+    @Scheduled(cron = "${scheduler.historical.sync-cron:0 15 7 * * *}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_historicalSync", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerHistoricalSync() {
         log.info("Orchestrator: Triggering Historical Data Sync");
         if (ingestionScheduler.isPresent()) {
-            // ingestionScheduler.get().executeHistoricalSync();
+            ingestionScheduler.get().executeHistoricalSync();
         } else {
             log.warn("Orchestrator: MarketDataIngestionScheduler is not present, skipping Historical Data Sync");
         }
@@ -221,10 +222,12 @@ public class MarketDataOrchestrator {
      * Daily Market Analysis: Runs at 7:15 AM
      */
     @Scheduled(cron = "${scheduler.analysis.daily:0 15 7 * * *}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_dailyAnalysis", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerDailyAnalysis() {
         log.info("Orchestrator: Triggering Daily Market Analysis");
         if (marketAnalysisSchedulerService.isPresent()) {
-            // marketAnalysisSchedulerService.get().executeDailyAnalysis();
+            // Uncommented to enable daily market analysis report generation
+            marketAnalysisSchedulerService.get().executeDailyAnalysis();
         } else {
             log.warn("Orchestrator: MarketAnalysisSchedulerService is not present, skipping Analysis");
         }
@@ -233,11 +236,13 @@ public class MarketDataOrchestrator {
     /**
      * Redis Cache Cleanup (e.g., 2:00 AM)
      */
-    @Scheduled(cron = "${scheduler.redis.cleanup.cron:0 0 2 * * *}")
+    @Scheduled(cron = "${scheduler.redis.cleanup.cron:0 0 2 * * *}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_redisCleanup", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerRedisCleanup() {
         log.info("Orchestrator: Triggering Redis Cleanup");
         if (redisCacheCleanupScheduler.isPresent()) {
-            // redisCacheCleanupScheduler.get().executeCleanup();
+            // Uncommented to ensure daily Redis cache cleanup executes normally
+            redisCacheCleanupScheduler.get().executeCleanup();
         } else {
             log.warn("Orchestrator: RedisCacheCleanupScheduler is not present, skipping Redis Cleanup");
         }

@@ -1,18 +1,12 @@
 """ETF domain models"""
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+from am_etf.holdings_models import ETFHoldingRecord
 
-class ETFHolding(BaseModel):
-    """Individual holding within an ETF"""
-    stock_name: Optional[str] = None
-    isin_code: Optional[str] = None
-    percentage: Optional[float] = None
-    market_value: Optional[float] = None
-    quantity: Optional[int] = None
-    # Store raw data for any additional fields
-    raw_data: Optional[Dict[str, Any]] = None
+# Single holding type: etf_holdings collection + optional embedded etfs.holdings
+ETFHolding = ETFHoldingRecord
 
 
 class ETFInstrument(BaseModel):

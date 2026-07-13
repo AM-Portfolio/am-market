@@ -33,4 +33,7 @@ public class StreamConnectRequest {
     @Builder.Default
     private Boolean forcePolling = false; // Whether to force polling mode (simulated stream) even if market is
                                           // closed/open
+
+    @Builder.Default
+    private Boolean mockMode = false; // Whether to enable active mock simulation with simulated ticks
 }

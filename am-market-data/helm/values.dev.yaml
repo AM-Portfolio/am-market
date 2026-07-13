@@ -1,16 +1,72 @@
 env:
-  SPRING_PROFILES_ACTIVE: "dev"
-  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=dev"
-environment: dev
+  SPRING_PROFILES_ACTIVE: "dev,security"
+  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=dev,security"
+  JAVA_TOOL_OPTIONS: "-Xms512m -Xmx768m"
+  # These keys are missing from Vault (apps/data/dev/services/am-market-data-scheduler).
+  # Explicitly set here to prevent <no value> boolean parse crash on startup.
+  SCHEDULER_INGESTION_POLL_ENABLED: "false"
+  SCHEDULER_INGESTION_POLL_HISTORICAL: "false"
+  SCHEDULER_INGESTION_USE_WEBSOCKET: "true"
 
+environment: dev
 replicaCount: 1
 
 probes:
   port: 8080
+  startup:
+    path: /actuator/health/liveness
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 60
   liveness:
     path: /actuator/health/liveness
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
   readiness:
     path: /actuator/health/readiness
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+config:
+  marketData:
+    maxRetries: 3
+    retryDelayMs: 1000
+    threadPoolSize: 5
+    threadQueueCapacity: 10
+    maxAgeMinutes: 15
+  env: "dev"
+  batchSearch:
+    cacheEnabled: true
+    mongoQueryLimit: 0
+    maxCandidatesPerQuery: 100
+    internalBatchSize: 100
+
+  # Dev: disable live-market schedulers to prevent accidental ingestion.
+  scheduler:
+    cookie:
+      enabled: false
+    stockIndices:
+      enabled: false
+    ingestion:
+      enabled: false
+      provider: "UPSTOX"
+      force: false
+      useWebsocket: true
+      pollEnabled: false
+      pollHistorical: false
+    redisCleanup:
+      enabled: false
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1536Mi
+  requests:
+    cpu: 250m
+    memory: 512Mi
 
 service:
   type: ClusterIP
@@ -31,14 +87,6 @@ ingress:
         - path: /market
           pathType: Prefix
 
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 250m
-    memory: 256Mi
-
 vault:
   enabled: true
   secretPaths:
@@ -50,13 +98,21 @@ vault:
       path: "apps/data/dev/infra/redis"
     influxdb:
       path: "apps/data/dev/infra/influxdb"
-    kafka:
-      path: "apps/data/dev/infra/kafka"
     jwt:
       path: "apps/data/dev/services/am-market-data"
+    kafka:
+      path: "apps/data/dev/infra/kafka"
     zerodha:
       path: "apps/data/dev/services/am-market-data"
     upstox:
+      path: "apps/data/dev/services/am-market-data"
+    market-data:
+      path: "apps/data/dev/services/am-market-data"
+    scheduler-config:
+      path: "apps/data/dev/services/am-market-data-scheduler"
+    identity-oidc:
+      path: "apps/data/dev/services/am-identity"
+    service-oauth:
       path: "apps/data/dev/services/am-market-data"
 
 monitoring:
@@ -65,3 +121,10 @@ monitoring:
     scrape: true
     port: "8080"
     path: "/actuator/prometheus"
+
+hostAliases:
+  - ip: "203.174.22.129"
+    hostnames:
+      - "redis.asrax.in"
+      - "mongodb.asrax.in"
+      - "kafka.asrax.in"

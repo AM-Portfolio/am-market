@@ -72,19 +72,40 @@ public class OHLCMapper {
      * @return EquityPrice object
      */
     public EquityPrice toEquityPrice(String symbol, OHLCQuote ohlcQuote) {
+        return toEquityPrice(symbol, ohlcQuote, "NSE");
+    }
+
+    public EquityPrice toEquityPrice(String symbol, OHLCQuote ohlcQuote, String exchange) {
         if (ohlcQuote == null || ohlcQuote.getOhlc() == null) {
             return null;
         }
         
         // Clean symbol (remove exchange prefix if present)
         String cleanSymbol = symbol.replace("NSE:", "");
+
+        double lastPrice = ohlcQuote.getLastPrice();
+        double prevClose = ohlcQuote.getPreviousClose();
+        if (prevClose <= 0 && ohlcQuote.getOhlc() != null) {
+            prevClose = ohlcQuote.getOhlc().getClose();
+        }
+        double change = 0.0;
+        double changePercent = 0.0;
+        if (prevClose > 0) {
+            change = lastPrice - prevClose;
+            changePercent = (change / prevClose) * 100.0;
+            change = Math.round(change * 100.0) / 100.0;
+            changePercent = Math.round(changePercent * 100.0) / 100.0;
+        }
         
         return EquityPrice.builder()
             .symbol(cleanSymbol)
-            .lastPrice(ohlcQuote.getLastPrice())
+            .lastPrice(lastPrice)
             .ohlcv(OHLCVTPoint.builder().open(ohlcQuote.getOhlc().getOpen()).high(ohlcQuote.getOhlc().getHigh()).low(ohlcQuote.getOhlc().getLow()).close(ohlcQuote.getOhlc().getClose()).build())
             .time(ZonedDateTime.now().toInstant())
-            .exchange("NSE")
+            .exchange(exchange)
+            .previousClose(prevClose > 0 ? prevClose : null)
+            .change(prevClose > 0 ? change : null)
+            .changePercent(prevClose > 0 ? changePercent : null)
             .build();
     }
     
@@ -95,14 +116,26 @@ public class OHLCMapper {
      * @return List of EquityPrice objects
      */
     public List<EquityPrice> toEquityPriceList(Map<String, OHLCQuote> ohlcData) {
+        return toEquityPriceList(ohlcData, "NSE");
+    }
+
+    /**
+     * Convert a map of OHLCQuotes to a list of EquityPrice objects with provider info
+     *
+     * @param ohlcData Map of symbol to OHLCQuote
+     * @param provider The name of the data provider
+     * @return List of EquityPrice objects
+     */
+    public List<EquityPrice> toEquityPriceList(Map<String, OHLCQuote> ohlcData, String provider) {
         if (ohlcData == null || ohlcData.isEmpty()) {
             return new ArrayList<>();
         }
         
         List<EquityPrice> prices = new ArrayList<>(ohlcData.size());
+        String exchange = "MOCK".equalsIgnoreCase(provider) ? "MOCK" : "NSE";
         
         for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
-            EquityPrice price = toEquityPrice(entry.getKey(), entry.getValue());
+            EquityPrice price = toEquityPrice(entry.getKey(), entry.getValue(), exchange);
             if (price != null) {
                 prices.add(price);
             }

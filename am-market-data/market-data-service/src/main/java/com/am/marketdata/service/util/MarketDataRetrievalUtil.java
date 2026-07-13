@@ -59,7 +59,7 @@ public class MarketDataRetrievalUtil {
             log.info("[DATA_SOURCE] Found {} OHLC quotes in cache", cachedData.size());
 
             // Remove found symbols from the remaining set
-            cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE:", "")));
+            cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE_EQ:", "").replace("NSE:", "")));
 
             log.info("[DATA_SOURCE] {} symbols remaining after cache lookup", remainingSymbols.size());
         } else {
@@ -99,7 +99,7 @@ public class MarketDataRetrievalUtil {
             log.info("[DATA_SOURCE] Found {} OHLC quotes in database", dbData.size());
 
             // Remove found symbols from the remaining set
-            dbData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE:", "")));
+            dbData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE_EQ:", "").replace("NSE:", "")));
 
             log.info("[DATA_SOURCE] {} symbols remaining after database lookup", remainingSymbols.size());
         } else {

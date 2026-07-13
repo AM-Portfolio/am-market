@@ -18,7 +18,7 @@ import lombok.extern.slf4j.Slf4j;
  * Controller for API health check endpoints
  */
 @RestController
-@RequestMapping("/api/health")
+@RequestMapping("/health")
 @RequiredArgsConstructor
 @Slf4j
 public class ApiHealthController {

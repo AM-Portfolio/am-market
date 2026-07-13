@@ -1,16 +1,63 @@
 env:
-  SPRING_PROFILES_ACTIVE: "preprod"
-  JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=preprod"
+  SPRING_PROFILES_ACTIVE: "preprod,security"
+  JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=preprod,security"
+  # JVM reads JAVA_TOOL_OPTIONS automatically (chart entrypoint did not expand JAVA_OPTS)
+  JAVA_TOOL_OPTIONS: "-Xms512m -Xmx768m"
 environment: preprod
 
 replicaCount: 1
 
 probes:
   port: 8080
+
+  startup:
+    path: /actuator/health/liveness
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 60
+
   liveness:
     path: /actuator/health/liveness
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+
   readiness:
     path: /actuator/health/readiness
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Vault configuration
+vault:
+  enabled: true
+  role: "am-backend-role"
+  secretPaths:
+    postgres:
+      path: "apps/data/preprod/infra/postgres"
+    mongodb:
+      path: "apps/data/preprod/infra/mongodb"
+    redis:
+      path: "apps/data/preprod/infra/redis"
+    influxdb:
+      path: "apps/data/preprod/infra/influxdb"
+    kafka:
+      path: "apps/data/preprod/infra/kafka"
+    market-data:
+      path: "apps/data/preprod/services/am-market-data"
+    jwt:
+      path: "apps/data/preprod/services/am-market-data"
+    zerodha:
+      path: "apps/data/preprod/services/am-market-data"
+    upstox:
+      path: "apps/data/preprod/services/am-market-data"
+    scheduler-config:
+      path: "apps/data/preprod/services/am-market-data-scheduler"
+    identity-oidc:
+      path: "apps/data/preprod/services/am-identity"
+    service-oauth:
+      path: "apps/data/preprod/services/am-market-data"
 
 # Application Configuration
 config:
@@ -20,6 +67,62 @@ config:
     threadPoolSize: 5
     threadQueueCapacity: 10
     maxAgeMinutes: 15
+  batchSearch:
+    # Default true; set false only to bypass Redis batch_search:* cache while debugging
+    cacheEnabled: true
+    mongoQueryLimit: 0
+    maxCandidatesPerQuery: 100
+    internalBatchSize: 100
+
+  # ── Preprod scheduler — all enabled, production-identical crons ───────────
+  scheduler:
+    cookie:
+      enabled: false
+      refreshCron: "0 0 9-16 * * MON-FRI"
+    stockIndices:
+      enabled: false
+      morningFetchCron: "0 30 9 * * *"
+      eveningFetchCron: "0 0 16 * * *"
+      retry:
+        cron: "0 */15 * * * *"
+        intervalMinutes: 15
+        maxRetries: 20
+    indices:
+      fetchCron: "0 */2 * * * *"
+    ingestion:
+      enabled: true
+      provider: "UPSTOX"
+      force: false
+      useWebsocket: true
+      pollEnabled: false
+      pollHistorical: false
+      symbols: "NIFTY 50,NIFTY BANK"
+      startCron: "0 15 9 * * MON-FRI"
+      stopCron: "0 30 15 * * MON-FRI"
+    market:
+      start: "09:15"
+      end: "15:30"
+    historical:
+      syncCron: "0 15 7 * * *"
+    analysis:
+      dailyCron: "0 15 7 * * *"
+    stream:
+      startCron: "0 0 9 ? * MON-FRI"
+      stopCron: "0 30 15 ? * MON-FRI"
+    redisCleanup:
+      enabled: true
+      cron: "0 0 2 * * *"
+
+  # ── Redis TTLs — same as prod ─────────────────────────────────────────────
+  redis:
+    cleanupRetentionDays: 7
+    cleanupBatchSize: 1000
+    cacheTtl:
+      historical: 2592000
+      analysis: 2592000
+      intradayPast: 14400
+      intradayFuture: 86400
+      intradayBuffer: 14400
 
 # Service Configuration
 service:
@@ -45,32 +148,11 @@ ingress:
 # Resource Configuration (reduced for Kind)
 resources:
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 1000m
+    memory: 1536Mi
   requests:
     cpu: 250m
-    memory: 256Mi
-
-# Vault — apps KV (same shape as prod; env segment = preprod)
-vault:
-  enabled: true
-  secretPaths:
-    postgres:
-      path: "apps/data/preprod/infra/postgres"
-    mongodb:
-      path: "apps/data/preprod/infra/mongodb"
-    redis:
-      path: "apps/data/preprod/infra/redis"
-    influxdb:
-      path: "apps/data/preprod/infra/influxdb"
-    kafka:
-      path: "apps/data/preprod/infra/kafka"
-    jwt:
-      path: "apps/data/preprod/services/am-market-data"
-    zerodha:
-      path: "apps/data/preprod/services/am-market-data"
-    upstox:
-      path: "apps/data/preprod/services/am-market-data"
+    memory: 512Mi
 
 # Monitoring Configuration
 monitoring:

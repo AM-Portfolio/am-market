@@ -23,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
  * Controller for TradeBrain API endpoints
  */
 @RestController
-@RequestMapping("/api/tradebrain")
+@RequestMapping("/tradebrain")
 @RequiredArgsConstructor
 @Slf4j
 public class TradeBrainController {

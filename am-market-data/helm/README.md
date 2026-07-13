@@ -9,6 +9,20 @@ To keep things as simple as possible, all configurations are entirely flat. Ther
 - `values.preprod.yaml` - Changes applied only when deploying to Pre-Production (like replica counts).
 - `values.prod.yaml` - Changes applied only when deploying to Production.
 
+### Batch-search cache (`config.batchSearch`)
+
+Controls whether `POST /v1/securities/batch-search` reads/writes Redis (`BATCH_SEARCH_CACHE_ENABLED`).
+
+Default is **`cacheEnabled: true`** (in `values.yaml` and each env file). To force fresh lookups without Redis, set:
+
+```yaml
+config:
+  batchSearch:
+    cacheEnabled: false
+```
+
+Set per environment in `values.preprod.yaml`, `values.dev.yaml`, or `values.prod.yaml`. The universal chart maps these to env vars (see `am-pipelines/helm/universal-chart/templates/_batch-search-env.tpl`).
+
 ## How does it work?
 When a deployment is triggered via GitHub Actions, the CI pipeline checks out the central `AM-Portfolio/am-cicd` repository. It grabs the Universal Helm Chart from there, and merges your flat `values.yaml` files into it. 
 

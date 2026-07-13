@@ -71,6 +71,8 @@ class FileProcessingService:
             
             # Save sheet files to database
             for sheet_file in sheet_files:
+                if getattr(file_upload, 'user_id', None):
+                    sheet_file.user_id = file_upload.user_id
                 await self.file_upload_repo.create_file_upload(sheet_file)
             # Emit split event
             try:
@@ -147,7 +149,8 @@ class FileProcessingService:
                 # This ensures portfolio ID matches sheet ID for easy lookup
                 portfolio_id = await self.mutual_fund_service.save_portfolio_with_id(
                     portfolio, 
-                    custom_id=sheet_id  # Use sheet ID as portfolio ID
+                    custom_id=sheet_id,  # Use sheet ID as portfolio ID
+                    user_id=getattr(sheet_file, 'user_id', None)
                 )
                 
                 print(f"SUCCESS: Portfolio saved with ID: {portfolio_id} (matches sheet ID: {sheet_id})")
@@ -320,7 +323,8 @@ class FileProcessingService:
                 # Use sheet_id as portfolio_id for proper tracking
                 portfolio_id = await self.mutual_fund_service.save_portfolio_with_id(
                     portfolio, 
-                    custom_id=sheet_file.file_id  # Use sheet ID as portfolio ID
+                    custom_id=sheet_file.file_id,  # Use sheet ID as portfolio ID
+                    user_id=getattr(sheet_file, 'user_id', None)
                 )
                 
                 print(f"SUCCESS: Portfolio saved with ID: {portfolio_id} (matches sheet ID: {sheet_file.file_id})")

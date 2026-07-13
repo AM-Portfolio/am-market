@@ -1,30 +1,42 @@
+# Dev Environment — am-parser
 environment: dev
 replicaCount: 1
 
 env:
   ENVIRONMENT: "dev"
   MONGO_DB: "mutual_funds"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  LOG_LEVEL: "INFO"
+  ETF_LIST_CACHE_MINUTES: "60"
+  ETF_HOLDINGS_CACHE_DAYS: "1"
 
 probes:
   port: 8080
+  startup:
+    path: /health
+    timeoutSeconds: 10
+    failureThreshold: 30
+    periodSeconds: 10
   liveness:
     path: /health
+    timeoutSeconds: 10
   readiness:
     path: /health
+    timeoutSeconds: 10
 
 resources:
   limits:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 500m
+    memory: 512Mi
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 250m
+    memory: 256Mi
 
 service:
   type: ClusterIP
   port: 8080
 
-# Matches live am-apps-dev ingress (parser-strip-prefix middleware)
+# Matches live am-apps-dev ingress
 ingress:
   enabled: true
   className: "traefik"
@@ -45,13 +57,24 @@ ingress:
 vault:
   enabled: true
   secretPaths:
+    auth:
+      path: apps/data/dev/services/am-auth
+    logging:
+      path: apps/data/dev/services/logging
+    market:
+      path: apps/data/dev/services/am-market-data
     mongodb:
       path: "apps/data/dev/infra/mongodb"
     together:
       path: "apps/data/dev/infra/shared-api"
-    identity:
+    identity-oidc:
       path: "apps/data/dev/services/am-identity"
-    market:
-      path: "apps/data/dev/services/am-market-data"
-    oauth:
+    service-oauth:
       path: "apps/data/dev/services/am-parser"
+
+hostAliases:
+  - ip: "203.174.22.129"
+    hostnames:
+      - "redis.asrax.in"
+      - "mongodb.asrax.in"
+      - "kafka.asrax.in"

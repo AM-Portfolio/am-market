@@ -1,5 +1,7 @@
 package com.am.marketdata.analysis.service;
 
+// Trigger Push CI Action
+
 import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.model.stockindice.StockData;
 import com.am.marketdata.analysis.util.StockDataEnricher;
@@ -70,6 +72,14 @@ public class MarketAnalyticsService {
                 interval = "1D";
                 from = to.minusMonths(1);
                 break;
+            case "3M":
+                interval = "1D";
+                from = to.minusMonths(3);
+                break;
+            case "6M":
+                interval = "1D";
+                from = to.minusMonths(6);
+                break;
             case "5Y":
                 interval = "1W";
                 from = to.minusYears(5);
@@ -102,7 +112,25 @@ public class MarketAnalyticsService {
 
             // Filter data points by time range for each symbol
             if (response.getData() != null) {
-                long minTime = from.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+                // [1D Timeframe Chart Optimization]
+                // 1. Detect if today is a weekend. If so, roll back the query date target to Friday.
+                //    This prevents the chart from being empty when viewed on a Saturday or Sunday.
+                java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                java.time.DayOfWeek day = istNow.getDayOfWeek();
+                java.time.LocalDate targetDate = istNow.toLocalDate();
+                if (day == java.time.DayOfWeek.SATURDAY) {
+                    targetDate = targetDate.minusDays(1);
+                } else if (day == java.time.DayOfWeek.SUNDAY) {
+                    targetDate = targetDate.minusDays(2);
+                }
+
+                // 2. Bound the filter to the starting bell of the active market session (9:15 AM IST).
+                //    By using 9:15 AM today/Friday instead of "now - 24 hours" (which points to yesterday afternoon),
+                //    we preserve today's complete intraday chart progression rather than stripping out all daily candles.
+                java.time.LocalDateTime filterFrom = "1D".equalsIgnoreCase(range)
+                        ? targetDate.atTime(9, 15)
+                        : from;
+                long minTime = filterFrom.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
 
                 response.getData().forEach((s, symbolData) -> {
                     if (symbolData != null && symbolData.getDataPoints() != null) {
@@ -110,7 +138,10 @@ public class MarketAnalyticsService {
                                 .getDataPoints().stream()
                                 .filter(p -> {
                                     try {
-                                        long timestamp = p.getTime().atZone(java.time.ZoneId.systemDefault())
+                                        // Fix: Use Asia/Kolkata timezone to parse data point timestamp instead of server's local systemDefault().
+                                        // This ensures that the comparison with minTime (which is computed in Asia/Kolkata)
+                                        // is done using the same timezone context, avoiding data point drop-offs due to timezone mismatch.
+                                        long timestamp = p.getTime().atZone(java.time.ZoneId.of("Asia/Kolkata"))
                                                 .toInstant()
                                                 .toEpochMilli();
                                         return timestamp >= minTime;

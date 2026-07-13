@@ -22,6 +22,15 @@ public interface MarketDataIngestionService {
     CompletableFuture<Void> saveOHLCData(Map<String, OHLCQuote> data);
 
     /**
+     * Save OHLC data asynchronously with provider info.
+     *
+     * @param data     Map of symbol to OHLCQuote
+     * @param provider The name of the data provider
+     * @return CompletableFuture<Void> indicating completion
+     */
+    CompletableFuture<Void> saveOHLCData(Map<String, OHLCQuote> data, String provider);
+
+    /**
      * Save Historical data asynchronously.
      *
      * @param symbol    The trading symbol

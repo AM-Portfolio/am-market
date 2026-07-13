@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.ComponentScans;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 
 //import org.springframework.retry.annotation.EnableRetry;
@@ -24,6 +25,7 @@ import com.am.marketdata.api.config.SecurityConfig;
 import com.am.marketdata.config.MetricsConfig;
 import com.am.marketdata.internal.config.MarketDataInternalConfig;
 import com.am.marketdata.scheduler.config.MarketDataSchedulerConfig;
+import com.am.marketdata.kafka.config.MarketDataKafkaModuleConfig;
 
 @SpringBootApplication(exclude = {
                 DataSourceAutoConfiguration.class,
@@ -31,9 +33,14 @@ import com.am.marketdata.scheduler.config.MarketDataSchedulerConfig;
 })
 @EnableConfigurationProperties
 @Import({ MetricsConfig.class, InfluxDBConfig.class, SecurityConfig.class,
-                MarketDataInternalConfig.class, MarketDataSchedulerConfig.class })
+                MarketDataInternalConfig.class, MarketDataSchedulerConfig.class,
+                MarketDataKafkaModuleConfig.class })
 @ComponentScans({
-                @ComponentScan("com.am.marketdata"),
+                @ComponentScan(
+                                basePackages = "com.am.marketdata",
+                                excludeFilters = @ComponentScan.Filter(
+                                                type = FilterType.REGEX,
+                                                pattern = "com\\.am\\.marketdata\\.(kafka|service\\.kafka)\\..*")),
                 @ComponentScan("com.marketdata")
 })
 
@@ -74,6 +81,10 @@ public class MarketDataApplication {
                 logger.info("InfluxDB Token: {}", influxToken != null ? influxToken : "[NOT SET]");
                 logger.info("InfluxDB Org: {}", influxOrg != null ? influxOrg : "[NOT SET]");
                 logger.info("InfluxDB Bucket: {}", influxBucket != null ? influxBucket : "[NOT SET]");
+                logger.info("MARKET_DATA_KAFKA_ENABLED: {}",
+                                System.getenv("MARKET_DATA_KAFKA_ENABLED") != null
+                                                ? System.getenv("MARKET_DATA_KAFKA_ENABLED")
+                                                : "[NOT SET]");
 
                 // Log active profiles
                 logger.info("=== SPRING PROPERTIES DEBUG ====");

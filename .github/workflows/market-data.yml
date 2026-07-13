@@ -2,20 +2,35 @@ name: Market Data Publish
 
 on:
   push:
-    branches: ["main", "develop", "test/**", "feature/**"]
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - 'am-market-data/**'
       - 'am-common-investment-data/**'
   pull_request:
-    branches: ["main", "develop", "test/**", "feature/**"]
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - 'am-market-data/**'
       - 'am-common-investment-data/**'
   workflow_dispatch:
 
 jobs:
+  install-common-lib:
+    name: Install Common Investment Lib
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Build and install am-common-investment-data
+        working-directory: am-common-investment-data
+        run: mvn clean install -DskipTests -B
+
   publish:
     name: Publish Market Data
+    needs: install-common-lib
     permissions:
       contents: read
       packages: write

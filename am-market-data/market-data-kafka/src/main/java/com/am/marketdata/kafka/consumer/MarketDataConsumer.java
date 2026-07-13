@@ -35,23 +35,27 @@ public class MarketDataConsumer {
             log.debug("Received {} equity price updates from Kafka", event.getEquityPrices().size());
 
             Map<String, OHLCQuote> quotes = new java.util.HashMap<>();
+            String provider = null;
             for (com.am.common.investment.model.equity.EquityPrice price : event.getEquityPrices()) {
                 if (price.getSymbol() != null) {
+                    if ("MOCK".equalsIgnoreCase(price.getExchange())) {
+                        provider = "MOCK";
+                    }
                     OHLCQuote quote = new OHLCQuote();
-                    quote.setLastPrice(price.getLastPrice());
+                    quote.setLastPrice(price.getLastPrice() != null ? price.getLastPrice() : 0.0);
                     if (price.getOhlcv() != null) {
                         OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
-                        ohlc.setOpen(price.getOhlcv().getOpen());
-                        ohlc.setHigh(price.getOhlcv().getHigh());
-                        ohlc.setLow(price.getOhlcv().getLow());
-                        ohlc.setClose(price.getOhlcv().getClose());
+                        ohlc.setOpen(price.getOhlcv().getOpen() != null ? price.getOhlcv().getOpen() : 0.0);
+                        ohlc.setHigh(price.getOhlcv().getHigh() != null ? price.getOhlcv().getHigh() : 0.0);
+                        ohlc.setLow(price.getOhlcv().getLow() != null ? price.getOhlcv().getLow() : 0.0);
+                        ohlc.setClose(price.getOhlcv().getClose() != null ? price.getOhlcv().getClose() : 0.0);
                         quote.setOhlc(ohlc);
                     }
                     quotes.put(price.getSymbol(), quote);
                 }
             }
 
-            ingestionService.saveOHLCData(quotes);
+            ingestionService.saveOHLCData(quotes, provider);
 
         } catch (Exception e) {
             log.error("Error processing equity price update event", e);
@@ -72,8 +76,8 @@ public class MarketDataConsumer {
 
             log.info("Received OHLC ingestion event: {} symbols from {}", event.getData().size(), event.getProvider());
 
-            // Persist data sequentially
-            ingestionService.saveOHLCData(event.getData()).join();
+            // Persist data sequentially, passing provider info to handle mock streams
+            ingestionService.saveOHLCData(event.getData(), event.getProvider()).join();
 
             log.debug("Successfully processed OHLC ingestion event");
 

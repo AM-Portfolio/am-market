@@ -2,14 +2,15 @@ package com.am.marketdata.api.util;
 
 import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.service.StockIndicesMarketDataService;
+import com.am.marketdata.common.model.UpstoxInstrument;
+import com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository;
+import com.am.marketdata.service.repo.UnresolvedSymbolRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Component
@@ -18,6 +19,8 @@ import java.util.stream.Collectors;
 public class InstrumentUtils {
 
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
+    private final UpstoxInstrumentRepository upstoxInstrumentRepository;
+    private final UnresolvedSymbolRepository unresolvedSymbolRepository;
 
     /**
      * Resolves a comma-separated string of symbols with optional index expansion.
@@ -41,46 +44,103 @@ public class InstrumentUtils {
 
     /**
      * Resolves a list of symbols with optional index expansion.
+     * Checks if regular symbols exist in the Upstox database. Invalid/missing
+     * symbols are filtered out, logged, and persisted to unresolved_symbols collection.
      *
      * @param rawSymbols       List of symbols or indices.
      * @param fetchIndexStocks If true, fetch individual stocks from index symbols
      *                         via DB lookup.
      *                         If false, return symbols as-is without DB expansion.
-     * @return Set of unique stock symbols.
+     * @return Set of unique, valid stock symbols.
      */
     public Set<String> resolveSymbols(List<String> rawSymbols, boolean fetchIndexStocks) {
-        Set<String> finalSymbols = new HashSet<>();
-        finalSymbols.addAll(rawSymbols);
-        if (!fetchIndexStocks) {
-            // If fetchIndexStocks is false, return symbols as-is without database lookup
-            log.debug("fetchIndexStocks=false, returning symbols as-is: {}", rawSymbols);
-            return finalSymbols;
+        if (rawSymbols == null || rawSymbols.isEmpty()) {
+            return new HashSet<>();
         }
 
-        // If fetchIndexStocks is true, perform database lookup and expansion
-        for (String symbol : rawSymbols) {
-            try {
-                // Check if the symbol is an index
-                StockIndicesMarketData indexData = stockIndicesMarketDataService.findByIndexSymbol(symbol);
+        // Normalize all raw requested symbols to uppercase
+        List<String> upperRawSymbols = rawSymbols.stream()
+                .map(String::trim)
+                .map(String::toUpperCase)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
 
-                if (indexData != null && indexData.getData() != null) {
-                    // It is an index, add the index symbol ITSELF plus all constituents
-                    finalSymbols.add(symbol);
-                    List<String> constituents = indexData.getData().stream()
-                            .map(data -> data.getSymbol())
-                            .collect(Collectors.toList());
-                    finalSymbols.addAll(constituents);
-                    log.debug("Resolved index {} to itself + {} stocks", symbol, constituents.size());
-                } else {
-                    // Not an index or no data, treat as regular symbol
-                    finalSymbols.add(symbol);
+        Set<String> candidateSymbols = new HashSet<>();
+
+        if (!fetchIndexStocks) {
+            // If fetchIndexStocks is false, return normalized symbols as-is
+            log.debug("fetchIndexStocks=false, returning normalized symbols: {}", upperRawSymbols);
+            candidateSymbols.addAll(upperRawSymbols);
+        } else {
+            // Expand indices if fetchIndexStocks is true
+            for (String symbol : upperRawSymbols) {
+                try {
+                    StockIndicesMarketData indexData = stockIndicesMarketDataService.findByIndexSymbol(symbol);
+                    if (indexData != null && indexData.getData() != null) {
+                        candidateSymbols.add(symbol); // Keep index symbol itself
+                        List<String> constituents = indexData.getData().stream()
+                                .map(data -> data.getSymbol().toUpperCase())
+                                .collect(Collectors.toList());
+                        candidateSymbols.addAll(constituents);
+                        log.debug("Resolved index {} to itself + {} stocks", symbol, constituents.size());
+                    } else {
+                        candidateSymbols.add(symbol);
+                    }
+                } catch (Exception e) {
+                    log.warn("Error resolving symbol {}, treating as regular symbol: {}", symbol, e.getMessage());
+                    candidateSymbols.add(symbol);
                 }
-            } catch (Exception e) {
-                // On error (e.g. not found if service throws), assume it's a regular symbol
-                log.warn("Error resolving symbol {}, treating as regular symbol: {}", symbol, e.getMessage());
-                finalSymbols.add(symbol);
             }
         }
-        return finalSymbols;
+
+        // Batch validate candidates against DB (excluding indices)
+        List<String> nonIndexCandidates = candidateSymbols.stream()
+                .filter(sym -> stockIndicesMarketDataService.findByIndexSymbol(sym) == null)
+                .collect(Collectors.toList());
+
+        Set<String> validTradingSymbols = new HashSet<>();
+        if (!nonIndexCandidates.isEmpty()) {
+            try {
+                List<UpstoxInstrument> validInstruments = upstoxInstrumentRepository.findByTradingSymbolIn(nonIndexCandidates);
+                if (validInstruments != null) {
+                    validTradingSymbols = validInstruments.stream()
+                            .map(UpstoxInstrument::getTradingSymbol)
+                            .map(String::toUpperCase)
+                            .collect(Collectors.toSet());
+                }
+            } catch (Exception e) {
+                log.error("Failed to batch query upstock_instruments for validation", e);
+                // Fallback: If DB query fails, don't drop symbols to avoid complete API outage
+                return candidateSymbols;
+            }
+        }
+
+        Set<String> resolvedSymbols = new HashSet<>();
+        List<String> unresolvedSymbols = new ArrayList<>();
+
+        for (String sym : candidateSymbols) {
+            if (stockIndicesMarketDataService.findByIndexSymbol(sym) != null || validTradingSymbols.contains(sym)) {
+                resolvedSymbols.add(sym);
+            } else {
+                unresolvedSymbols.add(sym);
+            }
+        }
+
+        // Handle unresolved symbols asynchronously
+        if (!unresolvedSymbols.isEmpty()) {
+            log.warn("[UNRESOLVED_SYMBOLS] Filtering out {} invalid symbols: {}", unresolvedSymbols.size(), unresolvedSymbols);
+            CompletableFuture.runAsync(() -> {
+                for (String sym : unresolvedSymbols) {
+                    try {
+                        unresolvedSymbolRepository.incrementRequestCount(sym);
+                    } catch (Exception e) {
+                        log.error("Failed to save unresolved symbol: {}", sym, e);
+                    }
+                }
+            });
+        }
+
+        return resolvedSymbols;
     }
 }
+

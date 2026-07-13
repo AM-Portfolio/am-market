@@ -94,29 +94,68 @@ public class UpstoxSymbolResolver implements SymbolResolver {
     }
 
     /**
-     * Resolve instruments from database
+     * Resolve instruments from database.
+     * Detects whether the input symbols are ISIN codes (e.g. INE095N01031)
+     * or trading symbols (e.g. RELIANCE) and queries accordingly.
+     * Mixed lists are split and queried separately, then merged.
      */
     private List<com.am.marketdata.common.model.UpstoxInstrument> resolveInstruments(List<String> symbols) {
         if (symbols == null || symbols.isEmpty()) {
             return new ArrayList<>();
         }
 
-        // Strip exchange prefix if present (e.g., NSE:RELIANCE -> RELIANCE)
-        List<String> cleanedSymbols = symbols.stream()
-                .map(s -> {
-                    if (s.startsWith("NSE:") || s.startsWith("BSE:")) {
-                        return s.substring(4);
-                    }
-                    return s;
-                })
-                .collect(Collectors.toList());
+        List<String> isinSymbols = new ArrayList<>();
+        List<String> tradingSymbols = new ArrayList<>();
 
-        com.am.marketdata.common.dto.InstrumentSearchCriteria criteria = new com.am.marketdata.common.dto.InstrumentSearchCriteria();
-        criteria.setTradingSymbols(cleanedSymbols);
-        criteria.setProvider("UPSTOX");
+        for (String s : symbols) {
+            // Strip exchange prefix if present (e.g., NSE:RELIANCE -> RELIANCE)
+            String cleaned = s;
+            if (cleaned.contains("|")) {
+                cleaned = cleaned.substring(cleaned.indexOf("|") + 1);
+            }
+            if (cleaned.contains(":")) {
+                cleaned = cleaned.substring(cleaned.indexOf(":") + 1);
+            }
 
-        return (List<com.am.marketdata.common.model.UpstoxInstrument>) instrumentDataProvider
-                .searchInstruments(criteria);
+            // ISINs are 12-char alphanumeric codes starting with two uppercase letters (e.g. INE, IN2)
+            if (cleaned.matches("^[A-Z]{2}[A-Z0-9]{10}$")) {
+                isinSymbols.add(cleaned);
+            } else {
+                tradingSymbols.add(cleaned);
+            }
+        }
+
+        List<com.am.marketdata.common.model.UpstoxInstrument> results = new ArrayList<>();
+
+        // Query by ISIN
+        if (!isinSymbols.isEmpty()) {
+            log.info("UpstoxSymbolResolver",
+                    "Querying DB by ISIN for " + isinSymbols.size() + " symbols");
+            com.am.marketdata.common.dto.InstrumentSearchCriteria criteria =
+                    new com.am.marketdata.common.dto.InstrumentSearchCriteria();
+            criteria.setIsins(isinSymbols);
+            criteria.setProvider("UPSTOX");
+            List<?> found = (List<?>) instrumentDataProvider.searchInstruments(criteria);
+            if (found != null) {
+                found.forEach(i -> results.add((com.am.marketdata.common.model.UpstoxInstrument) i));
+            }
+        }
+
+        // Query by trading symbol
+        if (!tradingSymbols.isEmpty()) {
+            log.info("UpstoxSymbolResolver",
+                    "Querying DB by trading symbol for " + tradingSymbols.size() + " symbols");
+            com.am.marketdata.common.dto.InstrumentSearchCriteria criteria =
+                    new com.am.marketdata.common.dto.InstrumentSearchCriteria();
+            criteria.setTradingSymbols(tradingSymbols);
+            criteria.setProvider("UPSTOX");
+            List<?> found = (List<?>) instrumentDataProvider.searchInstruments(criteria);
+            if (found != null) {
+                found.forEach(i -> results.add((com.am.marketdata.common.model.UpstoxInstrument) i));
+            }
+        }
+
+        return results;
     }
 
     @Override

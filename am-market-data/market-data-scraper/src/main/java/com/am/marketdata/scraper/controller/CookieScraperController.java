@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/scraper")
+@RequestMapping("/scraper")
 @RequiredArgsConstructor
 public class CookieScraperController {
     private final CookieScraper scraperService;

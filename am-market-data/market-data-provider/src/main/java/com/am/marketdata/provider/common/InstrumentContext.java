@@ -53,6 +53,39 @@ public class InstrumentContext {
      * @return Trading symbol or instrument key if not found
      */
     public String getSymbol(String instrumentKey) {
-        return keyToSymbolMap.getOrDefault(instrumentKey, instrumentKey);
+        if (instrumentKey == null) {
+            return null;
+        }
+        String symbol = keyToSymbolMap.get(instrumentKey);
+        if (symbol == null) {
+            // Try normalizing key (e.g. replacing colons with pipes)
+            String normalizedKey = instrumentKey.replace(':', '|');
+            symbol = keyToSymbolMap.get(normalizedKey);
+            if (symbol == null) {
+                // Try reverse normalization (replacing pipes with colons)
+                normalizedKey = instrumentKey.replace('|', ':');
+                symbol = keyToSymbolMap.get(normalizedKey);
+            }
+        }
+        
+        // Strip exchange prefixes (colon or pipe) to return clean trading symbol as fallback
+        if (symbol == null) {
+            if (instrumentKey.contains(":") || instrumentKey.contains("|")) {
+                String clean = instrumentKey.replace("NSE_EQ:", "")
+                                            .replace("NSE:", "")
+                                            .replace("NSE_EQ|", "")
+                                            .replace("NSE|", "")
+                                            .replace("BSE_EQ:", "")
+                                            .replace("BSE:", "")
+                                            .replace("BSE_EQ|", "")
+                                            .replace("BSE|", "")
+                                            .trim();
+                if (!clean.isEmpty() && !clean.matches("^[A-Z]{2}[A-Z0-9]{10}$")) {
+                    return clean;
+                }
+            }
+        }
+        
+        return symbol != null ? symbol : instrumentKey;
     }
 }
