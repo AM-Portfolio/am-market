@@ -2,8 +2,27 @@
 environment: dev
 replicaCount: 1
 
-service:
+env:
+  ENVIRONMENT: "dev"
+  MONGO_DB: "mutual_funds"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  LOG_LEVEL: "INFO"
+  ETF_LIST_CACHE_MINUTES: "60"
+  ETF_HOLDINGS_CACHE_DAYS: "1"
+
+probes:
   port: 8080
+  startup:
+    path: /health
+    timeoutSeconds: 10
+    failureThreshold: 30
+    periodSeconds: 10
+  liveness:
+    path: /health
+    timeoutSeconds: 10
+  readiness:
+    path: /health
+    timeoutSeconds: 10
 
 resources:
   limits:
@@ -13,8 +32,30 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-# Vault configuration
+service:
+  type: ClusterIP
+  port: 8080
+
+# Matches live am-apps-dev ingress
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-dev-dev-global-cors@kubernetescrd,
+      am-apps-dev-parser-strip-prefix@kubernetescrd
+  hosts:
+    - host: am-dev.asrax.in
+      paths:
+        - path: /parser
+          pathType: Prefix
+        - path: /market/parser
+          pathType: Prefix
+
 vault:
+  enabled: true
   secretPaths:
     auth:
       path: apps/data/dev/services/am-auth
@@ -22,7 +63,7 @@ vault:
       path: apps/data/dev/services/logging
     market:
       path: apps/data/dev/services/am-market-data
-    mongodb: 
+    mongodb:
       path: "apps/data/dev/infra/mongodb"
     together:
       path: "apps/data/dev/infra/shared-api"
@@ -37,40 +78,3 @@ hostAliases:
       - "redis.asrax.in"
       - "mongodb.asrax.in"
       - "kafka.asrax.in"
-
-probes:
-  port: 8080
-  startup:
-    path: "/health"
-    timeoutSeconds: 10
-    failureThreshold: 30
-    periodSeconds: 10
-  liveness:
-    path: "/health"
-    timeoutSeconds: 10
-  readiness:
-    path: "/health"
-    timeoutSeconds: 10
-
-ingress:
-  enabled: true
-  className: "traefik"
-  annotations:
-    kubernetes.io/ingress.class: "traefik"
-    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.middlewares: >-
-      am-apps-dev-dev-global-cors@kubernetescrd,
-      am-apps-dev-dev-strip-prefix@kubernetescrd
-  hosts:
-    - host: am-dev.asrax.in
-      paths:
-        - path: /parser
-          pathType: Prefix
-
-env:
-  ENVIRONMENT: "dev"
-  MONGO_DB: "mutual_funds"
-  MARKET_DATA_URL: "http://am-market-data:8080"
-  LOG_LEVEL: "INFO"
-  ETF_LIST_CACHE_MINUTES: "60"
-  ETF_HOLDINGS_CACHE_DAYS: "1"

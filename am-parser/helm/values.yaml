@@ -14,6 +14,13 @@ image:
   repository: am-parser
   pullPolicy: Always
 
+# Service-owned Ingress (same model as am-identity / am-market-data).
+# Hosts/paths set per-env in values.<env>.yaml.
+ingress:
+  enabled: false
+  className: "traefik"
+  hosts: []
+
 resources:
   limits:
     cpu: 500m
@@ -30,9 +37,8 @@ securityContext:
     drop:
       - ALL
 
-environment: preprod
-
+# Vault paths are set per-env in values.<env>.yaml
 vault:
   enabled: true
   role: "am-backend-role"
-  serviceAccountName: "am-backend-sa"
+  secretPaths: {}
