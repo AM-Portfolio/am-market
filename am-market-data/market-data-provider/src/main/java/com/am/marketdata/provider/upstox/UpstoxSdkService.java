@@ -385,8 +385,8 @@ public class UpstoxSdkService {
                 res.setStatus(rootNode.path("status").asText());
 
                 com.fasterxml.jackson.databind.JsonNode candlesNode = rootNode.path("data").path("candles");
+                List<List<Object>> candlesList = new java.util.ArrayList<>();
                 if (candlesNode.isArray()) {
-                    List<List<Object>> candlesList = new java.util.ArrayList<>();
                     for (com.fasterxml.jackson.databind.JsonNode candle : candlesNode) {
                         List<Object> candleData = new java.util.ArrayList<>();
                         for (com.fasterxml.jackson.databind.JsonNode val : candle) {
@@ -398,11 +398,19 @@ public class UpstoxSdkService {
                         }
                         candlesList.add(candleData);
                     }
-                    com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload dataPayload = 
-                            new com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload();
-                    dataPayload.setCandles(candlesList);
-                    res.setData(dataPayload);
                 }
+
+                // FALLBACK: If querying today's intraday returned 0 candles (e.g. Nifty 500 is not supported on live endpoint),
+                // fallback to querying the historical range endpoint for today's date.
+                if (candlesList.isEmpty() && isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
+                    log.info("Intraday endpoint returned 0 candles for index: {}. Falling back to historical range endpoint for date: {}", normalizedKey, toDate);
+                    return fetchHistoricalCandleDirect(normalizedKey, unit, interval, toDate, toDate, false);
+                }
+
+                com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload dataPayload = 
+                        new com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload();
+                dataPayload.setCandles(candlesList);
+                res.setData(dataPayload);
                 return res;
             } else {
                 java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getErrorStream() != null ? conn.getErrorStream() : conn.getInputStream()));
