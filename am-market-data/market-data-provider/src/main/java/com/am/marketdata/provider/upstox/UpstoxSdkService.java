@@ -292,6 +292,8 @@ public class UpstoxSdkService {
                 log.info(
                         "Fetching live intraday data key={}, interval=1minute",
                         normalizedKey);
+                // The Upstox SDK internally URL-decodes query string path arguments.
+                // Do not URL-encode normalizedKey here to prevent double-encoding (e.g. '|' escaping to '%7C' then '%257C').
                 com.upstox.api.GetIntraDayCandleResponse intradayResponse = historyV3Api.getIntraDayCandleData(
                         normalizedKey, "1minute", 2);
                 return mapIntradayToHistoricalDataResponse(intradayResponse);

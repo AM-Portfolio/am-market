@@ -286,8 +286,18 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         continue;
                     }
 
-                    com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
-                            upstoxSdkService.getHistoricalCandleData(instrumentKey, "days", 1, toDate, fromDate);
+                     // Encode the instrument key to handle symbols containing special characters (like '&' in M&M).
+                     // Unencoded special characters act as query parameter separators in HTTP requests,
+                     // truncating the symbol key and returning empty results.
+                     String encodedKey = instrumentKey;
+                     try {
+                         encodedKey = java.net.URLEncoder.encode(instrumentKey, java.nio.charset.StandardCharsets.UTF_8.toString());
+                     } catch (java.io.UnsupportedEncodingException uee) {
+                         log.error("backfillPreviousClose", "Failed to URL-encode instrument key " + instrumentKey, uee);
+                     }
+
+                     com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
+                             upstoxSdkService.getHistoricalCandleData(encodedKey, "day", 1, toDate, fromDate);
 
                     if (histResponse != null && histResponse.getData() != null
                             && histResponse.getData().getCandles() != null
@@ -494,6 +504,10 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 instrumentKey = symbol;
             }
 
+            // The Upstox SDK handles path parameter encoding internally.
+            // Do not URL-encode instrumentKey here to avoid double-encoding (e.g. '|' escaping to '%7C' then '%257C' in HTTP call).
+            String cleanKey = instrumentKey;
+
             HistoricalDataResponse response;
             try {
                 log.info("getHistoricalData",
@@ -501,7 +515,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                                 + ", interval: " + intervalValue + ", from: " + fromDateStr + ", to: " + toDateStr);
 
                 response = upstoxSdkService.getHistoricalCandleData(
-                        instrumentKey, v3Unit, intervalValue, toDateStr, fromDateStr);
+                        cleanKey, v3Unit, intervalValue, toDateStr, fromDateStr);
             } catch (Exception e) {
                 log.error("getHistoricalData", "Failed to fetch historical data via SDK: " + e.getMessage(), e);
                 return new HistoricalData();
@@ -657,7 +671,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
      */
     private String mapToUpstoxV3Unit(TimeFrame interval) {
         if (interval == null) {
-            return "days";
+            return "day";
         }
         switch (interval) {
             case MINUTE:
@@ -665,17 +679,17 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             case TEN_MINUTE:
             case FIFTEEN_MINUTE:
             case THIRTY_MINUTE:
-                return "minutes";
+                return "minute";
             case HOUR:
-                return "hours";
+                return "hour";
             case DAY:
-                return "days";
+                return "day";
             case WEEK:
-                return "weeks";
+                return "week";
             case MONTH:
-                return "months";
+                return "month";
             default:
-                return "days";
+                return "day";
         }
     }
 

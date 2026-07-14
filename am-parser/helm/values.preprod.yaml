@@ -1,6 +1,3 @@
-environment: preprod
-replicaCount: 1
-
 env:
   ENVIRONMENT: "preprod"
   MONGO_DB: "mutual_funds"
@@ -8,6 +5,8 @@ env:
   LOG_LEVEL: "INFO"
   ETF_LIST_CACHE_MINUTES: "60"
   ETF_HOLDINGS_CACHE_DAYS: "1"
+
+environment: preprod
 
 probes:
   port: 8080
@@ -23,6 +22,28 @@ probes:
     path: /health
     timeoutSeconds: 10
 
+replicaCount: 1
+
+
+# Vault configuration
+vault:
+  secretPaths:
+    auth:
+      path: apps/data/preprod/services/am-auth
+    logging:
+      path: apps/data/preprod/services/logging
+    market:
+      path: apps/data/preprod/services/am-market-data
+    mongodb: 
+      path: "apps/data/preprod/infra/mongodb"
+    together:
+      path: "apps/data/preprod/infra/shared-api"
+    identity-oidc:
+      path: "apps/data/preprod/services/am-identity"
+    service-oauth:
+      path: "apps/data/preprod/services/am-parser"
+
+
 resources:
   limits:
     cpu: 500m
@@ -31,11 +52,6 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-service:
-  type: ClusterIP
-  port: 8080
-
-# Preprod app host only — am.asrax.in reserved for prod
 ingress:
   enabled: true
   className: "traefik"
@@ -43,28 +59,10 @@ ingress:
     kubernetes.io/ingress.class: "traefik"
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.middlewares: >-
-      am-apps-preprod-global-cors@kubernetescrd,
-      am-apps-preprod-strip-prefix-apps@kubernetescrd
+      am-apps-preprod-preprod-global-cors@kubernetescrd,
+      am-apps-preprod-preprod-strip-prefix@kubernetescrd
   hosts:
     - host: am-preprod.asrax.in
       paths:
         - path: /parser
           pathType: Prefix
-
-vault:
-  enabled: true
-  secretPaths:
-    auth:
-      path: apps/data/preprod/services/am-auth
-    logging:
-      path: apps/data/preprod/services/logging
-    market:
-      path: apps/data/preprod/services/am-market-data
-    mongodb:
-      path: "apps/data/preprod/infra/mongodb"
-    together:
-      path: "apps/data/preprod/infra/shared-api"
-    identity-oidc:
-      path: "apps/data/preprod/services/am-identity"
-    service-oauth:
-      path: "apps/data/preprod/services/am-parser"

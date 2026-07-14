@@ -5,8 +5,6 @@ env:
   JAVA_TOOL_OPTIONS: "-Xms512m -Xmx768m"
 environment: preprod
 
-replicaCount: 1
-
 probes:
   port: 8080
 
@@ -45,10 +43,6 @@ vault:
     kafka:
       path: "apps/data/preprod/infra/kafka"
     market-data:
-      path: "apps/data/preprod/services/am-market-data"
-    jwt:
-      path: "apps/data/preprod/services/am-market-data"
-    zerodha:
       path: "apps/data/preprod/services/am-market-data"
     upstox:
       path: "apps/data/preprod/services/am-market-data"
@@ -129,21 +123,10 @@ service:
   type: ClusterIP
   port: 8080
 
-# Preprod app host only — am.asrax.in reserved for prod
+# Ingress Configuration (disabled for Kind)
 ingress:
-  enabled: true
-  className: "traefik"
-  annotations:
-    kubernetes.io/ingress.class: "traefik"
-    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.middlewares: >-
-      am-apps-preprod-global-cors@kubernetescrd,
-      am-apps-preprod-strip-prefix-apps@kubernetescrd
-  hosts:
-    - host: am-preprod.asrax.in
-      paths:
-        - path: /market
-          pathType: Prefix
+  enabled: false
+  ipAddress: 127.0.0.1
 
 # Resource Configuration (reduced for Kind)
 resources:
@@ -153,6 +136,8 @@ resources:
   requests:
     cpu: 250m
     memory: 512Mi
+
+replicaCount: 1
 
 # Monitoring Configuration
 monitoring:

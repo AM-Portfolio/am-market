@@ -592,19 +592,22 @@ public class MarketDataService {
     }
 
     public List<String> getIndexConstituents(String indexSymbol) {
+        // "INDICES" is a special virtual index symbol used exclusively to fetch
+        // historical data points for the "Market Heatmap (Indices)" dashboard section.
         if ("INDICES".equalsIgnoreCase(indexSymbol)) {
             return java.util.Arrays.asList("NIFTY 50", "NIFTY BANK", "NIFTY IT", "SENSEX", "NIFTY MIDCAP 50",
-                    "NIFTY SMALLCAP 50", "NIFTY 100", "NIFTY AUTO", "NIFTY PHARMA", "NIFTY FMCG", "NIFTY METAL",
+                    "NIFTY SMLCAP 50", "NIFTY 100", "NIFTY AUTO", "NIFTY PHARMA", "NIFTY FMCG", "NIFTY METAL",
                     "NIFTY REALTY", "NIFTY ENERGY", "NIFTY INFRA");
         }
 
-        // Use StockIndicesService to fetch constituents
+        // Use StockIndicesService to fetch constituents (case-insensitive lookup)
         com.am.common.investment.model.stockindice.StockIndicesMarketData indexData = stockIndicesService
-                .findByIndexSymbol(indexSymbol);
+                .findByIndexSymbol(indexSymbol != null ? indexSymbol.trim().toUpperCase() : "");
 
         if (indexData != null && indexData.getData() != null) {
             return indexData.getData().stream()
                     .map(com.am.common.investment.model.stockindice.StockData::getSymbol)
+                    .filter(sym -> !sym.equalsIgnoreCase(indexSymbol)) // Exclude parent index symbol
                     .collect(java.util.stream.Collectors.toList());
         }
 

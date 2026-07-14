@@ -8,9 +8,6 @@ env:
   SCHEDULER_INGESTION_POLL_HISTORICAL: "false"
   SCHEDULER_INGESTION_USE_WEBSOCKET: "true"
 
-environment: dev
-replicaCount: 1
-
 probes:
   port: 8080
   startup:
@@ -38,27 +35,6 @@ config:
     threadQueueCapacity: 10
     maxAgeMinutes: 15
   env: "dev"
-  batchSearch:
-    cacheEnabled: true
-    mongoQueryLimit: 0
-    maxCandidatesPerQuery: 100
-    internalBatchSize: 100
-
-  # Dev: disable live-market schedulers to prevent accidental ingestion.
-  scheduler:
-    cookie:
-      enabled: false
-    stockIndices:
-      enabled: false
-    ingestion:
-      enabled: false
-      provider: "UPSTOX"
-      force: false
-      useWebsocket: true
-      pollEnabled: false
-      pollHistorical: false
-    redisCleanup:
-      enabled: false
 
 resources:
   limits:
@@ -67,25 +43,6 @@ resources:
   requests:
     cpu: 250m
     memory: 512Mi
-
-service:
-  type: ClusterIP
-  port: 8080
-
-ingress:
-  enabled: true
-  className: "traefik"
-  annotations:
-    kubernetes.io/ingress.class: "traefik"
-    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.middlewares: >-
-      am-apps-dev-dev-global-cors@kubernetescrd,
-      am-apps-dev-dev-strip-prefix@kubernetescrd
-  hosts:
-    - host: am-dev.asrax.in
-      paths:
-        - path: /market
-          pathType: Prefix
 
 vault:
   enabled: true
@@ -128,3 +85,42 @@ hostAliases:
       - "redis.asrax.in"
       - "mongodb.asrax.in"
       - "kafka.asrax.in"
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: "web,websecure"
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-dev-dev-global-cors@kubernetescrd,
+      am-apps-dev-dev-strip-prefix@kubernetescrd
+  hosts:
+    - host: am-dev.asrax.in
+      paths:
+        - path: /market
+          pathType: Prefix
+
+config:
+  batchSearch:
+    cacheEnabled: true
+    mongoQueryLimit: 0
+    maxCandidatesPerQuery: 100
+    internalBatchSize: 100
+
+  # Dev: disable live-market schedulers to prevent accidental ingestion.
+  # Re-enable individually via env.SCHEDULER_* vars if you need to test.
+  scheduler:
+    cookie:
+      enabled: false
+    stockIndices:
+      enabled: false
+    ingestion:
+      enabled: false
+      provider: "UPSTOX"
+      force: false
+      useWebsocket: true
+      pollEnabled: false
+      pollHistorical: false
+    redisCleanup:
+      enabled: false

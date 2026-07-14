@@ -1,23 +1,6 @@
-# Production — am-parser
-# Service-level Ingress (same model as am-identity / am-market-data).
-
 environment: prod
+
 replicaCount: 1
-
-env:
-  ENVIRONMENT: "prod"
-  MONGO_DB: "mutual_funds"
-  MARKET_DATA_URL: "http://am-market-data:8080"
-  LOG_LEVEL: "INFO"
-  ETF_LIST_CACHE_MINUTES: "60"
-  ETF_HOLDINGS_CACHE_DAYS: "1"
-
-probes:
-  port: 8080
-  liveness:
-    path: /health
-  readiness:
-    path: /health
 
 resources:
   limits:
@@ -27,9 +10,31 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-service:
-  type: ClusterIP
-  port: 8080
+# Vault Configuration (Prod Override)
+vault:
+  secretPaths:
+    auth:
+      path: apps/data/prod/services/am-auth
+    logging:
+      path: apps/data/prod/services/logging
+    market:
+      path: apps/data/prod/services/am-market-data
+    mongodb: 
+      path: "apps/data/prod/infra/mongodb"
+    together:
+      path: "apps/data/prod/infra/shared-api"
+    identity-oidc:
+      path: "secret/data/prod/services/am-identity"
+    service-oauth:
+      path: "secret/data/prod/services/am-parser"
+
+env:
+  ENVIRONMENT: "prod"
+  MONGO_DB: "mutual_funds"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  LOG_LEVEL: "INFO"
+  ETF_LIST_CACHE_MINUTES: "60"
+  ETF_HOLDINGS_CACHE_DAYS: "1"
 
 ingress:
   enabled: true
@@ -38,26 +43,10 @@ ingress:
     kubernetes.io/ingress.class: "traefik"
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.middlewares: >-
-      am-apps-prod-global-cors@kubernetescrd
+      am-apps-prod-prod-global-cors@kubernetescrd,
+      am-apps-prod-prod-strip-prefix@kubernetescrd
   hosts:
     - host: am.asrax.in
       paths:
         - path: /parser
           pathType: Prefix
-
-vault:
-  enabled: true
-  secretPaths:
-    auth:
-      path: apps/data/prod/services/am-auth
-    # logging path not present in prod Vault yet — omit so init does not hang
-    market:
-      path: apps/data/prod/services/am-market-data
-    mongodb:
-      path: "apps/data/prod/infra/mongodb"
-    together:
-      path: "apps/data/prod/infra/shared-api"
-    identity-oidc:
-      path: "apps/data/prod/services/am-identity"
-    service-oauth:
-      path: "apps/data/prod/services/am-parser"
