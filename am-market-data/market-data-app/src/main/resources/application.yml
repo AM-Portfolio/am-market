@@ -152,6 +152,9 @@ logging:
     "[org.springframework]": WARN
     "[org.apache.kafka]": INFO
     "[org.springframework.data.redis]": WARN # Reduce Redis connection logging
+    "[com.upstox]": DEBUG
+    "[org.apache.http]": DEBUG
+
 
 upstox:
   interval: I1
