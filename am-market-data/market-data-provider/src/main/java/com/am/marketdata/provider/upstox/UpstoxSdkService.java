@@ -288,6 +288,13 @@ public class UpstoxSdkService {
             java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
             boolean isQueryingToday = toDate != null && !java.time.LocalDate.parse(toDate).isBefore(today);
 
+            // Check if symbol is an Index. If so, we bypass the buggy SDK client to prevent URL-encoding issues (space to + instead of %20)
+            boolean isIndex = normalizedKey != null && (normalizedKey.startsWith("NSE_INDEX") || normalizedKey.contains("INDEX"));
+
+            if (isIndex) {
+                return fetchHistoricalCandleDirect(normalizedKey, unit, interval, toDate, fromDate, isQueryingToday);
+            }
+
             if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
                 // The Upstox Swagger client does not URL-encode the path parameter for the intraday endpoint.
                 // We must manually URL-encode normalizedKey (e.g. replacing ' ' with '%20' and '|' with '%7C') to prevent HTTP 400.
@@ -328,6 +335,92 @@ public class UpstoxSdkService {
             throw new RuntimeException("Error getting historical candle data", e);
         }
     }
+
+    /**
+     * Bypasses the Upstox SDK to directly query the REST API for index symbols.
+     * This avoids SDK path parameter encoding issues where spaces are encoded as '+' instead of '%20'.
+     */
+    private com.am.marketdata.provider.upstox.model.HistoricalDataResponse fetchHistoricalCandleDirect(
+            String normalizedKey, String unit, Integer interval, String toDate, String fromDate, boolean isQueryingToday) {
+        try {
+            String token = getDynamicAccessToken();
+            String encodedKey = java.net.URLEncoder.encode(normalizedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
+                    .replace("+", "%20");
+
+            String urlStr;
+            if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
+                urlStr = String.format("https://api.upstox.com/v2/historical-candle/intraday/%s/1minute", encodedKey);
+            } else {
+                String tf = "day".equalsIgnoreCase(unit) ? "day" : (interval + unit); // e.g. 1minute, 30minute, day
+                if (fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate)) {
+                    urlStr = String.format("https://api.upstox.com/v2/historical-candle/%s/%s/%s/%s", encodedKey, tf, toDate, fromDate);
+                } else {
+                    urlStr = String.format("https://api.upstox.com/v2/historical-candle/%s/%s/%s", encodedKey, tf, toDate);
+                }
+            }
+
+            log.info("Directly fetching historical data from URL: {}", urlStr);
+
+            java.net.URL url = new java.net.URL(urlStr);
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Authorization", "Bearer " + token);
+            conn.setRequestProperty("Accept", "application/json");
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode == 200) {
+                java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()));
+                String inputLine;
+                StringBuilder response = new StringBuilder();
+                while ((inputLine = in.readLine()) != null) {
+                    response.append(inputLine);
+                }
+                in.close();
+
+                // Deserialize JSON response manually
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(response.toString());
+
+                com.am.marketdata.provider.upstox.model.HistoricalDataResponse res = new com.am.marketdata.provider.upstox.model.HistoricalDataResponse();
+                res.setStatus(rootNode.path("status").asText());
+
+                com.fasterxml.jackson.databind.JsonNode candlesNode = rootNode.path("data").path("candles");
+                if (candlesNode.isArray()) {
+                    List<List<Object>> candlesList = new java.util.ArrayList<>();
+                    for (com.fasterxml.jackson.databind.JsonNode candle : candlesNode) {
+                        List<Object> candleData = new java.util.ArrayList<>();
+                        for (com.fasterxml.jackson.databind.JsonNode val : candle) {
+                            if (val.isNumber()) {
+                                candleData.add(val.doubleValue());
+                            } else {
+                                candleData.add(val.asText());
+                            }
+                        }
+                        candlesList.add(candleData);
+                    }
+                    com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload dataPayload = 
+                            new com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload();
+                    dataPayload.setCandles(candlesList);
+                    res.setData(dataPayload);
+                }
+                return res;
+            } else {
+                java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getErrorStream() != null ? conn.getErrorStream() : conn.getInputStream()));
+                String inputLine;
+                StringBuilder errorResponse = new StringBuilder();
+                while ((inputLine = in.readLine()) != null) {
+                    errorResponse.append(inputLine);
+                }
+                in.close();
+                log.error("Direct fetch failed. Code={}, Response={}", responseCode, errorResponse.toString());
+                throw new RuntimeException("Direct fetch failed with code: " + responseCode);
+            }
+        } catch (Exception e) {
+            log.error("Error fetching historical candle direct for key: " + normalizedKey, e);
+            throw new RuntimeException("Error fetching historical candle direct", e);
+        }
+    }
+
 
     private com.am.marketdata.provider.upstox.model.HistoricalDataResponse mapToHistoricalDataResponse(
             GetHistoricalCandleResponse sdkResponse) {
