@@ -289,13 +289,21 @@ public class UpstoxSdkService {
             boolean isQueryingToday = toDate != null && !java.time.LocalDate.parse(toDate).isBefore(today);
 
             if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
+                // The Upstox Swagger client does not URL-encode the path parameter for the intraday endpoint.
+                // We must manually URL-encode normalizedKey (e.g. replacing ' ' with '%20' and '|' with '%7C') to prevent HTTP 400.
+                String encodedIntradayKey = normalizedKey;
+                try {
+                    encodedIntradayKey = java.net.URLEncoder.encode(normalizedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
+                            .replace("+", "%20"); // Upstox expects %20 instead of + for spaces
+                } catch (java.io.UnsupportedEncodingException uee) {
+                    log.error("getHistoricalCandleData", "Failed to URL-encode intraday key: " + normalizedKey, uee);
+                }
+
                 log.info(
                         "Fetching live intraday data key={}, interval=1minute",
-                        normalizedKey);
-                // The Upstox SDK internally URL-decodes query string path arguments.
-                // Do not URL-encode normalizedKey here to prevent double-encoding (e.g. '|' escaping to '%7C' then '%257C').
+                        encodedIntradayKey);
                 com.upstox.api.GetIntraDayCandleResponse intradayResponse = historyV3Api.getIntraDayCandleData(
-                        normalizedKey, "1minute", 2);
+                        encodedIntradayKey, "1minute", 2);
                 return mapIntradayToHistoricalDataResponse(intradayResponse);
             }
 
