@@ -10,8 +10,7 @@
     <packaging>pom</packaging>
 
     <name>Market Data Service</name>
-    <description>Market Data Service with REST/gRPC endpoints and Kafka integration</description>
-
+    <description>Market Data Service with REST/gRPC endpoints and Kafka integration (asrax host cutover)</description>
     <modules>
     
         <module>market-data-common</module>
