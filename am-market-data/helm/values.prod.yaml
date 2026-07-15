@@ -1,12 +1,20 @@
-# Production Environment Configuration
-env:
-  SPRING_PROFILES_ACTIVE: "prod,security"
-  JAVA_OPTS: "-Dspring.profiles.active=prod,security"
-environment: prod
+# Production — am-market-data
+# Service-level Ingress (same model as am-identity), not central am-infra ingress.
 
+environment: prod
 replicaCount: 1
 
-# Application Configuration
+env:
+  SPRING_PROFILES_ACTIVE: "prod,security"
+  JAVA_OPTS: "-Xms512m -Xmx1024m -Dspring.profiles.active=prod,security"
+
+probes:
+  port: 8080
+  liveness:
+    path: /actuator/health/liveness
+  readiness:
+    path: /actuator/health/readiness
+
 config:
   marketData:
     maxRetries: 3
@@ -70,17 +78,24 @@ config:
       intradayFuture: 86400
       intradayBuffer: 14400
 
-# Service Configuration
 service:
   type: ClusterIP
   port: 8080
 
-# Ingress Configuration
 ingress:
   enabled: true
-  ipAddress: 20.59.109.241
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-prod-global-cors@kubernetescrd
+  hosts:
+    - host: am.asrax.in
+      paths:
+        - path: /market
+          pathType: Prefix
 
-# Resource Configuration
 resources:
   limits:
     cpu: 1000m
@@ -89,33 +104,40 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-# PostgreSQL Configuration (Inherited from Vault)
 postgresql:
   enabled: false
 
-# Vault Configuration (Standardised for Prod)
 vault:
   enabled: true
   secretPaths:
-    postgres: "apps/data/prod/infra/postgres"
-    mongodb: "apps/data/prod/infra/mongodb"
-    redis: "apps/data/prod/infra/redis"
-    influxdb: "apps/data/prod/infra/influxdb"
-    kafka: "apps/data/prod/infra/kafka"
-    zerodha: "apps/data/prod/api/zerodha"
-    upstock: "apps/data/prod/api/upstock"
-    market-data: "apps/data/prod/services/am-market-data"
-    scheduler-config: "apps/data/prod/services/am-market-data-scheduler"
-    identity-oidc: "apps/data/prod/services/am-identity"
-    service-oauth: "apps/data/prod/services/am-market-data"
+    postgres:
+      path: "apps/data/prod/infra/postgres"
+    mongodb:
+      path: "apps/data/prod/infra/mongodb"
+    redis:
+      path: "apps/data/prod/infra/redis"
+    influxdb:
+      path: "apps/data/prod/infra/influxdb"
+    kafka:
+      path: "apps/data/prod/infra/kafka"
+    jwt:
+      path: "apps/data/prod/services/am-market-data"
+    zerodha:
+      path: "apps/data/prod/services/am-market-data"
+    upstox:
+      path: "apps/data/prod/services/am-market-data"
+    market-data:
+      path: "apps/data/prod/services/am-market-data"
+    scheduler-config:
+      path: "apps/data/prod/services/am-market-data-scheduler"
+    identity-oidc:
+      path: "apps/data/prod/services/am-identity"
+    service-oauth:
+      path: "apps/data/prod/services/am-market-data"
 
-# Monitoring Configuration
 monitoring:
   enabled: true
   prometheus:
     scrape: true
     port: "8080"
     path: "/actuator/prometheus"
-
-# Triggering rebuild to consume latest published common library
-
