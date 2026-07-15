@@ -16,6 +16,7 @@ import com.am.marketdata.provider.zerodha.config.ZerodhaApiConfig;
 @Import({
                 ZerodhaApiConfig.class
 })
+// Triggering fresh rebuild to bypass transient container registry layer push error
 public class MarketDataApiModuleConfig {
 
 }
