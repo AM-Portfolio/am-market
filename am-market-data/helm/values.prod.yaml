@@ -110,6 +110,8 @@ postgresql:
 vault:
   enabled: true
   secretPaths:
+    otel:
+      path: "apps/data/prod/infra/observability"
     postgres:
       path: "apps/data/prod/infra/postgres"
     mongodb:

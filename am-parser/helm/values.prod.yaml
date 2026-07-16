@@ -48,6 +48,8 @@ ingress:
 vault:
   enabled: true
   secretPaths:
+    otel:
+      path: "apps/data/prod/infra/observability"
     auth:
       path: apps/data/prod/services/am-auth
     # logging path not present in prod Vault yet — omit so init does not hang
