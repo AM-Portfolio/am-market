@@ -133,6 +133,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+from am_api.plane_a import setup_plane_a
+setup_plane_a(app, application="am-parser")
+
 _http_log = get_logger("http")
 
 
