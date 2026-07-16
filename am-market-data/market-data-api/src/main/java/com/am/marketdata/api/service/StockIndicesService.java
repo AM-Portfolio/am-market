@@ -363,48 +363,112 @@ public class StockIndicesService {
         }
     }
 
+    /**
+     * Fetch EOD index values directly from Upstox API instead of the NSE website scraper.
+     * This avoids reliance on fragile cookie sessions and browser-scraping endpoints.
+     */
     private void fetchFreshData(List<String> symbolsToProcess, List<StockIndicesMarketData> finalResults,
             String methodName) {
-        log.info(methodName, "Fetching fresh data for " + symbolsToProcess.size() + " symbols: " + symbolsToProcess);
-
-        // Fetch in parallel
-        List<CompletableFuture<Boolean>> futures = new ArrayList<>();
-        for (String symbol : symbolsToProcess) {
-            try {
-                futures.add(marketDataProcessingService.fetchAndProcessStockIndices(symbol)
-                        .exceptionally(e -> {
-                            log.error(methodName, "Error fetching data for symbol: " + symbol, e);
-                            return false;
-                        }));
-            } catch (Exception e) {
-                log.error(methodName, "Rejected execution or error submitting scraper task for symbol: " + symbol, e);
-            }
-        }
-
-        // Wait for completion with a timeout guard to prevent API hanging if a scraper fails
-        if (!futures.isEmpty()) {
-            try {
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                        .get(4, TimeUnit.SECONDS);
-            } catch (java.util.concurrent.TimeoutException e) {
-                log.warn(methodName, "Scraping fresh index data timed out after 4 seconds, continuing with cached/seeded records");
-            } catch (Exception e) {
-                log.error(methodName, "Error during parallel index data fetch", e);
-            }
-        }
+        log.info(methodName, "Fetching fresh index data from Upstox for symbols: " + symbolsToProcess);
 
         try {
-            // Add a small delay to ensure data is persisted
-            TimeUnit.SECONDS.sleep(1);
+            // 1. Fetch latest OHLC quotes for the requested indices from Upstox in a single batch
+            Map<String, OHLCQuote> quotes = marketDataCacheService.getOHLC(
+                    new HashSet<>(symbolsToProcess), true, TimeFrame.DAY, true);
 
-            // FIX: Retrieve freshly persisted data from database
-            List<StockIndicesMarketData> freshData = stockIndicesMarketDataService
-                    .findByIndexSymbols(symbolsToProcess.stream().collect(Collectors.toSet()));
-            finalResults.addAll(freshData);
+            if (quotes == null || quotes.isEmpty()) {
+                log.warn(methodName, "No index quotes returned from Upstox provider.");
+                return;
+            }
 
-            log.info(methodName, "Retrieved " + freshData.size() + " freshly fetched indices from database");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            // 2. Fetch existing documents from MongoDB to update them, or create new ones
+            List<StockIndicesMarketData> existingDocs = stockIndicesMarketDataService
+                    .findByIndexSymbols(new HashSet<>(symbolsToProcess));
+            Map<String, StockIndicesMarketData> docMap = existingDocs.stream()
+                    .collect(Collectors.toMap(StockIndicesMarketData::getIndexSymbol, doc -> doc));
+
+            List<StockIndicesMarketData> docsToSave = new ArrayList<>();
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            long nowMs = System.currentTimeMillis();
+
+            for (String symbol : symbolsToProcess) {
+                OHLCQuote priceQuote = quotes.get(symbol);
+                if (priceQuote == null || priceQuote.getLastPrice() == 0.0) {
+                    log.warn(methodName, "No valid Upstox quote found for symbol: " + symbol);
+                    continue;
+                }
+
+                // Get existing MongoDB record or instantiate a new one
+                StockIndicesMarketData data = docMap.get(symbol);
+                if (data == null) {
+                    data = new StockIndicesMarketData();
+                    data.setIndexSymbol(symbol);
+                }
+
+                IndexMetadata meta = data.getMetadata();
+                if (meta == null) {
+                    meta = new IndexMetadata();
+                    data.setMetadata(meta);
+                }
+
+                double lastPrice = priceQuote.getLastPrice();
+                double open = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getOpen() : 0.0;
+                double high = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getHigh() : 0.0;
+                double low = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getLow() : 0.0;
+                double previousClose = priceQuote.getPreviousClose();
+
+                if (previousClose == 0.0) {
+                    Double cachedPrevClose = redisCacheService.getPreviousClose(symbol);
+                    if (cachedPrevClose != null && cachedPrevClose != 0.0) {
+                        previousClose = cachedPrevClose;
+                    }
+                }
+                if (previousClose == 0.0 && meta.getPreviousClose() != null) {
+                    previousClose = meta.getPreviousClose();
+                }
+
+                // Sanity check to avoid abnormal percent deviations
+                if (previousClose != 0.0 && lastPrice != 0.0) {
+                    double deviation = Math.abs(previousClose - lastPrice) / lastPrice;
+                    if (deviation > 0.10) {
+                        previousClose = open != 0.0 ? open : lastPrice;
+                    }
+                }
+
+                double change = previousClose != 0.0 ? lastPrice - previousClose : 0.0;
+                double changePercent = previousClose != 0.0 ? (change / previousClose) * 100.0 : 0.0;
+
+                meta.setLast(lastPrice);
+                if (open != 0.0) meta.setOpen(open);
+                if (high != 0.0) meta.setHigh(high);
+                if (low != 0.0) meta.setLow(low);
+                if (previousClose != 0.0) meta.setPreviousClose(previousClose);
+                meta.setChange(change);
+                meta.setPercChange(changePercent);
+                meta.setTimeVal(String.valueOf(nowMs));
+
+                com.am.common.investment.model.stockindice.AuditData audit = data.getAudit();
+                if (audit == null) {
+                    audit = new com.am.common.investment.model.stockindice.AuditData();
+                    audit.setCreatedAt(now);
+                    data.setAudit(audit);
+                }
+                audit.setUpdatedAt(now);
+
+                docsToSave.add(data);
+            }
+
+            // Save EOD index values to MongoDB database
+            if (!docsToSave.isEmpty()) {
+                for (StockIndicesMarketData doc : docsToSave) {
+                    stockIndicesMarketDataService.save(doc);
+                }
+                finalResults.addAll(docsToSave);
+                log.info(methodName, "Successfully fetched and saved " + docsToSave.size() + " EOD index prices from Upstox.");
+            }
+
+        } catch (Exception e) {
+            log.error(methodName, "Error while performing EOD index sync using Upstox", e);
         }
     }
 
