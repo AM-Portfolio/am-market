@@ -90,6 +90,8 @@ ingress:
 vault:
   enabled: true
   secretPaths:
+    otel:
+      path: "apps/data/dev/infra/observability"
     postgres:
       path: "apps/data/dev/infra/postgres"
     mongodb:

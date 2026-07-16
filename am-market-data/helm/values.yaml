@@ -117,5 +117,3 @@ podAnnotations:
 
 env:
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318/v1/traces"
-  # 1.0 while validating flows in Tempo; dial back to 0.1 when comfortable
-  TRACING_SAMPLING_PROBABILITY: "1.0"
