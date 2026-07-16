@@ -344,7 +344,9 @@ public class UpstoxSdkService {
             String normalizedKey, String unit, Integer interval, String toDate, String fromDate, boolean isQueryingToday) {
         try {
             String token = getDynamicAccessToken();
-            String encodedKey = java.net.URLEncoder.encode(normalizedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
+            // Safeguard against double-encoding (decodes the key to plain text first, then encodes it cleanly exactly once)
+            String decodedKey = java.net.URLDecoder.decode(normalizedKey, java.nio.charset.StandardCharsets.UTF_8.toString());
+            String encodedKey = java.net.URLEncoder.encode(decodedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
                     .replace("+", "%20");
 
             String urlStr;
