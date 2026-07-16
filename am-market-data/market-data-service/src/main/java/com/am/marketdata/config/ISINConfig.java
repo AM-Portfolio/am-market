@@ -11,3 +11,5 @@ public record ISINConfig(List<String> list) {
         list = list != null ? list : new ArrayList<>();
     }
 }
+
+// test deploy
