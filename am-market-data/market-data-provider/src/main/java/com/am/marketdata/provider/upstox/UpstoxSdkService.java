@@ -65,17 +65,43 @@ public class UpstoxSdkService {
         }
         
         try {
+            // 1. Try to read from Redis cache first
             String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
+            
             if (cachedToken != null && !cachedToken.isEmpty()) {
+                // Check remaining TTL in Redis
+                Long remainingTtlSeconds = redisTemplate.getExpire(REDIS_KEY_ACCESS_TOKEN, java.util.concurrent.TimeUnit.SECONDS);
+                
+                // If it has less than 24 hours left (86400 seconds), trigger a warm-up refresh from Vault config
+                if (remainingTtlSeconds != null && remainingTtlSeconds > 0 && remainingTtlSeconds < 86400) {
+                    log.info("getDynamicAccessToken", "Access token is nearing expiration (< 24 hours left). Refreshing from Vault configuration.");
+                    String freshToken = upstoxConfig.getAccessToken();
+                    if (freshToken != null && !freshToken.isEmpty()) {
+                        String sanitized = sanitizeAccessToken(freshToken);
+                        redisTemplate.opsForValue().set(REDIS_KEY_ACCESS_TOKEN, sanitized, 7, java.util.concurrent.TimeUnit.DAYS);
+                        this.accessToken = sanitized;
+                        return this.accessToken;
+                    }
+                }
+                
                 this.accessToken = sanitizeAccessToken(cachedToken);
                 return this.accessToken;
             }
         } catch (Exception e) {
-            log.warn("Failed to get access token from Redis in SDK service: {}", e.getMessage());
+            log.warn("getDynamicAccessToken", "Failed to get or verify access token TTL in Redis: " + e.getMessage());
         }
         
+        // 2. Fallback to Vault configuration (Cache-Aside DB fallback)
         if (upstoxConfig.getAccessToken() != null && !upstoxConfig.getAccessToken().isEmpty()) {
-            this.accessToken = sanitizeAccessToken(upstoxConfig.getAccessToken());
+            String sanitized = sanitizeAccessToken(upstoxConfig.getAccessToken());
+            try {
+                // 3. Self-heal: Cache it back in Redis for 7 days
+                redisTemplate.opsForValue().set(REDIS_KEY_ACCESS_TOKEN, sanitized, 7, java.util.concurrent.TimeUnit.DAYS);
+                log.info("getDynamicAccessToken", "Successfully cached Vault Upstox Access Token in Redis for 7 days (Self-healed)");
+            } catch (Exception e) {
+                log.warn("getDynamicAccessToken", "Failed to write self-healed token to Redis: " + e.getMessage());
+            }
+            this.accessToken = sanitized;
         }
         return this.accessToken;
     }
