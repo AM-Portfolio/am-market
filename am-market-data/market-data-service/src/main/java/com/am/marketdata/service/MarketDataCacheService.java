@@ -47,9 +47,30 @@ public class MarketDataCacheService {
         this.redisTemplate = redisTemplate;
     }
 
+    /**
+     * Helper method to normalize raw symbol inputs before constructing Redis keys.
+     * Ensures keys are normalized (e.g. NSE_INDEX|Nifty 50 -> NIFTY 50) so that
+     * scheduler writes and websocket reads resolve to the exact same cache keys.
+     */
+    private String normalizeSymbol(String rawSymbol) {
+        if (rawSymbol == null) {
+            return null;
+        }
+        String symbol = rawSymbol;
+        if (symbol.contains("|")) {
+            symbol = symbol.substring(symbol.indexOf("|") + 1);
+        }
+        if (symbol.contains(":")) {
+            symbol = symbol.substring(symbol.indexOf(":") + 1);
+        }
+        return symbol.toUpperCase().trim();
+    }
+
     public Double getPreviousClose(String symbol) {
         try {
-            String redisKey = "market:prev-close:" + symbol;
+            // Apply normalization to avoid mismatches between websocket trading symbols and scheduler instrument keys
+            String normalizedSymbol = normalizeSymbol(symbol);
+            String redisKey = "market:prev-close:" + normalizedSymbol;
             String value = redisTemplate.opsForValue().get(redisKey);
             if (value != null) {
                 return Double.parseDouble(value);
@@ -62,7 +83,9 @@ public class MarketDataCacheService {
 
     public void setPreviousClose(String symbol, double previousClose) {
         try {
-            String redisKey = "market:prev-close:" + symbol;
+            // Apply normalization so that the cached close is stored under a clean trading symbol format
+            String normalizedSymbol = normalizeSymbol(symbol);
+            String redisKey = "market:prev-close:" + normalizedSymbol;
             redisTemplate.opsForValue().set(redisKey, String.valueOf(previousClose), 26, TimeUnit.HOURS);
         } catch (Exception e) {
             log.warn("setPreviousClose", "Failed to set previous close for symbol: " + symbol, e);
