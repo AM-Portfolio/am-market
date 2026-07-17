@@ -57,6 +57,8 @@ ingress:
 vault:
   enabled: true
   secretPaths:
+    otel:
+      path: "apps/data/dev/infra/observability"
     auth:
       path: apps/data/dev/services/am-auth
     logging:

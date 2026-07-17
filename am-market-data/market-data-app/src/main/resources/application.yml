@@ -260,6 +260,10 @@ management:
       group:
         readiness:
           include: diskSpace,mongodb,redis,kafka,influx
+  metrics:
+    tags:
+      # Required for Grafana Technical / Services Service dropdown
+      application: ${spring.application.name}
   health:
     livenessstate:
       enabled: true

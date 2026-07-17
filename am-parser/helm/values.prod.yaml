@@ -50,3 +50,22 @@ ingress:
       paths:
         - path: /parser
           pathType: Prefix
+
+vault:
+  enabled: true
+  secretPaths:
+    otel:
+      path: "apps/data/prod/infra/observability"
+    auth:
+      path: apps/data/prod/services/am-auth
+    # logging path not present in prod Vault yet — omit so init does not hang
+    market:
+      path: apps/data/prod/services/am-market-data
+    mongodb:
+      path: "apps/data/prod/infra/mongodb"
+    together:
+      path: "apps/data/prod/infra/shared-api"
+    identity-oidc:
+      path: "apps/data/prod/services/am-identity"
+    service-oauth:
+      path: "apps/data/prod/services/am-parser"

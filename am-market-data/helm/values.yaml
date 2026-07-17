@@ -110,6 +110,11 @@ config:
       intradayFuture: 86400 # 24 hours for future dates
       intradayBuffer: 14400 # 4 hour buffer after EOD
 
+# Prometheus scrape (Plane A — Grafana Service dropdown)
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/actuator/prometheus"
+
 env:
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318/v1/traces"
-  TRACING_SAMPLING_PROBABILITY: "0.1"

@@ -34,6 +34,8 @@ vault:
   enabled: true
   role: "am-backend-role"
   secretPaths:
+    otel:
+      path: "apps/data/preprod/infra/observability"
     postgres:
       path: "apps/data/preprod/infra/postgres"
     mongodb:
