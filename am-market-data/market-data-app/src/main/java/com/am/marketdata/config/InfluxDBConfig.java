@@ -4,7 +4,7 @@ import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.InfluxDBClientFactory;
 import com.influxdb.client.InfluxDBClientOptions;
 import io.micrometer.observation.ObservationRegistry;
-import io.micrometer.observation.transport.http.OkHttpObservationInterceptor;
+import io.micrometer.core.instrument.binder.okhttp3.OkHttpObservationInterceptor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
