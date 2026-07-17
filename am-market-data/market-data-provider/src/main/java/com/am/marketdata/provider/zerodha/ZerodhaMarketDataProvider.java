@@ -26,10 +26,13 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import com.am.observability.trace.IgnoreTracing;
+
 /**
  * Zerodha implementation of the MarketDataProvider interface
  */
 @Service("zerodhaMarketDataProvider")
+@IgnoreTracing
 public class ZerodhaMarketDataProvider implements MarketDataProvider {
 
     private final AppLogger log = AppLogger.getLogger();

@@ -18,7 +18,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 //import com.am.marketdata.scraper.config.NSEIndicesConfig;
 //import com.am.common.investment.persistence.config.InfluxDBConfig;
 //import com.am.marketdata.external.api.config.ExternalApiAutoConfiguration;
-import com.am.common.investment.persistence.config.InfluxDBConfig;
+//import com.am.common.investment.persistence.config.InfluxDBConfig;
 //import com.am.marketdata.processor.config.ProcessorModuleConfig;
 //import com.am.marketdata.scheduler.config.SchedulerAutoConfiguration;
 import com.am.marketdata.api.config.SecurityConfig;
@@ -32,7 +32,7 @@ import com.am.marketdata.kafka.config.MarketDataKafkaModuleConfig;
                 org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration.class
 })
 @EnableConfigurationProperties
-@Import({ MetricsConfig.class, InfluxDBConfig.class, SecurityConfig.class,
+@Import({ MetricsConfig.class, SecurityConfig.class,
                 MarketDataInternalConfig.class, MarketDataSchedulerConfig.class,
                 MarketDataKafkaModuleConfig.class })
 @ComponentScans({

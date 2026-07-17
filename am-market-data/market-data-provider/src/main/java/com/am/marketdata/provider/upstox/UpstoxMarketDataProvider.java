@@ -26,7 +26,10 @@ import com.am.marketdata.common.log.AppLogger;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import com.am.observability.trace.IgnoreTracing;
+
 @Service("upstoxMarketDataProvider")
+@IgnoreTracing
 public class UpstoxMarketDataProvider implements MarketDataProvider {
 
     private final AppLogger log = AppLogger.getLogger();
