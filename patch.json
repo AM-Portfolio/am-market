@@ -1,0 +1,18 @@
+{
+  "spec": {
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "name": "am-market-data",
+            "resources": {
+              "requests": {
+                "cpu": "20m"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
