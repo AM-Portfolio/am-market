@@ -1,8 +1,5 @@
 package com.am.marketdata.redis.config;
 
-import io.lettuce.core.resource.ClientResources;
-import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -49,10 +46,10 @@ public class RedisConfig {
     private long cacheTimeToLiveSeconds;
 
     /**
-     * Redis connection factory configured with traced ClientResources
+     * Redis connection factory
      */
     @Bean
-    public RedisConnectionFactory redisConnectionFactory(ClientResources clientResources) {
+    public RedisConnectionFactory redisConnectionFactory() {
         RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
 
         log.info("redisConnectionFactory", "Redis connection details - Host: " + redisHost + ", Port: " + redisPort);
@@ -69,11 +66,7 @@ public class RedisConfig {
             log.warn("redisConnectionFactory", "No Redis password provided, connecting without authentication");
         }
 
-        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
-                .clientResources(clientResources)
-                .build();
-
-        return new LettuceConnectionFactory(redisConfig, clientConfig);
+        return new LettuceConnectionFactory(redisConfig);
     }
 
     /**
@@ -97,11 +90,9 @@ public class RedisConfig {
      * Redis template for operations with JSR310 support
      */
     @Bean
-    public RedisTemplate<String, Object> redisTemplate(
-            RedisConnectionFactory redisConnectionFactory,
-            @Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper) {
+    public RedisTemplate<String, Object> redisTemplate(@Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
-        template.setConnectionFactory(redisConnectionFactory);
+        template.setConnectionFactory(redisConnectionFactory());
         template.setKeySerializer(new StringRedisSerializer());
 
         // Create Jackson serializer with JSR310 support (non-deprecated approach)
