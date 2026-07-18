@@ -1,3 +1,6 @@
+import io.lettuce.core.resource.ClientResources;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
+
 package com.am.marketdata.redis.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -46,10 +49,10 @@ public class RedisConfig {
     private long cacheTimeToLiveSeconds;
 
     /**
-     * Redis connection factory
+     * Redis connection factory configured with traced ClientResources
      */
     @Bean
-    public RedisConnectionFactory redisConnectionFactory() {
+    public RedisConnectionFactory redisConnectionFactory(ClientResources clientResources) {
         RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
 
         log.info("redisConnectionFactory", "Redis connection details - Host: " + redisHost + ", Port: " + redisPort);
@@ -66,7 +69,11 @@ public class RedisConfig {
             log.warn("redisConnectionFactory", "No Redis password provided, connecting without authentication");
         }
 
-        return new LettuceConnectionFactory(redisConfig);
+        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
+                .clientResources(clientResources)
+                .build();
+
+        return new LettuceConnectionFactory(redisConfig, clientConfig);
     }
 
     /**

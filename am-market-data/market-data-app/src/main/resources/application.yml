@@ -58,6 +58,7 @@ am:
     request-log:
       # Emit a structured JSON log for every incoming HTTP request
       enabled: true
+      log-payloads: true
       ignore-paths:
         - "/actuator/**"
         - "/**/health/**"
