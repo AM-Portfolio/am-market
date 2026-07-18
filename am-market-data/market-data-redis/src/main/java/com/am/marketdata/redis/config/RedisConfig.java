@@ -1,7 +1,7 @@
+package com.am.marketdata.redis.config;
+
 import io.lettuce.core.resource.ClientResources;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
-
-package com.am.marketdata.redis.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
