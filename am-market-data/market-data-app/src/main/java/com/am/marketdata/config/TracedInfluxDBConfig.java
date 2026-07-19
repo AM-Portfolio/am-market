@@ -59,7 +59,7 @@ public class TracedInfluxDBConfig {
      */
     @Bean
     @Primary
-    public InfluxDBClient influxDBClient(
+    public InfluxDBClient tracedInfluxDBClient(
             ObjectProvider<ObservationRegistry> observationRegistryProvider,
             ObjectProvider<Tracer> tracerProvider) {
 
