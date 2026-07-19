@@ -65,66 +65,82 @@ public class InfluxDbQuerySanitizerInterceptor implements Interceptor {
 
         // Only process InfluxDB query and write API calls
         if (path.contains("/api/v2/query") || path.contains("/api/v2/write")) {
-            try {
-                tagCurrentSpan(request, path);
+            String operation = path.contains("/api/v2/write") ? "write" : "query";
+            
+            // Create a dedicated InfluxDB child client span
+            Span childSpan = tracer.spanBuilder()
+                    .name("influxdb." + operation)
+                    .kind(Span.Kind.CLIENT)
+                    .start();
+            
+            childSpan.tag("db.system", "influxdb");
+            childSpan.tag("peer.service", "influxdb");
+            childSpan.tag("net.peer.name", request.url().host());
+            childSpan.tag("net.peer.port", String.valueOf(request.url().port()));
+            
+            try (Tracer.SpanInScope ws = tracer.withSpan(childSpan)) {
+                // Extract metadata and tag the child span
+                tagSpan(childSpan, request, path);
+                
+                Response response = chain.proceed(request);
+                
+                childSpan.tag("http.status_code", String.valueOf(response.code()));
+                if (!response.isSuccessful()) {
+                    childSpan.tag("error", "true");
+                    childSpan.tag("db.error", "HTTP " + response.code());
+                }
+                return response;
             } catch (Exception e) {
-                // Never break the actual request due to tracing failure
-                log.warn("[INFLUXDB-TRACER] Failed to tag span with query metadata", e);
+                childSpan.error(e);
+                childSpan.tag("error", "true");
+                throw e;
+            } finally {
+                childSpan.end();
             }
         }
 
         return chain.proceed(request);
     }
 
-    private void tagCurrentSpan(Request request, String path) throws IOException {
-        Span currentSpan = tracer.currentSpan();
-        if (currentSpan == null) {
-            return;
-        }
-
+    private void tagSpan(Span span, Request request, String path) throws IOException {
         String body = readBody(request);
         if (body == null || body.isBlank()) {
             return;
         }
 
         // For /api/v2/write — it is a line protocol write, not a Flux query
-        // Just tag it as a write operation targeting the bucket from the URL query param
         if (path.contains("/api/v2/write")) {
             String bucket = extractQueryParam(request, "bucket");
-            currentSpan.tag("db.influxdb.operation", "write");
+            span.tag("db.influxdb.operation", "write");
             if (!bucket.isEmpty()) {
-                currentSpan.tag("db.influxdb.bucket", bucket);
+                span.tag("db.influxdb.bucket", bucket);
             }
             return;
         }
 
         // For /api/v2/query — parse the Flux script body
-        // 1. Extract measurement name (safe: it is a static table name, not user data)
         String measurement = extractFirst(body, MEASUREMENT_PATTERN);
-
-        // 2. Extract filter field names — NOT their values
         List<String> filterFields = extractFilterFields(body);
-
-        // 3. Build sanitized query — replaces raw values with "?"
         String sanitized = SANITIZE_VALUES_PATTERN.matcher(body)
                 .replaceAll("$1\"?\"")
                 .replaceAll("\\s+", " ")
                 .trim();
 
-        // Tag the current active Tempo span
-        currentSpan.tag("db.influxdb.operation", "query");
+        // Tag the InfluxDB client span
+        span.tag("db.influxdb.operation", "query");
         if (!measurement.isEmpty()) {
-            currentSpan.tag("db.influxdb.measurement", measurement);
+            span.tag("db.influxdb.measurement", measurement);
         }
         if (!filterFields.isEmpty()) {
-            currentSpan.tag("db.influxdb.filter_fields", String.join(", ", filterFields));
+            span.tag("db.influxdb.filter_fields", String.join(", ", filterFields));
         }
         if (!sanitized.isEmpty()) {
             // Limit to 500 chars to avoid bloating the span storage
-            currentSpan.tag("db.influxdb.sanitized_query",
+            span.tag("db.influxdb.sanitized_query",
                     sanitized.length() > 500 ? sanitized.substring(0, 500) + "..." : sanitized);
         }
     }
+
 
     private String readBody(Request request) throws IOException {
         RequestBody body = request.body();
