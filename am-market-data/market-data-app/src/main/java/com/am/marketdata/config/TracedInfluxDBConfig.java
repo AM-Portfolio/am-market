@@ -11,6 +11,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+
 
 /**
  * Custom InfluxDB Configuration with Micrometer Distributed Tracing.
@@ -64,14 +68,20 @@ public class TracedInfluxDBConfig {
         Tracer tracer = tracerProvider.getIfAvailable();
         ObservationRegistry registry = observationRegistryProvider.getIfAvailable();
 
+        Logger logger = LoggerFactory.getLogger(TracedInfluxDBConfig.class);
+        logger.info("[INFLUXDB-CONFIG] Initializing InfluxDBClient. Tracer available: {}, ObservationRegistry available: {}", 
+                tracer != null, registry != null);
+
         // Interceptor 1: Query sanitizer — extracts safe metadata and tags the Tempo span
         // Must run BEFORE OkHttpObservationInterceptor so the span already exists when we tag it
         if (tracer != null) {
+            logger.info("[INFLUXDB-CONFIG] Registering InfluxDbQuerySanitizerInterceptor");
             okHttpClientBuilder.addInterceptor(new InfluxDbQuerySanitizerInterceptor(tracer));
         }
 
         // Interceptor 2: Creates the Tempo HTTP span (method, url, status)
         if (registry != null) {
+            logger.info("[INFLUXDB-CONFIG] Registering OkHttpObservationInterceptor");
             okHttpClientBuilder.addInterceptor(
                 OkHttpObservationInterceptor.builder(registry, "influxdb.requests").build()
             );
