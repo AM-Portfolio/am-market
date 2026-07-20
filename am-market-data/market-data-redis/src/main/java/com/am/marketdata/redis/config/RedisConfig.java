@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.am.marketdata.common.log.AppLogger;
+import com.am.libraries.featureflag.service.GrowthBookService;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.EnableCaching;
@@ -90,8 +91,10 @@ public class RedisConfig {
      * Redis template for operations with JSR310 support
      */
     @Bean
-    public RedisTemplate<String, Object> redisTemplate(@Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper) {
-        RedisTemplate<String, Object> template = new RedisTemplate<>();
+    public RedisTemplate<String, Object> redisTemplate(
+            @Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper,
+            GrowthBookService growthBookService) {
+        RedisTemplate<String, Object> template = new FeatureFlaggedRedisTemplate<>(growthBookService);
         template.setConnectionFactory(redisConnectionFactory());
         template.setKeySerializer(new StringRedisSerializer());
 
