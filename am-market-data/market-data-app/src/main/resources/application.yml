@@ -55,7 +55,7 @@ am:
   feature-flag:
     enabled: ${GROWTHBOOK_ENABLED:true}
     api-host: ${GROWTHBOOK_API_HOST:https://growthbook.asrax.in/gbapi}
-    client-key: ${GROWTHBOOK_CLIENT_KEY:sdk-8WmIFrhYLe1AXr8}
+    client-key: ${GROWTHBOOK_CLIENT_KEY:sdk-8WmIFrhYLelAXr8}
   # Centralized observability from am-core-services
   observability:
     enabled: ${AM_OBSERVABILITY_ENABLED:true}
