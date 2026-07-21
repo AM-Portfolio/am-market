@@ -93,9 +93,29 @@ public class InstrumentUtils {
             }
         }
 
+        // OPTIMIZATION: Pre-fetch all matching index symbols from MongoDB in 1 single batch query.
+        // This replaces 1,000 individual Mongo findByIndexSymbol() calls inside loops with 1 batch query,
+        // eliminating network latency loops and cleaning up Grafana Tempo trace spans.
+        Set<String> foundIndexSymbols = Collections.emptySet();
+        try {
+            List<StockIndicesMarketData> indexDocs = stockIndicesMarketDataService.findByIndexSymbols(new HashSet<>(candidateSymbols));
+            if (indexDocs != null) {
+                foundIndexSymbols = indexDocs.stream()
+                        .filter(Objects::nonNull)
+                        .map(StockIndicesMarketData::getIndexSymbol)
+                        .filter(Objects::nonNull)
+                        .map(String::toUpperCase)
+                        .collect(Collectors.toSet());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to batch query stock indices from MongoDB", e);
+        }
+
+        final Set<String> matchingIndices = foundIndexSymbols;
+
         // Batch validate candidates against DB (excluding indices)
         List<String> nonIndexCandidates = candidateSymbols.stream()
-                .filter(sym -> stockIndicesMarketDataService.findByIndexSymbol(sym) == null)
+                .filter(sym -> !matchingIndices.contains(sym.toUpperCase()))
                 .collect(Collectors.toList());
 
         Set<String> validTradingSymbols = new HashSet<>();
@@ -122,7 +142,7 @@ public class InstrumentUtils {
         java.util.Set<String> whitelist = java.util.Set.of("TATAMOTORS", "MOTHERSON", "BIRLACORPN", "NUVAMA", "GSPL", "MCX", "ANGELONE");
 
         for (String sym : candidateSymbols) {
-            if (stockIndicesMarketDataService.findByIndexSymbol(sym) != null || 
+            if (matchingIndices.contains(sym.toUpperCase()) || 
                 validTradingSymbols.contains(sym) || 
                 whitelist.contains(sym.toUpperCase())) {
                 resolvedSymbols.add(sym);
