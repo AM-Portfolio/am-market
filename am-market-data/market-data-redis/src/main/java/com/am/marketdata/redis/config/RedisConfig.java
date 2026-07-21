@@ -109,6 +109,19 @@ public class RedisConfig {
         return template;
     }
 
+    @Bean
+    @Primary
+    public RedisTemplate<String, String> stringRedisTemplate(GrowthBookService growthBookService) {
+        FeatureFlaggedRedisTemplate<String, String> template = new FeatureFlaggedRedisTemplate<>(growthBookService);
+        template.setConnectionFactory(redisConnectionFactory());
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new StringRedisSerializer());
+        template.setHashKeySerializer(new StringRedisSerializer());
+        template.setHashValueSerializer(new StringRedisSerializer());
+        template.afterPropertiesSet();
+        return template;
+    }
+
     /**
      * Redis cache manager with TTL configuration and JSR310 support
      */
