@@ -19,4 +19,5 @@ public class SecuritySearchRequest implements Serializable {
     private String industry;
     private String index; // Index name (e.g., "NIFTY 50")
     private String query; // General text search (symbol or ISIN regex)
+    private Integer limit; // Maximum number of results to return (optional)
 }
