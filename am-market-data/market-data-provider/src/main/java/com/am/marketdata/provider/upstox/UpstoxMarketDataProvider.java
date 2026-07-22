@@ -300,7 +300,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                      }
 
                      com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
-                             upstoxSdkService.getHistoricalCandleData(instrumentKey, "day", 1, toDate, fromDate);
+                             upstoxSdkService.getHistoricalCandleData(encodedKey, "day", 1, toDate, fromDate);
 
                     if (histResponse != null && histResponse.getData() != null
                             && histResponse.getData().getCandles() != null

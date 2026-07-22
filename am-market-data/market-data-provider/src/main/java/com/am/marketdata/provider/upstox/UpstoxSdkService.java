@@ -321,22 +321,22 @@ public class UpstoxSdkService {
                 return fetchHistoricalCandleDirect(normalizedKey, unit, interval, toDate, fromDate, isQueryingToday);
             }
 
-            if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
-                // The Upstox Swagger client does not URL-encode the path parameter for the intraday endpoint.
-                // We must manually URL-encode normalizedKey (e.g. replacing ' ' with '%20' and '|' with '%7C') to prevent HTTP 400.
-                String encodedIntradayKey = normalizedKey;
-                try {
-                    encodedIntradayKey = java.net.URLEncoder.encode(normalizedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
-                            .replace("+", "%20"); // Upstox expects %20 instead of + for spaces
-                } catch (java.io.UnsupportedEncodingException uee) {
-                    log.error("getHistoricalCandleData", "Failed to URL-encode intraday key: " + normalizedKey, uee);
-                }
+            // The Upstox Swagger client does not URL-encode path parameters.
+            // We must manually URL-encode normalizedKey (replacing ' ' with '%20' and '|' with '%7C') to prevent HTTP 400.
+            String encodedKey = normalizedKey;
+            try {
+                encodedKey = java.net.URLEncoder.encode(normalizedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
+                        .replace("+", "%20");
+            } catch (java.io.UnsupportedEncodingException uee) {
+                log.error("getHistoricalCandleData", "Failed to URL-encode key: " + normalizedKey, uee);
+            }
 
+            if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
                 log.info(
                         "Fetching live intraday data key={}, interval=1minute",
-                        encodedIntradayKey);
+                        encodedKey);
                 com.upstox.api.GetIntraDayCandleResponse intradayResponse = historyV3Api.getIntraDayCandleData(
-                        encodedIntradayKey, "1minute", 2);
+                        encodedKey, "1minute", 2);
                 return mapIntradayToHistoricalDataResponse(intradayResponse);
             }
 
@@ -344,15 +344,15 @@ public class UpstoxSdkService {
             if (useDateRange) {
                 log.info(
                         "Fetching historical data (range) key={}, unit={}, interval={}, to={}, from={}",
-                        normalizedKey, unit, interval, toDate, fromDate);
+                        encodedKey, unit, interval, toDate, fromDate);
                 sdkResponse = historyV3Api.getHistoricalCandleData1(
-                        normalizedKey, unit, interval, toDate, fromDate);
+                        encodedKey, unit, interval, toDate, fromDate);
             } else {
                 log.info(
                         "Fetching historical data (to_date only) key={}, unit={}, interval={}, to={}",
-                        normalizedKey, unit, interval, toDate);
+                        encodedKey, unit, interval, toDate);
                 sdkResponse = historyV3Api.getHistoricalCandleData(
-                        normalizedKey, unit, interval, toDate);
+                        encodedKey, unit, interval, toDate);
             }
 
             return mapToHistoricalDataResponse(sdkResponse);
