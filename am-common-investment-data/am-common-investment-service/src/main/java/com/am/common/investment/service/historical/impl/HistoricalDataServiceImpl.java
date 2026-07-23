@@ -73,8 +73,8 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             .filter(price -> price.getTime() != null && price.getOhlcv() != null)
             .collect(java.util.stream.Collectors.toList());
         } else {
-            // Get price history from equity service
-            prices = equityService.getPriceHistoryByKey(tradingSymbol, fromDate, toDate);
+            // Get price history from equity service using native DB-level window aggregation
+            prices = equityService.getPriceHistoryByKey(tradingSymbol, fromDate, toDate, interval);
         }
         
         if (prices.isEmpty()) {
@@ -82,8 +82,15 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             return Optional.empty();
         }
         
-        // Process data based on interval if needed
-        List<EquityPrice> processedPrices = processDataByInterval(prices, interval);
+        // Smart Resampling: If InfluxDB already downsampled data via aggregateWindow,
+        // bypass the CPU-heavy Java processDataByInterval loop to eliminate ZoneId processing bottlenecks.
+        List<EquityPrice> processedPrices;
+        if (interval != null && !interval.isEmpty()) {
+            logger.debug("Data pre-aggregated via InfluxDB aggregateWindow for interval {}; bypassing Java processDataByInterval", interval);
+            processedPrices = prices;
+        } else {
+            processedPrices = processDataByInterval(prices, interval);
+        }
         
         // Convert to OHLCVTPoint objects
         List<OHLCVTPoint> dataPoints = OHLCVTMapper.toOHLCVTPoints(processedPrices);

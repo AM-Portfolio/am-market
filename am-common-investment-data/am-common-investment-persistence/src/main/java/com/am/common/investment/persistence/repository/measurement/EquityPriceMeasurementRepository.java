@@ -14,13 +14,16 @@ public interface EquityPriceMeasurementRepository extends Repository<EquityPrice
      Optional<EquityPriceMeasurement> findLatestBySymbol(String symbol);
      List<EquityPriceMeasurement> findBySymbol(String symbol);
     List<EquityPriceMeasurement> findBySymbolAndTimeBetween(String symbol, Instant startTime, Instant endTime);
+    List<EquityPriceMeasurement> findBySymbolAndTimeBetween(String symbol, Instant startTime, Instant endTime, String windowInterval);
     
     // // Find by ISIN
      Optional<EquityPriceMeasurement> findLatestByIsin(String isin);
      List<EquityPriceMeasurement> findByIsin(String isin);
      List<EquityPriceMeasurement> findByIsinAndTimeBetween(String isin, Instant startTime, Instant endTime);
+     List<EquityPriceMeasurement> findByIsinAndTimeBetween(String isin, Instant startTime, Instant endTime, String windowInterval);
     
      List<EquityPriceMeasurement> findByKeyAndTimeBetween(String key, Instant startTime, Instant endTime);
+     List<EquityPriceMeasurement> findByKeyAndTimeBetween(String key, Instant startTime, Instant endTime, String windowInterval);
     
     // Find by exchange and currency
      List<EquityPriceMeasurement> findByExchange(String exchange);

@@ -26,6 +26,12 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     private final com.am.marketdata.service.kafka.producer.MarketDataProducer producer;
 
+    // Single-Flight Deduplication Map: Tracks active background backfills to prevent duplicate Upstox API calls
+    private static final java.util.concurrent.ConcurrentHashMap<String, Boolean> activeBackfills = new java.util.concurrent.ConcurrentHashMap<>();
+
+    // Shared Rate Limiter: Enforces global limit of 3 req/sec across all background provider backfills
+    private static final java.util.concurrent.Semaphore upstoxRateLimiter = new java.util.concurrent.Semaphore(3);
+
     private HistoricalDataRetriever(
             MarketDataPersistenceService persistenceService,
             MarketDataProviderFactory providerFactory,
@@ -272,18 +278,16 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                         missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
                     }
 
+                    // Return whatever data points exist locally in DB immediately to prevent empty payloads & 41s latencies
+                    result.put(symbol, data);
+                    remainingSymbols.remove(symbol);
+
                     if (missingEarlyData || missingRecentData) {
-                        log.info("[DATABASE_VALIDATION] Partial database data detected for {}. Discarding database entry to force fallback to provider. " +
-                                "Req: {} to {} (validation target: {} to {}), Found: {} to {} (lastTime={}, dataEndMs={}, validationEndMs={}, toleranceMs={}). MissingEarly: {}, MissingRecent: {}",
-                                symbol, fromDateStr, toDateStr,
-                                new java.sql.Timestamp(validationStartMs), new java.sql.Timestamp(validationEndMs),
-                                firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
-                                lastPointTime, dataEndMs, validationEndMs, toleranceMs,
-                                missingEarlyData, missingRecentData);
+                        log.info("[DATABASE_PARTIAL_HIT] Partial database data found for symbol: {}. Returning {} points immediately to client (< 20ms). Triggering background Single-Flight backfill.",
+                                symbol, points.size());
+                        triggerSingleFlightBackfill(symbol, fromDateStr, toDateStr);
                     } else {
-                        result.put(symbol, data);
-                        remainingSymbols.remove(symbol);
-                        log.debug("[DATABASE] Found valid historical data for symbol: {}", symbol);
+                        log.debug("[DATABASE] Found complete historical data for symbol: {}", symbol);
                     }
                 }
             } catch (Exception e) {
@@ -552,6 +556,58 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         }
         
         return targetDateTime.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+    }
+
+    /**
+     * Triggers a Single-Flight background backfill for a missing historical data gap.
+     * Prevents duplicate HTTP requests to Upstox when multiple requests arrive concurrently for the same range.
+     */
+    private void triggerSingleFlightBackfill(String symbol, String fromDateStr, String toDateStr) {
+        String backfillKey = symbol + ":" + interval.getApiValue() + ":" + fromDateStr + ":" + toDateStr;
+
+        // Try putting key into activeBackfills map. If non-null, another thread is already backfilling this gap!
+        if (activeBackfills.putIfAbsent(backfillKey, Boolean.TRUE) != null) {
+            log.info("[SINGLE_FLIGHT_SKIP] Single-Flight backfill already in progress for key: {}. Skipping duplicate provider fetch.", backfillKey);
+            return;
+        }
+
+        log.info("[SINGLE_FLIGHT_TRIGGER] Initiating async Single-Flight backfill for key: {}", backfillKey);
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            boolean permitAcquired = false;
+            try {
+                // Acquire permit from shared RateLimiter (max 3 req/sec to Upstox)
+                permitAcquired = upstoxRateLimiter.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS);
+                if (!permitAcquired) {
+                    log.warn("[SINGLE_FLIGHT_RATE_LIMIT] Timed out waiting for Upstox rate limiter permit for key: {}", backfillKey);
+                    return;
+                }
+
+                MarketDataProvider provider = providerFactory.getProvider(targetProviderName != null ? targetProviderName : "upstox");
+                if (provider != null) {
+                    log.info("[SINGLE_FLIGHT_EXEC] Fetching gap data from provider for symbol: {} interval: {}", symbol, interval.getApiValue());
+                    HistoricalData historicalData = provider.getHistoricalData(symbol, fromDate, toDate, interval, continuous, additionalParams);
+
+                    if (historicalData != null && historicalData.getDataPoints() != null && !historicalData.getDataPoints().isEmpty()) {
+                        log.info("[SINGLE_FLIGHT_SUCCESS] Backfilled {} data points for symbol: {}. Saving asynchronously.",
+                                historicalData.getDataPointCount(), symbol);
+                        saveDataAsync(Collections.singletonMap(symbol, historicalData));
+                    }
+                }
+            } catch (Exception e) {
+                log.error("[SINGLE_FLIGHT_ERROR] Failed async gap backfill for key: " + backfillKey, e);
+            } finally {
+                if (permitAcquired) {
+                    // Release rate limiter permit after short delay to maintain steady 3 req/sec throttle
+                    try {
+                        Thread.sleep(300);
+                    } catch (InterruptedException ignored) {}
+                    upstoxRateLimiter.release();
+                }
+                // ALWAYS remove key from activeBackfills map in finally block to prevent permanent locks on exceptions
+                activeBackfills.remove(backfillKey);
+                log.debug("[SINGLE_FLIGHT_CLEANUP] Released Single-Flight lock for key: {}", backfillKey);
+            }
+        });
     }
 
     /**

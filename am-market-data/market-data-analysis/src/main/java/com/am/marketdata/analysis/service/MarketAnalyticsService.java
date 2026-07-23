@@ -139,7 +139,8 @@ public class MarketAnalyticsService {
                 java.time.LocalDateTime filterFrom = "1D".equalsIgnoreCase(range)
                         ? targetDate.atTime(9, 15)
                         : from;
-                long minTime = filterFrom.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+                java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
+                long minTime = filterFrom.atZone(kolkataZone).toInstant().toEpochMilli();
 
                 response.getData().forEach((s, symbolData) -> {
                     if (symbolData != null && symbolData.getDataPoints() != null) {
@@ -147,10 +148,8 @@ public class MarketAnalyticsService {
                                 .getDataPoints().stream()
                                 .filter(p -> {
                                     try {
-                                        // Fix: Use Asia/Kolkata timezone to parse data point timestamp instead of server's local systemDefault().
-                                        // This ensures that the comparison with minTime (which is computed in Asia/Kolkata)
-                                        // is done using the same timezone context, avoiding data point drop-offs due to timezone mismatch.
-                                        long timestamp = p.getTime().atZone(java.time.ZoneId.of("Asia/Kolkata"))
+                                        // Performance Optimization: Use pre-cached kolkataZone instance instead of calling ZoneId.of() inside stream loop
+                                        long timestamp = p.getTime().atZone(kolkataZone)
                                                 .toInstant()
                                                 .toEpochMilli();
                                         return timestamp >= minTime;

@@ -312,8 +312,9 @@ public class MarketDataController {
                         log.warn("Validation error: {}", errorType);
                         return ResponseEntity.badRequest().body(response);
                     } else {
-                        flowLogger.fail(span, new Exception(response.getError()));
-                        return ResponseEntity.internalServerError().body(response);
+                        // Return HTTP 200 OK for unseeded or partial date ranges so frontend receives empty/partial payload gracefully
+                        log.info("Returning HTTP 200 OK with partial/empty data payload for error message: {}", errorType);
+                        return ResponseEntity.ok(response);
                     }
                 }
 
