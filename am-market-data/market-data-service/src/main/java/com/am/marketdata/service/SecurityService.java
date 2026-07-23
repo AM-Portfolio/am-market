@@ -314,53 +314,34 @@ public class SecurityService {
             if (!uncachedQueries.isEmpty()) {
                 int limit = request.getLimit() != null ? request.getLimit() : 3;
 
-                // STEP 3: TIER 2 & 3 - THUNDERING HERD COLLAPSING & RESOLUTION
+                // STEP 3: SINGLE-QUERY BULK FETCH FOR UNCACHED TERMS (1 NETWORK CALL)
+                // Combine all uncached query strings into a single MongoDB $in bulk query for symbols and ISINs.
+                // This replaces the N+1 thread pool loop with 1 single database call (O(1) connection usage).
+                Map<String, List<SecurityDocument>> bulkDocMap = bulkFetchDocumentsForQueries(uncachedQueries);
+
                 for (String query : uncachedQueries) {
-                    String fetchKey = query.toLowerCase();
+                    List<SecurityDocument> matches = bulkDocMap.getOrDefault(query.toLowerCase(), List.of());
 
-                    // Singleflight Collapsing: Check if another concurrent thread is already fetching this query term
-                    java.util.concurrent.CompletableFuture<List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> future =
-                        activeFetches.computeIfAbsent(fetchKey, k -> {
-                            java.util.concurrent.CompletableFuture<List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> f =
-                                java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-                                    List<SecurityDocument> matches = resolveDocumentsForQuery(query);
-                                    List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches =
-                                            convertToSecurityMatches(query, matches, request.getMinMatchScore());
-
-                                    securityMatches.sort(java.util.Comparator
-                                            .comparingDouble(
-                                                    com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch::getMatchScore)
-                                            .reversed()
-                                            .thenComparing(m -> m.getMarketCapValue() == null ? 0L : m.getMarketCapValue(),
-                                                    java.util.Comparator.reverseOrder()));
-
-                                    if (securityMatches.size() > limit) {
-                                        return securityMatches.subList(0, limit);
-                                    }
-                                    return securityMatches;
-                                });
-
-                            // 3-second timeout protection to prevent thread starvation if a fetch stalls
-                            return f.orTimeout(3, TimeUnit.SECONDS);
-                        });
-
-                    try {
-                        List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches = future.get();
-                        freshResults.put(query, securityMatches);
-                    } catch (Exception e) {
-                        log.warn("batchSearch", "Error or timeout resolving query: " + query + ", falling back to direct fetch", e);
-                        activeFetches.remove(fetchKey);
-                        List<SecurityDocument> matches = resolveDocumentsForQuery(query);
-                        List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches =
-                                convertToSecurityMatches(query, matches, request.getMinMatchScore());
-                        if (securityMatches.size() > limit) {
-                            securityMatches = securityMatches.subList(0, limit);
-                        }
-                        freshResults.put(query, securityMatches);
-                    } finally {
-                        // Purge key from activeFetches map after completion so future requests get clean state
-                        activeFetches.remove(fetchKey);
+                    // Fallback to individual resolution (Text Index / NIFTY 500) if no exact bulk match was found
+                    if (matches.isEmpty()) {
+                        matches = resolveDocumentsForQuery(query);
                     }
+
+                    List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches =
+                            convertToSecurityMatches(query, matches, request.getMinMatchScore());
+
+                    securityMatches.sort(java.util.Comparator
+                            .comparingDouble(
+                                    com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch::getMatchScore)
+                            .reversed()
+                            .thenComparing(m -> m.getMarketCapValue() == null ? 0L : m.getMarketCapValue(),
+                                    java.util.Comparator.reverseOrder()));
+
+                    if (securityMatches.size() > limit) {
+                        securityMatches = securityMatches.subList(0, limit);
+                    }
+
+                    freshResults.put(query, securityMatches);
                 }
 
                 // STEP 4: CACHE FRESH RESULTS IN REDIS
@@ -454,6 +435,48 @@ public class SecurityService {
             }
             target.putIfAbsent(doc.getKey().getIsin(), doc);
         }
+    }
+
+    /**
+     * Bulk fetch securities matching any symbol or ISIN in a single MongoDB query.
+     * Uses B-Tree unique/compound indexes (key.symbol_1, key.isin_1) for sub-millisecond lookup.
+     */
+    private Map<String, List<SecurityDocument>> bulkFetchDocumentsForQueries(List<String> queries) {
+        if (queries == null || queries.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<String> upperQueries = queries.stream().map(String::toUpperCase).collect(Collectors.toList());
+
+        Query mongoQuery = new Query(new Criteria().orOperator(
+                Criteria.where("key.symbol").in(upperQueries),
+                Criteria.where("key.isin").in(upperQueries)
+        ));
+
+        // FIELD PROJECTION OPTIMIZATION:
+        // Instruct MongoDB to return only key and metadata fields over TCP wire
+        mongoQuery.fields().include("key").include("metadata");
+
+        List<SecurityDocument> docs = mongoTemplate.find(mongoQuery, SecurityDocument.class);
+        if (docs == null || docs.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, List<SecurityDocument>> docMap = new HashMap<>();
+        for (SecurityDocument doc : docs) {
+            if (!isValidDocument(doc) || doc.getKey() == null) {
+                continue;
+            }
+            if (doc.getKey().getSymbol() != null) {
+                String symLower = doc.getKey().getSymbol().toLowerCase();
+                docMap.computeIfAbsent(symLower, k -> new ArrayList<>()).add(doc);
+            }
+            if (doc.getKey().getIsin() != null) {
+                String isinLower = doc.getKey().getIsin().toLowerCase();
+                docMap.computeIfAbsent(isinLower, k -> new ArrayList<>()).add(doc);
+            }
+        }
+        return docMap;
     }
 
     private List<SecurityDocument> searchDocuments(String text) {
