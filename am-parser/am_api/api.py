@@ -125,11 +125,37 @@ from am_configs.settings import settings as app_settings
 
 setup_parser_logging(app_settings.log_level)
 
-# Create FastAPI app with lifecycle management
+tags_metadata = [
+    {
+        "name": "ETF Holdings",
+        "description": "APIs for looking up ETF constituent holdings, ISIN fuzzy matching, and deduplicated search.",
+    },
+    {
+        "name": "Background Jobs",
+        "description": "Async job queue endpoints for long-running LLM document parsing, Excel processing, and webhook tracking.",
+    },
+    {
+        "name": "System Health",
+        "description": "Liveness probes, MongoDB connection diagnostics, and telemetry health endpoints.",
+    },
+]
+
+# Traefik Ingress Compatibility:
+# When am-parser is deployed behind Traefik ingress with prefix stripping (/parser),
+# FastAPI needs root_path to construct relative OpenAPI URLs (/parser/openapi.json).
+# This prevents 404 "API spec not found" errors when accessing Swagger UI at https://am.asrax.in/parser/docs.
+root_path = os.getenv("ROOT_PATH", os.getenv("FASTAPI_ROOT_PATH", ""))
+
+# Create FastAPI app with lifecycle management and enriched OpenAPI specs
 app = FastAPI(
-    title="Mutual Fund Portfolio API",
-    description="REST API for managing mutual fund portfolio data",
+    title="AM Portfolio Parser Microservice API",
+    description=(
+        "High-performance async parsing microservice for mutual fund portfolios, "
+        "ETF holdings data, Excel document extraction, and background LLM processing."
+    ),
     version="1.0.0",
+    openapi_tags=tags_metadata,
+    root_path=root_path,
     lifespan=lifespan
 )
 

@@ -55,7 +55,7 @@ am:
   feature-flag:
     enabled: ${GROWTHBOOK_ENABLED:true}
     api-host: ${GROWTHBOOK_API_HOST:https://growthbook.asrax.in/gbapi}
-    client-key: ${GROWTHBOOK_CLIENT_KEY:sdk-8WmIFrhYLelAXr8}
+    client-key: ${GROWTHBOOK_CLIENT_KEY:${GROWTHBOOK_SDK_KEY:sdk-8WmIFrhYLelAXr8}}
   # Centralized observability from am-core-services
   observability:
     enabled: ${AM_OBSERVABILITY_ENABLED:true}
@@ -166,8 +166,8 @@ logging:
     "[org.springframework]": WARN
     "[org.apache.kafka]": INFO
     "[org.springframework.data.redis]": WARN # Reduce Redis connection logging
-    "[com.upstox]": DEBUG
-    "[org.apache.http]": DEBUG
+    "[com.upstox]": INFO
+    "[org.apache.http]": WARN
 
 
 upstox:

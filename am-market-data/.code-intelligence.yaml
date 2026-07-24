@@ -1,0 +1,50 @@
+enabled: true
+tool: gitnexus
+phase: local
+versions:
+  gitnexus: 1.6.9
+  graphifyy: 0.4.11
+production:
+  branch: main
+  embeddings: false
+  ci: false
+  mode: verify
+local:
+  sync_on_commit: true
+  sync_on_save: false
+  index_workspace: true
+  watch_debounce_sec: 30
+gitnexus:
+  skipAgentsMd: true
+  skipSkills: true
+  group_path: services/am-market-data
+capabilities:
+  domain: market-data
+  surfaces:
+    - http
+    - kafka
+    - mongodb
+    - redis
+    - influx
+    - libs
+    - config
+  pdg: true
+  scan:
+    scan_roots:
+      - .
+  topics:
+    - am-stock-price-update
+    - nse-indices-update
+    - nse-stock-indices-update
+    - stock-board-of-directors
+    - stock-quaterly-financials
+    - stock-results-financials
+    - stock-profit-and-loss-financials
+    - stock-balance-sheet-financials
+    - stock-cash-flow-financials
+    - stock-fact-sheet-dividend-financials
+  config_prefixes:
+    - am.market
+    - am.observability
+    - market-data
+    - upstox

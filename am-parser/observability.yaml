@@ -1,12 +1,17 @@
 apiVersion: am.obs/v1
 kind: ServiceObservability
 service: am-parser
-tier: B
+tier: A
 runtime: python
 k8s_app_label: am-parser
 metrics_application: am-parser
 namespace: am-apps-preprod
-owners: [platform]
+owners: [market]
 signals:
-  bundle: tier-b-python
+  bundle: tier-a-python-core
   domain: []
+  include: []
+dashboard:
+  technical:
+    rows:
+      collapse: [row_python, row_k8s]

@@ -1,0 +1,6 @@
+apiVersion: am.qa/v1
+kind: ReleaseReadiness
+service: am-parser
+enabled: true
+branches: [main, master]
+environment: dev
