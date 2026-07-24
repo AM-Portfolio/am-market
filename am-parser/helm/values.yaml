@@ -38,7 +38,7 @@ vault:
   serviceAccountName: "am-backend-sa"
   secretPaths: {}
 
-# Plane A — Prometheus scrape
+# Plane A - Prometheus scrape
 podAnnotations:
   prometheus.io/scrape: "true"
   prometheus.io/port: "8080"
