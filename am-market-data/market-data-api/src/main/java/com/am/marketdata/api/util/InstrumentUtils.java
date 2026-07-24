@@ -58,10 +58,11 @@ public class InstrumentUtils {
             return new HashSet<>();
         }
 
-        // Normalize all raw requested symbols to uppercase
+        // Normalize all raw requested symbols to uppercase and strip exchange prefixes (e.g. NSE:RELIANCE -> RELIANCE)
         List<String> upperRawSymbols = rawSymbols.stream()
                 .map(String::trim)
                 .map(String::toUpperCase)
+                .map(s -> s.contains(":") ? s.substring(s.indexOf(":") + 1) : s)
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toList());
 
