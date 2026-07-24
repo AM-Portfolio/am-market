@@ -127,6 +127,8 @@ spring:
 
 springdoc:
   swagger-ui:
+    url: ${SPRINGDOC_SWAGGER_UI_URL:/market/v3/api-docs}
+    config-url: ${SPRINGDOC_SWAGGER_UI_CONFIG_URL:/market/v3/api-docs/swagger-config}
     disable-swagger-default-url: true
     path: /swagger-ui.html
   api-docs:
