@@ -9,6 +9,7 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.tags.Tag;
+import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -61,5 +62,13 @@ public class OpenApiConfig {
                                         .scheme("bearer")
                                         .bearerFormat("JWT")
                                         .description("JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"")));
+    }
+
+    @Bean
+    public GroupedOpenApi marketDataApi() {
+        return GroupedOpenApi.builder()
+                .group("am-market-data")
+                .packagesToScan("com.am.marketdata.api.controller", "com.am.marketdata.analysis.controller")
+                .build();
     }
 }

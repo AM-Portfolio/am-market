@@ -37,3 +37,18 @@ LICENSE
 **/testdata/
 spt/
 **/spt/
+
+# Scratch / Query Python scripts
+check_pod_env.py
+curl_batch.py
+curl_batch_full.py
+curl_batch_missing.py
+curl_both.py
+db_check_docs.py
+get_batch_error.py
+get_exception_logs.py
+insert_missing_indices.py
+show_dbs_and_collections.py
+test_external_batch.py
+trigger_prev_close_now.py
+
