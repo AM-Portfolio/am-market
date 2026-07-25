@@ -113,24 +113,34 @@ public class MarketAnalyticsService {
             // Filter data points by time range for each symbol
             if (response.getData() != null) {
                 // [1D Timeframe Chart Optimization]
-                // 1. Detect if today is a weekend. If so, roll back the query date target to Friday.
-                //    This prevents the chart from being empty when viewed on a Saturday or Sunday.
+                // 1. Detect if today is a weekend or before market open. If so, roll back the query date target to the previous trading day.
+                //    This prevents the chart from being empty when viewed on a Saturday, Sunday, or early morning before open.
                 java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
                 java.time.DayOfWeek day = istNow.getDayOfWeek();
                 java.time.LocalDate targetDate = istNow.toLocalDate();
+                java.time.LocalTime time = istNow.toLocalTime();
+                
+                boolean isBeforeMarketOpen = time.isBefore(java.time.LocalTime.of(9, 15));
                 if (day == java.time.DayOfWeek.SATURDAY) {
                     targetDate = targetDate.minusDays(1);
                 } else if (day == java.time.DayOfWeek.SUNDAY) {
                     targetDate = targetDate.minusDays(2);
+                } else if (isBeforeMarketOpen) {
+                    // It's a weekday, but before market opens. Roll back to the previous trading day.
+                    targetDate = targetDate.minusDays(1);
+                    if (targetDate.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+                        targetDate = targetDate.minusDays(2);
+                    }
                 }
 
                 // 2. Bound the filter to the starting bell of the active market session (9:15 AM IST).
-                //    By using 9:15 AM today/Friday instead of "now - 24 hours" (which points to yesterday afternoon),
-                //    we preserve today's complete intraday chart progression rather than stripping out all daily candles.
+                //    By using 9:15 AM today/Friday/yesterday instead of "now - 24 hours" (which points to yesterday afternoon),
+                //    we preserve the complete intraday chart progression rather than stripping out all daily candles.
                 java.time.LocalDateTime filterFrom = "1D".equalsIgnoreCase(range)
                         ? targetDate.atTime(9, 15)
                         : from;
-                long minTime = filterFrom.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+                java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
+                long minTime = filterFrom.atZone(kolkataZone).toInstant().toEpochMilli();
 
                 response.getData().forEach((s, symbolData) -> {
                     if (symbolData != null && symbolData.getDataPoints() != null) {
@@ -138,10 +148,8 @@ public class MarketAnalyticsService {
                                 .getDataPoints().stream()
                                 .filter(p -> {
                                     try {
-                                        // Fix: Use Asia/Kolkata timezone to parse data point timestamp instead of server's local systemDefault().
-                                        // This ensures that the comparison with minTime (which is computed in Asia/Kolkata)
-                                        // is done using the same timezone context, avoiding data point drop-offs due to timezone mismatch.
-                                        long timestamp = p.getTime().atZone(java.time.ZoneId.of("Asia/Kolkata"))
+                                        // Performance Optimization: Use pre-cached kolkataZone instance instead of calling ZoneId.of() inside stream loop
+                                        long timestamp = p.getTime().atZone(kolkataZone)
                                                 .toInstant()
                                                 .toEpochMilli();
                                         return timestamp >= minTime;

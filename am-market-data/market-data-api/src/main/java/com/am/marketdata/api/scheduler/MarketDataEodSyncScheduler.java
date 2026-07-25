@@ -15,13 +15,7 @@ public class MarketDataEodSyncScheduler {
 
     private final AppLogger log = AppLogger.getLogger();
     private final StockIndicesService stockIndicesService;
-
-    // Major Indian Indices to sync at EOD
-    private static final List<String> MAJOR_INDICES = Arrays.asList(
-            "NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "NIFTY IT", 
-            "NIFTY 100", "NIFTY 200", "NIFTY 500", "NIFTY MIDCAP 100", 
-            "NIFTY SMLCAP 100"
-    );
+    private final com.am.marketdata.scraper.config.NSEIndicesConfig nseIndicesConfig;
 
     /**
      * Runs Monday to Friday at 3:40 PM IST (15:40) to sync final EOD prices 
@@ -37,10 +31,33 @@ public class MarketDataEodSyncScheduler {
         log.info(methodName, "Starting EOD Index Price Sync Scheduler to persist Redis prices to MongoDB");
 
         try {
+            // Dynamically load all configured index names from application yml/properties
+            List<String> allIndices = new java.util.ArrayList<>();
+            if (nseIndicesConfig.getBroadMarketIndices() != null) {
+                allIndices.addAll(nseIndicesConfig.getBroadMarketIndices());
+            }
+            if (nseIndicesConfig.getSectorIndices() != null) {
+                allIndices.addAll(nseIndicesConfig.getSectorIndices());
+            }
+
+            // Also ensure both plural and singular aliases of Nifty Fin Services are synced
+            if (allIndices.contains("NIFTY FIN SERVICES") && !allIndices.contains("NIFTY FIN SERVICE")) {
+                allIndices.add("NIFTY FIN SERVICE");
+            }
+
+            if (allIndices.isEmpty()) {
+                log.warn(methodName, "No indices found in configuration. Falling back to default list.");
+                allIndices = Arrays.asList(
+                    "NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "NIFTY IT", 
+                    "NIFTY 100", "NIFTY 200", "NIFTY 500", "NIFTY MIDCAP 100", 
+                    "NIFTY SMLCAP 100"
+                );
+            }
+
             // Force a refresh (forceRefresh = true) to fetch the official exchange-adjusted 
             // post-market closing prices from Upstox instead of copying the raw 3:30 PM ticks from Redis.
-            stockIndicesService.getLatestIndicesData(MAJOR_INDICES, true);
-            log.info(methodName, "Successfully completed EOD Index Price Sync");
+            stockIndicesService.getLatestIndicesData(allIndices, true);
+            log.info(methodName, "Successfully completed EOD Index Price Sync for " + allIndices.size() + " indices.");
         } catch (Exception e) {
             log.error(methodName, "Error during EOD Index Price Sync", e);
         }

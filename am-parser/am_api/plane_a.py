@@ -27,7 +27,7 @@ def _setup_metrics(app: FastAPI, application: str) -> None:
     try:
         from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
     except ImportError:
-        logger.warning("prometheus_client missing — /metrics not enabled")
+        logger.warning("prometheus_client missing - /metrics not enabled")
         return
 
     up = Gauge("am_process_up", "1 if the process is up", ["application"])
@@ -67,7 +67,7 @@ def _setup_metrics(app: FastAPI, application: str) -> None:
 def _setup_tracing(app: FastAPI, service_name: str) -> None:
     endpoint = (os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") or "").strip()
     if not endpoint:
-        logger.info("OTEL endpoint unset — tracing disabled")
+        logger.info("OTEL endpoint unset - tracing disabled")
         return
 
     try:
@@ -85,7 +85,7 @@ def _setup_tracing(app: FastAPI, service_name: str) -> None:
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
         from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
     except ImportError:
-        logger.warning("opentelemetry deps missing — tracing not enabled")
+        logger.warning("opentelemetry deps missing - tracing not enabled")
         return
 
     resource = Resource.create(

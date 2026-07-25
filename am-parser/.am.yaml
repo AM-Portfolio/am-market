@@ -1,3 +1,18 @@
-runtime: "python"
-entrypoint: "am_api.api:app"
-port: 8022
+# Local amctl identity — matches CI image_name
+name: am-parser
+release: am-parser
+image: ghcr.io/am-portfolio/am-parser
+runtime: python
+language: python
+entrypoint: am_api.api:app
+port: 8080
+dockerfile: Dockerfile
+context: .
+github:
+  repo: AM-Portfolio/am-market
+  deploy_workflow: direct-deploy.yml
+  service: am-parser
+  ref: main
+deploy:
+  via: helm
+  rebuild: on-change

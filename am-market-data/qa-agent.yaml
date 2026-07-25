@@ -1,0 +1,6 @@
+apiVersion: am.qa/v1
+kind: ReleaseReadiness
+service: am-market-data
+enabled: true
+branches: [main, master]
+environment: dev

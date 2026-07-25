@@ -22,6 +22,8 @@ import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.MarketDataService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -206,14 +208,28 @@ public class MarketDataController {
      * @param request The quotes request containing symbols and timeframe
      * @return Map of symbol to quote data with metadata
      */
-    @PostMapping(value = "/quotes", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/quotes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get quotes for multiple symbols (POST)", description = "Retrieves latest quotes for multiple symbols with support for different timeframes using POST request")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Quotes retrieved successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
             @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<Map<String, Object>> getQuotesPost(@RequestBody QuotesRequest request) {
+    public ResponseEntity<Map<String, Object>> getQuotesPost(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "Quotes request payload containing symbols, timeframe, and options",
+                    required = true,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = QuotesRequest.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    name = "Batch Stock Quotes Request",
+                                    summary = "Sample quotes request for RELIANCE and TCS",
+                                    value = "{\"symbols\": [\"NSE_EQ:RELIANCE\", \"NSE_EQ:TCS\"], \"timeFrame\": \"1d\", \"indexSymbol\": false, \"forceRefresh\": false}"
+                            )
+                    )
+            )
+            @RequestBody QuotesRequest request) {
         Set<String> symbolList = parseSymbols(request.getSymbols());
         try (FlowSpan span = flowLogger.start("market.quotes.fetch.post",
                 "symbolsCount", symbolList.size(), "timeFrame", request.getTimeFrame(), "forceRefresh",
@@ -253,14 +269,28 @@ public class MarketDataController {
      * @param request Request body containing symbols and options
      * @return Map of symbol to OHLC data with cache status
      */
-    @PostMapping(value = "/ohlc", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/ohlc", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get OHLC data for multiple symbols", description = "Retrieves Open-High-Low-Close data for multiple symbols with support for different timeframes")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "OHLC data retrieved successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
             @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<?> getOHLC(@RequestBody OHLCRequest request) {
+    public ResponseEntity<?> getOHLC(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "OHLC request payload containing symbols, timeframe, and options",
+                    required = true,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = OHLCRequest.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    name = "Batch OHLC Request",
+                                    summary = "Sample OHLC request for RELIANCE and INFY",
+                                    value = "{\"symbols\": [\"NSE_EQ:RELIANCE\", \"NSE_EQ:INFY\"], \"timeFrame\": \"1d\", \"indexSymbol\": false, \"forceRefresh\": false}"
+                            )
+                    )
+            )
+            @RequestBody OHLCRequest request) {
         Set<String> symbolList = parseSymbols(request.getSymbols());
         try (FlowSpan span = flowLogger.start("market.ohlc.fetch",
                 "symbolsCount", symbolList.size(), "timeFrame", request.getTimeFrame(), "indexSymbol",
@@ -312,8 +342,9 @@ public class MarketDataController {
                         log.warn("Validation error: {}", errorType);
                         return ResponseEntity.badRequest().body(response);
                     } else {
-                        flowLogger.fail(span, new Exception(response.getError()));
-                        return ResponseEntity.internalServerError().body(response);
+                        // Return HTTP 200 OK for unseeded or partial date ranges so frontend receives empty/partial payload gracefully
+                        log.info("Returning HTTP 200 OK with partial/empty data payload for error message: {}", errorType);
+                        return ResponseEntity.ok(response);
                     }
                 }
 

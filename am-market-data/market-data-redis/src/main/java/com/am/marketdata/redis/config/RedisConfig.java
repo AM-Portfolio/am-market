@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.am.marketdata.common.log.AppLogger;
+import com.am.libraries.featureflag.service.GrowthBookService;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.EnableCaching;
@@ -17,6 +18,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
@@ -90,8 +92,10 @@ public class RedisConfig {
      * Redis template for operations with JSR310 support
      */
     @Bean
-    public RedisTemplate<String, Object> redisTemplate(@Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper) {
-        RedisTemplate<String, Object> template = new RedisTemplate<>();
+    public RedisTemplate<String, Object> redisTemplate(
+            @Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper,
+            GrowthBookService growthBookService) {
+        RedisTemplate<String, Object> template = new FeatureFlaggedRedisTemplate<>(growthBookService);
         template.setConnectionFactory(redisConnectionFactory());
         template.setKeySerializer(new StringRedisSerializer());
 
@@ -102,6 +106,19 @@ public class RedisConfig {
         template.setValueSerializer(serializer);
         template.setHashKeySerializer(new StringRedisSerializer());
         template.setHashValueSerializer(serializer);
+        template.afterPropertiesSet();
+        return template;
+    }
+
+    @Bean
+    @Primary
+    public StringRedisTemplate stringRedisTemplate(GrowthBookService growthBookService) {
+        FeatureFlaggedStringRedisTemplate template = new FeatureFlaggedStringRedisTemplate(growthBookService);
+        template.setConnectionFactory(redisConnectionFactory());
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new StringRedisSerializer());
+        template.setHashKeySerializer(new StringRedisSerializer());
+        template.setHashValueSerializer(new StringRedisSerializer());
         template.afterPropertiesSet();
         return template;
     }

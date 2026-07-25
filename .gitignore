@@ -90,3 +90,12 @@ am-market-data/get_exception_logs.py
 am-market-data/insert_missing_indices.py
 am-market-data/show_dbs_and_collections.py
 am-market-data/test_external_batch.py
+
+# Performance Testing (SPT)
+spt/
+**/spt/
+**/spt/*
+*spt-test*
+*sptReport*
+*spt_report*
+

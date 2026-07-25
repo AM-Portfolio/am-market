@@ -32,6 +32,7 @@ public class MarketDataAdminController {
     private final com.am.marketdata.scheduler.service.MarketDataOrchestrator orchestrator;
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
     private final com.am.marketdata.scheduler.PreviousCloseScheduler previousCloseScheduler;
+    private final com.am.marketdata.scraper.service.MarketDataProcessingService marketDataProcessingService;
 
     @GetMapping("/logs/{jobId}")
     public ResponseEntity<IngestionJobLog> getJobDetails(@PathVariable String jobId) {
@@ -104,6 +105,19 @@ public class MarketDataAdminController {
         log.info("Manual trigger: Indices Data Processing");
         orchestrator.triggerIndicesDataProcessing();
         return ResponseEntity.ok("Triggered Indices Data Processing");
+    }
+
+    @PostMapping("/scheduler/indices/force-process")
+    public ResponseEntity<String> forceTriggerIndicesProcessing() {
+        log.info("Manual trigger: Force Indices Data Processing (bypassing trading hours)");
+        new Thread(() -> {
+            try {
+                marketDataProcessingService.fetchAndProcessMarketData();
+            } catch (Exception e) {
+                log.error("Failed to run manually triggered force indices processing", e);
+            }
+        }, "manual-force-indices-thread").start();
+        return ResponseEntity.ok("Force triggered indices processing in background");
     }
 
     @PostMapping("/scheduler/indices/retry")

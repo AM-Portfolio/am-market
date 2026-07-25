@@ -52,12 +52,17 @@ app:
     enabled: ${MARKET_DATA_KAFKA_ENABLED:false}
 
 am:
+  feature-flag:
+    enabled: ${GROWTHBOOK_ENABLED:true}
+    api-host: ${GROWTHBOOK_API_HOST:https://growthbook.asrax.in/gbapi}
+    client-key: ${GROWTHBOOK_CLIENT_KEY:${GROWTHBOOK_SDK_KEY:sdk-8WmIFrhYLelAXr8}}
   # Centralized observability from am-core-services
   observability:
     enabled: ${AM_OBSERVABILITY_ENABLED:true}
     request-log:
       # Emit a structured JSON log for every incoming HTTP request
       enabled: true
+      log-payloads: true
       ignore-paths:
         - "/actuator/**"
         - "/**/health/**"
@@ -120,6 +125,15 @@ spring:
       #- classpath:application-endpoints.yml
       - classpath:application-zerodha.yml
 
+springdoc:
+  swagger-ui:
+    url: ${SPRINGDOC_SWAGGER_UI_URL:/market/v3/api-docs}
+    config-url: ${SPRINGDOC_SWAGGER_UI_CONFIG_URL:/market/v3/api-docs/swagger-config}
+    disable-swagger-default-url: true
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
 market-data:
   provider: upstox
   batch-search:
@@ -152,6 +166,9 @@ logging:
     "[org.springframework]": WARN
     "[org.apache.kafka]": INFO
     "[org.springframework.data.redis]": WARN # Reduce Redis connection logging
+    "[com.upstox]": INFO
+    "[org.apache.http]": WARN
+
 
 upstox:
   interval: I1

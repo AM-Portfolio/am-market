@@ -51,20 +51,54 @@ public class MarketIndexController {
          * Get latest market data for multiple indices
          * 
          * @param indexSymbols List of Index symbols
-         * @param forceRefresh Whether to force refresh from source instead of using
-         *                     cache
+         * @param forceRefresh Whether to force refresh from source instead of using cache
          * @return List of market data for the requested indices
          */
-        @PostMapping(value = "/batch", produces = MediaType.APPLICATION_JSON_VALUE)
-        @Operation(summary = "Get latest market data for multiple indices", description = "Retrieves the latest market data for multiple indices in a single request")
+        @PostMapping(value = "/batch", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+        @Operation(
+                summary = "Get latest market data for multiple indices",
+                description = "Retrieves the latest market data for multiple indices in a single batch request"
+        )
         @ApiResponses(value = {
-                        @ApiResponse(responseCode = "200", description = "Indices data retrieved successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = StockIndicesMarketData.class))),
+                        @ApiResponse(
+                                responseCode = "200",
+                                description = "Indices data retrieved successfully",
+                                content = @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                                schema = @Schema(implementation = StockIndicesMarketData.class)
+                                        )
+                                )
+                        ),
                         @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
                         @ApiResponse(responseCode = "500", description = "Internal server error")
         })
         public ResponseEntity<java.util.List<StockIndicesMarketData>> getLatestIndicesData(
-                        @Parameter(description = "List of Index symbols (e.g., NIFTY, BANKNIFTY, FINNIFTY)", required = true) @RequestBody java.util.List<String> indexSymbols,
-                        @Parameter(description = "Force refresh from source instead of using cache") @RequestParam(value = "forceRefresh", required = false, defaultValue = "false") boolean forceRefresh) {
+                        /*
+                         * Using @io.swagger.v3.oas.annotations.parameters.RequestBody with @Content and @ExampleObject
+                         * ensures Swagger UI populates both the 'Schema' tab and 'Example Value' tab correctly.
+                         */
+                        @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                                description = "List of NSE index symbols to fetch market data for",
+                                required = true,
+                                content = @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        schema = @Schema(
+                                                type = "array",
+                                                implementation = String.class,
+                                                description = "Array of valid NSE index symbols",
+                                                example = "[\"NIFTY 50\", \"NIFTY BANK\", \"NIFTY IT\"]"
+                                        ),
+                                        examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                                name = "Major NSE Indices Request",
+                                                summary = "Batch query for NIFTY 50, NIFTY BANK, and NIFTY IT",
+                                                value = "[\"NIFTY 50\", \"NIFTY BANK\", \"NIFTY IT\"]"
+                                        )
+                                )
+                        )
+                        @RequestBody java.util.List<String> indexSymbols,
+                        @Parameter(description = "Force refresh from source instead of using cache", example = "false")
+                        @RequestParam(value = "forceRefresh", required = false, defaultValue = "false") boolean forceRefresh) {
 
                 String methodName = "getLatestIndicesData";
                 log.info(methodName, String.format("Fetching latest data for indices: %s, forceRefresh: %b",

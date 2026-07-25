@@ -58,6 +58,7 @@ public class UpstoxIndexIdentifier {
                 // Add custom aliases for UI symbols that differ from Upstox instrument keys
                 indexKeyMap.put("NIFTY PHARMACEUTICALS", "NSE_INDEX|Nifty Pharma");
                 indexKeyMap.put("NIFTY FIN SERVICES", "NSE_INDEX|Nifty Fin Service");
+                indexKeyMap.put("NIFTY FIN SERVICE", "NSE_INDEX|Nifty Fin Service");
                 indexKeyMap.put("NIFTY CONSR DURABLE", "NSE_INDEX|NIFTY CONSR DURBL");
 
                 log.info("Loaded {} Upstox Index Identifiers", indexKeyMap.size());

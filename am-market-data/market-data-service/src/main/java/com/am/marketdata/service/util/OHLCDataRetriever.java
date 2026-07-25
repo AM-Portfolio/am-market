@@ -171,15 +171,16 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
                     for (Map.Entry<String, OHLCQuote> entry : providerData.entrySet()) {
                         String cleanProv = entry.getKey().replace("NSE_EQ:", "").replace("NSE:", "").trim().toUpperCase();
                         
-                        // Handle known mappings:
-                        // 1. Exact match (e.g. RELIANCE == RELIANCE)
-                        // 2. Contains mapping (e.g. AXISGOLD matches GOLDAXIS, AXISNIFTY matches NIFTYAXIS, SEQUENT matches VIYASH due to name change)
-                        if (cleanReq.equals(cleanProv) || 
-                            (cleanReq.equals("AXISGOLD") && cleanProv.equals("GOLDAXIS")) ||
-                            (cleanReq.equals("AXISNIFTY") && cleanProv.equals("NIFTYAXIS")) ||
-                            (cleanReq.equals("SEQUENT") && cleanProv.equals("VIYASH"))) {
-                            
-                            mappedData.put(reqSymbol, entry.getValue());
+                         // Handle known mappings:
+                         // 1. Exact match (e.g. RELIANCE == RELIANCE)
+                         // 2. Contains mapping (e.g. AXISGOLD matches GOLDAXIS, AXISNIFTY matches NIFTYAXIS, SEQUENT matches VIYASH, TATAMOTORS matches TMCV due to demerger)
+                         if (cleanReq.equals(cleanProv) || 
+                             (cleanReq.equals("AXISGOLD") && cleanProv.equals("GOLDAXIS")) ||
+                             (cleanReq.equals("AXISNIFTY") && cleanProv.equals("NIFTYAXIS")) ||
+                             (cleanReq.equals("SEQUENT") && cleanProv.equals("VIYASH")) ||
+                             (cleanReq.equals("TATAMOTORS") && cleanProv.equals("TMCV"))) {
+                             
+                             mappedData.put(reqSymbol, entry.getValue());
                             matched = true;
                             log.info("[PROVIDER_MAP] Mapped provider symbol {} back to requested symbol {}", entry.getKey(), reqSymbol);
                             break;

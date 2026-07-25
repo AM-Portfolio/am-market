@@ -67,7 +67,7 @@
         <dependency>
             <groupId>com.am.libraries</groupId>
             <artifactId>am-observability-lib</artifactId>
-            <version>1.1.2-SNAPSHOT</version>
+            <!-- version inherited from parent dependencyManagement -->
         </dependency>
 
         <!-- Kite Connect -->

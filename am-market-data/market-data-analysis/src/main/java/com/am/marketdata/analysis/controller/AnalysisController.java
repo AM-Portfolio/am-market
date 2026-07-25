@@ -122,9 +122,10 @@ public class AnalysisController {
     @GetMapping("/heatmap")
     public ResponseEntity<java.util.Map<String, Double>> getHeatmap(
             @RequestParam String symbol,
-            @RequestParam(defaultValue = "1D") String timeframe) {
+            @RequestParam(defaultValue = "1D") String timeframe,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
 
-        return ResponseEntity.ok(analysisService.getHeatmap(symbol, timeframe));
+        return ResponseEntity.ok(analysisService.getHeatmap(symbol, timeframe, forceRefresh));
     }
 
     @GetMapping("/indices/historical-performance")

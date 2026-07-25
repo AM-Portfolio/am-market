@@ -597,7 +597,7 @@ public class AnalysisService {
                 null,
                 null,
                 isIndexBatch, // isIndex
-                false // forceRefresh
+                bypassCache // forceRefresh
         );
 
         // 4. Calculate Returns

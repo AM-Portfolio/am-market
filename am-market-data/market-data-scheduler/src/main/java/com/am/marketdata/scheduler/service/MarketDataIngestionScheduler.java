@@ -15,12 +15,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.time.LocalTime;
 
+import com.am.observability.trace.IgnoreTracing;
+
 /**
  * Scheduler to control Market Data Ingestion.
  * Starts ingestion at market open and stops at market close.
  */
 @Service
 @RequiredArgsConstructor
+@IgnoreTracing
 public class MarketDataIngestionScheduler {
 
     private final AppLogger log = AppLogger.getLogger(MarketDataIngestionScheduler.class);

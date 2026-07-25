@@ -1,23 +1,6 @@
-# Production — am-parser
-# Service-level Ingress (same model as am-identity / am-market-data).
-
 environment: prod
+
 replicaCount: 1
-
-env:
-  ENVIRONMENT: "prod"
-  MONGO_DB: "mutual_funds"
-  MARKET_DATA_URL: "http://am-market-data:8080"
-  LOG_LEVEL: "INFO"
-  ETF_LIST_CACHE_MINUTES: "60"
-  ETF_HOLDINGS_CACHE_DAYS: "1"
-
-probes:
-  port: 8080
-  liveness:
-    path: /health
-  readiness:
-    path: /health
 
 resources:
   limits:
@@ -27,9 +10,14 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-service:
-  type: ClusterIP
-  port: 8080
+env:
+  ENVIRONMENT: "prod"
+  ROOT_PATH: "/parser"
+  MONGO_DB: "mutual_funds"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  LOG_LEVEL: "INFO"
+  ETF_LIST_CACHE_MINUTES: "60"
+  ETF_HOLDINGS_CACHE_DAYS: "1"
 
 ingress:
   enabled: true
@@ -38,7 +26,8 @@ ingress:
     kubernetes.io/ingress.class: "traefik"
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.middlewares: >-
-      am-apps-prod-global-cors@kubernetescrd
+      am-apps-prod-global-cors@kubernetescrd,
+      am-apps-prod-strip-prefix-apps@kubernetescrd
   hosts:
     - host: am.asrax.in
       paths:
@@ -52,7 +41,6 @@ vault:
       path: "apps/data/prod/infra/observability"
     auth:
       path: apps/data/prod/services/am-auth
-    # logging path not present in prod Vault yet — omit so init does not hang
     market:
       path: apps/data/prod/services/am-market-data
     mongodb:

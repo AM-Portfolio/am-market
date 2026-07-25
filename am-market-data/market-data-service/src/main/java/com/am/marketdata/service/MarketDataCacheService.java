@@ -47,9 +47,30 @@ public class MarketDataCacheService {
         this.redisTemplate = redisTemplate;
     }
 
+    /**
+     * Helper method to normalize raw symbol inputs before constructing Redis keys.
+     * Ensures keys are normalized (e.g. NSE_INDEX|Nifty 50 -> NIFTY 50) so that
+     * scheduler writes and websocket reads resolve to the exact same cache keys.
+     */
+    private String normalizeSymbol(String rawSymbol) {
+        if (rawSymbol == null) {
+            return null;
+        }
+        String symbol = rawSymbol;
+        if (symbol.contains("|")) {
+            symbol = symbol.substring(symbol.indexOf("|") + 1);
+        }
+        if (symbol.contains(":")) {
+            symbol = symbol.substring(symbol.indexOf(":") + 1);
+        }
+        return symbol.toUpperCase().trim();
+    }
+
     public Double getPreviousClose(String symbol) {
         try {
-            String redisKey = "market:prev-close:" + symbol;
+            // Apply normalization to avoid mismatches between websocket trading symbols and scheduler instrument keys
+            String normalizedSymbol = normalizeSymbol(symbol);
+            String redisKey = "market:prev-close:" + normalizedSymbol;
             String value = redisTemplate.opsForValue().get(redisKey);
             if (value != null) {
                 return Double.parseDouble(value);
@@ -62,7 +83,9 @@ public class MarketDataCacheService {
 
     public void setPreviousClose(String symbol, double previousClose) {
         try {
-            String redisKey = "market:prev-close:" + symbol;
+            // Apply normalization so that the cached close is stored under a clean trading symbol format
+            String normalizedSymbol = normalizeSymbol(symbol);
+            String redisKey = "market:prev-close:" + normalizedSymbol;
             redisTemplate.opsForValue().set(redisKey, String.valueOf(previousClose), 26, TimeUnit.HOURS);
         } catch (Exception e) {
             log.warn("setPreviousClose", "Failed to set previous close for symbol: " + symbol, e);
@@ -294,7 +317,13 @@ public class MarketDataCacheService {
         if (result == null || result.isEmpty()) {
             return;
         }
-        for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
+
+        // OPTIMIZATION: Combine 500 individual Redis GET calls into 1 single Redis MGET (multiGet) call.
+        // This eliminates 500 network roundtrips and cleans up Grafana Tempo traces.
+        List<Map.Entry<String, OHLCQuote>> entries = new ArrayList<>(result.entrySet());
+        List<String> keys = new ArrayList<>(entries.size());
+
+        for (Map.Entry<String, OHLCQuote> entry : entries) {
             String symbol = entry.getKey();
             if (symbol.contains("|")) {
                 symbol = symbol.substring(symbol.indexOf("|") + 1);
@@ -303,28 +332,38 @@ public class MarketDataCacheService {
                 symbol = symbol.substring(symbol.indexOf(":") + 1);
             }
             symbol = symbol.toUpperCase().trim();
-            String latestKey = "market:latest-price:" + symbol;
-            try {
-                String json = redisTemplate.opsForValue().get(latestKey);
-                if (json != null) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> latestData = objectMapper.readValue(json, Map.class);
-                    double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
-                    double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
-                    OHLCQuote quote = entry.getValue();
-                    if (latestPrice > 0) {
-                        quote.setLastPrice(latestPrice);
+            keys.add("market:latest-price:" + symbol);
+        }
+
+        try {
+            // Batch retrieve all latest price JSONs in 1 single Redis MGET command
+            List<String> jsonList = redisTemplate.opsForValue().multiGet(keys);
+
+            if (jsonList != null) {
+                for (int i = 0; i < entries.size(); i++) {
+                    String json = jsonList.get(i);
+                    if (json != null) {
+                        try {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> latestData = objectMapper.readValue(json, Map.class);
+                            double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
+                            double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
+                            OHLCQuote quote = entries.get(i).getValue();
+                            if (latestPrice > 0) {
+                                quote.setLastPrice(latestPrice);
+                            }
+                            if (prevClose > 0) {
+                                quote.setPreviousClose(prevClose);
+                            }
+                        } catch (Exception parseEx) {
+                            log.warn("overlayLatestPrices", "Failed to parse Redis latest-price JSON for symbol {}: {}",
+                                    entries.get(i).getKey(), parseEx.getMessage());
+                        }
                     }
-                    if (prevClose > 0) {
-                        quote.setPreviousClose(prevClose);
-                    }
-                    log.debug("overlayLatestPrices",
-                            "Overlaid live prices for {}: lastPrice={}, previousClose={}", symbol, latestPrice, prevClose);
                 }
-            } catch (Exception ex) {
-                log.warn("overlayLatestPrices",
-                        "Failed to overlay latest price for symbol {}: {}", symbol, ex.getMessage());
             }
+        } catch (Exception ex) {
+            log.warn("overlayLatestPrices", "Batch overlay failed for {} symbols: {}", keys.size(), ex.getMessage());
         }
     }
     /**
