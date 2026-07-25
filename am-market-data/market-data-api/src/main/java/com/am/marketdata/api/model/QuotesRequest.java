@@ -1,7 +1,9 @@
 package com.am.marketdata.api.model;
 
+import com.am.marketdata.api.deserializer.StringOrArrayDeserializer;
 import com.am.marketdata.common.model.TimeFrame;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 import lombok.Data;
 
@@ -11,6 +13,7 @@ import lombok.Data;
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class QuotesRequest {
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     private String symbols;
     private String timeFrame = TimeFrame.FIVE_MINUTE.getApiValue(); // Default to 5-minute timeframe
     private boolean forceRefresh = false;
