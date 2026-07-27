@@ -289,18 +289,8 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         continue;
                     }
 
-                     // Encode the instrument key to handle symbols containing special characters (like '&' in M&M).
-                     // Unencoded special characters act as query parameter separators in HTTP requests,
-                     // truncating the symbol key and returning empty results.
-                     String encodedKey = instrumentKey;
-                     try {
-                         encodedKey = java.net.URLEncoder.encode(instrumentKey, java.nio.charset.StandardCharsets.UTF_8.toString());
-                     } catch (java.io.UnsupportedEncodingException uee) {
-                         log.error("backfillPreviousClose", "Failed to URL-encode instrument key " + instrumentKey, uee);
-                     }
-
                      com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
-                             upstoxSdkService.getHistoricalCandleData(encodedKey, "day", 1, toDate, fromDate);
+                             upstoxSdkService.getHistoricalCandleData(instrumentKey, "day", 1, toDate, fromDate);
 
                     if (histResponse != null && histResponse.getData() != null
                             && histResponse.getData().getCandles() != null

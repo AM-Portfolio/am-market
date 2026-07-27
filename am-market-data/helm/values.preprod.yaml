@@ -3,6 +3,8 @@ env:
   JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=preprod,security"
   # JVM reads JAVA_TOOL_OPTIONS automatically (chart entrypoint did not expand JAVA_OPTS)
   JAVA_TOOL_OPTIONS: "-Xms512m -Xmx768m"
+  # Micro-chunking: controls maximum number of stock symbols flushed per pipelined Redis write batch
+  REDIS_CACHE_INTRADAY_BATCH_CHUNK_SIZE: "50"
 environment: preprod
 
 replicaCount: 1

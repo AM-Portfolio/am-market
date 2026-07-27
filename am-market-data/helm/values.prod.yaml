@@ -7,6 +7,8 @@ replicaCount: 1
 env:
   SPRING_PROFILES_ACTIVE: "prod,security"
   JAVA_OPTS: "-Xms512m -Xmx1024m -Dspring.profiles.active=prod,security"
+  # Micro-chunking: controls maximum number of stock symbols flushed per pipelined Redis write batch (100 in Prod)
+  REDIS_CACHE_INTRADAY_BATCH_CHUNK_SIZE: "100"
 
 probes:
   port: 8080

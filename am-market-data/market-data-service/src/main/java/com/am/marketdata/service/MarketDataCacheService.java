@@ -12,9 +12,15 @@ import com.am.marketdata.redis.util.CacheLoggingUtil;
 
 import com.am.marketdata.common.log.AppLogger;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.am.marketdata.service.model.PreviousCloseDocument;
+import com.am.marketdata.service.repo.PreviousCloseRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.data.redis.core.RedisTemplate;
 import java.util.concurrent.TimeUnit;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.util.Optional;
 
 import java.util.Set;
 
@@ -40,11 +46,16 @@ public class MarketDataCacheService {
     private final StockCacheService stockCacheService;
     private final ObjectMapper objectMapper;
     private final RedisTemplate<String, String> redisTemplate;
+    private final PreviousCloseRepository previousCloseRepository;
 
-    public MarketDataCacheService(StockCacheService stockCacheService, ObjectMapper objectMapper, RedisTemplate<String, String> redisTemplate) {
+    public MarketDataCacheService(StockCacheService stockCacheService,
+                                  ObjectMapper objectMapper,
+                                  RedisTemplate<String, String> redisTemplate,
+                                  @Autowired(required = false) PreviousCloseRepository previousCloseRepository) {
         this.stockCacheService = stockCacheService;
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
+        this.previousCloseRepository = previousCloseRepository;
     }
 
     /**
@@ -67,28 +78,70 @@ public class MarketDataCacheService {
     }
 
     public Double getPreviousClose(String symbol) {
+        String normalizedSymbol = normalizeSymbol(symbol);
+        if (normalizedSymbol == null) {
+            return null;
+        }
         try {
-            // Apply normalization to avoid mismatches between websocket trading symbols and scheduler instrument keys
-            String normalizedSymbol = normalizeSymbol(symbol);
+            // 1. Redis fast path
             String redisKey = "market:prev-close:" + normalizedSymbol;
             String value = redisTemplate.opsForValue().get(redisKey);
             if (value != null) {
                 return Double.parseDouble(value);
             }
         } catch (Exception e) {
-            log.warn("getPreviousClose", "Failed to get previous close for symbol: " + symbol, e);
+            log.warn("getPreviousClose", "Failed to get previous close from Redis for symbol: " + symbol + ", trying MongoDB", e);
+        }
+
+        // 2. Fallback to MongoDB persistence
+        if (previousCloseRepository != null) {
+            try {
+                Optional<PreviousCloseDocument> docOpt = previousCloseRepository.findById(normalizedSymbol);
+                if (docOpt.isPresent() && docOpt.get().getPreviousClose() != null && docOpt.get().getPreviousClose() > 0) {
+                    Double dbValue = docOpt.get().getPreviousClose();
+                    // Optionally backfill Redis
+                    try {
+                        String redisKey = "market:prev-close:" + normalizedSymbol;
+                        redisTemplate.opsForValue().set(redisKey, String.valueOf(dbValue), 26, TimeUnit.HOURS);
+                    } catch (Exception ignore) {}
+                    return dbValue;
+                }
+            } catch (Exception mongoEx) {
+                log.warn("getPreviousClose", "Failed to get previous close from MongoDB for symbol: " + symbol, mongoEx);
+            }
         }
         return null;
     }
 
     public void setPreviousClose(String symbol, double previousClose) {
+        if (previousClose <= 0) {
+            return;
+        }
+        String normalizedSymbol = normalizeSymbol(symbol);
+        if (normalizedSymbol == null) {
+            return;
+        }
+        // 1. Cache to Redis
         try {
-            // Apply normalization so that the cached close is stored under a clean trading symbol format
-            String normalizedSymbol = normalizeSymbol(symbol);
             String redisKey = "market:prev-close:" + normalizedSymbol;
             redisTemplate.opsForValue().set(redisKey, String.valueOf(previousClose), 26, TimeUnit.HOURS);
         } catch (Exception e) {
-            log.warn("setPreviousClose", "Failed to set previous close for symbol: " + symbol, e);
+            log.warn("setPreviousClose", "Failed to set previous close in Redis for symbol: " + symbol, e);
+        }
+
+        // 2. Upsert to MongoDB (single record per symbol)
+        if (previousCloseRepository != null) {
+            try {
+                PreviousCloseDocument doc = PreviousCloseDocument.builder()
+                        .symbol(normalizedSymbol)
+                        .previousClose(previousClose)
+                        .tradeDate(LocalDate.now(ZoneId.of("Asia/Kolkata")).toString())
+                        .updatedAt(Instant.now())
+                        .build();
+                previousCloseRepository.save(doc);
+            } catch (Exception mongoEx) {
+                log.warn("setPreviousClose", "Failed to upsert previous close in MongoDB for symbol: " + symbol, mongoEx);
+            }
         }
     }
 
@@ -101,8 +154,20 @@ public class MarketDataCacheService {
                     "MarketDataCacheService.cacheOHLCData: Caching %d symbols with timeFrame: %s (enum: %s, apiValue: %s) for date: %s",
                     ohlcData.size(), timeFrame, timeFrame != null ? timeFrame.name() : "null", interval, today));
 
-            // Convert OHLC quotes to OHLCV objects and cache per symbol with timeframe
+            /*
+             * PERFORMANCE OPTIMIZATION: BATCH SYMBOL COLLECTION
+             * ---------------------------------------------------------------------------------------------
+             * WHAT PROBLEM IT SOLVES:
+             * Previously, stockCacheService.cacheIntradayBars(...) was called inside this loop per symbol.
+             * For 300 symbols, that triggered 300-600 individual TCP network calls, taking 1.3 minutes (80s).
+             * 
+             * HOW IT WORKS:
+             * We accumulate all symbols into 'batchStockBars' first, then execute 1 bulk micro-pipelined
+             * flush via stockCacheService.cacheIntradayBars(batchStockBars).
+             */
             List<String> cachedKeys = new ArrayList<>();
+            List<com.am.marketdata.redis.model.StockBars> batchStockBars = new ArrayList<>();
+
             for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
                 String fullSymbol = entry.getKey();
                 // Remove all exchange prefixes (NSE_EQ:, NSE:, etc.)
@@ -125,15 +190,26 @@ public class MarketDataCacheService {
                         0L,
                         quote.getLastPrice());
 
-                // Cache as intraday (today's live market data)
-                // Retrieval logic will determine prefix based on date
                 List<OHLCV> bars = new ArrayList<>();
                 bars.add(ohlcv);
-                stockCacheService.cacheIntradayBars(symbol, interval, bars);
 
-                // Collect Redis key
+                com.am.marketdata.redis.model.StockBars stockBars = com.am.marketdata.redis.model.StockBars.builder()
+                        .symbol(symbol)
+                        .interval(interval)
+                        .startDate(today)
+                        .bars(bars)
+                        .build();
+
+                batchStockBars.add(stockBars);
+
+                // Collect Redis key for logging
                 String redisKey = String.format("stock:intraday:%s:%s:%s", symbol.toUpperCase(), interval, today);
                 cachedKeys.add(symbol + " -> " + redisKey);
+            }
+
+            // Execute 1 bulk micro-pipelined batch write instead of 300 individual calls
+            if (!batchStockBars.isEmpty()) {
+                stockCacheService.cacheIntradayBars(batchStockBars);
             }
 
             // Smart logging: if keys are huge (>1000), show only count in INFO and one
@@ -364,6 +440,43 @@ public class MarketDataCacheService {
             }
         } catch (Exception ex) {
             log.warn("overlayLatestPrices", "Batch overlay failed for {} symbols: {}", keys.size(), ex.getMessage());
+        }
+
+        // FALLBACK: Query MongoDB for any symbols where previousClose is still 0.0
+        if (previousCloseRepository != null) {
+            List<String> missingSymbols = new ArrayList<>();
+            for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
+                if (entry.getValue() != null && entry.getValue().getPreviousClose() == 0.0) {
+                    String norm = normalizeSymbol(entry.getKey());
+                    if (norm != null) {
+                        missingSymbols.add(norm);
+                    }
+                }
+            }
+
+            if (!missingSymbols.isEmpty()) {
+                try {
+                    List<PreviousCloseDocument> mongoDocs = previousCloseRepository.findBySymbolIn(missingSymbols);
+                    if (mongoDocs != null && !mongoDocs.isEmpty()) {
+                        Map<String, Double> dbCloseMap = mongoDocs.stream()
+                                .filter(d -> d.getPreviousClose() != null && d.getPreviousClose() > 0)
+                                .collect(Collectors.toMap(PreviousCloseDocument::getSymbol, PreviousCloseDocument::getPreviousClose, (v1, v2) -> v1));
+
+                        for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
+                            OHLCQuote quote = entry.getValue();
+                            if (quote != null && quote.getPreviousClose() == 0.0) {
+                                String norm = normalizeSymbol(entry.getKey());
+                                Double dbClose = dbCloseMap.get(norm);
+                                if (dbClose != null && dbClose > 0) {
+                                    quote.setPreviousClose(dbClose);
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception mongoEx) {
+                    log.warn("overlayLatestPrices", "Failed to fetch previousClose from MongoDB fallback: " + mongoEx.getMessage());
+                }
+            }
         }
     }
     /**
