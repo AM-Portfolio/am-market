@@ -213,16 +213,15 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 return;
             }
 
-            // 1. Try to load previousClose from local database in batch (very fast < 10ms)
-            // OPTIMIZATION: Bypass database check if we only need a few symbols (<= 5)
-            // because MongoDB connections can time out taking 10 seconds.
+            // 1. Try to load previousClose from local database in batch (very fast ~35ms)
+            // OPTIMIZATION: Uses EquityLatestPriceService (-5d window) instead of 30-day InfluxDB scan.
             if (symbolsNeedingPrevClose.size() > 5) {
                 try {
-                    com.am.common.investment.service.EquityService equityService =
-                            com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.common.investment.service.EquityService.class);
-                    if (equityService != null) {
+                    com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService =
+                            com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.common.investment.service.EquityLatestPriceService.class);
+                    if (equityLatestPriceService != null) {
                         List<com.am.common.investment.model.equity.EquityPrice> dbPrices =
-                                equityService.getPricesByTradingSymbols(symbolsNeedingPrevClose);
+                                equityLatestPriceService.getLatestPricesByTradingSymbols(symbolsNeedingPrevClose);
                         if (dbPrices != null) {
                             for (com.am.common.investment.model.equity.EquityPrice dbPrice : dbPrices) {
                                 if (dbPrice.getPreviousClose() != null && dbPrice.getPreviousClose() > 0) {
