@@ -9,6 +9,8 @@ env:
   JAVA_OPTS: "-Xms512m -Xmx1024m -Dspring.profiles.active=prod,security"
   # Micro-chunking: controls maximum number of stock symbols flushed per pipelined Redis write batch (100 in Prod)
   REDIS_CACHE_INTRADAY_BATCH_CHUNK_SIZE: "100"
+  # Internal Kubernetes DNS endpoint for GrowthBook (bypasses Cloudflare HTTP 400 blocking)
+  GROWTHBOOK_API_HOST: "http://growthbook-backend.growthbook.svc.cluster.local:3100/api"
 
 probes:
   port: 8080
