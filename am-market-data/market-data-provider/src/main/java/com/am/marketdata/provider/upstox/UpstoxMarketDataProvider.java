@@ -213,27 +213,30 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 return;
             }
 
-            // 1. Try to load previousClose from local database in batch via EquityLatestPriceService (-5d window)
-            try {
-                com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService =
-                        com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.common.investment.service.EquityLatestPriceService.class);
-                if (equityLatestPriceService != null) {
-                    List<com.am.common.investment.model.equity.EquityPrice> dbPrices =
-                            equityLatestPriceService.getLatestPricesByTradingSymbols(symbolsNeedingPrevClose);
-                    if (dbPrices != null) {
-                        for (com.am.common.investment.model.equity.EquityPrice dbPrice : dbPrices) {
-                            if (dbPrice.getPreviousClose() != null && dbPrice.getPreviousClose() > 0) {
-                                String symbol = dbPrice.getSymbol();
-                                if (result.containsKey(symbol)) {
-                                    result.get(symbol).setPreviousClose(dbPrice.getPreviousClose());
-                                    log.debug("backfillPreviousClose", "Loaded previousClose from DB for " + symbol + ": " + dbPrice.getPreviousClose());
+            // 1. Try to load previousClose from local database in batch (very fast ~35ms)
+            // OPTIMIZATION: Uses EquityLatestPriceService (-5d window) instead of 30-day InfluxDB scan.
+            if (symbolsNeedingPrevClose.size() > 5) {
+                try {
+                    com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService =
+                            com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.common.investment.service.EquityLatestPriceService.class);
+                    if (equityLatestPriceService != null) {
+                        List<com.am.common.investment.model.equity.EquityPrice> dbPrices =
+                                equityLatestPriceService.getLatestPricesByTradingSymbols(symbolsNeedingPrevClose);
+                        if (dbPrices != null) {
+                            for (com.am.common.investment.model.equity.EquityPrice dbPrice : dbPrices) {
+                                if (dbPrice.getPreviousClose() != null && dbPrice.getPreviousClose() > 0) {
+                                    String symbol = dbPrice.getSymbol();
+                                    if (result.containsKey(symbol)) {
+                                        result.get(symbol).setPreviousClose(dbPrice.getPreviousClose());
+                                        log.debug("backfillPreviousClose", "Loaded previousClose from DB for " + symbol + ": " + dbPrice.getPreviousClose());
+                                    }
                                 }
                             }
                         }
                     }
+                } catch (Exception dbEx) {
+                    log.warn("backfillPreviousClose", "Failed to retrieve previousClose from EquityLatestPriceService: " + dbEx.getMessage());
                 }
-            } catch (Exception dbEx) {
-                log.warn("backfillPreviousClose", "Failed to retrieve previousClose from EquityLatestPriceService: " + dbEx.getMessage());
             }
 
             // 2. Filter remaining symbols that still have previousClose == 0.0 for API fallback
