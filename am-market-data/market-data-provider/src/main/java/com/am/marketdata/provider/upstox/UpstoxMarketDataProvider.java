@@ -213,32 +213,27 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 return;
             }
 
-            // 1. Try to load previousClose from local database in batch (very fast ~35ms)
-            // OPTIMIZATION: Uses EquityLatestPriceService (-5d window) instead of 30-day InfluxDB scan.
-            if (symbolsNeedingPrevClose.size() > 5) {
-                try {
-                    com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService =
-                            com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.common.investment.service.EquityLatestPriceService.class);
-                    if (equityLatestPriceService != null) {
-                        List<com.am.common.investment.model.equity.EquityPrice> dbPrices =
-                                equityLatestPriceService.getLatestPricesByTradingSymbols(symbolsNeedingPrevClose);
-                        if (dbPrices != null) {
-                            for (com.am.common.investment.model.equity.EquityPrice dbPrice : dbPrices) {
-                                if (dbPrice.getPreviousClose() != null && dbPrice.getPreviousClose() > 0) {
-                                    String symbol = dbPrice.getSymbol();
-                                    if (result.containsKey(symbol)) {
-                                        result.get(symbol).setPreviousClose(dbPrice.getPreviousClose());
-                                        log.debug("backfillPreviousClose", "Loaded previousClose from DB for " + symbol + ": " + dbPrice.getPreviousClose());
-                                    }
+            // 1. Try to load previousClose from local database in batch via EquityLatestPriceService (-5d window)
+            try {
+                com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService =
+                        com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.common.investment.service.EquityLatestPriceService.class);
+                if (equityLatestPriceService != null) {
+                    List<com.am.common.investment.model.equity.EquityPrice> dbPrices =
+                            equityLatestPriceService.getLatestPricesByTradingSymbols(symbolsNeedingPrevClose);
+                    if (dbPrices != null) {
+                        for (com.am.common.investment.model.equity.EquityPrice dbPrice : dbPrices) {
+                            if (dbPrice.getPreviousClose() != null && dbPrice.getPreviousClose() > 0) {
+                                String symbol = dbPrice.getSymbol();
+                                if (result.containsKey(symbol)) {
+                                    result.get(symbol).setPreviousClose(dbPrice.getPreviousClose());
+                                    log.debug("backfillPreviousClose", "Loaded previousClose from DB for " + symbol + ": " + dbPrice.getPreviousClose());
                                 }
                             }
                         }
                     }
-                } catch (Exception dbEx) {
-                    log.warn("backfillPreviousClose", "Failed to retrieve previousClose from database: " + dbEx.getMessage());
                 }
-            } else {
-                log.info("backfillPreviousClose", "Bypassing database query for previousClose because count is small ({}) to prevent timeouts", symbolsNeedingPrevClose.size());
+            } catch (Exception dbEx) {
+                log.warn("backfillPreviousClose", "Failed to retrieve previousClose from EquityLatestPriceService: " + dbEx.getMessage());
             }
 
             // 2. Filter remaining symbols that still have previousClose == 0.0 for API fallback
@@ -252,111 +247,131 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             }
 
             log.info("backfillPreviousClose",
-                    "Backfilling previousClose via historical API for {} remaining symbols: {}",
-                    remainingSymbols.size(), remainingSymbols);
+                    "Backfilling previousClose via historical API for {} remaining symbols",
+                    remainingSymbols.size());
 
             java.time.LocalDate today = java.time.LocalDate.now();
             String toDate = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
             // Fetch 5 calendar days back to safely cover weekends/holidays
             String fromDate = today.minusDays(5).format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
 
-            int callCount = 0;
-            for (String symbol : remainingSymbols) {
-                try {
-                    if (callCount > 0) {
-                        try {
-                            Thread.sleep(100); // Respect Upstox rate limits (10 requests/sec)
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            log.warn("backfillPreviousClose", "Interrupted during backfill rate-limit sleep");
-                            break;
+            // Reusing existing production BATCH_SIZE (500) and BATCH_DELAY_MS (150ms) to comply with Upstox API limits
+            for (int batchIdx = 0; batchIdx < remainingSymbols.size(); batchIdx += BATCH_SIZE) {
+                int endIdx = Math.min(batchIdx + BATCH_SIZE, remainingSymbols.size());
+                List<String> batchSymbols = remainingSymbols.subList(batchIdx, endIdx);
+
+                int callCount = 0;
+                for (String symbol : batchSymbols) {
+                    try {
+                        if (callCount > 0) {
+                            try {
+                                Thread.sleep(100); // Respect Upstox rate limits (10 requests/sec per symbol)
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                                log.warn("backfillPreviousClose", "Interrupted during backfill rate-limit sleep");
+                                break;
+                            }
                         }
-                    }
-                    callCount++;
+                        callCount++;
 
-                    // Resolve instrument key for this symbol, stripping exchange prefixes if present
-                    String cleanSymbol = symbol.replace("NSE_EQ:", "").replace("NSE:", "").trim();
-                    String instrumentKey = context.keyToSymbolMap.entrySet().stream()
-                            .filter(e -> e.getValue().equals(cleanSymbol) || e.getValue().equals(symbol))
-                            .map(Map.Entry::getKey)
-                            .findFirst()
-                            .orElse(null);
+                        // Resolve instrument key for this symbol, stripping exchange prefixes if present
+                        String cleanSymbol = symbol.replace("NSE_EQ:", "").replace("NSE:", "").trim();
+                        String instrumentKey = context.keyToSymbolMap.entrySet().stream()
+                                .filter(e -> e.getValue().equals(cleanSymbol) || e.getValue().equals(symbol))
+                                .map(Map.Entry::getKey)
+                                .findFirst()
+                                .orElse(null);
 
-                    if (instrumentKey == null) {
-                        log.warn("backfillPreviousClose",
-                                "Could not find instrument key for symbol: {} (cleaned: {}), skipping", symbol, cleanSymbol);
-                        continue;
-                    }
+                        // If not found in context map, attempt dynamic instrument resolution
+                        if (instrumentKey == null) {
+                            try {
+                                com.am.marketdata.provider.common.InstrumentContext resolvedContext =
+                                        symbolResolver.resolveContext(java.util.Collections.singletonList(cleanSymbol));
+                                if (resolvedContext != null && resolvedContext.instrumentKeys != null && !resolvedContext.instrumentKeys.isEmpty()) {
+                                    instrumentKey = resolvedContext.instrumentKeys.get(0);
+                                }
+                            } catch (Exception ignore) {}
+                        }
 
-                     com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
-                             upstoxSdkService.getHistoricalCandleData(instrumentKey, "day", 1, toDate, fromDate);
+                        if (instrumentKey == null) {
+                            log.warn("backfillPreviousClose",
+                                    "Could not find instrument key for symbol: {} (cleaned: {}), skipping", symbol, cleanSymbol);
+                            continue;
+                        }
 
-                    if (histResponse != null && histResponse.getData() != null
-                            && histResponse.getData().getCandles() != null
-                            && !histResponse.getData().getCandles().isEmpty()) {
+                        com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
+                                upstoxSdkService.getHistoricalCandleData(instrumentKey, "day", 1, toDate, fromDate);
 
-                        java.util.List<java.util.List<Object>> candles = histResponse.getData().getCandles();
-                        double prevClose = 0.0;
-                        if (!candles.isEmpty()) {
-                            java.util.List<Object> newestCandle = candles.get(0);
-                            String candleDateStr = newestCandle.get(0) != null ? newestCandle.get(0).toString() : "";
-                            
-                            // Compare candle date against today's date in Asia/Kolkata timezone
-                            java.time.LocalDate todayKolkata = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
-                            String todayStr = todayKolkata.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
-                            boolean isTodayCandle = !candleDateStr.isEmpty() && candleDateStr.startsWith(todayStr);
-                            
-                            // Self-correcting check: If the live quote's open and close exactly match the newest candle's open and close,
-                            // it means the live quote is still showing that newest candle's day (e.g., today is a weekend or market holiday).
-                            // In this case, the true previous close must be the next older candle in the list (index 1).
-                            boolean matchesNewestCandle = false;
-                            OHLCQuote liveQuote = result.get(symbol);
-                            if (liveQuote != null && liveQuote.getOhlc() != null && newestCandle.size() >= 5) {
-                                double liveOpen = liveQuote.getOhlc().getOpen();
-                                double liveClose = liveQuote.getOhlc().getClose();
-                                double candleOpen = parseDouble(newestCandle.get(1));
-                                double candleClose = parseDouble(newestCandle.get(4));
-                                if (liveOpen == candleOpen && liveClose == candleClose) {
-                                    matchesNewestCandle = true;
+                        if (histResponse != null && histResponse.getData() != null
+                                && histResponse.getData().getCandles() != null
+                                && !histResponse.getData().getCandles().isEmpty()) {
+
+                            java.util.List<java.util.List<Object>> candles = histResponse.getData().getCandles();
+                            double prevClose = 0.0;
+                            if (!candles.isEmpty()) {
+                                java.util.List<Object> newestCandle = candles.get(0);
+                                String candleDateStr = newestCandle.get(0) != null ? newestCandle.get(0).toString() : "";
+                                
+                                java.time.LocalDate todayKolkata = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+                                String todayStr = todayKolkata.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+                                boolean isTodayCandle = !candleDateStr.isEmpty() && candleDateStr.startsWith(todayStr);
+                                
+                                boolean matchesNewestCandle = false;
+                                OHLCQuote liveQuote = result.get(symbol);
+                                if (liveQuote != null && liveQuote.getOhlc() != null && newestCandle.size() >= 5) {
+                                    double liveOpen = liveQuote.getOhlc().getOpen();
+                                    double liveClose = liveQuote.getOhlc().getClose();
+                                    double candleOpen = parseDouble(newestCandle.get(1));
+                                    double candleClose = parseDouble(newestCandle.get(4));
+                                    if (liveOpen == candleOpen && liveClose == candleClose) {
+                                        matchesNewestCandle = true;
+                                    }
+                                }
+
+                                if ((isTodayCandle || matchesNewestCandle) && candles.size() >= 2) {
+                                    java.util.List<Object> prevCandle = candles.get(1);
+                                    if (prevCandle != null && prevCandle.size() >= 5) {
+                                        Object closeObj = prevCandle.get(4);
+                                        if (closeObj instanceof Number) {
+                                            prevClose = ((Number) closeObj).doubleValue();
+                                        }
+                                    }
+                                } else {
+                                    if (newestCandle.size() >= 5) {
+                                        Object closeObj = newestCandle.get(4);
+                                        if (closeObj instanceof Number) {
+                                            prevClose = ((Number) closeObj).doubleValue();
+                                        }
+                                    }
                                 }
                             }
 
-                            if ((isTodayCandle || matchesNewestCandle) && candles.size() >= 2) {
-                                // Index 0 represents today's trading candle (or the last active trading day's candle on a holiday/weekend);
-                                // previous close is yesterday's (or the prior trading day's) candle at index 1
-                                java.util.List<Object> prevCandle = candles.get(1);
-                                if (prevCandle != null && prevCandle.size() >= 5) {
-                                    Object closeObj = prevCandle.get(4);
-                                    if (closeObj instanceof Number) {
-                                        prevClose = ((Number) closeObj).doubleValue();
-                                    }
-                                }
+                            if (prevClose > 0) {
+                                result.get(symbol).setPreviousClose(prevClose);
+                                log.info("backfillPreviousClose",
+                                        "Backfilled previousClose for {}: {}", symbol, prevClose);
                             } else {
-                                // Index 0 represents yesterday's (or older) candle; it is the correct previous close
-                                if (newestCandle.size() >= 5) {
-                                    Object closeObj = newestCandle.get(4);
-                                    if (closeObj instanceof Number) {
-                                        prevClose = ((Number) closeObj).doubleValue();
-                                    }
-                                }
+                                log.warn("backfillPreviousClose",
+                                        "Could not extract valid previousClose from historical candles for {}", symbol);
                             }
-                        }
-
-                        if (prevClose > 0) {
-                            result.get(symbol).setPreviousClose(prevClose);
-                            log.info("backfillPreviousClose",
-                                    "Backfilled previousClose for {}: {}", symbol, prevClose);
                         } else {
                             log.warn("backfillPreviousClose",
-                                    "Could not extract valid previousClose from historical candles for {}", symbol);
+                                    "No historical candle data returned for symbol: {}", symbol);
                         }
-                    } else {
-                        log.warn("backfillPreviousClose",
-                                "No historical candle data returned for symbol: {}", symbol);
+                    } catch (Exception ex) {
+                        log.error("backfillPreviousClose",
+                                "Failed to backfill previousClose for symbol {}: {}", symbol, ex.getMessage());
                     }
-                } catch (Exception ex) {
-                    log.error("backfillPreviousClose",
-                            "Failed to backfill previousClose for symbol {}: {}", symbol, ex.getMessage());
+                }
+
+                // Inter-batch delay to comply with Upstox API limits (150ms delay between 500-symbol sub-batches)
+                if (endIdx < remainingSymbols.size()) {
+                    try {
+                        Thread.sleep(BATCH_DELAY_MS);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 }
             }
         } catch (Exception e) {
