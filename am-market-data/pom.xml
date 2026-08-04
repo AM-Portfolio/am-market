@@ -40,8 +40,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <lombok.version>1.18.30</lombok.version>
         <kong-unirest.version>3.14.5</kong-unirest.version>
-        <investment-model.version>1.6.27-SNAPSHOT</investment-model.version>
-        <investment-service.version>1.6.27-SNAPSHOT</investment-service.version>
+        <investment-model.version>1.6.28-SNAPSHOT</investment-model.version>
+        <investment-service.version>1.6.28-SNAPSHOT</investment-service.version>
         <spring-web.version>6.1.5</spring-web.version>
     </properties>
 

@@ -45,7 +45,7 @@
         <dependency>
             <groupId>com.am.common</groupId>
             <artifactId>am-common-investment-service-lib</artifactId>
-            <version>1.6.24-SNAPSHOT</version>
+            <version>${investment-service.version}</version>
         </dependency>
         <!-- <dependency>
             <groupId>com.marketdata</groupId>

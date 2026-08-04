@@ -120,4 +120,6 @@ podAnnotations:
 env:
   # Micro-chunking batch size: controls maximum number of stock symbols flushed per pipelined Redis write batch
   REDIS_CACHE_INTRADAY_BATCH_CHUNK_SIZE: "50"
+  # Internal Kubernetes DNS endpoint for GrowthBook (bypasses Cloudflare HTTP 400 blocking)
+  GROWTHBOOK_API_HOST: "http://growthbook-backend.growthbook.svc.cluster.local:3100/api"
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318/v1/traces"
