@@ -51,6 +51,17 @@ public class IpoSyncService {
                 || ipoIssueRepository.count() > 0;
     }
 
+    public Optional<IpoSyncMetaDocument> findSyncMeta(IpoFeedScope scope) {
+        if (scope == IpoFeedScope.ALL) {
+            return Optional.empty();
+        }
+        return ipoSyncMetaRepository.findById(scope.name());
+    }
+
+    public List<IpoSyncMetaDocument> allSyncMeta() {
+        return ipoSyncMetaRepository.findAll();
+    }
+
     public int sync(IpoFeedScope scope, IpoSyncTrigger trigger) {
         IpoIssueSource source = ipoIssueSource.orElseThrow(
                 () -> new IllegalStateException("No IpoIssueSource bean (market-data.ipo.source)"));

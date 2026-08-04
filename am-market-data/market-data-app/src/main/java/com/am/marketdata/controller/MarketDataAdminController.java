@@ -1,23 +1,24 @@
 package com.am.marketdata.controller;
 
+import com.am.marketdata.api.model.ipo.IpoApiMapper;
+import com.am.marketdata.api.model.ipo.IpoSyncResponse;
+import com.am.marketdata.common.ipo.IpoFeedScope;
 import com.am.marketdata.internal.model.IngestionJobLog;
 import com.am.marketdata.internal.repository.IngestionJobLogRepository;
 import com.am.marketdata.internal.service.MarketDataHistoricalSyncService;
 import com.am.marketdata.internal.service.MarketDataIngestionService;
+import com.am.marketdata.service.ipo.IpoSyncTrigger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 import java.time.LocalDate;
-
-import org.springframework.format.annotation.DateTimeFormat;
-
-import org.springframework.context.annotation.Profile;
+import java.util.List;
 
 @Slf4j
 @RestController
@@ -221,27 +222,45 @@ public class MarketDataAdminController {
     }
 
     @PostMapping("/sync/ipo")
-    public ResponseEntity<String> syncIpo(
+    public ResponseEntity<IpoSyncResponse> syncIpo(
             @RequestParam(defaultValue = "all") String scope) {
         log.info("Manual trigger: IPO sync scope={}", scope);
-        com.am.marketdata.common.ipo.IpoFeedScope feedScope;
+        IpoFeedScope feedScope;
         try {
-            feedScope = com.am.marketdata.common.ipo.IpoFeedScope.valueOf(scope.trim().toUpperCase());
+            feedScope = IpoFeedScope.valueOf(scope.trim().toUpperCase());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
-                    .body("Invalid scope. Use past|current|upcoming|subscription|all");
+                    .body(IpoSyncResponse.builder()
+                            .scope(scope)
+                            .status("failed")
+                            .error("Invalid scope. Use past|current|upcoming|subscription|all")
+                            .build());
         }
         if (!ipoSyncService.isSourceAvailable()) {
-            return ResponseEntity.status(503).body("IPO source not configured");
+            return ResponseEntity.status(503)
+                    .body(IpoSyncResponse.builder()
+                            .scope(feedScope.name())
+                            .status("failed")
+                            .error("IPO source not configured")
+                            .build());
         }
-        new Thread(() -> {
-            try {
-                int n = ipoSyncService.sync(feedScope, com.am.marketdata.service.ipo.IpoSyncTrigger.ADMIN);
-                log.info("Manual IPO sync complete scope={} upserts={}", scope, n);
-            } catch (Exception e) {
-                log.error("Failed IPO sync scope={}", scope, e);
-            }
-        }, "manual-ipo-sync").start();
-        return ResponseEntity.ok("IPO sync triggered for scope=" + feedScope.name());
+        try {
+            int n = ipoSyncService.sync(feedScope, IpoSyncTrigger.ADMIN);
+            return ResponseEntity.ok(IpoSyncResponse.builder()
+                    .scope(feedScope.name())
+                    .status("ok")
+                    .upserts(n)
+                    .meta(IpoApiMapper.toSyncMeta(ipoSyncService.findSyncMeta(feedScope).orElse(null)))
+                    .build());
+        } catch (Exception e) {
+            log.error("Failed IPO sync scope={}", scope, e);
+            return ResponseEntity.status(500)
+                    .body(IpoSyncResponse.builder()
+                            .scope(feedScope.name())
+                            .status("failed")
+                            .error(e.getMessage())
+                            .meta(IpoApiMapper.toSyncMeta(ipoSyncService.findSyncMeta(feedScope).orElse(null)))
+                            .build());
+        }
     }
 }
