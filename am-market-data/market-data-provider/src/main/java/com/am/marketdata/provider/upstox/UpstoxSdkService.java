@@ -379,7 +379,19 @@ public class UpstoxSdkService {
             if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
                 urlStr = String.format("https://api.upstox.com/v2/historical-candle/intraday/%s/1minute", encodedKey);
             } else {
-                String tf = "day".equalsIgnoreCase(unit) ? "day" : (interval + unit); // e.g. 1minute, 30minute, day
+                String tf;
+                if ("day".equalsIgnoreCase(unit) || "days".equalsIgnoreCase(unit)) {
+                    tf = "day";
+                } else if ("week".equalsIgnoreCase(unit) || "weeks".equalsIgnoreCase(unit)) {
+                    tf = "week";
+                } else if ("month".equalsIgnoreCase(unit) || "months".equalsIgnoreCase(unit)) {
+                    tf = "month";
+                } else {
+                    String singularUnit = unit != null && unit.endsWith("s")
+                            ? unit.substring(0, unit.length() - 1)
+                            : unit;
+                    tf = interval + singularUnit; // e.g. 1minute, 30minute, day
+                }
                 if (fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate)) {
                     urlStr = String.format("https://api.upstox.com/v2/historical-candle/%s/%s/%s/%s", encodedKey, tf, toDate, fromDate);
                 } else {

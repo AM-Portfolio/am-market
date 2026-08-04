@@ -300,7 +300,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         }
 
                         com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
-                                upstoxSdkService.getHistoricalCandleData(instrumentKey, "day", 1, toDate, fromDate);
+                                upstoxSdkService.getHistoricalCandleData(instrumentKey, "days", 1, toDate, fromDate);
 
                         if (histResponse != null && histResponse.getData() != null
                                 && histResponse.getData().getCandles() != null
@@ -673,12 +673,12 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     }
 
     /**
-     * V3 historical candle path unit ({@code days}, {@code minutes}, …).
+     * V3 historical candle path unit ({@code days}, {@code minutes}, ...).
      * See https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/
      */
     private String mapToUpstoxV3Unit(TimeFrame interval) {
         if (interval == null) {
-            return "day";
+            return "days";
         }
         switch (interval) {
             case MINUTE:
@@ -686,17 +686,17 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             case TEN_MINUTE:
             case FIFTEEN_MINUTE:
             case THIRTY_MINUTE:
-                return "minute";
+                return "minutes";
             case HOUR:
-                return "hour";
+                return "hours";
             case DAY:
-                return "day";
+                return "days";
             case WEEK:
-                return "week";
+                return "weeks";
             case MONTH:
-                return "month";
+                return "months";
             default:
-                return "day";
+                return "days";
         }
     }
 
