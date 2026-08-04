@@ -5,6 +5,7 @@ import com.am.marketdata.common.model.NSEStockInsidicesData;
 import com.am.marketdata.scraper.exception.NSEApiException;
 import com.am.marketdata.scraper.cookie.CookieCache;
 import com.am.marketdata.scraper.exception.CookieException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -73,6 +74,28 @@ public class NSEApiClient {
     public NSEIndicesResponse getAllIndices() {
         return indicesRequestTimer
                 .record(() -> executeApiCall("/api/allIndices", NSEIndicesResponse.class, this::logIndicesResponse));
+    }
+
+    public JsonNode getIpoPastIssues() {
+        return executeApiCall("/api/public-past-issues", JsonNode.class, body ->
+                log.info("IPO past issues count={}", body == null || !body.isArray() ? 0 : body.size()));
+    }
+
+    public JsonNode getIpoCurrentIssues() {
+        return executeApiCall("/api/ipo-current-issue", JsonNode.class, body ->
+                log.info("IPO current issues count={}", body == null || !body.isArray() ? 0 : body.size()));
+    }
+
+    public JsonNode getIpoUpcomingIssues() {
+        return executeApiCall("/api/all-upcoming-issues?category=ipo", JsonNode.class, body ->
+                log.info("IPO upcoming issues count={}", body == null || !body.isArray() ? 0 : body.size()));
+    }
+
+    public JsonNode getIpoBidDetails(String symbol, String series) {
+        String sym = java.net.URLEncoder.encode(symbol, java.nio.charset.StandardCharsets.UTF_8);
+        String ser = java.net.URLEncoder.encode(series == null ? "EQ" : series, java.nio.charset.StandardCharsets.UTF_8);
+        return executeApiCall("/api/ipo-bid-details?symbol=" + sym + "&series=" + ser, JsonNode.class, body ->
+                log.info("IPO bid details symbol={} series={}", symbol, series));
     }
 
     private HttpHeaders createBasicHeaders() {

@@ -34,6 +34,7 @@ public class MarketDataAdminController {
     private final com.am.marketdata.scheduler.PreviousCloseScheduler previousCloseScheduler;
     private final com.am.marketdata.scraper.service.MarketDataProcessingService marketDataProcessingService;
     private final com.am.marketdata.service.calendar.MarketCalendarSyncService marketCalendarSyncService;
+    private final com.am.marketdata.service.ipo.IpoSyncService ipoSyncService;
 
     @GetMapping("/logs/{jobId}")
     public ResponseEntity<IngestionJobLog> getJobDetails(@PathVariable String jobId) {
@@ -217,5 +218,30 @@ public class MarketDataAdminController {
             }
         }, "manual-market-calendar-sync").start();
         return ResponseEntity.ok("Market calendar sync triggered for " + exchange);
+    }
+
+    @PostMapping("/sync/ipo")
+    public ResponseEntity<String> syncIpo(
+            @RequestParam(defaultValue = "all") String scope) {
+        log.info("Manual trigger: IPO sync scope={}", scope);
+        com.am.marketdata.common.ipo.IpoFeedScope feedScope;
+        try {
+            feedScope = com.am.marketdata.common.ipo.IpoFeedScope.valueOf(scope.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body("Invalid scope. Use past|current|upcoming|subscription|all");
+        }
+        if (!ipoSyncService.isSourceAvailable()) {
+            return ResponseEntity.status(503).body("IPO source not configured");
+        }
+        new Thread(() -> {
+            try {
+                int n = ipoSyncService.sync(feedScope, com.am.marketdata.service.ipo.IpoSyncTrigger.ADMIN);
+                log.info("Manual IPO sync complete scope={} upserts={}", scope, n);
+            } catch (Exception e) {
+                log.error("Failed IPO sync scope={}", scope, e);
+            }
+        }, "manual-ipo-sync").start();
+        return ResponseEntity.ok("IPO sync triggered for scope=" + feedScope.name());
     }
 }
