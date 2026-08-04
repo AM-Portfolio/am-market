@@ -321,22 +321,16 @@ public class UpstoxSdkService {
                 return fetchHistoricalCandleDirect(normalizedKey, unit, interval, toDate, fromDate, isQueryingToday);
             }
 
-            // The Upstox Swagger client does not URL-encode path parameters.
-            // We must manually URL-encode normalizedKey (replacing ' ' with '%20' and '|' with '%7C') to prevent HTTP 400.
-            String encodedKey = normalizedKey;
-            try {
-                encodedKey = java.net.URLEncoder.encode(normalizedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
-                        .replace("+", "%20");
-            } catch (java.io.UnsupportedEncodingException uee) {
-                log.error("getHistoricalCandleData", "Failed to URL-encode key: " + normalizedKey, uee);
-            }
+            // Pass the raw normalized key to the SDK. The generated client encodes path
+            // parameters itself; pre-encoding here turns "|" into "%257C" on the wire.
+            String sdkKey = normalizedKey;
 
             if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
                 log.info(
                         "Fetching live intraday data key={}, interval=1minute",
-                        encodedKey);
+                        sdkKey);
                 com.upstox.api.GetIntraDayCandleResponse intradayResponse = historyV3Api.getIntraDayCandleData(
-                        encodedKey, "1minute", 2);
+                        sdkKey, "1minute", 2);
                 return mapIntradayToHistoricalDataResponse(intradayResponse);
             }
 
@@ -344,15 +338,15 @@ public class UpstoxSdkService {
             if (useDateRange) {
                 log.info(
                         "Fetching historical data (range) key={}, unit={}, interval={}, to={}, from={}",
-                        encodedKey, unit, interval, toDate, fromDate);
+                        sdkKey, unit, interval, toDate, fromDate);
                 sdkResponse = historyV3Api.getHistoricalCandleData1(
-                        encodedKey, unit, interval, toDate, fromDate);
+                        sdkKey, unit, interval, toDate, fromDate);
             } else {
                 log.info(
                         "Fetching historical data (to_date only) key={}, unit={}, interval={}, to={}",
-                        encodedKey, unit, interval, toDate);
+                        sdkKey, unit, interval, toDate);
                 sdkResponse = historyV3Api.getHistoricalCandleData(
-                        encodedKey, unit, interval, toDate);
+                        sdkKey, unit, interval, toDate);
             }
 
             return mapToHistoricalDataResponse(sdkResponse);
