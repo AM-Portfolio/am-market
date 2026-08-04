@@ -60,8 +60,8 @@ public class CookieManagementService {
 
     public void refreshCookies() {
         try {
-            log.info("Attempting to refresh cookies");
-            cookieManager.refreshIfNeeded();
+            log.info("Attempting to refresh cookies via Selenium writer");
+            cookieManager.refreshFromSelenium();
         } catch (CookieException e) {
             log.error("Failed to refresh cookies: {}", e.getMessage(), e);
             throw e;
