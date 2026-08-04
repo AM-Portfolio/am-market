@@ -76,6 +76,8 @@ am:
         - access_token
         - refresh_token
         - client_secret
+        - cookieHeader
+        - cookie_header
 
 kafka:
   topics:

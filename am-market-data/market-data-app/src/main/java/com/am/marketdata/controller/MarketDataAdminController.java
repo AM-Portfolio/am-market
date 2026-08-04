@@ -136,11 +136,21 @@ public class MarketDataAdminController {
 
     @PostMapping("/scheduler/cookie/refresh")
     @Operation(summary = "Trigger Selenium cookie refresh (writer)",
-            description = "Scrapes NSE cookies and stores them in Redis for all pods")
-    public ResponseEntity<String> triggerCookieRefresh() {
-        log.info("Manual trigger: Cookie Refresh");
-        orchestrator.triggerCookieRefresh();
-        return ResponseEntity.ok("Triggered Cookie Refresh");
+            description = "Scrapes NSE cookies and stores them in Redis for all pods. Works even when scheduler.cookie.enabled=false.")
+    public ResponseEntity<NseCookiesStatusResponse> triggerCookieRefresh() {
+        log.info("Manual trigger: Cookie Refresh (Selenium writer)");
+        try {
+            cookieManager.refreshFromSelenium();
+            return ResponseEntity.ok(toStatusResponse(cookieManager.status(), "ok", null));
+        } catch (CookieException e) {
+            log.error("Selenium cookie refresh failed: {}", e.getMessage());
+            return ResponseEntity.status(500)
+                    .body(NseCookiesStatusResponse.builder()
+                            .status("failed")
+                            .error(e.getMessage())
+                            .present(false)
+                            .build());
+        }
     }
 
     @PutMapping("/nse/cookies")
