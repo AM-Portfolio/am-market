@@ -136,6 +136,16 @@ springdoc:
 
 market-data:
   provider: upstox
+  calendar:
+    source: ${MARKET_DATA_CALENDAR_SOURCE:upstox}
+    exchange: ${MARKET_DATA_CALENDAR_EXCHANGE:NSE}
+    sync:
+      enabled: ${MARKET_DATA_CALENDAR_SYNC_ENABLED:true}
+  market:
+    hours:
+      start: ${MARKET_DATA_MARKET_HOURS_START:09:15}
+      end: ${MARKET_DATA_MARKET_HOURS_END:15:30}
+    timezone: ${MARKET_DATA_MARKET_TIMEZONE:Asia/Kolkata}
   batch-search:
     max-queries: ${BATCH_SEARCH_MAX_QUERIES:1000}
     internal-batch-size: ${BATCH_SEARCH_INTERNAL_BATCH_SIZE:100}
@@ -231,6 +241,8 @@ scheduler:
   # ── Historical sync ───────────────────────────────────────────────────────
   historical:
     sync-cron: "${SCHEDULER_HISTORICAL_SYNC_CRON:0 15 7 * * *}"          # 7:15 AM daily
+  market-calendar:
+    sync-cron: "${SCHEDULER_MARKET_CALENDAR_SYNC_CRON:0 30 6 * * *}"     # 6:30 AM daily
   # ── Analysis ─────────────────────────────────────────────────────────────
   analysis:
     daily: "${SCHEDULER_ANALYSIS_DAILY_CRON:0 15 7 * * *}"               # 7:15 AM daily

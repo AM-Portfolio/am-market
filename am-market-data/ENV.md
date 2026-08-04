@@ -81,6 +81,19 @@ npm run run:data:preprod
 
 Health: `http://localhost:8092/actuator/health`
 
+## Market calendar (local/dev)
+
+After `npm run run:dev`, exercise holidays/timings (JWT required when `security.enabled=true`):
+
+```powershell
+$base = "http://localhost:8092"
+curl -s "$base/v1/market-calendar/holidays?year=2026&exchange=NSE"
+curl -s "$base/v1/market-calendar/status?exchange=NSE"
+curl -s -X POST "$base/v1/admin/sync/market-calendar?exchange=NSE"
+```
+
+Config: `market-data.calendar.source=upstox` (swappable), nightly sync `scheduler.market-calendar.sync-cron`.
+
 ## npm scripts (am-market-data)
 
 | Script | What it does |

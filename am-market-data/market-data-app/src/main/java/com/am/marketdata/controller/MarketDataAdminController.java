@@ -33,6 +33,7 @@ public class MarketDataAdminController {
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
     private final com.am.marketdata.scheduler.PreviousCloseScheduler previousCloseScheduler;
     private final com.am.marketdata.scraper.service.MarketDataProcessingService marketDataProcessingService;
+    private final com.am.marketdata.service.calendar.MarketCalendarSyncService marketCalendarSyncService;
 
     @GetMapping("/logs/{jobId}")
     public ResponseEntity<IngestionJobLog> getJobDetails(@PathVariable String jobId) {
@@ -200,5 +201,21 @@ public class MarketDataAdminController {
             }
         }, "manual-prev-close-trigger-thread").start();
         return ResponseEntity.ok("Triggered previous close cache refresh in background");
+    }
+
+    @PostMapping("/sync/market-calendar")
+    public ResponseEntity<String> syncMarketCalendar(
+            @RequestParam(defaultValue = "NSE") String exchange) {
+        log.info("Manual trigger: Market calendar sync exchange={}", exchange);
+        new Thread(() -> {
+            try {
+                marketCalendarSyncService.sync(
+                        exchange,
+                        com.am.marketdata.service.calendar.MarketCalendarSyncTrigger.ADMIN);
+            } catch (Exception e) {
+                log.error("Failed market calendar sync for {}", exchange, e);
+            }
+        }, "manual-market-calendar-sync").start();
+        return ResponseEntity.ok("Market calendar sync triggered for " + exchange);
     }
 }

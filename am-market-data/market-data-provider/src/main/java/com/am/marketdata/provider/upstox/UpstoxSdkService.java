@@ -492,4 +492,26 @@ public class UpstoxSdkService {
         return response;
     }
 
+    public com.upstox.api.GetHolidayResponse getHolidays() throws ApiException {
+        ApiClient apiClient = createAuthenticatedClient();
+        io.swagger.client.api.MarketHolidaysAndTimingsApi api =
+                new io.swagger.client.api.MarketHolidaysAndTimingsApi(apiClient);
+        return api.getHolidays();
+    }
+
+    private ApiClient createAuthenticatedClient() {
+        String token = getDynamicAccessToken();
+        if (token == null || token.isEmpty()) {
+            throw new IllegalStateException("Upstox Access token is not initialized");
+        }
+        ApiClient apiClient = new ApiClient();
+        OAuth oAuth = (OAuth) apiClient.getAuthentication("OAUTH2");
+        if (oAuth != null) {
+            oAuth.setAccessToken(token);
+        } else {
+            apiClient.setAccessToken(token);
+        }
+        return apiClient;
+    }
+
 }
