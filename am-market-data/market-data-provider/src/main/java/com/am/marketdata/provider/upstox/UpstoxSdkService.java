@@ -297,62 +297,93 @@ public class UpstoxSdkService {
             throw new IllegalStateException("Upstox Access token is not initialized");
         }
 
-        try {
-            ApiClient apiClient = new ApiClient();
-            OAuth oAuth = (OAuth) apiClient.getAuthentication("OAUTH2");
-            if (oAuth != null) {
-                oAuth.setAccessToken(this.accessToken);
-            } else {
-                apiClient.setAccessToken(this.accessToken);
+        int maxRetries = 3;
+        int attempt = 0;
+        long backoffMs = 1000;
+
+        while (true) {
+            try {
+                ApiClient apiClient = new ApiClient();
+                OAuth oAuth = (OAuth) apiClient.getAuthentication("OAUTH2");
+                if (oAuth != null) {
+                    oAuth.setAccessToken(this.accessToken);
+                } else {
+                    apiClient.setAccessToken(this.accessToken);
+                }
+
+                HistoryV3Api historyV3Api = new HistoryV3Api(apiClient);
+                boolean useDateRange = fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate);
+
+                String normalizedKey = instrumentKey != null ? instrumentKey.replace(":", "|") : null;
+
+                java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+                boolean isQueryingToday = toDate != null && !java.time.LocalDate.parse(toDate).isBefore(today);
+
+                // Check if symbol is an Index. If so, we bypass the buggy SDK client to prevent URL-encoding issues (space to + instead of %20)
+                boolean isIndex = normalizedKey != null && (normalizedKey.startsWith("NSE_INDEX") || normalizedKey.contains("INDEX"));
+
+                if (isIndex) {
+                    return fetchHistoricalCandleDirect(normalizedKey, unit, interval, toDate, fromDate, isQueryingToday);
+                }
+
+                // Pass the raw normalized key to the SDK. The generated client encodes path
+                // parameters itself; pre-encoding here turns "|" into "%257C" on the wire.
+                String sdkKey = normalizedKey;
+
+                if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
+                    log.info(
+                            "Fetching live intraday data key={}, interval=1minute",
+                            sdkKey);
+                    com.upstox.api.GetIntraDayCandleResponse intradayResponse = historyV3Api.getIntraDayCandleData(
+                            sdkKey, "1minute", 2);
+                    return mapIntradayToHistoricalDataResponse(intradayResponse);
+                }
+
+                GetHistoricalCandleResponse sdkResponse;
+                if (useDateRange) {
+                    log.info(
+                            "Fetching historical data (range) key={}, unit={}, interval={}, to={}, from={}",
+                            sdkKey, unit, interval, toDate, fromDate);
+                    sdkResponse = historyV3Api.getHistoricalCandleData1(
+                            sdkKey, unit, interval, toDate, fromDate);
+                } else {
+                    log.info(
+                            "Fetching historical data (to_date only) key={}, unit={}, interval={}, to={}",
+                            sdkKey, unit, interval, toDate);
+                    sdkResponse = historyV3Api.getHistoricalCandleData(
+                            sdkKey, unit, interval, toDate);
+                }
+
+                return mapToHistoricalDataResponse(sdkResponse);
+            } catch (Exception e) {
+                // Check if the exception or its message indicates a Rate Limit (HTTP 429)
+                boolean isRateLimit = false;
+                if (e instanceof ApiException && ((ApiException) e).getCode() == 429) {
+                    isRateLimit = true;
+                } else if (e.getMessage() != null && (e.getMessage().contains("429") || e.getMessage().contains("Too Many Requests"))) {
+                    isRateLimit = true;
+                } else if (e.getCause() != null && e.getCause().getMessage() != null && 
+                        (e.getCause().getMessage().contains("429") || e.getCause().getMessage().contains("Too Many Requests"))) {
+                    isRateLimit = true;
+                }
+
+                if (isRateLimit && attempt < maxRetries) {
+                    attempt++;
+                    log.warn("Upstox API rate limited (HTTP 429) for key {}. Retrying in {}ms... (Attempt {}/{})", 
+                            instrumentKey, backoffMs, attempt, maxRetries);
+                    try {
+                        Thread.sleep(backoffMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Interrupted during backoff sleep", ie);
+                    }
+                    backoffMs *= 2; // exponential backoff
+                    continue;
+                }
+
+                log.error("Error getting historical candle data from SDK for key: {}", instrumentKey, e);
+                throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error getting historical candle data", e);
             }
-
-            HistoryV3Api historyV3Api = new HistoryV3Api(apiClient);
-            boolean useDateRange = fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate);
-
-            String normalizedKey = instrumentKey != null ? instrumentKey.replace(":", "|") : null;
-
-            java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
-            boolean isQueryingToday = toDate != null && !java.time.LocalDate.parse(toDate).isBefore(today);
-
-            // Check if symbol is an Index. If so, we bypass the buggy SDK client to prevent URL-encoding issues (space to + instead of %20)
-            boolean isIndex = normalizedKey != null && (normalizedKey.startsWith("NSE_INDEX") || normalizedKey.contains("INDEX"));
-
-            if (isIndex) {
-                return fetchHistoricalCandleDirect(normalizedKey, unit, interval, toDate, fromDate, isQueryingToday);
-            }
-
-            // Pass the raw normalized key to the SDK. The generated client encodes path
-            // parameters itself; pre-encoding here turns "|" into "%257C" on the wire.
-            String sdkKey = normalizedKey;
-
-            if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
-                log.info(
-                        "Fetching live intraday data key={}, interval=1minute",
-                        sdkKey);
-                com.upstox.api.GetIntraDayCandleResponse intradayResponse = historyV3Api.getIntraDayCandleData(
-                        sdkKey, "1minute", 2);
-                return mapIntradayToHistoricalDataResponse(intradayResponse);
-            }
-
-            GetHistoricalCandleResponse sdkResponse;
-            if (useDateRange) {
-                log.info(
-                        "Fetching historical data (range) key={}, unit={}, interval={}, to={}, from={}",
-                        sdkKey, unit, interval, toDate, fromDate);
-                sdkResponse = historyV3Api.getHistoricalCandleData1(
-                        sdkKey, unit, interval, toDate, fromDate);
-            } else {
-                log.info(
-                        "Fetching historical data (to_date only) key={}, unit={}, interval={}, to={}",
-                        sdkKey, unit, interval, toDate);
-                sdkResponse = historyV3Api.getHistoricalCandleData(
-                        sdkKey, unit, interval, toDate);
-            }
-
-            return mapToHistoricalDataResponse(sdkResponse);
-        } catch (Exception e) {
-            log.error("Error getting historical candle data from SDK", e);
-            throw new RuntimeException("Error getting historical candle data", e);
         }
     }
 

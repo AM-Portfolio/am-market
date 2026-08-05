@@ -265,7 +265,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                     try {
                         if (callCount > 0) {
                             try {
-                                Thread.sleep(100); // Respect Upstox rate limits (10 requests/sec per symbol)
+                                Thread.sleep(250); // Respect Upstox rate limits (capping at 4 requests/sec to stay under 5 req/sec limit)
                             } catch (InterruptedException ie) {
                                 Thread.currentThread().interrupt();
                                 log.warn("backfillPreviousClose", "Interrupted during backfill rate-limit sleep");

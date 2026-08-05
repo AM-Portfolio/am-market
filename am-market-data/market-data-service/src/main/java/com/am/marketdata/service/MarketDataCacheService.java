@@ -477,6 +477,38 @@ public class MarketDataCacheService {
                     log.warn("overlayLatestPrices", "Failed to fetch previousClose from MongoDB fallback: " + mongoEx.getMessage());
                 }
             }
+
+            // Meaningful Comment: Self-healing fallback. If any symbols still have previousClose = 0.0 after MongoDB lookup (e.g. they are missing in Nifty 500
+            // and the scheduler never synced them), fetch them from the Historical API dynamically and cache them immediately.
+            List<String> finalMissingSymbols = new java.util.ArrayList<>();
+            for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
+                if (entry.getValue() != null && entry.getValue().getPreviousClose() == 0.0) {
+                    finalMissingSymbols.add(entry.getKey());
+                }
+            }
+
+            if (!finalMissingSymbols.isEmpty()) {
+                try {
+                    com.marketdata.common.MarketDataProvider provider = com.am.marketdata.common.util.ApplicationContextProvider.getBean("upstox", com.marketdata.common.MarketDataProvider.class);
+                    if (provider != null) {
+                        log.info("overlayLatestPrices", "Self-healing: Triggering historical fallback sync for " + finalMissingSymbols.size() + " symbols: " + finalMissingSymbols);
+                        Map<String, OHLCQuote> freshQuotes = provider.getOHLC(finalMissingSymbols, TimeFrame.DAY);
+                        if (freshQuotes != null) {
+                            for (String sym : finalMissingSymbols) {
+                                OHLCQuote freshQuote = freshQuotes.get(sym);
+                                if (freshQuote != null && freshQuote.getPreviousClose() > 0.0) {
+                                    result.get(sym).setPreviousClose(freshQuote.getPreviousClose());
+                                    if (result.get(sym).getLastPrice() == 0.0 && freshQuote.getLastPrice() > 0.0) {
+                                        result.get(sym).setLastPrice(freshQuote.getLastPrice());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception selfHealEx) {
+                    log.warn("overlayLatestPrices", "Failed self-healing previousClose fallback: " + selfHealEx.getMessage());
+                }
+            }
         }
     }
     /**
@@ -972,6 +1004,15 @@ public class MarketDataCacheService {
                 double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
                 double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
                 double previousClose = quote.getPreviousClose();
+                if (previousClose > 0.0) {
+                    try {
+                        // Meaningful Comment: Backfill the retrieved previousClose directly to both Redis (market:prev-close:*)
+                        // and MongoDB (previous_close_snapshots) to prevent redundant live API lookups on next request.
+                        setPreviousClose(symbol, previousClose);
+                    } catch (Exception backfillEx) {
+                        log.warn("cacheLatestPrices", "Failed to backfill previous close for symbol " + symbol + ": " + backfillEx.getMessage());
+                    }
+                }
                 double change = lastPrice - previousClose;
                 double changePercent = previousClose != 0 ? (change / previousClose) * 100.0 : 0.0;
 
