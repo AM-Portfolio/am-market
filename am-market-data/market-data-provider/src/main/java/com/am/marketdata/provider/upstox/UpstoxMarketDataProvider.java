@@ -231,9 +231,9 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             }
                         }
                     }
-                } catch (Exception dbEx) {
-                    log.warn("backfillPreviousClose", "Failed to retrieve previousClose from EquityLatestPriceService: " + dbEx.getMessage());
                 }
+            } catch (Exception dbEx) {
+                log.warn("backfillPreviousClose", "Failed to retrieve previousClose from EquityLatestPriceService: " + dbEx.getMessage());
             }
 
             // 2. Filter remaining symbols that still have previousClose == 0.0 for API fallback
