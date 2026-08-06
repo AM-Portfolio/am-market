@@ -169,6 +169,9 @@ market-data:
     enabled: true
     price-ttl-minutes: ${MARKET_DATA_CACHE_PRICE_TTL_MINUTES:15}
     history-ttl-minutes: ${MARKET_HISTORY_DATA_CACHE_HISTORY_TTL_MINUTES:15}
+  nse:
+    cookies:
+      ttl-minutes: ${NSE_COOKIES_TTL_MINUTES:60}
 # Logging Configuration
 logging:
   # NOTE: logging.file.name and logging.pattern.* are intentionally NOT set.
@@ -207,11 +210,6 @@ upstox:
 scraper:
   urls:
     - https://www.nseindia.com/
-
-market-data:
-  nse:
-    cookies:
-      ttl-minutes: ${NSE_COOKIES_TTL_MINUTES:60}
 
 # Server Configuration
 server:
