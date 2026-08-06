@@ -1,6 +1,7 @@
 package com.am.marketdata.scheduler.service;
 
 import com.am.marketdata.internal.service.MarketDataIngestionService;
+import com.am.marketdata.service.MarketHoursService;
 import com.am.marketdata.service.SymbolOrchestratorService;
 import com.am.marketdata.service.websocket.service.StreamerManager;
 import com.am.marketdata.common.log.AppLogger;
@@ -13,7 +14,6 @@ import org.springframework.context.event.EventListener;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import java.util.ArrayList;
 import java.util.List;
-import java.time.LocalTime;
 
 import com.am.observability.trace.IgnoreTracing;
 
@@ -33,6 +33,7 @@ public class MarketDataIngestionScheduler {
     private final StreamerManager streamerManager;
 
     private final SymbolOrchestratorService symbolService;
+    private final MarketHoursService marketHoursService;
 
     @Value("${scheduler.ingestion.enabled:true}")
     private boolean enabled;
@@ -52,16 +53,9 @@ public class MarketDataIngestionScheduler {
     @Value("${scheduler.ingestion.poll-enabled:false}")
     private boolean pollEnabled;
 
-    // Market Hours Config
-    @Value("${scheduler.market.start:09:15}")
-    private String marketStartTime;
-
-    @Value("${scheduler.market.end:15:30}")
-    private String marketEndTime;
-
     @EventListener(ApplicationReadyEvent.class)
     public void init() {
-        if (enabled && isMarketOpen() && !isWeekend()) {
+        if (enabled && marketHoursService.isMarketOpen()) {
             log.info("init", "Application started during market hours. Starting live data path (websocket={}, poll={}).",
                     useWebSocket, pollEnabled);
             startLiveMarketData();
@@ -76,6 +70,10 @@ public class MarketDataIngestionScheduler {
             return;
         if (isWeekend()) {
             log.info("startIngestionJob", "Skipping market data ingestion on weekends.");
+            return;
+        }
+        if (!marketHoursService.isMarketOpen()) {
+            log.info("startIngestionJob", "Skipping market data ingestion; market closed (holiday or outside hours).");
             return;
         }
         log.info("scheduledStart", "Scheduled trigger: Starting live market data (websocket={}, poll={})",
@@ -160,19 +158,6 @@ public class MarketDataIngestionScheduler {
         return provider != null && "UPSTOX".equalsIgnoreCase(provider.trim());
     }
 
-    // Check if the current time is within Indian market trading hours.
-    // NOTE: Explicitly uses Asia/Kolkata timezone because the application container
-    // runtime is typically in UTC, which otherwise causes false "market closed" evaluations.
-    private boolean isMarketOpen() {
-        java.time.LocalTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata")).toLocalTime();
-        java.time.LocalTime start = java.time.LocalTime.parse(marketStartTime);
-        java.time.LocalTime end = java.time.LocalTime.parse(marketEndTime);
-        return now.isAfter(start) && now.isBefore(end);
-    }
-
-    // Check if current day is a weekend.
-    // NOTE: Explicitly uses Asia/Kolkata timezone to avoid date offset issues (e.g., Friday night
-    // in India evaluating to Saturday in local system time depending on container configuration).
     private boolean isWeekend() {
         java.time.DayOfWeek day = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).getDayOfWeek();
         return day == java.time.DayOfWeek.SATURDAY || day == java.time.DayOfWeek.SUNDAY;

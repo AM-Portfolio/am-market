@@ -4,19 +4,11 @@ import com.am.marketdata.scraper.model.WebsiteCookies;
 import com.am.marketdata.scraper.exception.CookieException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
-/**
- * Manages the complete cookie lifecycle including:
- * - Scraping
- * - Validation
- * - Caching
- * - Refresh
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -24,30 +16,24 @@ public class CookieManager {
     private final CookieScraper cookieScraper;
     private final CookieValidator cookieValidator;
     private final CookieCache cookieCache;
+    private final ReentrantLock refreshLock = new ReentrantLock();
 
-    @Value("${app.cookie.validator.expiry-threshold-minutes:10}")
-    private int expiryThresholdMinutes;
-    
-    /**
-     * Fetches and validates fresh cookies
-     * @return Validated WebsiteCookies
-     * @throws CookieException if cookie validation fails
-     */
     public WebsiteCookies fetchAndValidateCookies() throws CookieException {
         try {
             WebsiteCookies websiteCookies = cookieScraper.scrapeCookies();
             String cookieString = websiteCookies.getCookiesString();
-            
-            // Validate cookies
-            Map<String, CookieValidator.ValidationResult> validationResults = 
-                cookieValidator.validateAllCookies(cookieString);
-            
-            // Check if all required cookies are valid
+            if (cookieString == null || cookieString.isBlank()) {
+                throw new CookieException("Selenium scrape returned empty cookie string");
+            }
+
+            Map<String, CookieValidator.ValidationResult> validationResults =
+                    cookieValidator.validateAllCookies(cookieString);
+
             boolean isValid = true;
             for (String requiredCookie : cookieValidator.getRequiredCookies()) {
                 CookieValidator.ValidationResult result = validationResults.get(requiredCookie);
                 if (result == null || !result.isValid()) {
-                    log.warn("Required cookie {} is invalid: {}", requiredCookie, 
+                    log.warn("Required cookie {} is invalid: {}", requiredCookie,
                             result == null ? "not found" : result.getMessage());
                     isValid = false;
                 }
@@ -58,28 +44,40 @@ public class CookieManager {
             }
 
             return websiteCookies;
+        } catch (CookieException e) {
+            throw e;
         } catch (Exception e) {
             throw new CookieException("Failed to fetch and validate cookies: " + e.getMessage(), e);
         }
     }
 
     /**
-     * Refreshes cookies if needed
-     * @return true if cookies were refreshed
+     * Writer path: scrape via Selenium under lock and store in Redis + L1.
+     */
+    public String refreshFromSelenium() throws CookieException {
+        refreshLock.lock();
+        try {
+            log.info("Refreshing NSE cookies via Selenium (writer)");
+            WebsiteCookies newCookies = fetchAndValidateCookies();
+            cookieCache.storeCookies(newCookies.getCookiesString());
+            return newCookies.getCookiesString();
+        } finally {
+            refreshLock.unlock();
+        }
+    }
+
+    /**
+     * Writer path: scrape only when Redis/L1 is empty or required cookies look invalid.
      */
     public boolean refreshIfNeeded() {
         try {
             String currentCookies = cookieCache.getCookies();
-            
-            if (currentCookies == null || 
-                !cookieValidator.areRequiredCookiesValid(currentCookies) ||
-                cookieValidator.areAnyRequiredCookiesExpiringSoon(currentCookies, 10)) {
-                
-                WebsiteCookies newCookies = fetchAndValidateCookies();
-                cookieCache.storeCookies(newCookies.getCookiesString());
+            if (currentCookies == null
+                    || !cookieValidator.areRequiredCookiesValid(currentCookies)
+                    || cookieValidator.areAnyRequiredCookiesExpiringSoon(currentCookies, 10)) {
+                refreshFromSelenium();
                 return true;
             }
-            
             return false;
         } catch (CookieException e) {
             log.error("Cookie refresh failed: {}", e.getMessage());
@@ -88,21 +86,36 @@ public class CookieManager {
     }
 
     /**
-     * Gets valid cookies from cache or refreshes if needed
-     * @return Valid cookies string
-     * @throws CookieException if no valid cookies can be obtained
+     * Reader path for NSE API / IPO sync: Redis (and L1) only. Never launches Selenium.
+     */
+    public String getCookiesForApi() throws CookieException {
+        return cookieCache.getCookiesOrThrow();
+    }
+
+    /**
+     * @deprecated Prefer {@link #getCookiesForApi()} for readers and {@link #refreshFromSelenium()} for writers.
+     * Kept for callers; now Redis-only (no auto-scrape).
      */
     public String getValidCookies() throws CookieException {
-        String cookies = cookieCache.getCookies();
-        if (cookies == null || 
-            !cookieValidator.areRequiredCookiesValid(cookies) ||
-            cookieValidator.areAnyRequiredCookiesExpiringSoon(cookies, 10)) {
-            
-            WebsiteCookies newCookies = fetchAndValidateCookies();
-            cookieCache.storeCookies(newCookies.getCookiesString());
-            return newCookies.getCookiesString();
+        return getCookiesForApi();
+    }
+
+    public CookieCache.CookiePresenceStatus setCookiesFromHeader(String cookieHeader, Integer ttlMinutes) {
+        if (cookieHeader == null || cookieHeader.isBlank()) {
+            throw new CookieException("cookieHeader must not be blank");
         }
-        
-        return cookies;
+        String trimmed = cookieHeader.trim();
+        cookieValidator.validateAllCookies(trimmed);
+        int ttl = ttlMinutes == null ? cookieCache.getTtlMinutes() : ttlMinutes;
+        cookieCache.storeCookies(trimmed, ttl);
+        return cookieCache.status();
+    }
+
+    public CookieCache.CookiePresenceStatus status() {
+        return cookieCache.status();
+    }
+
+    public void invalidate() {
+        cookieCache.invalidateCookies();
     }
 }

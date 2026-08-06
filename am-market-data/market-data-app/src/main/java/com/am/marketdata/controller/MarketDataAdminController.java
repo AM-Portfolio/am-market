@@ -1,29 +1,38 @@
 package com.am.marketdata.controller;
 
+import com.am.marketdata.api.model.ipo.IpoApiMapper;
+import com.am.marketdata.api.model.ipo.IpoSyncResponse;
+import com.am.marketdata.api.model.nse.NseCookiesSetRequest;
+import com.am.marketdata.api.model.nse.NseCookiesStatusResponse;
+import com.am.marketdata.common.ipo.IpoFeedScope;
 import com.am.marketdata.internal.model.IngestionJobLog;
 import com.am.marketdata.internal.repository.IngestionJobLogRepository;
 import com.am.marketdata.internal.service.MarketDataHistoricalSyncService;
 import com.am.marketdata.internal.service.MarketDataIngestionService;
+import com.am.marketdata.scraper.cookie.CookieCache;
+import com.am.marketdata.scraper.cookie.CookieManager;
+import com.am.marketdata.scraper.exception.CookieException;
+import com.am.marketdata.service.ipo.IpoSyncTrigger;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 import java.time.LocalDate;
-
-import org.springframework.format.annotation.DateTimeFormat;
-
-import org.springframework.context.annotation.Profile;
+import java.util.List;
 
 @Slf4j
 @RestController
 @RequestMapping("/v1/admin")
 @RequiredArgsConstructor
 @Profile("!isolated")
+@Tag(name = "Admin", description = "Admin sync and ops endpoints")
 public class MarketDataAdminController {
 
     private final IngestionJobLogRepository ingestionJobLogRepository;
@@ -33,12 +42,14 @@ public class MarketDataAdminController {
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
     private final com.am.marketdata.scheduler.PreviousCloseScheduler previousCloseScheduler;
     private final com.am.marketdata.scraper.service.MarketDataProcessingService marketDataProcessingService;
+    private final com.am.marketdata.service.calendar.MarketCalendarSyncService marketCalendarSyncService;
+    private final com.am.marketdata.service.ipo.IpoSyncService ipoSyncService;
+    private final CookieManager cookieManager;
 
     @GetMapping("/logs/{jobId}")
     public ResponseEntity<IngestionJobLog> getJobDetails(@PathVariable String jobId) {
         return ingestionJobLogRepository.findByJobId(jobId)
                 .map(job -> {
-                    // Fetch transient logs from Redis
                     String key = "job:logs:" + jobId;
                     List<String> logs = redisTemplate.opsForList().range(key, 0, -1);
                     job.setLogs(logs);
@@ -60,10 +71,9 @@ public class MarketDataAdminController {
                     endDate.plusDays(1).atStartOfDay(),
                     PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startTime")))
                     .getContent();
-        } else {
-            return ingestionJobLogRepository.findAll(
-                    PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startTime"))).getContent();
         }
+        return ingestionJobLogRepository.findAll(
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startTime"))).getContent();
     }
 
     @PostMapping("/sync/historical")
@@ -76,7 +86,6 @@ public class MarketDataAdminController {
                 "Manual trigger: Historical Sync (Symbol: {}, Duration: {}, Force Refresh: {}, Fetch Index Stocks: {})",
                 symbol, duration,
                 forceRefresh, fetchIndexStocks);
-        // Running asynchronously to avoid blocking
         new Thread(() -> historicalSyncService.syncHistoricalData(symbol, duration, forceRefresh, fetchIndexStocks))
                 .start();
         return ResponseEntity.ok("Historical Sync Triggered (Symbol: " + symbol + ", Duration: " + duration
@@ -97,8 +106,6 @@ public class MarketDataAdminController {
         ingestionService.stopIngestion(provider);
         return ResponseEntity.ok("Ingestion Stopped");
     }
-
-    // --- Scheduler Manual Triggers ---
 
     @PostMapping("/scheduler/indices/process")
     public ResponseEntity<String> triggerIndicesProcessing() {
@@ -128,10 +135,61 @@ public class MarketDataAdminController {
     }
 
     @PostMapping("/scheduler/cookie/refresh")
-    public ResponseEntity<String> triggerCookieRefresh() {
-        log.info("Manual trigger: Cookie Refresh");
-        orchestrator.triggerCookieRefresh();
-        return ResponseEntity.ok("Triggered Cookie Refresh");
+    @Operation(summary = "Trigger Selenium cookie refresh (writer)",
+            description = "Scrapes NSE cookies and stores them in Redis for all pods. Works even when scheduler.cookie.enabled=false.")
+    public ResponseEntity<NseCookiesStatusResponse> triggerCookieRefresh() {
+        log.info("Manual trigger: Cookie Refresh (Selenium writer)");
+        try {
+            cookieManager.refreshFromSelenium();
+            return ResponseEntity.ok(toStatusResponse(cookieManager.status(), "ok", null));
+        } catch (CookieException e) {
+            log.error("Selenium cookie refresh failed: {}", e.getMessage());
+            return ResponseEntity.status(500)
+                    .body(NseCookiesStatusResponse.builder()
+                            .status("failed")
+                            .error(e.getMessage())
+                            .present(false)
+                            .build());
+        }
+    }
+
+    @PutMapping("/nse/cookies")
+    @Operation(summary = "Set NSE cookies from browser Cookie header",
+            description = "Writes shared Redis cookie store used by IPO sync and NSE API calls. Never returns raw cookie values.")
+    public ResponseEntity<NseCookiesStatusResponse> setNseCookies(@RequestBody NseCookiesSetRequest request) {
+        try {
+            CookieCache.CookiePresenceStatus status =
+                    cookieManager.setCookiesFromHeader(request.getCookieHeader(), request.getTtlMinutes());
+            return ResponseEntity.ok(toStatusResponse(status, "ok", null));
+        } catch (CookieException e) {
+            log.warn("Failed to set NSE cookies: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(NseCookiesStatusResponse.builder()
+                            .status("failed")
+                            .error(e.getMessage())
+                            .present(false)
+                            .build());
+        }
+    }
+
+    @GetMapping("/nse/cookies/status")
+    @Operation(summary = "NSE cookie cache status",
+            description = "Returns presence, cookie names, TTL. Never returns raw cookie values.")
+    public ResponseEntity<NseCookiesStatusResponse> getNseCookiesStatus() {
+        return ResponseEntity.ok(toStatusResponse(cookieManager.status(), "ok", null));
+    }
+
+    private static NseCookiesStatusResponse toStatusResponse(
+            CookieCache.CookiePresenceStatus status, String outcome, String error) {
+        return NseCookiesStatusResponse.builder()
+                .present(status.present())
+                .cookieNames(status.cookieNames())
+                .storedAt(status.storedAt())
+                .ttlSecondsRemaining(status.ttlSecondsRemaining())
+                .redisBacked(status.redisBacked())
+                .status(outcome)
+                .error(error)
+                .build();
     }
 
     @PostMapping("/scheduler/streamer/start")
@@ -179,16 +237,10 @@ public class MarketDataAdminController {
     @PostMapping("/scheduler/market/close")
     public ResponseEntity<String> triggerMarketClose() {
         log.info("Manual trigger: Market Close/Ingestion Stop");
-        orchestrator.triggerIngestionStop(); // Orchestrator method for market close/stop ingestion
+        orchestrator.triggerIngestionStop();
         return ResponseEntity.ok("Triggered Market Close/Ingestion Stop");
     }
-    /**
-     * Exposes a manual administrative endpoint to force-refresh the previousClose cache.
-     * Useful to warm up/repopulate the Redis cache with correct previousClose prices from Upstox
-     * without waiting for the daily scheduled job at 8:00 AM.
-     * Runs asynchronously in a separate background thread to prevent HTTP request blocking
-     * due to rate-limiting delays (100ms per backfill request to Upstox).
-     */
+
     @PostMapping("/scheduler/prev-close/trigger")
     public ResponseEntity<String> triggerPreviousCloseFetch() {
         log.info("Manual trigger: Previous Close Fetch and Cache");
@@ -200,5 +252,64 @@ public class MarketDataAdminController {
             }
         }, "manual-prev-close-trigger-thread").start();
         return ResponseEntity.ok("Triggered previous close cache refresh in background");
+    }
+
+    @PostMapping("/sync/market-calendar")
+    public ResponseEntity<String> syncMarketCalendar(
+            @RequestParam(defaultValue = "NSE") String exchange) {
+        log.info("Manual trigger: Market calendar sync exchange={}", exchange);
+        new Thread(() -> {
+            try {
+                marketCalendarSyncService.sync(
+                        exchange,
+                        com.am.marketdata.service.calendar.MarketCalendarSyncTrigger.ADMIN);
+            } catch (Exception e) {
+                log.error("Failed market calendar sync for {}", exchange, e);
+            }
+        }, "manual-market-calendar-sync").start();
+        return ResponseEntity.ok("Market calendar sync triggered for " + exchange);
+    }
+
+    @PostMapping("/sync/ipo")
+    public ResponseEntity<IpoSyncResponse> syncIpo(
+            @RequestParam(defaultValue = "all") String scope) {
+        log.info("Manual trigger: IPO sync scope={}", scope);
+        IpoFeedScope feedScope;
+        try {
+            feedScope = IpoFeedScope.valueOf(scope.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(IpoSyncResponse.builder()
+                            .scope(scope)
+                            .status("failed")
+                            .error("Invalid scope. Use past|current|upcoming|subscription|all")
+                            .build());
+        }
+        if (!ipoSyncService.isSourceAvailable()) {
+            return ResponseEntity.status(503)
+                    .body(IpoSyncResponse.builder()
+                            .scope(feedScope.name())
+                            .status("failed")
+                            .error("IPO source not configured")
+                            .build());
+        }
+        try {
+            int n = ipoSyncService.sync(feedScope, IpoSyncTrigger.ADMIN);
+            return ResponseEntity.ok(IpoSyncResponse.builder()
+                    .scope(feedScope.name())
+                    .status("ok")
+                    .upserts(n)
+                    .meta(IpoApiMapper.toSyncMeta(ipoSyncService.findSyncMeta(feedScope).orElse(null)))
+                    .build());
+        } catch (Exception e) {
+            log.error("Failed IPO sync scope={}", scope, e);
+            return ResponseEntity.status(500)
+                    .body(IpoSyncResponse.builder()
+                            .scope(feedScope.name())
+                            .status("failed")
+                            .error(e.getMessage())
+                            .meta(IpoApiMapper.toSyncMeta(ipoSyncService.findSyncMeta(feedScope).orElse(null)))
+                            .build());
+        }
     }
 }
