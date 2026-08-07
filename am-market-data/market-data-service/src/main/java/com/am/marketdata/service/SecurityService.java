@@ -148,9 +148,25 @@ public class SecurityService {
             }
         }
 
-        // 3. Fetch missing from DB
+        // 3. Fetch missing from DB (checks if the missing items are symbol tickers or ISIN codes)
         if (!missingSymbols.isEmpty()) {
-            List<SecurityDocument> dbDocs = securityRepository.findBySymbolIn(missingSymbols);
+            // Check if any of the missing symbols look like an ISIN (12 letters and numbers)
+            List<String> isinCandidates = missingSymbols.stream()
+                    .filter(s -> s.length() == 12 && s.matches("[A-Z]{2}[A-Z0-9]{10}"))
+                    .collect(Collectors.toList());
+            List<String> tickerCandidates = missingSymbols.stream()
+                    .filter(s -> !isinCandidates.contains(s))
+                    .collect(Collectors.toList());
+
+            List<SecurityDocument> dbDocs = new ArrayList<>();
+            // Query normal ticker symbols from the database
+            if (!tickerCandidates.isEmpty()) {
+                dbDocs.addAll(securityRepository.findBySymbolIn(tickerCandidates));
+            }
+            // Query ISIN codes from the database
+            if (!isinCandidates.isEmpty()) {
+                dbDocs.addAll(securityRepository.findByIsinIn(isinCandidates));
+            }
 
             // Map back to handle duplicates or ordering if needed
             Map<String, SecurityDocument> dbMap = new HashMap<>();
@@ -163,16 +179,24 @@ public class SecurityService {
             // Add found DB docs to results
             results.addAll(dbDocs);
 
-            // 4. Update Cache for found items
+            // 4. Update Cache for found items (saves cache under BOTH symbol and ISIN keys)
             Map<String, Object> cacheUpdates = new HashMap<>();
             for (SecurityDocument doc : dbDocs) {
-                if (doc.getKey() != null && doc.getKey().getSymbol() != null) {
-                    String key = CACHE_PREFIX + doc.getKey().getSymbol().toUpperCase();
-                    cacheUpdates.put(key, doc);
+                if (doc.getKey() != null) {
+                    // Save in cache under normal stock symbol ticker (e.g. stock:BANKBARODA)
+                    if (doc.getKey().getSymbol() != null) {
+                        String key = CACHE_PREFIX + doc.getKey().getSymbol().toUpperCase();
+                        cacheUpdates.put(key, doc);
+                    }
+                    // Also save in cache under ISIN code (e.g. stock:INE028A01039) so both lookups work
+                    if (doc.getKey().getIsin() != null) {
+                        String key = CACHE_PREFIX + doc.getKey().getIsin().toUpperCase();
+                        cacheUpdates.put(key, doc);
+                    }
                 }
             }
 
-            // 4. Update Redis Cache for items fetched from MongoDB:
+            // 5. Update Redis Cache for items fetched from MongoDB:
             if (!cacheUpdates.isEmpty()) {
                 try {
                     // Bulk write all newly fetched securities into Redis in 1 network command
