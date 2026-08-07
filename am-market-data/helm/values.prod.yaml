@@ -1,4 +1,4 @@
-# Production — am-market-data
+# Production â€” am-market-data
 # Service-level Ingress (same model as am-identity), not central am-infra ingress.
 
 environment: prod
@@ -32,7 +32,7 @@ config:
     maxCandidatesPerQuery: 100
     internalBatchSize: 100
 
-  # ── Prod scheduler — explicit for auditability ───────────────────────
+  # â”€â”€ Prod scheduler â€” explicit for auditability â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   scheduler:
     cookie:
       enabled: false
@@ -71,7 +71,7 @@ config:
       enabled: true
       cron: "0 0 2 * * *"
 
-  # ── Redis TTLs ────────────────────────────────────────────────
+  # â”€â”€ Redis TTLs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   redis:
     cleanupRetentionDays: 7
     cleanupBatchSize: 1000
@@ -148,3 +148,7 @@ monitoring:
     scrape: true
     port: "8080"
     path: "/actuator/prometheus"
+
+global:
+  image:
+    tag: "31089479814"

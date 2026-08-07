@@ -51,3 +51,7 @@ vault:
       path: "apps/data/prod/services/am-identity"
     service-oauth:
       path: "apps/data/prod/services/am-parser"
+
+global:
+  image:
+    tag: "30149047627"
