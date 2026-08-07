@@ -1,0 +1,21 @@
+apiVersion: am.argocd/v1
+kind: ServiceDeploy
+service: am-parser
+enabled: true
+owners: market
+source:
+  repo: am-market
+  path: am-parser/argocd.yaml
+chart:
+  repoURL: https://github.com/AM-Portfolio/am-pipelines.git
+  path: am-parser/argocd.yaml
+  targetRevision: main
+helm:
+  releaseName: am-parser
+  valuesPath: am-parser/helm
+valuesRepoURL: https://github.com/AM-Portfolio/am-market.git
+valuesTargetRevision: main
+envs:
+  prod:
+    enabled: true
+    namespace: am-apps-prod
