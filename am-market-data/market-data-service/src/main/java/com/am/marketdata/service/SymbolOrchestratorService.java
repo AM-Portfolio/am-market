@@ -96,10 +96,32 @@ public class SymbolOrchestratorService {
         // 3. Add ETF symbols
         combinedSymbols.addAll(getEtfSymbols());
 
-        // Test
-        // combinedSymbols.addAll(List.of("RELIANCE"));
+        // 4. Add User Portfolio symbols (dynamically fetched from MongoDB portfolios collection)
+        try {
+            org.springframework.data.mongodb.core.MongoTemplate mongoTemplate = 
+                    com.am.marketdata.common.util.ApplicationContextProvider.getBean(org.springframework.data.mongodb.core.MongoTemplate.class);
+            if (mongoTemplate != null) {
+                List<String> userIsinsAndSymbols = mongoTemplate.getCollection("portfolios")
+                        .distinct("equities.isin", String.class)
+                        .into(new ArrayList<>());
+                List<String> userDirectSymbols = mongoTemplate.getCollection("portfolios")
+                        .distinct("equities.symbol", String.class)
+                        .into(new ArrayList<>());
+                userIsinsAndSymbols.addAll(userDirectSymbols);
+                List<String> cleanUserSymbols = userIsinsAndSymbols.stream()
+                        .filter(s -> s != null && !s.isBlank())
+                        .distinct()
+                        .toList();
+                if (!cleanUserSymbols.isEmpty()) {
+                    combinedSymbols.addAll(cleanUserSymbols);
+                    log.info("Added {} distinct user portfolio symbols/ISINs to fetch list", cleanUserSymbols.size());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to append user portfolio symbols in SymbolOrchestratorService: {}", e.getMessage());
+        }
 
-        // 4. Deduplicate and store in cache
+        // 5. Deduplicate and store in cache
         cachedSymbols = combinedSymbols.stream()
                 .distinct()
                 .filter(s -> s != null && !s.trim().isEmpty())
