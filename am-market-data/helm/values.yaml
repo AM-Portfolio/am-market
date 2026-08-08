@@ -6,6 +6,9 @@ language: java
 global:
   vault:
     serviceAccountName: "am-backend-sa"
+    # Prod cluster has Vault Agent Injector, not secrets-store CSI driver CRDs.
+    csi:
+      enabled: false
 
 image:
   repository: am-market-data
