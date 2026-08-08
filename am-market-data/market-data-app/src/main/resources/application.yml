@@ -217,6 +217,12 @@ server:
 
 scheduler:
   timezone: ${SCHEDULER_TIMEZONE:Asia/Kolkata}
+  # ── Symbol universe (previous-close / streamer) ───────────────────────────
+  symbols:
+    default: ${SCHEDULER_SYMBOLS_DEFAULT:RELIANCE}
+    include-portfolio-active-set: ${SCHEDULER_SYMBOLS_INCLUDE_PORTFOLIO_ACTIVE_SET:true}
+    active-set-redis-key: ${SCHEDULER_SYMBOLS_ACTIVE_SET_REDIS_KEY:market:active-symbols}
+    cache-ttl-seconds: ${SCHEDULER_SYMBOLS_CACHE_TTL_SECONDS:900}
   # ── Cookie / NSE session ──────────────────────────────────────────────────
   cookie:
     enabled: ${SCHEDULER_COOKIE_ENABLED:false}

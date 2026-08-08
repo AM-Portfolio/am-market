@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @RestController
@@ -45,6 +46,7 @@ public class MarketDataAdminController {
     private final com.am.marketdata.service.calendar.MarketCalendarSyncService marketCalendarSyncService;
     private final com.am.marketdata.service.ipo.IpoSyncService ipoSyncService;
     private final CookieManager cookieManager;
+    private final com.am.marketdata.service.SymbolOrchestratorService symbolOrchestratorService;
 
     @GetMapping("/logs/{jobId}")
     public ResponseEntity<IngestionJobLog> getJobDetails(@PathVariable String jobId) {
@@ -252,6 +254,15 @@ public class MarketDataAdminController {
             }
         }, "manual-prev-close-trigger-thread").start();
         return ResponseEntity.ok("Triggered previous close cache refresh in background");
+    }
+
+    @PostMapping("/scheduler/symbols/refresh")
+    @Operation(summary = "Refresh symbol universe cache (Nifty/ETF + Redis active portfolio set)")
+    public ResponseEntity<String> refreshSymbolUniverse() {
+        log.info("Manual trigger: Symbol universe cache refresh");
+        symbolOrchestratorService.refreshCache();
+        Set<String> refreshed = symbolOrchestratorService.findDistinctSymbols();
+        return ResponseEntity.ok("Symbol universe refreshed. count=" + refreshed.size());
     }
 
     @PostMapping("/sync/market-calendar")
