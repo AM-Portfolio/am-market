@@ -982,9 +982,12 @@ public class MarketDataCacheService {
         }
 
         try {
-            for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
-                String rawSymbol = entry.getKey();
-                // Normalize symbol: e.g. NSE_INDEX|Nifty 50 -> NIFTY 50
+            // Step 1: Pre-normalize all symbols and build lookup keys to check Redis
+            List<String> normalizedSymbols = new ArrayList<>();
+            List<String> redisPrevCloseKeys = new ArrayList<>();
+            Map<String, String> normalizedToRaw = new HashMap<>();
+
+            for (String rawSymbol : quotes.keySet()) {
                 String symbol = rawSymbol;
                 if (symbol.contains("|")) {
                     symbol = symbol.substring(symbol.indexOf("|") + 1);
@@ -993,8 +996,35 @@ public class MarketDataCacheService {
                     symbol = symbol.substring(symbol.indexOf(":") + 1);
                 }
                 symbol = symbol.toUpperCase().trim();
+                normalizedSymbols.add(symbol);
+                redisPrevCloseKeys.add("market:prev-close:" + symbol);
+                normalizedToRaw.put(symbol, rawSymbol);
+            }
 
-                OHLCQuote quote = entry.getValue();
+            // Step 2: Bulk multiGet to check which prev-close keys are already in Redis
+            List<String> existingPrevCloses = Collections.emptyList();
+            try {
+                existingPrevCloses = redisTemplate.opsForValue().multiGet(redisPrevCloseKeys);
+            } catch (Exception redisCheckEx) {
+                log.warn("cacheLatestPrices", "Failed to check existing previous closes in Redis, defaulting to write everything", redisCheckEx);
+            }
+
+            // Map each symbol to whether it already has a previous close cached
+            Map<String, Boolean> isCachedMap = new HashMap<>();
+            for (int i = 0; i < normalizedSymbols.size(); i++) {
+                String symbol = normalizedSymbols.get(i);
+                boolean exists = existingPrevCloses != null && i < existingPrevCloses.size() && existingPrevCloses.get(i) != null;
+                isCachedMap.put(symbol, exists);
+            }
+
+            // Step 3: Accumulate Redis pipeline commands and MongoDB documents
+            Map<String, String> latestPriceRedisWrites = new HashMap<>();
+            Map<String, String> prevCloseRedisWrites = new HashMap<>();
+            List<PreviousCloseDocument> mongoPrevCloseDocs = new ArrayList<>();
+
+            for (String symbol : normalizedSymbols) {
+                String rawSymbol = normalizedToRaw.get(symbol);
+                OHLCQuote quote = quotes.get(rawSymbol);
                 if (quote == null) {
                     continue;
                 }
@@ -1004,15 +1034,24 @@ public class MarketDataCacheService {
                 double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
                 double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
                 double previousClose = quote.getPreviousClose();
-                if (previousClose > 0.0) {
-                    try {
-                        // Meaningful Comment: Backfill the retrieved previousClose directly to both Redis (market:prev-close:*)
-                        // and MongoDB (previous_close_snapshots) to prevent redundant live API lookups on next request.
-                        setPreviousClose(symbol, previousClose);
-                    } catch (Exception backfillEx) {
-                        log.warn("cacheLatestPrices", "Failed to backfill previous close for symbol " + symbol + ": " + backfillEx.getMessage());
+
+                // If previous close is not cached in Redis, we write it to both Redis and MongoDB (cold start)
+                if (previousClose > 0.0 && !isCachedMap.getOrDefault(symbol, false)) {
+                    // Cache key: market:prev-close:SYMBOL
+                    prevCloseRedisWrites.put("market:prev-close:" + symbol, String.valueOf(previousClose));
+                    
+                    // MongoDB document mapping
+                    if (previousCloseRepository != null) {
+                        PreviousCloseDocument doc = PreviousCloseDocument.builder()
+                                .symbol(symbol)
+                                .previousClose(previousClose)
+                                .tradeDate(LocalDate.now(ZoneId.of("Asia/Kolkata")).toString())
+                                .updatedAt(Instant.now())
+                                .build();
+                        mongoPrevCloseDocs.add(doc);
                     }
                 }
+
                 double change = lastPrice - previousClose;
                 double changePercent = previousClose != 0 ? (change / previousClose) * 100.0 : 0.0;
 
@@ -1029,13 +1068,46 @@ public class MarketDataCacheService {
                 cacheData.put("source", "UPSTOX_WS");
 
                 String json = objectMapper.writeValueAsString(cacheData);
-                String key = "market:latest-price:" + symbol;
-
-                // 6 hours TTL during market day fallback
-                redisTemplate.opsForValue().set(key, json, 6, TimeUnit.HOURS);
+                latestPriceRedisWrites.put("market:latest-price:" + symbol, json);
             }
+
+            // Step 4: Execute bulk Redis pipelined write for latest prices (6 hours TTL)
+            if (!latestPriceRedisWrites.isEmpty()) {
+                redisTemplate.executePipelined((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
+                    for (Map.Entry<String, String> e : latestPriceRedisWrites.entrySet()) {
+                        byte[] keyBytes = redisTemplate.getStringSerializer().serialize(e.getKey());
+                        byte[] valueBytes = redisTemplate.getStringSerializer().serialize(e.getValue());
+                        connection.setEx(keyBytes, 6 * 3600, valueBytes); // 6 hours expiration
+                    }
+                    return null;
+                });
+            }
+
+            // Step 5: Execute bulk Redis pipelined write for new previous closes (26 hours TTL)
+            if (!prevCloseRedisWrites.isEmpty()) {
+                redisTemplate.executePipelined((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
+                    for (Map.Entry<String, String> e : prevCloseRedisWrites.entrySet()) {
+                        byte[] keyBytes = redisTemplate.getStringSerializer().serialize(e.getKey());
+                        byte[] valueBytes = redisTemplate.getStringSerializer().serialize(e.getValue());
+                        connection.setEx(keyBytes, 26 * 3600, valueBytes); // 26 hours expiration
+                    }
+                    return null;
+                });
+                log.info("cacheLatestPrices", "Pipelined {} new previous close values to Redis", prevCloseRedisWrites.size());
+            }
+
+            // Step 6: Bulk save to MongoDB (only for new/uncached previous closes)
+            if (previousCloseRepository != null && !mongoPrevCloseDocs.isEmpty()) {
+                try {
+                    previousCloseRepository.saveAll(mongoPrevCloseDocs);
+                    log.info("cacheLatestPrices", "Saved {} new previous close documents to MongoDB in bulk", mongoPrevCloseDocs.size());
+                } catch (Exception mongoEx) {
+                    log.warn("cacheLatestPrices", "Failed to bulk save previous closes in MongoDB", mongoEx);
+                }
+            }
+
         } catch (Exception e) {
-            log.error("cacheLatestPrices", "Error caching latest prices to Redis", e);
+            log.error("cacheLatestPrices", "Error caching latest prices to Redis/MongoDB in bulk", e);
         }
     }
 
