@@ -158,6 +158,42 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
             if (providerData != null && !providerData.isEmpty()) {
                 log.info("[PROVIDER] {} Successfully fetched {} OHLC quotes from provider with timeFrame {}",
                         provider.getProviderName(), providerData.size(), tfValue);
+
+                // Fetch ISIN mappings for the requested symbols to support copying quote values back to ISIN keys.
+                Map<String, String> isinToSymbolMap = new HashMap<>();
+                try {
+                    com.am.marketdata.service.SecurityService securityService = 
+                            com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.marketdata.service.SecurityService.class);
+                    log.info("[PROVIDER_MAP] Fetching ISIN mapping from SecurityService for symbols: " + symbols);
+                    List<com.am.marketdata.service.model.security.SecurityDocument> docs = 
+                            securityService.findBySymbols(symbols);
+                    for (com.am.marketdata.service.model.security.SecurityDocument doc : docs) {
+                        if (doc.getKey() != null && doc.getKey().getIsin() != null && doc.getKey().getSymbol() != null) {
+                            isinToSymbolMap.put(doc.getKey().getIsin().toUpperCase().trim(), doc.getKey().getSymbol().toUpperCase().trim());
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to fetch ISIN mapping from SecurityService: " + e.getMessage(), e);
+                }
+
+                try {
+                    org.springframework.data.mongodb.core.MongoTemplate mongoTemplate = 
+                            com.am.marketdata.common.util.ApplicationContextProvider.getBean(org.springframework.data.mongodb.core.MongoTemplate.class);
+                    log.info("[PROVIDER_MAP] Fetching ISIN mapping from upstock_instruments for symbols: " + symbols);
+                    org.springframework.data.mongodb.core.query.Query mongoQuery = new org.springframework.data.mongodb.core.query.Query(
+                            org.springframework.data.mongodb.core.query.Criteria.where("isin").in(symbols)
+                    );
+                    List<com.am.marketdata.common.model.UpstoxInstrument> instruments = 
+                            mongoTemplate.find(mongoQuery, com.am.marketdata.common.model.UpstoxInstrument.class);
+                    for (com.am.marketdata.common.model.UpstoxInstrument inst : instruments) {
+                        if (inst.getIsin() != null && inst.getTradingSymbol() != null) {
+                            isinToSymbolMap.put(inst.getIsin().toUpperCase().trim(), inst.getTradingSymbol().toUpperCase().trim());
+                        }
+                    }
+                    log.info("[PROVIDER_MAP] Final Resolved ISIN mapping: " + isinToSymbolMap);
+                } catch (Exception e) {
+                    log.error("Failed to fetch ISIN mapping from MongoTemplate: " + e.getMessage(), e);
+                }
                 
                 // Map the results back to the original requested symbols.
                 // Upstox sometimes maps symbols internally to different trading symbols (e.g. AXISGOLD -> GOLDAXIS).
@@ -174,11 +210,13 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
                          // Handle known mappings:
                          // 1. Exact match (e.g. RELIANCE == RELIANCE)
                          // 2. Contains mapping (e.g. AXISGOLD matches GOLDAXIS, AXISNIFTY matches NIFTYAXIS, SEQUENT matches VIYASH, TATAMOTORS matches TMCV due to demerger)
+                         // 3. ISIN match: if the requested symbol is an ISIN mapping to this provider symbol
                          if (cleanReq.equals(cleanProv) || 
                              (cleanReq.equals("AXISGOLD") && cleanProv.equals("GOLDAXIS")) ||
                              (cleanReq.equals("AXISNIFTY") && cleanProv.equals("NIFTYAXIS")) ||
                              (cleanReq.equals("SEQUENT") && cleanProv.equals("VIYASH")) ||
-                             (cleanReq.equals("TATAMOTORS") && cleanProv.equals("TMCV"))) {
+                             (cleanReq.equals("TATAMOTORS") && cleanProv.equals("TMCV")) ||
+                             cleanProv.equals(isinToSymbolMap.get(cleanReq))) {
                              
                              mappedData.put(reqSymbol, entry.getValue());
                             matched = true;

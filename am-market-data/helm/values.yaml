@@ -6,6 +6,9 @@ language: java
 global:
   vault:
     serviceAccountName: "am-backend-sa"
+    # Prod cluster has Vault Agent Injector, not secrets-store CSI driver CRDs.
+    csi:
+      enabled: false
 
 image:
   repository: am-market-data
@@ -50,6 +53,8 @@ config:
 
   # ── Scheduler configuration — maps to SCHEDULER_* env vars ────────────────
   # All crons run in Asia/Kolkata. Override per environment in values.<env>.yaml.
+  # Also merges Redis set market:active-symbols from am-portfolio when
+  # SCHEDULER_SYMBOLS_INCLUDE_PORTFOLIO_ACTIVE_SET=true (default).
   scheduler:
     timezone: "Asia/Kolkata"
 

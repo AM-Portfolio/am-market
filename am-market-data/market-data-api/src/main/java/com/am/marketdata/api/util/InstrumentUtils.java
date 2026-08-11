@@ -141,12 +141,36 @@ public class InstrumentUtils {
         Set<String> validTradingSymbols = new HashSet<>();
         if (!nonIndexCandidates.isEmpty()) {
             try {
-                List<UpstoxInstrument> validInstruments = upstoxInstrumentRepository.findByTradingSymbolIn(nonIndexCandidates);
-                if (validInstruments != null) {
-                    validTradingSymbols = validInstruments.stream()
-                            .map(UpstoxInstrument::getTradingSymbol)
-                            .map(String::toUpperCase)
-                            .collect(Collectors.toSet());
+                // Separate the input into ISINs (12 letters/numbers) and normal stock symbols
+                List<String> isinCandidates = nonIndexCandidates.stream()
+                        .filter(s -> s.length() == 12 && s.matches("[A-Z]{2}[A-Z0-9]{10}"))
+                        .collect(Collectors.toList());
+                List<String> symbolCandidates = nonIndexCandidates.stream()
+                        .filter(s -> !isinCandidates.contains(s))
+                        .collect(Collectors.toList());
+
+                // Query normal stock symbols from database
+                if (!symbolCandidates.isEmpty()) {
+                    List<UpstoxInstrument> validInstruments = upstoxInstrumentRepository.findByTradingSymbolIn(symbolCandidates);
+                    if (validInstruments != null) {
+                        validInstruments.forEach(inst -> {
+                            if (inst.getTradingSymbol() != null) {
+                                validTradingSymbols.add(inst.getTradingSymbol().toUpperCase());
+                            }
+                        });
+                    }
+                }
+
+                // Query ISIN codes from database
+                if (!isinCandidates.isEmpty()) {
+                    List<UpstoxInstrument> validInstruments = upstoxInstrumentRepository.findByIsinIn(isinCandidates);
+                    if (validInstruments != null) {
+                        validInstruments.forEach(inst -> {
+                            if (inst.getIsin() != null) {
+                                validTradingSymbols.add(inst.getIsin().toUpperCase());
+                            }
+                        });
+                    }
                 }
             } catch (Exception e) {
                 log.error("Failed to batch query upstock_instruments for validation", e);

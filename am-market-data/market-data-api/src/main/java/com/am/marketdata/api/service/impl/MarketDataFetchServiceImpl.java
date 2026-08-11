@@ -17,6 +17,7 @@ import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.MarketDataService;
 import com.am.marketdata.service.MarketHoursService;
+import com.am.marketdata.service.calendar.MarketCalendarService;
 import org.springframework.stereotype.Service;
 
 import java.text.ParseException;
@@ -36,17 +37,20 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final InstrumentUtils instrumentUtils;
     private final MarketHoursService marketHoursService;
+    private final MarketCalendarService marketCalendarService;
 
     public MarketDataFetchServiceImpl(FlowLogger flowLogger,
             MarketDataService marketDataService,
             StockIndicesMarketDataService stockIndicesMarketDataService,
             InstrumentUtils instrumentUtils,
-            MarketHoursService marketHoursService) {
+            MarketHoursService marketHoursService,
+            MarketCalendarService marketCalendarService) {
         this.flowLogger = flowLogger;
         this.marketDataService = marketDataService;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.instrumentUtils = instrumentUtils;
         this.marketHoursService = marketHoursService;
+        this.marketCalendarService = marketCalendarService;
     }
 
     @Override
@@ -342,6 +346,26 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                     .build();
         }
 
+        // Adjust query dates to the last active trading session if they fall on weekends or holidays.
+        // This prevents querying empty holiday/weekend ranges and avoids Upstox API rejections.
+        java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
+        java.time.LocalDate localTo = toDate.toInstant().atZone(kolkataZone).toLocalDate();
+        java.time.LocalDate localFrom = fromDate.toInstant().atZone(kolkataZone).toLocalDate();
+
+        // Roll to-date back to the last active trading day if currently closed
+        localTo = adjustToLastTradingDay(localTo);
+
+        // Ensure from-date is not after the adjusted to-date (collapses 1D queries correctly)
+        if (localFrom.isAfter(localTo)) {
+            localFrom = localTo;
+        }
+
+        // Convert back to java.util.Date, preserving end-of-day precision for toDate
+        toDate = java.util.Date.from(localTo.atTime(23, 59, 59, 999).atZone(kolkataZone).toInstant());
+        fromDate = java.util.Date.from(localFrom.atStartOfDay(kolkataZone).toInstant());
+
+        log.info("[HOLIDAY_ROLLBACK] Adjusted query range: {} to {}", fromDate, toDate);
+
         Map<String, Object> additionalParams = request.getAdditionalParams();
         if (additionalParams == null) {
             additionalParams = new HashMap<>();
@@ -511,6 +535,31 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             errorResponse.put("error", "Failed to fetch chart data");
             errorResponse.put("message", e.getMessage());
             return errorResponse;
+        }
+    }
+
+    /**
+     * Recursively rolls back a date to the nearest preceding active trading day (non-weekend, non-holiday).
+     */
+    private java.time.LocalDate adjustToLastTradingDay(java.time.LocalDate date) {
+        java.time.LocalDate current = date;
+        while (!isTradingDay(current)) {
+            current = current.minusDays(1);
+        }
+        return current;
+    }
+
+    /**
+     * Checks if a specific date is a valid trading day using the market calendar database (includes mid-week holidays).
+     */
+    private boolean isTradingDay(java.time.LocalDate date) {
+        try {
+            var timings = marketCalendarService.getTimings("NSE", date);
+            return timings != null && timings.open();
+        } catch (Exception e) {
+            // Fallback: simple day-of-week check if calendar db lookup fails
+            java.time.DayOfWeek dow = date.getDayOfWeek();
+            return dow != java.time.DayOfWeek.SATURDAY && dow != java.time.DayOfWeek.SUNDAY;
         }
     }
 }
