@@ -20,6 +20,8 @@ import com.am.marketdata.api.service.MarketDataFetchService;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.MarketDataService;
+import com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository;
+import com.am.marketdata.common.model.UpstoxInstrument;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -51,15 +53,57 @@ public class MarketDataController {
     private final FlowLogger flowLogger;
     private final MarketDataService marketDataService;
     private final MarketDataFetchService marketDataCacheService;
+    private final UpstoxInstrumentRepository upstoxInstrumentRepository;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 
     public MarketDataController(FlowLogger flowLogger,
             MarketDataService marketDataService,
-            MarketDataFetchService marketDataCacheService) {
+            MarketDataFetchService marketDataCacheService,
+            UpstoxInstrumentRepository upstoxInstrumentRepository) {
         this.flowLogger = flowLogger;
         this.marketDataService = marketDataService;
         this.marketDataCacheService = marketDataCacheService;
+        this.upstoxInstrumentRepository = upstoxInstrumentRepository;
         dateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
+    }
+
+    /**
+     * Resolve trading symbol by ISIN
+     *
+     * @param isin The ISIN code of the security (e.g. INF666M01IO8)
+     * @return Map containing resolved symbol details
+     */
+    @GetMapping(value = "/instruments/isin/{isin}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Resolve trading symbol by ISIN", description = "Queries upstock_instruments to resolve ISIN code into standard NSE/BSE trading symbol")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Symbol resolved successfully"),
+            @ApiResponse(responseCode = "404", description = "ISIN not found in instrument master"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<Map<String, String>> getInstrumentByIsin(@PathVariable String isin) {
+        try (FlowSpan span = flowLogger.start("market.instruments.resolve-isin", "isin", isin)) {
+            try {
+                log.info("Resolving ticker symbol for ISIN: {}", isin);
+                List<UpstoxInstrument> instruments = upstoxInstrumentRepository.findByIsinIn(List.of(isin.trim().toUpperCase()));
+                if (instruments != null && !instruments.isEmpty()) {
+                    UpstoxInstrument inst = instruments.get(0);
+                    if (inst.getTradingSymbol() != null && !inst.getTradingSymbol().isBlank()) {
+                        Map<String, String> response = new HashMap<>();
+                        response.put("isin", isin);
+                        response.put("symbol", inst.getTradingSymbol().trim().toUpperCase());
+                        flowLogger.complete(span, "symbol", inst.getTradingSymbol());
+                        return ResponseEntity.ok(response);
+                    }
+                }
+                log.warn("ISIN not found in upstock_instruments master: {}", isin);
+                flowLogger.complete(span, "status", "NOT_FOUND");
+                return ResponseEntity.notFound().build();
+            } catch (Exception e) {
+                log.error("Error resolving ticker for ISIN={}", isin, e);
+                flowLogger.fail(span, e);
+                return ResponseEntity.internalServerError().build();
+            }
+        }
     }
 
     /**
