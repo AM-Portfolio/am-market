@@ -107,6 +107,53 @@ public class MarketDataController {
     }
 
     /**
+     * Batch resolve trading symbols by a list of ISINs
+     *
+     * @param isins List of ISIN codes of securities
+     * @return Map containing resolved symbol details matching each ISIN
+     */
+    @PostMapping(value = "/instruments/isin", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Batch resolve trading symbols by ISINs", description = "Queries upstock_instruments to resolve a batch list of ISIN codes into standard NSE/BSE trading symbols")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Symbols resolved successfully"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<Map<String, String>> getInstrumentsByIsins(@RequestBody List<String> isins) {
+        if (isins == null || isins.isEmpty()) {
+            return ResponseEntity.ok(new HashMap<>());
+        }
+        try (FlowSpan span = flowLogger.start("market.instruments.resolve-isins-batch", "count", String.valueOf(isins.size()))) {
+            try {
+                List<String> cleanedIsins = isins.stream()
+                        .filter(i -> i != null && !i.isBlank())
+                        .map(i -> i.trim().toUpperCase())
+                        .distinct()
+                        .collect(Collectors.toList());
+
+                log.info("Batch resolving ticker symbols for {} ISINs", cleanedIsins.size());
+                Map<String, String> response = new HashMap<>();
+                if (!cleanedIsins.isEmpty()) {
+                    List<UpstoxInstrument> instruments = upstoxInstrumentRepository.findByIsinIn(cleanedIsins);
+                    if (instruments != null) {
+                        for (UpstoxInstrument inst : instruments) {
+                            if (inst.getIsin() != null && inst.getTradingSymbol() != null && !inst.getTradingSymbol().isBlank()) {
+                                response.put(inst.getIsin().trim().toUpperCase(), inst.getTradingSymbol().trim().toUpperCase());
+                            }
+                        }
+                    }
+                }
+                flowLogger.complete(span, "resolved_count", String.valueOf(response.size()));
+                return ResponseEntity.ok(response);
+            } catch (Exception e) {
+                log.error("Error batch resolving tickers for ISINs={}", isins, e);
+                flowLogger.fail(span, e);
+                return ResponseEntity.internalServerError().build();
+            }
+        }
+    }
+
+
+    /**
      * Get login URL for authentication
      * 
      * @return Login URL for broker authentication
