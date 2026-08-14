@@ -47,15 +47,18 @@ public class MarketDataCacheService {
     private final ObjectMapper objectMapper;
     private final RedisTemplate<String, String> redisTemplate;
     private final PreviousCloseRepository previousCloseRepository;
+    private final MarketHoursService marketHoursService;
 
     public MarketDataCacheService(StockCacheService stockCacheService,
                                   ObjectMapper objectMapper,
                                   RedisTemplate<String, String> redisTemplate,
-                                  @Autowired(required = false) PreviousCloseRepository previousCloseRepository) {
+                                  @Autowired(required = false) PreviousCloseRepository previousCloseRepository,
+                                  @Autowired(required = false) MarketHoursService marketHoursService) {
         this.stockCacheService = stockCacheService;
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
         this.previousCloseRepository = previousCloseRepository;
+        this.marketHoursService = marketHoursService;
     }
 
     /**
@@ -384,15 +387,22 @@ public class MarketDataCacheService {
     }
 
     /**
-     * Overlays the latest prices and previous close from the fast Redis cache onto the provided OHLC quotes.
-     * This is useful when fetching data from sources that might not have the absolute latest price or previous close.
-     * 
-     * @param result The map of OHLCQuotes to overlay with latest prices
+     * Overlays Redis websocket ticks onto OHLC quotes.
+     *
+     * <p>While NSE is open, {@code lastPrice} is the last trade — correct for live holdings.
+     * After close, Redis still holds that last trade (often hours old on thin ETFs/SGB).
+     * Brokers then show official day close; overwriting lastPrice with the tick is what
+     * made GOLDBEES / MOHEALTH / SGB diverge. previousClose overlay is unchanged either way.
+     *
+     * <p>If market hours cannot be resolved, keep the old overlay (fail-open) so live
+     * trading is not broken by a calendar outage.
      */
     public void overlayLatestPrices(Map<String, OHLCQuote> result) {
         if (result == null || result.isEmpty()) {
             return;
         }
+
+        final boolean overlayLiveLastPrice = isLiveTickOverlayAllowed();
 
         // OPTIMIZATION: Combine 500 individual Redis GET calls into 1 single Redis MGET (multiGet) call.
         // This eliminates 500 network roundtrips and cleans up Grafana Tempo traces.
@@ -425,7 +435,7 @@ public class MarketDataCacheService {
                             double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
                             double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
                             OHLCQuote quote = entries.get(i).getValue();
-                            if (latestPrice > 0) {
+                            if (overlayLiveLastPrice && latestPrice > 0) {
                                 quote.setLastPrice(latestPrice);
                             }
                             if (prevClose > 0) {
@@ -1108,6 +1118,22 @@ public class MarketDataCacheService {
 
         } catch (Exception e) {
             log.error("cacheLatestPrices", "Error caching latest prices to Redis/MongoDB in bulk", e);
+        }
+    }
+
+    /**
+     * Live last-trade overlay is only valid while the cash market is open.
+     * Closed / weekend / holiday → official daily close must win (see MarketDataService).
+     */
+    private boolean isLiveTickOverlayAllowed() {
+        if (marketHoursService == null) {
+            return true;
+        }
+        try {
+            return marketHoursService.isMarketOpen();
+        } catch (Exception e) {
+            log.warn("overlayLatestPrices", "Market hours check failed; keeping live-tick overlay: " + e.getMessage());
+            return true;
         }
     }
 

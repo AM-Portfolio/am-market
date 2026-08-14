@@ -65,6 +65,7 @@ public class MarketDataService {
 
     private final FlowLogger flowLogger;
     private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService;
+    private final MarketHoursService marketHoursService;
 
     public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
             MeterRegistry meterRegistry, InstrumentMapper instrumentMapper,
@@ -72,7 +73,8 @@ public class MarketDataService {
             MarketDataRetrievalUtil marketDataRetrievalUtil,
             java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
             com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
-            FlowLogger flowLogger) {
+            FlowLogger flowLogger,
+            java.util.Optional<MarketHoursService> marketHoursService) {
         this.providerFactory = providerFactory;
         this.instrumentService = instrumentService;
         this.meterRegistry = meterRegistry;
@@ -83,6 +85,7 @@ public class MarketDataService {
         this.producer = producer.orElse(null);
         this.stockIndicesService = stockIndicesService;
         this.flowLogger = flowLogger;
+        this.marketHoursService = marketHoursService.orElse(null);
     }
 
     private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh) {
@@ -189,6 +192,7 @@ public class MarketDataService {
 
                 if (result != null && !result.isEmpty()) {
                     persistenceService.getMarketDataCacheService().overlayLatestPrices(result);
+                    applyOfficialDailyCloseWhenMarketClosed(result);
                 }
 
                 meterRegistry.counter("market.data.success.count", "operation", "getOHLC", "timeFrame", tfValue).increment();
@@ -202,6 +206,92 @@ public class MarketDataService {
             } finally {
                 timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getOHLC", "timeFrame", tfValue));
             }
+        }
+    }
+
+    /**
+     * After NSE close, Upstox live OHLC {@code lastPrice} is last trade, not official close.
+     * Liquid names look fine (last trade ≈ close). Thin ETFs/SGB do not.
+     *
+     * <p>Reuse {@link #getHistoricalDataBatch} daily candles (same source as previous-close
+     * backfill). If today's candle exists, that close becomes lastPrice for every symbol —
+     * no ETF/SGB special cases. If today's candle is not published yet, leave lastPrice
+     * unchanged so we never swap in yesterday's close by mistake.
+     *
+     * <p>No-op while the market is open, and if hours cannot be resolved (fail-open).
+     */
+    private void applyOfficialDailyCloseWhenMarketClosed(Map<String, OHLCQuote> quotes) {
+        if (quotes == null || quotes.isEmpty()) {
+            return;
+        }
+        if (marketHoursService == null) {
+            return;
+        }
+        try {
+            if (marketHoursService.isMarketOpen()) {
+                return;
+            }
+        } catch (Exception e) {
+            log.warn("Could not resolve market hours; skipping official-close overlay: {}", e.getMessage());
+            return;
+        }
+
+        java.time.ZoneId ist = java.time.ZoneId.of("Asia/Kolkata");
+        java.time.LocalDate today = java.time.LocalDate.now(ist);
+        Date fromDate = Date.from(today.minusDays(5).atStartOfDay(ist).toInstant());
+        Date toDate = Date.from(today.plusDays(1).atStartOfDay(ist).toInstant());
+
+        try {
+            Map<String, HistoricalData> history = getHistoricalDataBatch(
+                    new ArrayList<>(quotes.keySet()),
+                    fromDate,
+                    toDate,
+                    TimeFrame.DAY,
+                    false,
+                    null,
+                    null,
+                    false,
+                    false);
+
+            if (history == null || history.isEmpty()) {
+                log.debug("No daily candles available for official-close overlay");
+                return;
+            }
+
+            int updated = 0;
+            for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
+                HistoricalData data = history.get(entry.getKey());
+                if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
+                    continue;
+                }
+                Double officialClose = null;
+                for (com.am.common.investment.model.historical.OHLCVTPoint point : data.getDataPoints()) {
+                    if (point == null || point.getTime() == null || point.getClose() == null || point.getClose() <= 0) {
+                        continue;
+                    }
+                    if (today.equals(point.getTime().toLocalDate())) {
+                        officialClose = point.getClose();
+                    }
+                }
+                if (officialClose == null) {
+                    continue;
+                }
+                OHLCQuote quote = entry.getValue();
+                if (quote == null) {
+                    continue;
+                }
+                quote.setLastPrice(officialClose);
+                if (quote.getOhlc() != null) {
+                    quote.getOhlc().setClose(officialClose);
+                }
+                updated++;
+            }
+            if (updated > 0) {
+                log.info("Applied official daily close after hours for {}/{} symbols (sessionDate={})",
+                        updated, quotes.size(), today);
+            }
+        } catch (Exception e) {
+            log.warn("Official daily close overlay failed; leaving lastPrice as-is: {}", e.getMessage());
         }
     }
 
