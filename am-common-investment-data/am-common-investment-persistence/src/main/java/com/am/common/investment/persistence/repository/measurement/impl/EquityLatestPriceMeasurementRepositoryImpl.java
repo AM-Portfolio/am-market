@@ -45,28 +45,39 @@ public class EquityLatestPriceMeasurementRepositoryImpl implements EquityLatestP
             return List.of();
         }
 
-        String symbolFilter = tradingSymbols.stream()
-                .map(symbol -> "r.symbol == \"" + symbol + "\"")
-                .collect(Collectors.joining(" or "));
+        // Chunk size of 100 to prevent InfluxDB "Program is nested too deep" Flux compilation limits
+        List<EquityPriceMeasurement> allResults = new java.util.ArrayList<>();
+        int chunkSize = 100;
+        for (int i = 0; i < tradingSymbols.size(); i += chunkSize) {
+            List<String> chunk = tradingSymbols.subList(i, Math.min(i + chunkSize, tradingSymbols.size()));
 
-        // Fast Flux query: scans only last 5 days (-5d) instead of 30 days (-30d)
-        String query = String.format(
-            "from(bucket: \"%s\") " +
-            "|> range(start: -5d) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
-            "|> filter(fn: (r) => %s) " +
-            "|> last() " +
-            "|> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") ",
-            influxDBConfig.getBucket(), symbolFilter
-        );
+            String symbolFilter = chunk.stream()
+                    .map(symbol -> "r.symbol == \"" + symbol + "\"")
+                    .collect(Collectors.joining(" or "));
 
-        logger.info("Executing fast findLatestPricesByTradingSymbolIn query (-5d window) for {} symbols", tradingSymbols.size());
-        long startTime = System.currentTimeMillis();
-        List<EquityPriceMeasurement> results = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
-        long duration = System.currentTimeMillis() - startTime;
-        logger.info("Found {} latest price results in {}ms", results.size(), duration);
+            // Fast Flux query: scans only last 5 days (-5d) instead of 30 days (-30d)
+            String query = String.format(
+                "from(bucket: \"%s\") " +
+                "|> range(start: -5d) " +
+                "|> filter(fn: (r) => r._measurement == \"equity\") " +
+                "|> filter(fn: (r) => %s) " +
+                "|> last() " +
+                "|> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") ",
+                influxDBConfig.getBucket(), symbolFilter
+            );
 
-        return results;
+            logger.info("Executing fast findLatestPricesByTradingSymbolIn query (-5d window) for chunk of {} symbols (total {})", chunk.size(), tradingSymbols.size());
+            long startTime = System.currentTimeMillis();
+            List<EquityPriceMeasurement> chunkResults = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info("Found {} latest price results in {}ms for current chunk", chunkResults != null ? chunkResults.size() : 0, duration);
+
+            if (chunkResults != null) {
+                allResults.addAll(chunkResults);
+            }
+        }
+
+        return allResults;
     }
 
     /**
@@ -79,26 +90,37 @@ public class EquityLatestPriceMeasurementRepositoryImpl implements EquityLatestP
             return List.of();
         }
 
-        String isinFilter = isins.stream()
-                .map(isin -> "r.isin == \"" + isin + "\"")
-                .collect(Collectors.joining(" or "));
+        // Chunk size of 100 to prevent InfluxDB "Program is nested too deep" Flux compilation limits
+        List<EquityPriceMeasurement> allResults = new java.util.ArrayList<>();
+        int chunkSize = 100;
+        for (int i = 0; i < isins.size(); i += chunkSize) {
+            List<String> chunk = isins.subList(i, Math.min(i + chunkSize, isins.size()));
 
-        String query = String.format(
-            "from(bucket: \"%s\") " +
-            "|> range(start: -5d) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
-            "|> filter(fn: (r) => %s) " +
-            "|> last() " +
-            "|> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") ",
-            influxDBConfig.getBucket(), isinFilter
-        );
+            String isinFilter = chunk.stream()
+                    .map(isin -> "r.isin == \"" + isin + "\"")
+                    .collect(Collectors.joining(" or "));
 
-        logger.info("Executing fast findLatestPricesByIsinIn query (-5d window) for {} ISINs", isins.size());
-        long startTime = System.currentTimeMillis();
-        List<EquityPriceMeasurement> results = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
-        long duration = System.currentTimeMillis() - startTime;
-        logger.info("Found {} latest ISIN price results in {}ms", results.size(), duration);
+            String query = String.format(
+                "from(bucket: \"%s\") " +
+                "|> range(start: -5d) " +
+                "|> filter(fn: (r) => r._measurement == \"equity\") " +
+                "|> filter(fn: (r) => %s) " +
+                "|> last() " +
+                "|> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") ",
+                influxDBConfig.getBucket(), isinFilter
+            );
 
-        return results;
+            logger.info("Executing fast findLatestPricesByIsinIn query (-5d window) for chunk of {} ISINs (total {})", chunk.size(), isins.size());
+            long startTime = System.currentTimeMillis();
+            List<EquityPriceMeasurement> chunkResults = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info("Found {} latest ISIN price results in {}ms for current chunk", chunkResults != null ? chunkResults.size() : 0, duration);
+
+            if (chunkResults != null) {
+                allResults.addAll(chunkResults);
+            }
+        }
+
+        return allResults;
     }
 }

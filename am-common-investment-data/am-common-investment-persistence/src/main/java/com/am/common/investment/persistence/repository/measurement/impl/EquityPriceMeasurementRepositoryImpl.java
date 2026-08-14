@@ -343,61 +343,83 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
             logger.warn("Empty or null trading symbols list provided");
             return List.of();
         }
-        
-        String symbolFilter = tradingSymbols.stream()
-                .map(symbol -> "r.symbol == \"" + symbol + "\"")
-                .collect(Collectors.joining(" or "));
-        
-        String query = String.format(
-            "from(bucket: \"%s\") " +
-            "|> range(start: %s) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
-            "|> filter(fn: (r) => %s) " +
-            "|> last() " +
-            "|> pivot(rowKey: [\"_time\"], " +
-            "        columnKey: [\"_field\"], " +
-            "        valueColumn: \"_value\") ",
-            influxDBConfig.getBucket(), parseRange(rangeConfig.getHistoryRange()), symbolFilter
-        );
 
-        logger.info("Executing findByTradingSymbolIn query. Query: {}", query);
-        long startTime = System.currentTimeMillis();
-        List<EquityPriceMeasurement> results = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
-        long duration = System.currentTimeMillis() - startTime;
-        logger.info("Found {} results for trading symbols in {}ms", results.size(), duration);
-        
-        return results;
+        // Chunk size of 100 to prevent InfluxDB "Program is nested too deep" Flux compilation limits
+        List<EquityPriceMeasurement> allResults = new java.util.ArrayList<>();
+        int chunkSize = 100;
+        for (int i = 0; i < tradingSymbols.size(); i += chunkSize) {
+            List<String> chunk = tradingSymbols.subList(i, Math.min(i + chunkSize, tradingSymbols.size()));
+
+            String symbolFilter = chunk.stream()
+                    .map(symbol -> "r.symbol == \"" + symbol + "\"")
+                    .collect(Collectors.joining(" or "));
+
+            String query = String.format(
+                "from(bucket: \"%s\") " +
+                "|> range(start: %s) " +
+                "|> filter(fn: (r) => r._measurement == \"equity\") " +
+                "|> filter(fn: (r) => %s) " +
+                "|> last() " +
+                "|> pivot(rowKey: [\"_time\"], " +
+                "        columnKey: [\"_field\"], " +
+                "        valueColumn: \"_value\") ",
+                influxDBConfig.getBucket(), parseRange(rangeConfig.getHistoryRange()), symbolFilter
+            );
+
+            logger.info("Executing findByTradingSymbolIn query for chunk of {} symbols (total {})", chunk.size(), tradingSymbols.size());
+            long startTime = System.currentTimeMillis();
+            List<EquityPriceMeasurement> chunkResults = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info("Found {} results in {}ms for current chunk", chunkResults != null ? chunkResults.size() : 0, duration);
+
+            if (chunkResults != null) {
+                allResults.addAll(chunkResults);
+            }
+        }
+
+        return allResults;
     }
-    
+
     @Override
     public List<EquityPriceMeasurement> findByIsinIn(List<String> isins) {
         if (isins == null || isins.isEmpty()) {
             logger.warn("Empty or null ISINs list provided");
             return List.of();
         }
-        
-        String isinFilter = isins.stream()
-                .map(isin -> "r.isin == \"" + isin + "\"")
-                .collect(Collectors.joining(" or "));
-        
-        String query = String.format(
-            "from(bucket: \"%s\") " +
-            "|> range(start: %s) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
-            "|> filter(fn: (r) => %s) " +
-            "|> last() " +
-            "|> pivot(rowKey: [\"_time\"], " +
-            "        columnKey: [\"_field\"], " +
-            "        valueColumn: \"_value\") ",
-            influxDBConfig.getBucket(), parseRange(rangeConfig.getHistoryRange()), isinFilter
-        );
 
-        logger.info("Executing findByIsinIn query. Query: {}", query);
-        long startTime = System.currentTimeMillis();
-        List<EquityPriceMeasurement> results = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
-        long duration = System.currentTimeMillis() - startTime;
-        logger.info("Found {} results for ISINs in {}ms", results.size(), duration);
-        
-        return results;
+        // Chunk size of 100 to prevent InfluxDB "Program is nested too deep" Flux compilation limits
+        List<EquityPriceMeasurement> allResults = new java.util.ArrayList<>();
+        int chunkSize = 100;
+        for (int i = 0; i < isins.size(); i += chunkSize) {
+            List<String> chunk = isins.subList(i, Math.min(i + chunkSize, isins.size()));
+
+            String isinFilter = chunk.stream()
+                    .map(isin -> "r.isin == \"" + isin + "\"")
+                    .collect(Collectors.joining(" or "));
+
+            String query = String.format(
+                "from(bucket: \"%s\") " +
+                "|> range(start: %s) " +
+                "|> filter(fn: (r) => r._measurement == \"equity\") " +
+                "|> filter(fn: (r) => %s) " +
+                "|> last() " +
+                "|> pivot(rowKey: [\"_time\"], " +
+                "        columnKey: [\"_field\"], " +
+                "        valueColumn: \"_value\") ",
+                influxDBConfig.getBucket(), parseRange(rangeConfig.getHistoryRange()), isinFilter
+            );
+
+            logger.info("Executing findByIsinIn query for chunk of {} ISINs (total {})", chunk.size(), isins.size());
+            long startTime = System.currentTimeMillis();
+            List<EquityPriceMeasurement> chunkResults = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info("Found {} results in {}ms for current chunk", chunkResults != null ? chunkResults.size() : 0, duration);
+
+            if (chunkResults != null) {
+                allResults.addAll(chunkResults);
+            }
+        }
+
+        return allResults;
     }
 }
