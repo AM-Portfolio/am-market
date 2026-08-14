@@ -435,7 +435,11 @@ public class MarketDataCacheService {
                             double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
                             double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
                             OHLCQuote quote = entries.get(i).getValue();
-                            if (overlayLiveLastPrice && latestPrice > 0) {
+
+                            // Fallback to Live Price: Always overlay the latest traded price (LTP) from Redis.
+                            // This ensures low-volume ETFs/SGBs show the correct last traded price even after hours 
+                            // if the broker's daily EOD close candle is delayed or missing.
+                            if (latestPrice > 0) {
                                 quote.setLastPrice(latestPrice);
                             }
                             if (prevClose > 0) {
