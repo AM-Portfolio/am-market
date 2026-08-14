@@ -96,6 +96,12 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
             Map<String, OHLCQuote> ohlcData = marketDataService.getOHLC(new ArrayList<>(symbols), timeFrame,
                     forceRefresh, null);
+            if (ohlcData != null) {
+                ohlcData = new HashMap<>(ohlcData);
+                instrumentUtils.aliasQuotesUnderOriginalIsins(tradingSymbols, ohlcData);
+            } else {
+                ohlcData = new HashMap<>();
+            }
 
             Map<String, Object> response = new HashMap<>();
             response.put("quotes", ohlcData);
@@ -437,12 +443,15 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         // isIndexSymbol=true means keep as-is (fetchIndexStocks=false)
         // isIndexSymbol=false means expand indices (fetchIndexStocks=true)
         boolean fetchIndexStocks = !isIndexSymbol;
+        Set<String> requested = new HashSet<>(symbols);
         symbols = instrumentUtils.resolveSymbols(new ArrayList<>(symbols), fetchIndexStocks);
 
         Map<String, OHLCQuote> ohlcData = marketDataService.getOHLC(new ArrayList<>(symbols), timeFrame, forceRefresh,
                 null);
 
         if (ohlcData != null) {
+            ohlcData = new HashMap<>(ohlcData);
+            instrumentUtils.aliasQuotesUnderOriginalIsins(requested, ohlcData);
             log.info("Fetched OHLC data for keys: {}", ohlcData.keySet());
             return ohlcData;
         } else {

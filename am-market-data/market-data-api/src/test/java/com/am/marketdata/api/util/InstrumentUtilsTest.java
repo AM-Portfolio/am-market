@@ -12,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,28 +53,45 @@ class InstrumentUtilsTest {
         when(upstoxInstrumentRepository.findByTradingSymbolIn(List.of("BANKBARODA")))
                 .thenReturn(List.of(barodaSymbolInst));
 
-        // Mock a valid instrument response for ISIN
+        // Mock a valid instrument response for ISIN — quotes must use trading symbol
         UpstoxInstrument barodaIsinInst = new UpstoxInstrument();
         barodaIsinInst.setIsin("INE028A01039");
+        barodaIsinInst.setTradingSymbol("BANKBARODA");
+        barodaIsinInst.setExchange("NSE_EQ");
+        barodaIsinInst.setInstrumentType("EQ");
         when(upstoxInstrumentRepository.findByIsinIn(List.of("INE028A01039")))
                 .thenReturn(List.of(barodaIsinInst));
 
         // WHEN: We run resolveSymbols validation with fetchIndexStocks = false
         Set<String> resolved = instrumentUtils.resolveSymbols(candidates, false);
 
-        // THEN: We verify both standard ticker and ISIN resolved successfully
+        // THEN: ISIN is rewritten to the trading symbol Upstox actually quotes
         assertNotNull(resolved);
-        
-        // Both candidates must be in the resolved list
         assertTrue(resolved.contains("BANKBARODA"));
-        assertTrue(resolved.contains("INE028A01039"));
+        assertTrue(!resolved.contains("INE028A01039"));
 
-        // Verify the database was queried correctly for both types
         verify(upstoxInstrumentRepository, times(1)).findByTradingSymbolIn(List.of("BANKBARODA"));
         verify(upstoxInstrumentRepository, times(1)).findByIsinIn(List.of("INE028A01039"));
-
-        // Verify that unresolvedSymbolRepository was NEVER called (meaning no symbols failed)
         verify(unresolvedSymbolRepository, never()).incrementRequestCount(anyString());
+    }
+
+    @Test
+    void aliasQuotesUnderOriginalIsins_copiesTickerQuoteOntoIsinKey() {
+        UpstoxInstrument sgb = new UpstoxInstrument();
+        sgb.setIsin("IN0020210228");
+        sgb.setTradingSymbol("SGBD29VIII");
+        sgb.setExchange("NSE");
+        sgb.setInstrumentType("GB");
+        when(upstoxInstrumentRepository.findByIsinIn(List.of("IN0020210228")))
+                .thenReturn(List.of(sgb));
+
+        Map<String, String> quotes = new java.util.HashMap<>();
+        quotes.put("SGBD29VIII", "15130");
+
+        instrumentUtils.aliasQuotesUnderOriginalIsins(List.of("IN0020210228"), quotes);
+
+        assertEquals("15130", quotes.get("SGBD29VIII"));
+        assertEquals("15130", quotes.get("IN0020210228"));
     }
 
     // Helper for assertions

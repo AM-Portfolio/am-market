@@ -139,17 +139,16 @@ public class InstrumentUtils {
                 .collect(Collectors.toList());
 
         Set<String> validTradingSymbols = new HashSet<>();
+        Map<String, String> isinToTicker = Map.of();
         if (!nonIndexCandidates.isEmpty()) {
             try {
-                // Separate the input into ISINs (12 letters/numbers) and normal stock symbols
                 List<String> isinCandidates = nonIndexCandidates.stream()
-                        .filter(s -> s.length() == 12 && s.matches("[A-Z]{2}[A-Z0-9]{10}"))
+                        .filter(InstrumentUtils::looksLikeIsin)
                         .collect(Collectors.toList());
                 List<String> symbolCandidates = nonIndexCandidates.stream()
-                        .filter(s -> !isinCandidates.contains(s))
+                        .filter(s -> !looksLikeIsin(s))
                         .collect(Collectors.toList());
 
-                // Query normal stock symbols from database
                 if (!symbolCandidates.isEmpty()) {
                     List<UpstoxInstrument> validInstruments = upstoxInstrumentRepository.findByTradingSymbolIn(symbolCandidates);
                     if (validInstruments != null) {
@@ -161,17 +160,8 @@ public class InstrumentUtils {
                     }
                 }
 
-                // Query ISIN codes from database
-                if (!isinCandidates.isEmpty()) {
-                    List<UpstoxInstrument> validInstruments = upstoxInstrumentRepository.findByIsinIn(isinCandidates);
-                    if (validInstruments != null) {
-                        validInstruments.forEach(inst -> {
-                            if (inst.getIsin() != null) {
-                                validTradingSymbols.add(inst.getIsin().toUpperCase());
-                            }
-                        });
-                    }
-                }
+                isinToTicker = lookupIsinToTradingSymbol(isinCandidates);
+                isinToTicker.values().forEach(validTradingSymbols::add);
             } catch (Exception e) {
                 log.error("Failed to batch query upstock_instruments for validation", e);
                 // Fallback: if DB fails, pass all symbols through to avoid a complete API outage
@@ -186,9 +176,13 @@ public class InstrumentUtils {
         java.util.Set<String> whitelist = java.util.Set.of("TATAMOTORS", "MOTHERSON", "BIRLACORPN", "NUVAMA", "GSPL", "MCX", "ANGELONE");
 
         for (String sym : candidateSymbols) {
-            if (matchingIndices.contains(sym.toUpperCase()) || 
-                validTradingSymbols.contains(sym) || 
-                whitelist.contains(sym.toUpperCase())) {
+            String upper = sym.toUpperCase();
+            if (matchingIndices.contains(upper) || whitelist.contains(upper)) {
+                resolvedSymbols.add(sym);
+            } else if (isinToTicker.containsKey(upper)) {
+                // Upstox quotes by trading symbol, not ISIN
+                resolvedSymbols.add(isinToTicker.get(upper));
+            } else if (validTradingSymbols.contains(sym) || validTradingSymbols.contains(upper)) {
                 resolvedSymbols.add(sym);
             } else {
                 unresolvedSymbols.add(sym);
@@ -210,6 +204,96 @@ public class InstrumentUtils {
         }
 
         return resolvedSymbols;
+    }
+
+    /**
+     * Maps ISIN-shaped inputs to Upstox trading symbols (NSE cash preferred).
+     * Non-ISIN inputs are omitted. Fail-open: missing instruments are omitted.
+     */
+    public Map<String, String> mapIsinsToTradingSymbols(Collection<String> symbols) {
+        if (symbols == null || symbols.isEmpty()) {
+            return Map.of();
+        }
+        List<String> isins = symbols.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .map(String::toUpperCase)
+                .filter(InstrumentUtils::looksLikeIsin)
+                .distinct()
+                .collect(Collectors.toList());
+        return lookupIsinToTradingSymbol(isins);
+    }
+
+    /**
+     * Copies quote values under the original ISIN key so callers that stored
+     * holdings as ISIN still match {@code quotes.get(isin)}.
+     */
+    public <T> void aliasQuotesUnderOriginalIsins(Collection<String> requested, Map<String, T> quotes) {
+        if (requested == null || quotes == null || quotes.isEmpty()) {
+            return;
+        }
+        Map<String, String> isinToTicker = mapIsinsToTradingSymbols(requested);
+        for (Map.Entry<String, String> entry : isinToTicker.entrySet()) {
+            T quote = quotes.get(entry.getValue());
+            if (quote != null) {
+                quotes.putIfAbsent(entry.getKey(), quote);
+            }
+        }
+    }
+
+    static boolean looksLikeIsin(String value) {
+        return value != null && value.length() == 12 && value.matches("[A-Z]{2}[A-Z0-9]{10}");
+    }
+
+    private Map<String, String> lookupIsinToTradingSymbol(List<String> isinCandidates) {
+        if (isinCandidates == null || isinCandidates.isEmpty()) {
+            return Map.of();
+        }
+        List<UpstoxInstrument> instruments;
+        try {
+            instruments = upstoxInstrumentRepository.findByIsinIn(isinCandidates);
+        } catch (Exception e) {
+            log.warn("ISIN to trading-symbol lookup failed: {}", e.getMessage());
+            return Map.of();
+        }
+        if (instruments == null || instruments.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, UpstoxInstrument> bestByIsin = new HashMap<>();
+        for (UpstoxInstrument inst : instruments) {
+            if (inst == null || inst.getIsin() == null || inst.getTradingSymbol() == null
+                    || inst.getTradingSymbol().isBlank()) {
+                continue;
+            }
+            String isin = inst.getIsin().trim().toUpperCase();
+            UpstoxInstrument existing = bestByIsin.get(isin);
+            if (existing == null || rankInstrument(inst) < rankInstrument(existing)) {
+                bestByIsin.put(isin, inst);
+            }
+        }
+        Map<String, String> result = new HashMap<>();
+        bestByIsin.forEach((isin, inst) -> result.put(isin, inst.getTradingSymbol().trim().toUpperCase()));
+        return result;
+    }
+
+    /** Lower is better. Prefer NSE cash / GB over BSE; skip F&O. */
+    private static int rankInstrument(UpstoxInstrument inst) {
+        String exchange = inst.getExchange() != null ? inst.getExchange().trim().toUpperCase() : "";
+        String type = inst.getInstrumentType() != null ? inst.getInstrumentType().trim().toUpperCase() : "";
+        if (exchange.contains("NFO") || exchange.contains("BFO") || exchange.contains("MCX")
+                || type.contains("FUT") || type.contains("OPT")) {
+            return 100;
+        }
+        if (exchange.startsWith("NSE") && (type.contains("EQ") || type.contains("GB") || type.isEmpty())) {
+            return 0;
+        }
+        if (exchange.startsWith("NSE")) {
+            return 1;
+        }
+        if (exchange.startsWith("BSE")) {
+            return 2;
+        }
+        return 3;
     }
 }
 
