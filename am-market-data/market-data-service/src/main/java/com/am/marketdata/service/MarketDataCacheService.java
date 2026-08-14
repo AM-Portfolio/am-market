@@ -8,6 +8,7 @@ import com.am.marketdata.common.util.ApplicationContextProvider;
 import com.am.marketdata.redis.model.OHLCV;
 import com.am.marketdata.redis.model.StockBars;
 import com.am.marketdata.redis.service.StockCacheService;
+import com.am.marketdata.service.util.OfficialClosePolicy;
 import com.am.marketdata.redis.util.CacheLoggingUtil;
 
 import com.am.marketdata.common.log.AppLogger;
@@ -402,7 +403,8 @@ public class MarketDataCacheService {
             return;
         }
 
-        final boolean overlayLiveLastPrice = isLiveTickOverlayAllowed();
+        final boolean overlayLiveLastPrice = OfficialClosePolicy.shouldOverlayLiveLastPrice(
+                isLiveTickOverlayAllowed());
 
         // OPTIMIZATION: Combine 500 individual Redis GET calls into 1 single Redis MGET (multiGet) call.
         // This eliminates 500 network roundtrips and cleans up Grafana Tempo traces.
@@ -436,10 +438,7 @@ public class MarketDataCacheService {
                             double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
                             OHLCQuote quote = entries.get(i).getValue();
 
-                            // Fallback to Live Price: Always overlay the latest traded price (LTP) from Redis.
-                            // This ensures low-volume ETFs/SGBs show the correct last traded price even after hours 
-                            // if the broker's daily EOD close candle is delayed or missing.
-                            if (latestPrice > 0) {
+                            if (overlayLiveLastPrice && latestPrice > 0) {
                                 quote.setLastPrice(latestPrice);
                             }
                             if (prevClose > 0) {

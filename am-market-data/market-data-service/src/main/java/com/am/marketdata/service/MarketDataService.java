@@ -15,6 +15,7 @@ import com.am.marketdata.service.util.DataRetrievalStrategyUtil;
 import com.am.marketdata.service.util.HistoricalDataRetriever;
 import com.am.marketdata.service.util.MarketDataRetrievalUtil;
 import com.am.marketdata.service.util.OHLCDataRetriever;
+import com.am.marketdata.service.util.OfficialClosePolicy;
 import com.marketdata.common.MarketDataProvider;
 import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import com.zerodhatech.models.LTPQuote;
@@ -214,9 +215,10 @@ public class MarketDataService {
      * Liquid names look fine (last trade ≈ close). Thin ETFs/SGB do not.
      *
      * <p>Reuse {@link #getHistoricalDataBatch} daily candles (same source as previous-close
-     * backfill). If today's candle exists, that close becomes lastPrice for every symbol —
-     * no ETF/SGB special cases. If today's candle is not published yet, leave lastPrice
-     * unchanged so we never swap in yesterday's close by mistake.
+     * backfill). Prefer today's candle. On weekend/holiday there is no today candle — use
+     * the latest session close in the window (last trading day). On a trading day after
+     * 15:30, if today's candle is not published yet, leave lastPrice unchanged so we do
+     * not paint yesterday as today.
      *
      * <p>No-op while the market is open, and if hours cannot be resolved (fail-open).
      */
@@ -238,7 +240,13 @@ public class MarketDataService {
 
         java.time.ZoneId ist = java.time.ZoneId.of("Asia/Kolkata");
         java.time.LocalDate today = java.time.LocalDate.now(ist);
-        Date fromDate = Date.from(today.minusDays(5).atStartOfDay(ist).toInstant());
+        boolean sessionDay = true;
+        try {
+            sessionDay = marketHoursService.isCashSessionDay();
+        } catch (Exception e) {
+            log.warn("Could not resolve session day; requiring today's candle: {}", e.getMessage());
+        }
+        Date fromDate = Date.from(today.minusDays(7).atStartOfDay(ist).toInstant());
         Date toDate = Date.from(today.plusDays(1).atStartOfDay(ist).toInstant());
 
         try {
@@ -264,15 +272,8 @@ public class MarketDataService {
                 if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
                     continue;
                 }
-                Double officialClose = null;
-                for (com.am.common.investment.model.historical.OHLCVTPoint point : data.getDataPoints()) {
-                    if (point == null || point.getTime() == null || point.getClose() == null || point.getClose() <= 0) {
-                        continue;
-                    }
-                    if (today.equals(point.getTime().toLocalDate())) {
-                        officialClose = point.getClose();
-                    }
-                }
+                Double officialClose = OfficialClosePolicy.pickSessionClose(
+                        data.getDataPoints(), today, sessionDay);
                 if (officialClose == null) {
                     continue;
                 }
@@ -287,8 +288,8 @@ public class MarketDataService {
                 updated++;
             }
             if (updated > 0) {
-                log.info("Applied official daily close after hours for {}/{} symbols (sessionDate={})",
-                        updated, quotes.size(), today);
+                log.info("Applied official daily close after hours for {}/{} symbols (calendarDate={}, sessionDay={})",
+                        updated, quotes.size(), today, sessionDay);
             }
         } catch (Exception e) {
             log.warn("Official daily close overlay failed; leaving lastPrice as-is: {}", e.getMessage());
