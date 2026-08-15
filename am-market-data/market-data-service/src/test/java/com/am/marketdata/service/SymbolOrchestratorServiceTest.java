@@ -78,4 +78,20 @@ class SymbolOrchestratorServiceTest {
         assertTrue(symbols.contains("RELIANCE"));
         assertFalse(symbols.contains("GROWWDEFNC"));
     }
+
+    @Test
+    void findDistinctSymbols_mergesNewRedisMembersWhileBaseCacheValid() {
+        service.setIncludePortfolioActiveSet(true);
+        when(stringRedisTemplate.opsForSet()).thenReturn(setOperations);
+        when(setOperations.members("market:active-symbols"))
+                .thenReturn(Set.of("GROWWDEFNC"))
+                .thenReturn(Set.of("GROWWDEFNC", "NEWETF"));
+
+        Set<String> first = service.findDistinctSymbols();
+        assertTrue(first.contains("GROWWDEFNC"));
+
+        Set<String> second = service.findDistinctSymbols();
+        assertTrue(second.contains("GROWWDEFNC"));
+        assertTrue(second.contains("NEWETF"));
+    }
 }

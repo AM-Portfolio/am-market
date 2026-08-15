@@ -3,20 +3,35 @@ package com.am.marketdata.watchlist.service;
 import com.am.marketdata.watchlist.dto.WatchlistItemDto;
 import com.am.marketdata.watchlist.entity.WatchlistItem;
 import com.am.marketdata.watchlist.repository.WatchlistRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class WatchlistService {
 
+    public static final String DEFAULT_ACTIVE_SET_KEY = "market:active-symbols";
+
     private final WatchlistRepository watchlistRepository;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final String activeSetRedisKey;
+
+    public WatchlistService(
+            WatchlistRepository watchlistRepository,
+            @Nullable StringRedisTemplate stringRedisTemplate,
+            @Value("${market.active-symbols.redis-key:" + DEFAULT_ACTIVE_SET_KEY + "}") String activeSetRedisKey) {
+        this.watchlistRepository = watchlistRepository;
+        this.stringRedisTemplate = stringRedisTemplate;
+        this.activeSetRedisKey = activeSetRedisKey;
+    }
 
     public List<WatchlistItemDto> getWatchlist(String userId) {
         log.info("Getting watchlist for user: {}", userId);
@@ -46,6 +61,7 @@ public class WatchlistService {
                 .build();
 
         WatchlistItem saved = watchlistRepository.save(item);
+        publishActiveSymbol(saved.getSymbol());
         log.info("Added symbol {} to watchlist for user {}", symbol, userId);
         return toDto(saved);
     }
@@ -81,5 +97,16 @@ public class WatchlistService {
                 .displayOrder(item.getDisplayOrder())
                 .createdAt(item.getCreatedAt())
                 .build();
+    }
+
+    private void publishActiveSymbol(String symbol) {
+        if (stringRedisTemplate == null || symbol == null || symbol.isBlank()) {
+            return;
+        }
+        try {
+            stringRedisTemplate.opsForSet().add(activeSetRedisKey, symbol.trim().toUpperCase(Locale.ROOT));
+        } catch (Exception e) {
+            log.warn("Watchlist active-symbol publish failed (fail-open): {}", e.getMessage());
+        }
     }
 }

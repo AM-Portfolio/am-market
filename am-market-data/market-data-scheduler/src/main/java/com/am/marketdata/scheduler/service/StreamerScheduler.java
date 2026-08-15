@@ -2,7 +2,6 @@ package com.am.marketdata.scheduler.service;
 
 import com.am.marketdata.service.SymbolOrchestratorService;
 import com.am.marketdata.service.websocket.service.StreamerManager;
-import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +38,18 @@ public class StreamerScheduler {
         streamerManager.startStreaming();
 
         log.info("✅ Upstox Streamer started successfully");
+    }
+
+    /**
+     * During cash hours, pick up symbols SADDed after 09:00 (new holdings / watchlist).
+     */
+    @Scheduled(cron = "${scheduler.stream.refresh-cron:0 */2 9-15 * * MON-FRI}", zone = "Asia/Kolkata")
+    public void executeRefreshSubscriptions() {
+        if (!streamerManager.isStreaming()) {
+            return;
+        }
+        log.info("Refreshing Upstox subscriptions for newly added portfolio/watchlist symbols");
+        streamerManager.refreshSubscriptions();
     }
 
     /**
