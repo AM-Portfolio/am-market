@@ -20,4 +20,15 @@ public class MarketHoursService {
             return false;
         }
     }
+
+    /** True on an NSE cash session date (Mon–Fri, not a holiday). False on weekend/holiday. */
+    public boolean isCashSessionDay() {
+        try {
+            java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+            return marketCalendarService.getTimings("NSE", today).open();
+        } catch (Exception e) {
+            log.warn("Could not resolve session day: {}", e.getMessage());
+            return true;
+        }
+    }
 }
