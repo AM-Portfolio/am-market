@@ -137,8 +137,7 @@ public class MarketDataAdminController {
     }
 
     @PostMapping("/scheduler/cookie/refresh")
-    @Operation(summary = "Trigger Selenium cookie refresh (writer)",
-            description = "Scrapes NSE cookies and stores them in Redis for all pods. Works even when scheduler.cookie.enabled=false.")
+    @Operation(summary = "Trigger Selenium cookie refresh (writer)", description = "Scrapes NSE cookies and stores them in Redis for all pods. Works even when scheduler.cookie.enabled=false.")
     public ResponseEntity<NseCookiesStatusResponse> triggerCookieRefresh() {
         log.info("Manual trigger: Cookie Refresh (Selenium writer)");
         try {
@@ -156,12 +155,11 @@ public class MarketDataAdminController {
     }
 
     @PutMapping("/nse/cookies")
-    @Operation(summary = "Set NSE cookies from browser Cookie header",
-            description = "Writes shared Redis cookie store used by IPO sync and NSE API calls. Never returns raw cookie values.")
+    @Operation(summary = "Set NSE cookies from browser Cookie header", description = "Writes shared Redis cookie store used by IPO sync and NSE API calls. Never returns raw cookie values.")
     public ResponseEntity<NseCookiesStatusResponse> setNseCookies(@RequestBody NseCookiesSetRequest request) {
         try {
-            CookieCache.CookiePresenceStatus status =
-                    cookieManager.setCookiesFromHeader(request.getCookieHeader(), request.getTtlMinutes());
+            CookieCache.CookiePresenceStatus status = cookieManager.setCookiesFromHeader(request.getCookieHeader(),
+                    request.getTtlMinutes());
             return ResponseEntity.ok(toStatusResponse(status, "ok", null));
         } catch (CookieException e) {
             log.warn("Failed to set NSE cookies: {}", e.getMessage());
@@ -175,8 +173,7 @@ public class MarketDataAdminController {
     }
 
     @GetMapping("/nse/cookies/status")
-    @Operation(summary = "NSE cookie cache status",
-            description = "Returns presence, cookie names, TTL. Never returns raw cookie values.")
+    @Operation(summary = "NSE cookie cache status", description = "Returns presence, cookie names, TTL. Never returns raw cookie values.")
     public ResponseEntity<NseCookiesStatusResponse> getNseCookiesStatus() {
         return ResponseEntity.ok(toStatusResponse(cookieManager.status(), "ok", null));
     }
