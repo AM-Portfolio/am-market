@@ -1,6 +1,8 @@
 package com.am.marketdata.service;
 
 import com.am.common.investment.service.StockIndicesMarketDataService;
+import com.am.marketdata.common.model.UpstoxInstrument;
+import com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository;
 import com.am.marketdata.service.client.ParserApiClient;
 import com.am.common.investment.model.stockindice.StockData;
 import lombok.extern.slf4j.Slf4j;
@@ -12,10 +14,13 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -30,10 +35,12 @@ import java.util.stream.Collectors;
 public class SymbolOrchestratorService {
 
     public static final String DEFAULT_ACTIVE_SET_KEY = "market:active-symbols";
+    private static final Pattern ISIN_PATTERN = Pattern.compile("^[A-Z]{2}[A-Z0-9]{10}$");
 
     private final ParserApiClient parserApiClient;
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final StringRedisTemplate stringRedisTemplate;
+    private final UpstoxInstrumentRepository upstoxInstrumentRepository;
 
     @Value("${scheduler.symbols.default:RELIANCE}")
     private String defaultSymbols;
@@ -55,9 +62,19 @@ public class SymbolOrchestratorService {
             ParserApiClient parserApiClient,
             StockIndicesMarketDataService stockIndicesMarketDataService,
             @Nullable StringRedisTemplate stringRedisTemplate) {
+        this(parserApiClient, stockIndicesMarketDataService, stringRedisTemplate, null);
+    }
+
+    @Autowired
+    public SymbolOrchestratorService(
+            ParserApiClient parserApiClient,
+            StockIndicesMarketDataService stockIndicesMarketDataService,
+            @Nullable StringRedisTemplate stringRedisTemplate,
+            @Nullable UpstoxInstrumentRepository upstoxInstrumentRepository) {
         this.parserApiClient = parserApiClient;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.stringRedisTemplate = stringRedisTemplate;
+        this.upstoxInstrumentRepository = upstoxInstrumentRepository;
     }
 
     public List<String> getNifty500Symbols() {
@@ -87,51 +104,22 @@ public class SymbolOrchestratorService {
     }
 
     public synchronized Set<String> findDistinctSymbols() {
-        if (isCacheValid()) {
-            log.info("Returning cached symbols. Count: {}", cachedSymbols.size());
-            return new HashSet<>(cachedSymbols);
-        }
-
-        log.info("Fetching distinct symbols from all sources...");
-        List<String> combinedSymbols = new ArrayList<>();
-        int baseCount;
+        Set<String> universe = new HashSet<>(loadOrRefreshBaseSymbols());
+        int baseCount = universe.size();
         int portfolioAdded = 0;
 
-        if (defaultSymbols != null && !defaultSymbols.isEmpty()) {
-            combinedSymbols.addAll(List.of(defaultSymbols.split(",")));
-        }
-
-        combinedSymbols.addAll(getNifty500Symbols());
-        combinedSymbols.addAll(getEtfSymbols());
-
-        baseCount = (int) combinedSymbols.stream()
-                .filter(s -> s != null && !s.isBlank())
-                .map(s -> s.trim().toUpperCase(Locale.ROOT))
-                .distinct()
-                .count();
-
         if (includePortfolioActiveSet) {
-            Set<String> active = loadActivePortfolioSymbols();
-            if (!active.isEmpty()) {
-                Set<String> before = combinedSymbols.stream()
-                        .filter(s -> s != null && !s.isBlank())
-                        .map(s -> s.trim().toUpperCase(Locale.ROOT))
-                        .collect(Collectors.toSet());
-                combinedSymbols.addAll(active);
-                portfolioAdded = (int) active.stream().filter(s -> !before.contains(s)).count();
+            Set<String> active = expandActivePortfolioSymbols(loadActivePortfolioSymbols());
+            for (String symbol : active) {
+                if (universe.add(symbol)) {
+                    portfolioAdded++;
+                }
             }
         }
 
-        cachedSymbols = combinedSymbols.stream()
-                .filter(s -> s != null && !s.trim().isEmpty())
-                .map(s -> s.trim().toUpperCase(Locale.ROOT))
-                .distinct()
-                .collect(Collectors.toList());
-        cacheLoadedAt = Instant.now();
-
         log.info("Symbol aggregation complete. total={}, base≈{}, portfolio_added≈{}, includePortfolio={}",
-                cachedSymbols.size(), baseCount, portfolioAdded, includePortfolioActiveSet);
-        return new HashSet<>(cachedSymbols);
+                universe.size(), baseCount, portfolioAdded, includePortfolioActiveSet);
+        return universe;
     }
 
     public synchronized void refreshCache() {
@@ -139,6 +127,104 @@ public class SymbolOrchestratorService {
         cachedSymbols = null;
         cacheLoadedAt = null;
         findDistinctSymbols();
+    }
+
+    private List<String> loadOrRefreshBaseSymbols() {
+        if (isCacheValid()) {
+            return cachedSymbols;
+        }
+        log.info("Fetching base symbol universe (defaults ∪ Nifty 500 ∪ ETFs)...");
+        List<String> combinedSymbols = new ArrayList<>();
+        if (defaultSymbols != null && !defaultSymbols.isEmpty()) {
+            combinedSymbols.addAll(List.of(defaultSymbols.split(",")));
+        }
+        combinedSymbols.addAll(getNifty500Symbols());
+        combinedSymbols.addAll(getEtfSymbols());
+        cachedSymbols = combinedSymbols.stream()
+                .filter(s -> s != null && !s.trim().isEmpty())
+                .map(s -> s.trim().toUpperCase(Locale.ROOT))
+                .distinct()
+                .collect(Collectors.toList());
+        cacheLoadedAt = Instant.now();
+        return cachedSymbols;
+    }
+
+    /**
+     * Redis may contain ISINs. Upstox WS needs trading symbols from upstock_instruments.
+     */
+    private Set<String> expandActivePortfolioSymbols(Set<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> tickers = new HashSet<>();
+        List<String> isins = new ArrayList<>();
+        for (String member : raw) {
+            if (looksLikeIsin(member)) {
+                isins.add(member);
+            } else {
+                tickers.add(member);
+            }
+        }
+        if (isins.isEmpty()) {
+            return tickers;
+        }
+        if (upstoxInstrumentRepository == null) {
+            tickers.addAll(isins);
+            return tickers;
+        }
+        try {
+            List<UpstoxInstrument> instruments = upstoxInstrumentRepository.findByIsinIn(isins);
+            Map<String, UpstoxInstrument> bestByIsin = new HashMap<>();
+            if (instruments != null) {
+                for (UpstoxInstrument inst : instruments) {
+                    if (inst == null || inst.getIsin() == null || inst.getTradingSymbol() == null
+                            || inst.getTradingSymbol().isBlank()) {
+                        continue;
+                    }
+                    String isin = inst.getIsin().trim().toUpperCase(Locale.ROOT);
+                    UpstoxInstrument existing = bestByIsin.get(isin);
+                    if (existing == null || rankInstrument(inst) < rankInstrument(existing)) {
+                        bestByIsin.put(isin, inst);
+                    }
+                }
+            }
+            for (String isin : isins) {
+                UpstoxInstrument inst = bestByIsin.get(isin);
+                if (inst != null) {
+                    tickers.add(inst.getTradingSymbol().trim().toUpperCase(Locale.ROOT));
+                } else {
+                    log.warn("Active symbol ISIN {} has no upstock_instruments row; skipped from stream universe",
+                            isin);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("ISIN expand for active symbols failed (fail-open keep ISINs): {}", e.getMessage());
+            tickers.addAll(isins);
+        }
+        return tickers;
+    }
+
+    private static boolean looksLikeIsin(String value) {
+        return value != null && ISIN_PATTERN.matcher(value).matches();
+    }
+
+    private static int rankInstrument(UpstoxInstrument inst) {
+        String exchange = inst.getExchange() != null ? inst.getExchange().trim().toUpperCase(Locale.ROOT) : "";
+        String type = inst.getInstrumentType() != null ? inst.getInstrumentType().trim().toUpperCase(Locale.ROOT) : "";
+        if (exchange.contains("NFO") || exchange.contains("BFO") || exchange.contains("MCX")
+                || type.contains("FUT") || type.contains("OPT")) {
+            return 100;
+        }
+        if (exchange.startsWith("NSE") && (type.contains("EQ") || type.contains("GB") || type.isEmpty())) {
+            return 0;
+        }
+        if (exchange.startsWith("NSE")) {
+            return 1;
+        }
+        if (exchange.startsWith("BSE")) {
+            return 2;
+        }
+        return 3;
     }
 
     /** Package-visible for tests. */
