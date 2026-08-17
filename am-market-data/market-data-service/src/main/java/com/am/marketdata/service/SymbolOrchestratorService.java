@@ -57,7 +57,6 @@ public class SymbolOrchestratorService {
     private List<String> cachedSymbols = null;
     private Instant cacheLoadedAt = null;
 
-    @Autowired
     public SymbolOrchestratorService(
             ParserApiClient parserApiClient,
             StockIndicesMarketDataService stockIndicesMarketDataService,
