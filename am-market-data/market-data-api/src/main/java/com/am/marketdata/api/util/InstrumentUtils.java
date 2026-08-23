@@ -177,7 +177,7 @@ public class InstrumentUtils {
 
         for (String sym : candidateSymbols) {
             String upper = sym.toUpperCase();
-            if (matchingIndices.contains(upper) || whitelist.contains(upper)) {
+            if (upper.startsWith("GLOBAL_") || matchingIndices.contains(upper) || whitelist.contains(upper)) {
                 resolvedSymbols.add(sym);
             } else if (isinToTicker.containsKey(upper)) {
                 // Upstox quotes by trading symbol, not ISIN

@@ -9,8 +9,10 @@ import com.am.marketdata.service.MarketDataPersistenceService;
 import com.am.marketdata.service.MarketDataCacheService;
 import com.am.marketdata.service.SymbolOrchestratorService;
 import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
+import com.am.marketdata.service.global.GlobalMarketScheduleService;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -41,6 +43,36 @@ public class StreamerManager implements StreamerListener {
     private final SymbolOrchestratorService symbolService;
     private final MarketDataPublisher publisher; // For WebSocket broadcasting
     private final MarketDataCacheService cacheService;
+    private final StringRedisTemplate redisTemplate;
+
+    /**
+     * Redis key written by the Indian market hours scheduler.
+     * Set to "true" during NSE trading hours (9:15 AM - 3:45 PM IST, Mon-Fri).
+     * Set to "false" after market close.
+     */
+    private static final String INDIAN_VOTE_KEY = "market:websocket:vote:indian";
+
+    /**
+     * Redis key written by GlobalMarketScheduleService.
+     * Set to "true" when any configured global exchange is open.
+     * Set to "false" when all global exchanges are closed.
+     */
+    private static final String GLOBAL_VOTE_KEY = GlobalMarketScheduleService.GLOBAL_VOTE_KEY;
+
+    /**
+     * Redis key prefix for global index live prices.
+     * Format: market:global-latest:<INSTRUMENT_KEY>
+     * Written by the global tick handler in onMessage().
+     * Read by GlobalIndexService for the latest price lookup.
+     */
+    private static final String GLOBAL_LATEST_PREFIX = "market:global-latest:";
+
+    /**
+     * Redis key prefix for global index tick timestamps.
+     * Format: market:global-timestamp:<INSTRUMENT_KEY>
+     * Used by the circuit breaker to detect 30+ min of no-tick during market hours.
+     */
+    private static final String GLOBAL_TIMESTAMP_PREFIX = "market:global-timestamp:";
 
     private Set<String> subscribedSymbols = new HashSet<>();
     private static final String DEFAULT_MODE = "full";
@@ -51,13 +83,15 @@ public class StreamerManager implements StreamerListener {
             MarketDataProcessor processor,
             SymbolOrchestratorService symbolService,
             MarketDataPublisher publisher,
-            MarketDataCacheService cacheService) {
+            MarketDataCacheService cacheService,
+            StringRedisTemplate redisTemplate) {
         this.streamer = streamer;
         this.persistenceService = persistenceService;
         this.processor = processor;
         this.symbolService = symbolService;
         this.publisher = publisher;
         this.cacheService = cacheService;
+        this.redisTemplate = redisTemplate;
     }
 
     // @PostConstruct
@@ -242,6 +276,49 @@ public class StreamerManager implements StreamerListener {
         streamer.subscribe(subscribedSymbols, DEFAULT_MODE);
     }
 
+    // --- WebSocket Voting Reconciler ---
+
+    /**
+     * Reconciles the WebSocket connection state based on the two Redis voting flags:
+     * <ul>
+     *   <li>{@code market:websocket:vote:indian} — set by the Indian market hours scheduler</li>
+     *   <li>{@code market:websocket:vote:global} — set by GlobalMarketScheduleService</li>
+     * </ul>
+     *
+     * <p><b>Connect rule:</b> Connect if EITHER vote is "true".
+     * <p><b>Disconnect rule:</b> Disconnect ONLY if BOTH votes are "false".
+     *
+     * <p>This design prevents the Indian market close (3:45 PM IST) from killing the
+     * WebSocket while the US market is still open (9:30 PM - 4:00 AM IST).
+     * Runs every 5 minutes to align with the scheduler cadence.
+     */
+    @Scheduled(fixedRateString = "${market.websocket.reconcile-interval-ms:300000}")
+    public void reconcileWebSocketConnection() {
+        boolean indianVote = "true".equalsIgnoreCase(
+                redisTemplate.opsForValue().get(INDIAN_VOTE_KEY));
+        boolean globalVote = "true".equalsIgnoreCase(
+                redisTemplate.opsForValue().get(GLOBAL_VOTE_KEY));
+
+        boolean shouldConnect = indianVote || globalVote;
+
+        log.info("StreamerManager",
+                String.format("[Reconciler] vote:indian=%s, vote:global=%s → shouldConnect=%s",
+                        indianVote, globalVote, shouldConnect));
+
+        if (shouldConnect) {
+            if (!streamer.isConnected()) {
+                log.info("StreamerManager", "[Reconciler] Connecting WebSocket (market open).");
+                connectAndSubscribe();
+            }
+        } else {
+            if (streamer.isConnected()) {
+                log.info("StreamerManager",
+                        "[Reconciler] All markets closed. Disconnecting WebSocket.");
+                streamer.disconnect();
+            }
+        }
+    }
+
     // --- StreamerListener Implementation ---
 
     @Override
@@ -255,8 +332,7 @@ public class StreamerManager implements StreamerListener {
         // Service layer expects ONLY common DTOs (UpstoxFeedResponse)
         // Provider layer is responsible for converting proto → common DTO
 
-        // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 or Map<String,
-        // OHLCQuote>
+        // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 or Map<String, OHLCQuote>
         if (message instanceof MarketUpdateV3) {
             try {
                 processUpdateForPublisher((MarketUpdateV3) message);
@@ -272,6 +348,24 @@ public class StreamerManager implements StreamerListener {
                     String symbol = entry.getKey();
                     OHLCQuote quote = entry.getValue();
                     if (quote != null) {
+
+                        // ---------------------------------------------------------
+                        // GLOBAL INDEX ROUTING
+                        // If the instrument key is a GLOBAL_* key (from Upstox Global
+                        // Instruments), route it to the isolated global Redis cache.
+                        // This keeps global tick data strictly separate from Indian
+                        // index data (market:latest-price:*) to prevent any cross-pollution.
+                        // ---------------------------------------------------------
+                        if (symbol != null && symbol.startsWith("GLOBAL_")) {
+                            handleGlobalIndexTick(symbol, quote);
+                            // Do NOT add global ticks to the Indian UI broadcast — they
+                            // have different refresh rates and display components.
+                            continue;
+                        }
+                        // ---------------------------------------------------------
+                        // END GLOBAL INDEX ROUTING — below is the existing Indian index path
+                        // ---------------------------------------------------------
+
                         double lastPrice = quote.getLastPrice();
                         double open = quote.getOhlc() != null ? quote.getOhlc().getOpen() : 0.0;
                         double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
@@ -333,8 +427,7 @@ public class StreamerManager implements StreamerListener {
         try {
             Map<String, OHLCQuote> quotes = processor.processUpdate(message);
             if (quotes != null && !quotes.isEmpty()) {
-                // log.debug("StreamerManager", "Processed " + quotes.size() + " quotes
-                // (Kafka).");
+                // log.debug("StreamerManager", "Processed " + quotes.size() + " quotes (Kafka).");
             }
         } catch (Exception e) {
             log.error("StreamerManager", "Error handling message for persistence", e);
@@ -386,6 +479,45 @@ public class StreamerManager implements StreamerListener {
             }
         } catch (Exception e) {
             // log.warn("StreamerManager", "Error processing update for publisher", e);
+        }
+    }
+
+    /**
+     * Handles an incoming WebSocket tick for a GLOBAL_* instrument key.
+     *
+     * <p>Writes the price and timestamp to their dedicated Redis keys:
+     * <ul>
+     *   <li>{@code market:global-latest:<INSTRUMENT_KEY>} — the latest price JSON</li>
+     *   <li>{@code market:global-timestamp:<INSTRUMENT_KEY>} — epoch ms of last tick</li>
+     * </ul>
+     *
+     * <p>These keys are read exclusively by {@code GlobalIndexService}.
+     * They are intentionally NOT mixed with the Indian price cache
+     * ({@code market:latest-price:*}) to keep the storage layers strictly separated.
+     *
+     * @param instrumentKey the full Upstox key (e.g., "GLOBAL_INDEX|DJI")
+     * @param quote         the OHLC quote received from the WebSocket tick
+     */
+    private void handleGlobalIndexTick(String instrumentKey, OHLCQuote quote) {
+        try {
+            // Serialize the OHLCQuote to JSON for Redis storage
+            ObjectMapper mapper = new ObjectMapper();
+            String json = mapper.writeValueAsString(quote);
+
+            // Write price to the global-specific Redis key (NOT the Indian market:latest-price key)
+            redisTemplate.opsForValue().set(GLOBAL_LATEST_PREFIX + instrumentKey, json);
+
+            // Write timestamp for the 30-min circuit breaker check
+            redisTemplate.opsForValue().set(
+                    GLOBAL_TIMESTAMP_PREFIX + instrumentKey,
+                    String.valueOf(System.currentTimeMillis()));
+
+            log.debug("StreamerManager",
+                    "[GlobalTick] Cached global tick for instrumentKey=" + instrumentKey +
+                    ", lastPrice=" + quote.getLastPrice());
+        } catch (Exception e) {
+            log.error("StreamerManager",
+                    "[GlobalTick] Failed to cache global tick for instrumentKey=" + instrumentKey, e);
         }
     }
 
