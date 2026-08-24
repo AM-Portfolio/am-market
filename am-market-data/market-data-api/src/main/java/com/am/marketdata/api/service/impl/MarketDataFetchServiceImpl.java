@@ -418,20 +418,23 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         if (isIndexSymbol && !marketHoursService.isMarketOpen() && !forceRefresh) {
             log.info("Market is closed. Fetching OHLC for index symbols from MongoDB fallback: {}", symbols);
             Map<String, OHLCQuote> fallbackData = new HashMap<>();
-            for (String symbol : symbols) {
-                var indexData = stockIndicesMarketDataService.findByIndexSymbol(symbol);
-                if (indexData != null && indexData.getMetadata() != null) {
-                    var meta = indexData.getMetadata();
-                    fallbackData.put(symbol, OHLCQuote.builder()
-                        .lastPrice(meta.getLast())
-                        .previousClose(meta.getPreviousClose())
-                        .ohlc(OHLCQuote.OHLC.builder()
-                            .open(meta.getOpen())
-                            .high(meta.getHigh())
-                            .low(meta.getLow())
-                            .close(meta.getLast())
-                            .build())
-                        .build());
+            List<com.am.common.investment.model.stockindice.StockIndicesMarketData> indexDocs = stockIndicesMarketDataService.findByIndexSymbols(symbols);
+            if (indexDocs != null) {
+                for (com.am.common.investment.model.stockindice.StockIndicesMarketData indexData : indexDocs) {
+                    if (indexData != null && indexData.getIndexSymbol() != null && indexData.getMetadata() != null) {
+                        String symbol = indexData.getIndexSymbol();
+                        var meta = indexData.getMetadata();
+                        fallbackData.put(symbol, OHLCQuote.builder()
+                            .lastPrice(meta.getLast())
+                            .previousClose(meta.getPreviousClose())
+                            .ohlc(OHLCQuote.OHLC.builder()
+                                .open(meta.getOpen())
+                                .high(meta.getHigh())
+                                .low(meta.getLow())
+                                .close(meta.getLast())
+                                .build())
+                            .build());
+                    }
                 }
             }
             if (!fallbackData.isEmpty()) {
