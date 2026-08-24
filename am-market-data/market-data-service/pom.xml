@@ -156,6 +156,30 @@
             <artifactId>commons-lang3</artifactId>
         </dependency>
 
+        <!--
+            Jollyday — DST-safe public holiday detection for global market schedules.
+            Used by GlobalMarketScheduleService to check if a given date is a national
+            holiday for a specific country (e.g., US, GB, JP) before setting the global
+            WebSocket vote flag.
+            The focus-shift fork is the modern, actively maintained version that supports Java 17+.
+        -->
+        <dependency>
+            <groupId>de.focus-shift</groupId>
+            <artifactId>jollyday-jaxb</artifactId>
+            <version>0.26.0</version>
+        </dependency>
+
+        <!--
+            SnakeYAML — used by GlobalMarketScheduleService to parse global-market-schedule.yml
+            at startup (loaded via ClassPathResource). Already present transitively via
+            Spring Boot, but declared explicitly to pin the version for security compliance.
+        -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <!-- version managed by Spring Boot BOM -->
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

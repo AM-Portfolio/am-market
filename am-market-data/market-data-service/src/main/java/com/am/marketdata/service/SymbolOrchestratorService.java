@@ -1,6 +1,7 @@
 package com.am.marketdata.service;
 
 import com.am.common.investment.service.StockIndicesMarketDataService;
+import com.am.common.investment.persistence.document.global.GlobalIndexConfigRepository;
 import com.am.marketdata.common.model.UpstoxInstrument;
 import com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository;
 import com.am.marketdata.service.client.ParserApiClient;
@@ -42,6 +43,13 @@ public class SymbolOrchestratorService {
     private final StringRedisTemplate stringRedisTemplate;
     private final UpstoxInstrumentRepository upstoxInstrumentRepository;
 
+    /**
+     * Optional: loads global index instrument keys from MongoDB so the WebSocket
+     * subscribes to them and live ticks populate the global Redis cache.
+     * Nullable (fail-open): if the repo is unavailable, Indian streaming continues normally.
+     */
+    private final GlobalIndexConfigRepository globalIndexConfigRepository;
+
     @Value("${scheduler.symbols.default:RELIANCE}")
     private String defaultSymbols;
 
@@ -61,7 +69,15 @@ public class SymbolOrchestratorService {
             ParserApiClient parserApiClient,
             StockIndicesMarketDataService stockIndicesMarketDataService,
             @Nullable StringRedisTemplate stringRedisTemplate) {
-        this(parserApiClient, stockIndicesMarketDataService, stringRedisTemplate, null);
+        this(parserApiClient, stockIndicesMarketDataService, stringRedisTemplate, null, null);
+    }
+
+    public SymbolOrchestratorService(
+            ParserApiClient parserApiClient,
+            StockIndicesMarketDataService stockIndicesMarketDataService,
+            @Nullable StringRedisTemplate stringRedisTemplate,
+            @Nullable UpstoxInstrumentRepository upstoxInstrumentRepository) {
+        this(parserApiClient, stockIndicesMarketDataService, stringRedisTemplate, upstoxInstrumentRepository, null);
     }
 
     @Autowired
@@ -69,11 +85,13 @@ public class SymbolOrchestratorService {
             ParserApiClient parserApiClient,
             StockIndicesMarketDataService stockIndicesMarketDataService,
             @Nullable StringRedisTemplate stringRedisTemplate,
-            @Nullable UpstoxInstrumentRepository upstoxInstrumentRepository) {
+            @Nullable UpstoxInstrumentRepository upstoxInstrumentRepository,
+            @Nullable GlobalIndexConfigRepository globalIndexConfigRepository) {
         this.parserApiClient = parserApiClient;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.stringRedisTemplate = stringRedisTemplate;
         this.upstoxInstrumentRepository = upstoxInstrumentRepository;
+        this.globalIndexConfigRepository = globalIndexConfigRepository;
     }
 
     public List<String> getNifty500Symbols() {
@@ -116,8 +134,14 @@ public class SymbolOrchestratorService {
             }
         }
 
-        log.info("Symbol aggregation complete. total={}, base≈{}, portfolio_added≈{}, includePortfolio={}",
-                universe.size(), baseCount, portfolioAdded, includePortfolioActiveSet);
+        // Merge global index instrument keys so the WebSocket subscribes to them.
+        // Ticks matching GLOBAL_* keys are routed by StreamerManager.handleGlobalIndexTick()
+        // to market:global-latest:* Redis keys (separate from Indian market:latest-price:*).
+        Set<String> globalKeys = getGlobalIndexInstrumentKeys();
+        universe.addAll(globalKeys);
+
+        log.info("Symbol aggregation complete. total={}, base≈{}, portfolio_added≈{}, global_indices={}, includePortfolio={}",
+                universe.size(), baseCount, portfolioAdded, globalKeys.size(), includePortfolioActiveSet);
         return universe;
     }
 
@@ -126,6 +150,34 @@ public class SymbolOrchestratorService {
         cachedSymbols = null;
         cacheLoadedAt = null;
         findDistinctSymbols();
+    }
+
+    /**
+     * Loads all enabled global index instrument keys from MongoDB.
+     * These Upstox keys (e.g. "GLOBAL_INDEX|DJI") are added to the WebSocket subscription
+     * universe so live ticks flow into StreamerManager.handleGlobalIndexTick().
+     *
+     * <p>Fail-open: returns an empty set if the repository is unavailable,
+     * so Indian streaming continues unaffected.
+     */
+    private Set<String> getGlobalIndexInstrumentKeys() {
+        if (globalIndexConfigRepository == null) {
+            log.debug("GlobalIndexConfigRepository not available; skipping global index subscription.");
+            return Set.of();
+        }
+        try {
+            Set<String> keys = new HashSet<>();
+            globalIndexConfigRepository.findAll().forEach(config -> {
+                if (config.getInstrumentKey() != null && !config.getInstrumentKey().isBlank()) {
+                    keys.add(config.getInstrumentKey());
+                }
+            });
+            log.info("Loaded {} global index instrument keys for WebSocket subscription: {}", keys.size(), keys);
+            return keys;
+        } catch (Exception e) {
+            log.warn("Failed to load global index instrument keys (fail-open): {}", e.getMessage());
+            return Set.of();
+        }
     }
 
     private List<String> loadOrRefreshBaseSymbols() {

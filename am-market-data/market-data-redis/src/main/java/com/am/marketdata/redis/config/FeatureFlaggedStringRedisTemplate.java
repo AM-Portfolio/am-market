@@ -36,6 +36,13 @@ public class FeatureFlaggedStringRedisTemplate extends StringRedisTemplate {
     }
 
     private boolean isRedisEnabled() {
+        // Local Override: If running in a local developer environment, we might not have a
+        // direct connection to the self-hosted GrowthBook feature flag dashboard.
+        // Setting REDIS_FORCE_ENABLED=true in the run environment forces Redis templates
+        // to stay active, bypassing the GrowthBook server check.
+        if ("true".equalsIgnoreCase(System.getenv("REDIS_FORCE_ENABLED"))) {
+            return true;
+        }
         boolean enabled = growthBookService.isOn(flagKey);
         if (lastState == null || lastState != enabled) {
             lastState = enabled;

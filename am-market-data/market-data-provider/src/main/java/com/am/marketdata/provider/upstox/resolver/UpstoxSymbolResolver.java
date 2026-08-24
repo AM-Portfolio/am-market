@@ -44,10 +44,19 @@ public class UpstoxSymbolResolver implements SymbolResolver {
         // 1. Identify and resolve known Indices
         Map<String, String> resolvedIndices = indexIdentifier.resolveIndices(symbols); // Symbol -> Key
 
-        // 2. Identify remaining symbols to lookup in DB
-        List<String> symbolsForDb = symbols.stream()
-                .filter(s -> !resolvedIndices.containsKey(s))
-                .collect(Collectors.toList());
+        // 2. Identify remaining symbols to lookup in DB, whitelisting direct keys (containing '|')
+        List<String> symbolsForDb = new ArrayList<>();
+        for (String s : symbols) {
+            if (resolvedIndices.containsKey(s)) {
+                continue;
+            }
+            if (s != null && (s.startsWith("GLOBAL_INDEX") || s.contains("|"))) {
+                // If it's already an instrument key or a global index key, resolve it directly
+                resolvedIndices.put(s, s.replace(":", "|"));
+                continue;
+            }
+            symbolsForDb.add(s);
+        }
 
         if (!symbolsForDb.isEmpty()) {
             log.info("UpstoxSymbolResolver",

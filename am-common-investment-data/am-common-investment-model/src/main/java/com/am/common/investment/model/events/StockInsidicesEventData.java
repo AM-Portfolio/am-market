@@ -115,6 +115,30 @@ public class StockInsidicesEventData {
         private Double totalTradedValue;
         @JsonProperty("ffmc_sum")
         private double ffmcSum;
+
+        // -------------------------------------------------------------------------
+        // GLOBAL INDEX FIELDS (Optional — only populated for foreign market indices)
+        // These fields are safely ignored by existing Indian-market microservices
+        // because IndexMetadata is annotated with @JsonInclude(NON_NULL) and
+        // @JsonIgnoreProperties(ignoreUnknown = true).
+        // -------------------------------------------------------------------------
+
+        /**
+         * Identifies the market segment for this index.
+         * Values: "NSE" for Indian indices, "GLOBAL" for foreign indices (Dow Jones, S&P 500, etc.).
+         * Null for Indian indices so existing consumers are not affected.
+         */
+        private String segment;
+
+        /**
+         * Circuit breaker flag for global indices.
+         * Set to {@code true} when no WebSocket tick is received for 30+ minutes
+         * during the expected market hours window (detected via global-market-schedule.yml).
+         * This signals the frontend/consumers that the displayed price may be stale
+         * due to an ad-hoc exchange closure or connectivity issue.
+         * Null for Indian indices.
+         */
+        private Boolean suspended;
     }
 
     @Data
