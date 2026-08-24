@@ -681,14 +681,14 @@ public class MarketDataController {
                 Object pricesObj = livePrices.get("prices");
                 if (pricesObj instanceof List) {
                     @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> pricesList = (List<Map<String, Object>>) pricesObj;
+                    List<com.am.common.investment.model.equity.EquityPrice> pricesList = (List<com.am.common.investment.model.equity.EquityPrice>) pricesObj;
 
-                    for (Map<String, Object> priceData : pricesList) {
-                        String symbol = (String) priceData.get("symbol");
+                    for (com.am.common.investment.model.equity.EquityPrice priceData : pricesList) {
+                        String symbol = priceData.getSymbol();
                         if (symbol == null)
                             continue;
 
-                        Double currentPrice = ((Number) priceData.get("lastPrice")).doubleValue();
+                        Double currentPrice = priceData.getLastPrice();
                         OHLCQuote historical = historicalData.get(symbol);
                         if (historical == null) {
                             historical = historicalData.get("NSE:" + symbol);
