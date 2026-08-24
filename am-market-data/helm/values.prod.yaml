@@ -7,6 +7,10 @@ replicaCount: 1
 env:
   SPRING_PROFILES_ACTIVE: "prod,security"
   JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=prod,security"
+  # Chrome/Selenium needs a writable HOME (pod runs non-root with empty home otherwise)
+  HOME: "/tmp"
+  XDG_CONFIG_HOME: "/tmp/.config"
+  XDG_CACHE_HOME: "/tmp/.cache"
   # Micro-chunking: controls maximum number of stock symbols flushed per pipelined Redis write batch (100 in Prod)
   REDIS_CACHE_INTRADAY_BATCH_CHUNK_SIZE: "100"
   # Internal Kubernetes DNS endpoint for GrowthBook (bypasses Cloudflare HTTP 400 blocking)
@@ -35,7 +39,8 @@ config:
   # ── Prod scheduler — explicit for auditability ───────────────────────
   scheduler:
     cookie:
-      enabled: false
+      # Writer must run in prod so Redis nse:cookies stays warm for NSE scrapes
+      enabled: true
       refreshCron: "0 0 9-16 * * MON-FRI"
     stockIndices:
       enabled: false
@@ -104,10 +109,10 @@ ingress:
 resources:
   limits:
     cpu: 1000m
-    memory: 1024Mi
+    memory: 3Gi
   requests:
     cpu: 500m
-    memory: 512Mi
+    memory: 1.5Gi
 
 postgresql:
   enabled: false
