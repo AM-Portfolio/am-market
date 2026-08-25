@@ -31,6 +31,8 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
     
     private final EquityService equityService;
     private final com.am.common.investment.service.MarketIndexIndicesService marketIndexIndicesService;
+    private final com.am.common.investment.persistence.repository.measurement.impl.GlobalIndexInfluxRepository globalIndexInfluxRepository;
+    private final com.am.common.investment.persistence.document.global.GlobalIndexConfigRepository globalIndexConfigRepository;
     
     @Override
     public Optional<HistoricalData> getHistoricalData(String tradingSymbol, Instant fromDate, Instant toDate, String interval) {
@@ -46,37 +48,89 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         
         List<EquityPrice> prices;
         if (isIndexSymbol) {
-            List<com.am.common.investment.model.equity.MarketIndexIndices> indices = 
-                marketIndexIndicesService.getByIndexSymbolAndTimeBetween(tradingSymbol, fromDate, toDate);
-            
-            prices = indices.stream().map(index -> {
-                com.am.common.investment.model.historical.OHLCVTPoint ohlcv = null;
-                if (index.getMarketData() != null) {
-                    ohlcv = com.am.common.investment.model.historical.OHLCVTPoint.builder()
-                        .open(index.getMarketData().getOpen() != null ? index.getMarketData().getOpen() : 0.0)
-                        .high(index.getMarketData().getHigh() != null ? index.getMarketData().getHigh() : 0.0)
-                        .low(index.getMarketData().getLow() != null ? index.getMarketData().getLow() : 0.0)
-                        .close(index.getMarketData().getLast() != null ? index.getMarketData().getLast() : 0.0)
-                        .volume(0L)
-                        .build();
+            if (tradingSymbol.startsWith("GLOBAL_INDEX|")) {
+                // Determine Flux aggregation interval
+                String aggregateWindowEvery;
+                if ("DAY".equalsIgnoreCase(interval) || "1D".equalsIgnoreCase(interval)) {
+                    aggregateWindowEvery = "1d";
+                } else if ("WEEK".equalsIgnoreCase(interval) || "1W".equalsIgnoreCase(interval)) {
+                    aggregateWindowEvery = "1w";
+                } else if ("MONTH".equalsIgnoreCase(interval) || "1M".equalsIgnoreCase(interval)) {
+                    aggregateWindowEvery = "30d";
+                } else if ("1m".equalsIgnoreCase(interval) || "MINUTE".equalsIgnoreCase(interval)) {
+                    aggregateWindowEvery = "1m";
+                } else if ("5m".equalsIgnoreCase(interval) || "FIVE_MINUTE".equalsIgnoreCase(interval)) {
+                    aggregateWindowEvery = "5m";
+                } else if ("1H".equalsIgnoreCase(interval) || "HOUR".equalsIgnoreCase(interval)) {
+                    aggregateWindowEvery = "1h";
+                } else {
+                    aggregateWindowEvery = "1d";
                 }
+
+                // Resolve exchange offset
+                String pureSymbol = tradingSymbol.replace("GLOBAL_INDEX|", "");
+                Optional<com.am.common.investment.persistence.document.global.GlobalIndexConfigDocument> configOpt = 
+                        globalIndexConfigRepository.findBySymbol(pureSymbol);
+                String offset = configOpt.map(com.am.common.investment.persistence.document.global.GlobalIndexConfigDocument::getInfluxAggregateOffset).orElse("+0h");
+
+                logger.info("Querying global index historical data for symbol={} key={} every={} offset={}", 
+                        tradingSymbol, tradingSymbol, aggregateWindowEvery, offset);
+
+                List<com.am.common.investment.persistence.influx.measurement.GlobalIndexMeasurement> dbMeasurements = 
+                        globalIndexInfluxRepository.findByInstrumentKeyAndTimeBetween(tradingSymbol, fromDate, toDate, aggregateWindowEvery, offset);
+
+                prices = dbMeasurements.stream().map(m -> {
+                    com.am.common.investment.model.historical.OHLCVTPoint ohlcv = com.am.common.investment.model.historical.OHLCVTPoint.builder()
+                            .open(m.getOpen() != null ? m.getOpen() : 0.0)
+                            .high(m.getHigh() != null ? m.getHigh() : 0.0)
+                            .low(m.getLow() != null ? m.getLow() : 0.0)
+                            .close(m.getClose() != null ? m.getClose() : 0.0)
+                            .volume(0L)
+                            .build();
+
+                    return com.am.common.investment.model.equity.EquityPrice.builder()
+                            .symbol(tradingSymbol)
+                            .time(m.getTime())
+                            .lastPrice(m.getClose() != null ? m.getClose() : 0.0)
+                            .ohlcv(ohlcv)
+                            .exchange("GLOBAL")
+                            .currency("USD")
+                            .build();
+                })
+                .collect(java.util.stream.Collectors.toList());
+            } else {
+                List<com.am.common.investment.model.equity.MarketIndexIndices> indices = 
+                    marketIndexIndicesService.getByIndexSymbolAndTimeBetween(tradingSymbol, fromDate, toDate);
                 
-                return com.am.common.investment.model.equity.EquityPrice.builder()
-                    .symbol(index.getIndexSymbol())
-                    .time(index.getTimestamp() != null ? index.getTimestamp().toInstant(java.time.ZoneOffset.UTC) : null)
-                    .lastPrice(index.getMarketData() != null && index.getMarketData().getLast() != null ? index.getMarketData().getLast() : 0.0)
-                    .ohlcv(ohlcv)
-                    .exchange("NSE")
-                    .currency("INR")
-                    .build();
-            })
-            .filter(price -> price.getTime() != null && price.getOhlcv() != null)
-            .collect(java.util.stream.Collectors.toList());
+                prices = indices.stream().map(index -> {
+                    com.am.common.investment.model.historical.OHLCVTPoint ohlcv = null;
+                    if (index.getMarketData() != null) {
+                        ohlcv = com.am.common.investment.model.historical.OHLCVTPoint.builder()
+                            .open(index.getMarketData().getOpen() != null ? index.getMarketData().getOpen() : 0.0)
+                            .high(index.getMarketData().getHigh() != null ? index.getMarketData().getHigh() : 0.0)
+                            .low(index.getMarketData().getLow() != null ? index.getMarketData().getLow() : 0.0)
+                            .close(index.getMarketData().getLast() != null ? index.getMarketData().getLast() : 0.0)
+                            .volume(0L)
+                            .build();
+                    }
+                    
+                    return com.am.common.investment.model.equity.EquityPrice.builder()
+                        .symbol(index.getIndexSymbol())
+                        .time(index.getTimestamp() != null ? index.getTimestamp().toInstant(java.time.ZoneOffset.UTC) : null)
+                        .lastPrice(index.getMarketData() != null && index.getMarketData().getLast() != null ? index.getMarketData().getLast() : 0.0)
+                        .ohlcv(ohlcv)
+                        .exchange("NSE")
+                        .currency("INR")
+                        .build();
+                })
+                .filter(price -> price.getTime() != null && price.getOhlcv() != null)
+                .collect(java.util.stream.Collectors.toList());
+            }
         } else {
             // Get price history from equity service using native DB-level window aggregation
             prices = equityService.getPriceHistoryByKey(tradingSymbol, fromDate, toDate, interval);
         }
-        
+
         if (prices.isEmpty()) {
             logger.debug("No historical data found for symbol: {}", tradingSymbol);
             return Optional.empty();

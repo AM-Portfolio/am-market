@@ -48,6 +48,8 @@ public class MarketDataAdminController {
     private final CookieManager cookieManager;
     private final com.am.marketdata.service.SymbolOrchestratorService symbolOrchestratorService;
 
+    private final com.am.marketdata.service.global.GlobalIndexHistoricalSyncService globalIndexSyncService;
+
     @GetMapping("/logs/{jobId}")
     public ResponseEntity<IngestionJobLog> getJobDetails(@PathVariable String jobId) {
         return ingestionJobLogRepository.findByJobId(jobId)
@@ -76,6 +78,15 @@ public class MarketDataAdminController {
         }
         return ingestionJobLogRepository.findAll(
                 PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startTime"))).getContent();
+    }
+
+    @PostMapping("/sync/global")
+    public ResponseEntity<String> triggerGlobalSync(
+            @RequestParam(required = false) String symbol,
+            @RequestParam(defaultValue = "false") boolean force) {
+        log.info("Manual trigger: Global Index Sync (Symbol: {}, Force: {})", symbol, force);
+        new Thread(() -> globalIndexSyncService.syncHistoricalData(symbol, force), "manual-global-sync-thread").start();
+        return ResponseEntity.ok("Global Index Sync Triggered (Symbol: " + symbol + ", Force: " + force + ")");
     }
 
     @PostMapping("/sync/historical")

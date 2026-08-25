@@ -169,6 +169,38 @@ public class GlobalIndexInfluxRepository {
     }
 
     /**
+     * Finds the timestamp of the last recorded data point for the given instrument key.
+     * Looks back up to 30 days.
+     *
+     * @param instrumentKey the Upstox instrument key
+     * @return Optional containing the last timestamp if found, or empty
+     */
+    public java.util.Optional<Instant> findLastTimestamp(String instrumentKey) {
+        try {
+            String query = String.format(
+                "from(bucket: \"%s\") " +
+                "|> range(start: -30d) " +
+                "|> filter(fn: (r) => r._measurement == \"%s\") " +
+                "|> filter(fn: (r) => r.instrumentKey == \"%s\") " +
+                "|> last() " +
+                "|> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")",
+                bucket, MEASUREMENT_NAME, instrumentKey
+            );
+
+            logger.debug("Executing last timestamp query for: {}", instrumentKey);
+            QueryApi queryApi = influxDBClient.getQueryApi();
+            List<GlobalIndexMeasurement> results = queryApi.query(query, GlobalIndexMeasurement.class);
+
+            if (results != null && !results.isEmpty()) {
+                return java.util.Optional.ofNullable(results.get(0).getTime());
+            }
+        } catch (Exception e) {
+            logger.error("Failed to query last timestamp for: {}", instrumentKey, e);
+        }
+        return java.util.Optional.empty();
+    }
+
+    /**
      * Builds an InfluxDB {@link Point} from a {@link GlobalIndexMeasurement}.
      * Extracted as a private helper to keep save() and saveAll() DRY.
      *

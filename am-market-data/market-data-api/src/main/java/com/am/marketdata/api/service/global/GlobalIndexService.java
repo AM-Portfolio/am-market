@@ -235,19 +235,20 @@ public class GlobalIndexService {
         // Step 5: Map Redis cache to StockIndicesMarketData DTO
         if (cachedJson != null) {
             StockIndicesMarketData data = buildResponse(symbol, config, cachedJson, isSuspended);
-            saveToMongoAsync(data);
+            saveToMongoAsync(data, instrumentKey);
             return data;
         }
 
         // Fallback: If no Redis cache, check MongoDB database for last-known values
         try {
-            StockIndicesMarketData lastKnown = stockIndicesMarketDataService.findByIndexSymbol(symbol);
+            StockIndicesMarketData lastKnown = stockIndicesMarketDataService.findByIndexSymbol(instrumentKey);
             if (lastKnown != null) {
-                log.info("[GlobalIndexService] Serving last available database values for symbol={}", symbol);
+                log.info("[GlobalIndexService] Serving last available database values for symbol={} (key={})", symbol, instrumentKey);
+                lastKnown.setIndexSymbol(symbol);
                 return lastKnown;
             }
         } catch (Exception e) {
-            log.error("[GlobalIndexService] Failed to load last-known data from MongoDB for symbol={}", symbol, e);
+            log.error("[GlobalIndexService] Failed to load last-known data from MongoDB for symbol={} (key={})", symbol, instrumentKey, e);
         }
 
         // No data at all — return a suspended fallback response
@@ -259,7 +260,7 @@ public class GlobalIndexService {
      * Persists the global index market data asynchronously back to MongoDB.
      * Uses a cooldown to debounce writes.
      */
-    private void saveToMongoAsync(StockIndicesMarketData data) {
+    private void saveToMongoAsync(StockIndicesMarketData data, String instrumentKey) {
         String symbol = data.getIndexSymbol();
         long now = System.currentTimeMillis();
         Long lastSave = lastMongoSaveTimeMap.get(symbol);
@@ -270,16 +271,23 @@ public class GlobalIndexService {
 
         CompletableFuture.runAsync(() -> {
             try {
-                if (data.getAudit() == null) {
+                // Save document with indexSymbol set to the prefixed instrumentKey (e.g. GLOBAL_INDEX|DJI)
+                StockIndicesMarketData dbData = StockIndicesMarketData.builder()
+                        .indexSymbol(instrumentKey)
+                        .metadata(data.getMetadata())
+                        .audit(data.getAudit())
+                        .build();
+
+                if (dbData.getAudit() == null) {
                     com.am.common.investment.model.stockindice.AuditData audit = new com.am.common.investment.model.stockindice.AuditData();
                     audit.setCreatedAt(java.time.LocalDateTime.now());
                     audit.setUpdatedAt(java.time.LocalDateTime.now());
-                    data.setAudit(audit);
+                    dbData.setAudit(audit);
                 } else {
-                    data.getAudit().setUpdatedAt(java.time.LocalDateTime.now());
+                    dbData.getAudit().setUpdatedAt(java.time.LocalDateTime.now());
                 }
-                stockIndicesMarketDataService.save(data);
-                log.info("[GlobalIndexService] Successfully persisted global index {} to MongoDB", symbol);
+                stockIndicesMarketDataService.save(dbData);
+                log.info("[GlobalIndexService] Successfully persisted global index {} to MongoDB", instrumentKey);
             } catch (Exception e) {
                 log.error("[GlobalIndexService] Failed to save global index data to MongoDB for symbol={}", symbol, e);
             }

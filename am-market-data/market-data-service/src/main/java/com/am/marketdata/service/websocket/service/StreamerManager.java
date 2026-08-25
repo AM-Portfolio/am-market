@@ -44,6 +44,7 @@ public class StreamerManager implements StreamerListener {
     private final MarketDataPublisher publisher; // For WebSocket broadcasting
     private final MarketDataCacheService cacheService;
     private final StringRedisTemplate redisTemplate;
+    private final com.am.marketdata.service.global.GlobalIndexCacheWriter globalIndexCacheWriter;
 
     /**
      * Redis key written by the Indian market hours scheduler.
@@ -84,7 +85,8 @@ public class StreamerManager implements StreamerListener {
             SymbolOrchestratorService symbolService,
             MarketDataPublisher publisher,
             MarketDataCacheService cacheService,
-            StringRedisTemplate redisTemplate) {
+            StringRedisTemplate redisTemplate,
+            com.am.marketdata.service.global.GlobalIndexCacheWriter globalIndexCacheWriter) {
         this.streamer = streamer;
         this.persistenceService = persistenceService;
         this.processor = processor;
@@ -92,6 +94,7 @@ public class StreamerManager implements StreamerListener {
         this.publisher = publisher;
         this.cacheService = cacheService;
         this.redisTemplate = redisTemplate;
+        this.globalIndexCacheWriter = globalIndexCacheWriter;
     }
 
     // @PostConstruct
@@ -511,6 +514,9 @@ public class StreamerManager implements StreamerListener {
             redisTemplate.opsForValue().set(
                     GLOBAL_TIMESTAMP_PREFIX + instrumentKey,
                     String.valueOf(System.currentTimeMillis()));
+
+            // Write tick to InfluxDB for historical/intraday charts
+            globalIndexCacheWriter.writeTick(instrumentKey, quote);
 
             log.debug("StreamerManager",
                     "[GlobalTick] Cached global tick for instrumentKey=" + instrumentKey +
