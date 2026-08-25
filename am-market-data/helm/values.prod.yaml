@@ -109,10 +109,10 @@ ingress:
 resources:
   limits:
     cpu: 1000m
-    memory: 3Gi
+    memory: 2Gi
   requests:
     cpu: 500m
-    memory: 1.5Gi
+    memory: 1Gi
 
 postgresql:
   enabled: false
