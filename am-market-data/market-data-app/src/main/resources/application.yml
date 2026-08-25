@@ -43,9 +43,9 @@ MARKET_DATA_THREAD_QUEUE_CAPACITY: 10
 MARKET_DATA_MAX_AGE_MINUTES: 15
 
 # Upstox Configuration
-UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
-UPSTOX_SECRET_KEY: ${UPSTOX_SECRET_KEY}
-UPSTOX_CODE: ${UPSTOX_CODE}
+UPSTOX_ACCESS_TOKEN_VALUE: ${UPSTOX_ACCESS_TOKEN:}
+UPSTOX_SECRET_KEY_VALUE: ${UPSTOX_SECRET_KEY:}
+UPSTOX_CODE_VALUE: ${UPSTOX_CODE:}
 
 app:
   kafka:
@@ -197,10 +197,10 @@ upstox:
   interval: I1
   auth:
     base-url: https://api.upstox.com/v2
-    code: ${UPSTOX_CODE}
-    api-key: ${UPSTOX_API_KEY}
-    secret-key: ${UPSTOX_SECRET_KEY}
-    access-token: ${UPSTOX_ACCESS_TOKEN}
+    code: ${UPSTOX_CODE_VALUE:}
+    api-key: ${UPSTOX_API_KEY:}
+    secret-key: ${UPSTOX_SECRET_KEY_VALUE:}
+    access-token: ${UPSTOX_ACCESS_TOKEN_VALUE:}
     redirect-uri: ${UPSTOX_REDIRECT_URI:http://localhost:${server.port}/v1/market-data/auth/session}
     authorization-url: https://api-v2.upstox.com/login/authorization/dialog
     token-url: https://api-v2.upstox.com/login/authorization/token

@@ -160,14 +160,24 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 HistoricalDataFilterUtil.FilterParams filterParams = HistoricalDataFilterUtil
                         .extractFilterParams(additionalParams);
 
-                // Partition symbols into stocks and indices to query with correct isIndexSymbol flags
+                // Keep a map of resolved symbols to original symbols to map results back correctly
+                Map<String, String> resolvedToOriginal = new HashMap<>();
                 Set<String> indexSymbols = new java.util.HashSet<>();
                 Set<String> stockSymbols = new java.util.HashSet<>();
-                for (String sym : resolvedSymbols) {
-                    if (sym.startsWith("NSE_EQ:")) {
-                        stockSymbols.add(sym);
-                    } else {
-                        indexSymbols.add(sym);
+                
+                for (String originalSymbol : symbols) {
+                    Set<String> resolved = instrumentUtils.resolveSymbols(List.of(originalSymbol), fetchIndexStocks);
+                    for (String sym : resolved) {
+                        resolvedToOriginal.put(sym, originalSymbol);
+                        if (sym.startsWith("GLOBAL_INDEX|") || sym.startsWith("NSE_INDEX|") || !sym.contains("|")) {
+                            // If a symbol doesn't have exchange prefix, check if it looks like index
+                            indexSymbols.add(sym);
+                        } else if (sym.startsWith("NSE_EQ:")) {
+                            stockSymbols.add(sym);
+                        } else {
+                            // Default fallback
+                            stockSymbols.add(sym);
+                        }
                     }
                 }
 
@@ -187,20 +197,22 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 int totalDataPoints = 0;
                 int totalFilteredDataPoints = 0;
 
-                for (String symbol : symbols) {
-                    HistoricalData historicalData = batchResult.get(symbol);
-                    if (historicalData != null && historicalData.getDataPoints() != null
+                for (Map.Entry<String, HistoricalData> entry : batchResult.entrySet()) {
+                    String resolvedSymbol = entry.getKey();
+                    HistoricalData historicalData = entry.getValue();
+                    String originalSymbol = resolvedToOriginal.get(resolvedSymbol);
+                    
+                    if (originalSymbol != null && historicalData != null && historicalData.getDataPoints() != null
                             && !historicalData.getDataPoints().isEmpty()) {
                         List<OHLCVTPoint> dataPoints = historicalData.getDataPoints();
                         int originalCount = dataPoints.size();
 
                         if (filterParams.isFiltered()) {
-                            // Fixed SLF4J pattern in helper classes might also have been updated
                             dataPoints = HistoricalDataFilterUtil.applyFilterStrategy(dataPoints, filterParams);
                         }
 
                         HistoricalData filteredHistoricalData = new HistoricalData();
-                        filteredHistoricalData.setTradingSymbol(symbol);
+                        filteredHistoricalData.setTradingSymbol(originalSymbol);
                         filteredHistoricalData.setInterval(interval.getApiValue());
                         filteredHistoricalData.setDataPoints(dataPoints);
                         filteredHistoricalData.setDataPointCount(dataPoints.size());
@@ -211,7 +223,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         filteredHistoricalData.setToDate(historicalData.getToDate());
                         filteredHistoricalData.setRetrievalTime(historicalData.getRetrievalTime());
 
-                        symbolsData.put(symbol, filteredHistoricalData);
+                        symbolsData.put(originalSymbol, filteredHistoricalData);
                         successCount++;
                         totalDataPoints += originalCount;
                         totalFilteredDataPoints += dataPoints.size();

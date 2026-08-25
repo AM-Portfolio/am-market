@@ -152,7 +152,10 @@ public abstract class AbstractMarketDataRetriever<K, T> {
                     // Symbols found here are removed from remainingKeys.
                     // OPTIMIZATION: InfluxDB queries are slow and timeout frequently on dev env for small sets of keys.
                     // If there are only a few keys remaining (e.g. <= 5 keys), bypass InfluxDB lookup and go directly to Provider.
-                    if (remainingKeys.size() <= 5) {
+                    // However, we MUST NOT bypass InfluxDB for global index keys since the provider cannot serve them.
+                    boolean hasGlobalIndex = remainingKeys.stream()
+                            .anyMatch(k -> k.toString().startsWith("GLOBAL_INDEX|"));
+                    if (remainingKeys.size() <= 5 && !hasGlobalIndex) {
                         log.info("[DATABASE] Bypassing InfluxDB query because remaining keys count is small ({}) to prevent database timeouts", remainingKeys.size());
                         sourceData = Collections.emptyMap();
                     } else {

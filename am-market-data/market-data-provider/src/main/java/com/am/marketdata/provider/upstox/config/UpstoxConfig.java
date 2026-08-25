@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Profile;
 
 @Data
 @Configuration
-@ConfigurationProperties(prefix = "upstox")
+@ConfigurationProperties(prefix = "upstox.auth")
 @Profile("!isolated")
 public class UpstoxConfig {
     private String accessToken;

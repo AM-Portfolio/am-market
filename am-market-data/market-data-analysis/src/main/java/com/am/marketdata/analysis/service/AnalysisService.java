@@ -528,11 +528,18 @@ public class AnalysisService {
     }
 
     public Map<String, Double> getHeatmap(String symbol, String timeframeStr, boolean bypassCache) {
-        // Check Cache
+        String tfNorm = timeframeStr == null ? "1D" : timeframeStr.trim().toUpperCase();
+
+        // Check Cache — ignore degenerate INDICES maps (almost all 0.0) so UI recovers
+        // without waiting for the long analysis TTL to expire.
         if (!bypassCache) {
-            Map<String, Double> cached = analysisRedisCache.getIndexHeatmap(symbol, timeframeStr);
-            if (cached != null) {
+            Map<String, Double> cached = analysisRedisCache.getIndexHeatmap(symbol, tfNorm);
+            if (cached != null && !isDegenerateIndicesHeatmap(symbol, tfNorm, cached)) {
                 return cached;
+            }
+            if (cached != null) {
+                log.warn("Discarding degenerate cached heatmap for {} {}", symbol, tfNorm);
+                analysisRedisCache.deleteIndexHeatmap(symbol, tfNorm);
             }
         }
 
@@ -557,7 +564,7 @@ public class AnalysisService {
         LocalDate from;
 
         // Custom logic for duration
-        String tfUpper = timeframeStr.toUpperCase();
+        String tfUpper = tfNorm;
         if (tfUpper.equals("1D")) {
             from = to.minusDays(5); // Look back enough to find prev close
         } else if (tfUpper.equals("1W") || tfUpper.equals("5D")) {
@@ -653,8 +660,39 @@ public class AnalysisService {
                         (e1, e2) -> e1,
                         LinkedHashMap::new));
 
-        analysisRedisCache.saveIndexHeatmap(symbol, timeframeStr, sortedHeatmap);
+        // Never persist a broken INDICES 1D map (all/mostly zeros) — that is what stuck the UI.
+        if (isDegenerateIndicesHeatmap(symbol, tfNorm, sortedHeatmap)) {
+            log.warn("Skipping cache save for degenerate heatmap {} {} (zeros={}/{})",
+                    symbol, tfNorm,
+                    sortedHeatmap.values().stream().filter(v -> v != null && Math.abs(v) < 1e-9).count(),
+                    sortedHeatmap.size());
+            analysisRedisCache.deleteIndexHeatmap(symbol, tfNorm);
+        } else {
+            analysisRedisCache.saveIndexHeatmap(symbol, tfNorm, sortedHeatmap);
+        }
         return sortedHeatmap;
+    }
+
+    /**
+     * INDICES 1D heatmap that is almost entirely 0.0 usually means incomplete history
+     * or a bad scrape day — not a real flat market across every index.
+     */
+    private boolean isDegenerateIndicesHeatmap(String symbol, String timeframe,
+            Map<String, Double> heatmap) {
+        if (heatmap == null || heatmap.isEmpty()) {
+            return false;
+        }
+        if (!"INDICES".equalsIgnoreCase(symbol)) {
+            return false;
+        }
+        if (timeframe == null || !"1D".equalsIgnoreCase(timeframe.trim())) {
+            return false;
+        }
+        long zeroCount = heatmap.values().stream()
+                .filter(v -> v == null || Math.abs(v) < 1e-9)
+                .count();
+        // >70% exact zeros with at least 5 symbols → treat as bad cache / bad compute
+        return heatmap.size() >= 5 && zeroCount * 10 >= heatmap.size() * 7;
     }
 
     private LocalDate CalculateTargetDate(LocalDate to, String tf) {
