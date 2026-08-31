@@ -2,14 +2,8 @@ package com.am.marketdata.api.controller;
 
 import com.am.marketdata.api.model.FundamentalAnalysisResponse;
 import com.am.marketdata.api.model.FundamentalRatiosResponse;
-import com.am.marketdata.api.service.MarketDataFetchService;
-import com.am.marketdata.common.model.OHLCQuote;
-import com.am.marketdata.common.model.TimeFrame;
+import com.am.marketdata.api.service.FundamentalAnalysisService;
 import com.am.marketdata.common.model.fundamental.*;
-import com.am.marketdata.service.fundamental.FundamentalCalculationEngine;
-import com.am.marketdata.service.fundamental.FundamentalQueryService;
-import com.am.observability.flow.FlowLogger;
-import com.am.observability.flow.FlowSpan;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -25,7 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.*;
+import java.util.List;
 
 /**
  * REST Controller for Stock Fundamental Analysis.
@@ -38,10 +32,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class FundamentalAnalysisController {
 
-        private final FundamentalQueryService fundamentalQueryService;
-        private final MarketDataFetchService marketDataFetchService;
-        private final FundamentalCalculationEngine calculationEngine;
-        private final FlowLogger flowLogger;
+    private final FundamentalAnalysisService fundamentalAnalysisService;
 
         /**
          * Retrieves unified fundamental analysis data for a stock by trading symbol.
@@ -62,109 +53,7 @@ public class FundamentalAnalysisController {
                 if (symbol == null || symbol.trim().isEmpty()) {
                         return ResponseEntity.badRequest().build();
                 }
-
-                String rawSymbol = symbol.trim();
-                String resolvedIsin = fundamentalQueryService.resolveIsin(rawSymbol);
-
-                try (FlowSpan span = flowLogger.start("market.fundamentals.fetch", "symbol", rawSymbol, "isin",
-                                resolvedIsin != null ? resolvedIsin : "UNRESOLVED")) {
-                        try {
-                                if (resolvedIsin == null) {
-                                        log.warn("Unable to resolve trading symbol={} to ISIN", rawSymbol);
-                                        flowLogger.complete(span, "status", "NOT_FOUND");
-                                        return ResponseEntity.notFound().build();
-                                }
-
-                                Optional<FundamentalData> dataOpt = fundamentalQueryService
-                                                .getFundamentalsByIsin(resolvedIsin);
-                                if (dataOpt.isEmpty()) {
-                                        flowLogger.complete(span, "status", "NOT_FOUND");
-                                        return ResponseEntity.notFound().build();
-                                }
-
-                                FundamentalData data = dataOpt.get();
-
-                                // Enrich with live price data using quotes flow
-                                Double[] prices = fetchLivePrice(
-                                                data.getSymbol() != null ? data.getSymbol() : rawSymbol.toUpperCase());
-                                Double livePrice = prices[0];
-                                Double dayHigh = prices[1];
-                                Double dayLow = prices[2];
-                                Double dayChange = prices[3];
-                                Double dayChangePercent = prices[4];
-
-                                // Construct Company Overview Section
-                                CompanyProfile profile = data.getCompanyProfile();
-                                FundamentalAnalysisResponse.CompanyOverviewSection companySection = FundamentalAnalysisResponse.CompanyOverviewSection
-                                                .builder()
-                                                .isin(data.getIsin())
-                                                .symbol(data.getSymbol() != null ? data.getSymbol()
-                                                                : rawSymbol.toUpperCase())
-                                                .companyName(data.getCompanyName())
-                                                .description(profile != null ? profile.getDescription() : null)
-                                                .sector(profile != null ? profile.getSector() : null)
-                                                .sectorMarketCapInr(profile != null ? profile.getSectorMarketCapInr()
-                                                                : null)
-                                                .sectorMarketCapUsd(profile != null ? profile.getSectorMarketCapUsd()
-                                                                : null)
-                                                .currentPrice(livePrice)
-                                                .dayHigh(dayHigh)
-                                                .dayLow(dayLow)
-                                                .dayChange(dayChange)
-                                                .dayChangePercent(dayChangePercent)
-                                                .build();
-
-                                // Construct Profitability Section
-                                KeyRatios ratios = data.getKeyRatios();
-                                FundamentalAnalysisResponse.ProfitabilitySection profitabilitySection = null;
-                                if (ratios != null) {
-                                        profitabilitySection = FundamentalAnalysisResponse.ProfitabilitySection
-                                                        .builder()
-                                                        .roa(ratios.getRoa())
-                                                        .sectorRoa(ratios.getSectorRoa())
-                                                        .roe(ratios.getRoe())
-                                                        .sectorRoe(ratios.getSectorRoe())
-                                                        .roce(ratios.getRoce())
-                                                        .sectorRoce(ratios.getSectorRoce())
-                                                        .build();
-                                }
-
-                                // Construct Financials Section
-                                FundamentalAnalysisResponse.FinancialsSection financialsSection = FundamentalAnalysisResponse.FinancialsSection
-                                                .builder()
-                                                .incomeStatement(data.getIncomeStatements() != null
-                                                                ? data.getIncomeStatements()
-                                                                : Collections.emptyList())
-                                                .balanceSheet(data.getBalanceSheets() != null ? data.getBalanceSheets()
-                                                                : Collections.emptyList())
-                                                .cashFlow(data.getCashFlows() != null ? data.getCashFlows()
-                                                                : Collections.emptyList())
-                                                .build();
-
-                                // Build Final Unified Response
-                                FundamentalAnalysisResponse response = FundamentalAnalysisResponse.builder()
-                                                .company(companySection)
-                                                .valuation(ratios)
-                                                .profitability(profitabilitySection)
-                                                .financials(financialsSection)
-                                                .shareholding(data.getShareholdings() != null ? data.getShareholdings()
-                                                                : Collections.emptyList())
-                                                .corporateActions(data.getCorporateActions() != null
-                                                                ? data.getCorporateActions()
-                                                                : Collections.emptyList())
-                                                .peers(data.getPeers() != null ? data.getPeers()
-                                                                : Collections.emptyList())
-                                                .analytics(data.getAnalytics())
-                                                .build();
-
-                                flowLogger.complete(span);
-                                return ResponseEntity.ok(response);
-                        } catch (Exception e) {
-                                log.error("Error retrieving fundamentals for stock={}", rawSymbol, e);
-                                flowLogger.fail(span, e);
-                                return ResponseEntity.internalServerError().build();
-                        }
-                }
+                return ResponseEntity.ok(fundamentalAnalysisService.getFundamentals(symbol));
         }
 
         @GetMapping(value = "/{symbol}/profile", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -177,26 +66,10 @@ public class FundamentalAnalysisController {
         })
         public ResponseEntity<FundamentalAnalysisResponse.CompanyOverviewSection> getCompanyProfile(
                         @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol) {
-                return processGranularRequest(symbol, "profile", data -> {
-                        CompanyProfile profile = data.getCompanyProfile();
-                        Double[] prices = fetchLivePrice(
-                                        data.getSymbol() != null ? data.getSymbol() : symbol.trim().toUpperCase());
-                        return FundamentalAnalysisResponse.CompanyOverviewSection.builder()
-                                        .isin(data.getIsin())
-                                        .symbol(data.getSymbol() != null ? data.getSymbol()
-                                                        : symbol.trim().toUpperCase())
-                                        .companyName(data.getCompanyName())
-                                        .description(profile != null ? profile.getDescription() : null)
-                                        .sector(profile != null ? profile.getSector() : null)
-                                        .sectorMarketCapInr(profile != null ? profile.getSectorMarketCapInr() : null)
-                                        .sectorMarketCapUsd(profile != null ? profile.getSectorMarketCapUsd() : null)
-                                        .currentPrice(prices[0])
-                                        .dayHigh(prices[1])
-                                        .dayLow(prices[2])
-                                        .dayChange(prices[3])
-                                        .dayChangePercent(prices[4])
-                                        .build();
-                });
+                if (symbol == null || symbol.trim().isEmpty()) {
+                        return ResponseEntity.badRequest().build();
+                }
+                return ResponseEntity.ok(fundamentalAnalysisService.getCompanyProfile(symbol));
         }
 
         @GetMapping(value = "/{symbol}/ratios", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -209,20 +82,10 @@ public class FundamentalAnalysisController {
         })
         public ResponseEntity<FundamentalRatiosResponse> getRatios(
                         @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol) {
-                return processGranularRequest(symbol, "ratios", data -> {
-                        KeyRatios ratios = data.getKeyRatios();
-                        FundamentalAnalysisResponse.ProfitabilitySection profitability = ratios != null
-                                        ? FundamentalAnalysisResponse.ProfitabilitySection.builder()
-                                                        .roa(ratios.getRoa()).sectorRoa(ratios.getSectorRoa())
-                                                        .roe(ratios.getRoe()).sectorRoe(ratios.getSectorRoe())
-                                                        .roce(ratios.getRoce()).sectorRoce(ratios.getSectorRoce())
-                                                        .build()
-                                        : null;
-                        return FundamentalRatiosResponse.builder()
-                                        .valuation(ratios)
-                                        .profitability(profitability)
-                                        .build();
-                });
+                if (symbol == null || symbol.trim().isEmpty()) {
+                        return ResponseEntity.badRequest().build();
+                }
+                return ResponseEntity.ok(fundamentalAnalysisService.getRatios(symbol));
         }
 
         @GetMapping(value = "/{symbol}/financials", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -235,16 +98,10 @@ public class FundamentalAnalysisController {
         })
         public ResponseEntity<FundamentalAnalysisResponse.FinancialsSection> getFinancials(
                         @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol) {
-                return processGranularRequest(symbol, "financials",
-                                data -> FundamentalAnalysisResponse.FinancialsSection.builder()
-                                                .incomeStatement(data.getIncomeStatements() != null
-                                                                ? data.getIncomeStatements()
-                                                                : Collections.emptyList())
-                                                .balanceSheet(data.getBalanceSheets() != null ? data.getBalanceSheets()
-                                                                : Collections.emptyList())
-                                                .cashFlow(data.getCashFlows() != null ? data.getCashFlows()
-                                                                : Collections.emptyList())
-                                                .build());
+                if (symbol == null || symbol.trim().isEmpty()) {
+                        return ResponseEntity.badRequest().build();
+                }
+                return ResponseEntity.ok(fundamentalAnalysisService.getFinancials(symbol));
         }
 
         @GetMapping(value = "/{symbol}/shareholding", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -257,9 +114,10 @@ public class FundamentalAnalysisController {
         })
         public ResponseEntity<List<ShareholdingQuarterEntry>> getShareholding(
                         @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol) {
-                return processGranularRequest(symbol, "shareholding",
-                                data -> data.getShareholdings() != null ? data.getShareholdings()
-                                                : Collections.emptyList());
+                if (symbol == null || symbol.trim().isEmpty()) {
+                        return ResponseEntity.badRequest().build();
+                }
+                return ResponseEntity.ok(fundamentalAnalysisService.getShareholding(symbol));
         }
 
         @GetMapping(value = "/{symbol}/corporate-actions", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -272,9 +130,10 @@ public class FundamentalAnalysisController {
         })
         public ResponseEntity<List<CorporateActionEntry>> getCorporateActions(
                         @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol) {
-                return processGranularRequest(symbol, "corporateActions",
-                                data -> data.getCorporateActions() != null ? data.getCorporateActions()
-                                                : Collections.emptyList());
+                if (symbol == null || symbol.trim().isEmpty()) {
+                        return ResponseEntity.badRequest().build();
+                }
+                return ResponseEntity.ok(fundamentalAnalysisService.getCorporateActions(symbol));
         }
 
         @GetMapping(value = "/{symbol}/peers", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -287,8 +146,10 @@ public class FundamentalAnalysisController {
         })
         public ResponseEntity<List<CompetitorPeer>> getPeers(
                         @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol) {
-                return processGranularRequest(symbol, "peers",
-                                data -> data.getPeers() != null ? data.getPeers() : Collections.emptyList());
+                if (symbol == null || symbol.trim().isEmpty()) {
+                        return ResponseEntity.badRequest().build();
+                }
+                return ResponseEntity.ok(fundamentalAnalysisService.getPeers(symbol));
         }
 
         @GetMapping(value = "/{symbol}/analytics", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -301,95 +162,9 @@ public class FundamentalAnalysisController {
         })
         public ResponseEntity<FundamentalAnalytics> getAnalytics(
                         @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol) {
-                return processGranularRequest(symbol, "analytics",
-                                data -> data.getAnalytics() != null ? data.getAnalytics()
-                                                : FundamentalAnalytics.builder().build());
-        }
-
-        // --- Helper Methods ---
-
-        private <T> ResponseEntity<T> processGranularRequest(String symbol, String spanOp,
-                        java.util.function.Function<FundamentalData, T> extractor) {
                 if (symbol == null || symbol.trim().isEmpty()) {
                         return ResponseEntity.badRequest().build();
                 }
-                String rawSymbol = symbol.trim();
-                String resolvedIsin = fundamentalQueryService.resolveIsin(rawSymbol);
-
-                try (FlowSpan span = flowLogger.start("market.fundamentals." + spanOp, "symbol", rawSymbol, "isin",
-                                resolvedIsin != null ? resolvedIsin : "UNRESOLVED")) {
-                        if (resolvedIsin == null) {
-                                log.warn("Unable to resolve trading symbol={} to ISIN for operation={}", rawSymbol,
-                                                spanOp);
-                                flowLogger.complete(span, "status", "NOT_FOUND");
-                                return ResponseEntity.notFound().build();
-                        }
-
-                        Optional<FundamentalData> dataOpt = fundamentalQueryService.getFundamentalsByIsin(resolvedIsin);
-                        if (dataOpt.isEmpty()) {
-                                flowLogger.complete(span, "status", "NOT_FOUND");
-                                return ResponseEntity.notFound().build();
-                        }
-                        T result = extractor.apply(dataOpt.get());
-                        flowLogger.complete(span);
-                        return ResponseEntity.ok(result);
-                } catch (Exception e) {
-                        log.error("Error retrieving {} for stock={}", spanOp, rawSymbol, e);
-                        return ResponseEntity.internalServerError().build();
-                }
-        }
-
-        private Double[] fetchLivePrice(String symbol) {
-                Double[] prices = new Double[5]; // price, high, low, change, changePercent
-                try {
-                        Map<String, Object> quotesMap = marketDataFetchService.getQuotes(Set.of(symbol), false,
-                                        TimeFrame.DAY, false);
-                        if (quotesMap != null && quotesMap.get("quotes") instanceof Map<?, ?> map) {
-                                Object quoteObj = map.get(symbol);
-                                if (quoteObj == null) {
-                                        quoteObj = map.get("NSE:" + symbol);
-                                }
-                                if (quoteObj == null && !map.isEmpty()) {
-                                        quoteObj = map.values().iterator().next();
-                                }
-
-                                double lastPrice = 0.0;
-                                double high = 0.0;
-                                double low = 0.0;
-                                double prevClose = 0.0;
-
-                                if (quoteObj instanceof OHLCQuote quote) {
-                                        lastPrice = quote.getLastPrice();
-                                        if (quote.getOhlc() != null) {
-                                                high = quote.getOhlc().getHigh();
-                                                low = quote.getOhlc().getLow();
-                                        }
-                                        prevClose = quote.getPreviousClose();
-                                } else if (quoteObj instanceof Map<?, ?> quoteMap) {
-                                        lastPrice = quoteMap.get("lastPrice") instanceof Number n ? n.doubleValue()
-                                                        : 0.0;
-                                        prevClose = quoteMap.get("previousClose") instanceof Number n ? n.doubleValue()
-                                                        : 0.0;
-                                        if (quoteMap.get("ohlc") instanceof Map<?, ?> ohlcMap) {
-                                                high = ohlcMap.get("high") instanceof Number n ? n.doubleValue() : 0.0;
-                                                low = ohlcMap.get("low") instanceof Number n ? n.doubleValue() : 0.0;
-                                        }
-                                }
-
-                                if (lastPrice > 0) {
-                                        prices[0] = lastPrice;
-                                        prices[1] = high > 0 ? high : null;
-                                        prices[2] = low > 0 ? low : null;
-                                        if (prevClose > 0) {
-                                                prices[3] = Math.round((lastPrice - prevClose) * 100.0) / 100.0;
-                                                prices[4] = Math.round(((lastPrice - prevClose) / prevClose) * 10000.0)
-                                                                / 100.0;
-                                        }
-                                }
-                        }
-                } catch (Exception e) {
-                        log.debug("Live price lookup failed for symbol={}: {}", symbol, e.getMessage());
-                }
-                return prices;
+                return ResponseEntity.ok(fundamentalAnalysisService.getAnalytics(symbol));
         }
 }

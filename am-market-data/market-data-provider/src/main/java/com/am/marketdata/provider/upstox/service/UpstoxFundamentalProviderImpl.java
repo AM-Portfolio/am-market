@@ -115,11 +115,22 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
         }
 
         KeyRatios.KeyRatiosBuilder builder = KeyRatios.builder();
+        Map<String, Double> dynamicRatios = new java.util.LinkedHashMap<>();
+        Map<String, Double> sectorDynamicRatios = new java.util.LinkedHashMap<>();
+
         if (data.isArray()) {
             for (JsonNode item : data) {
-                String ratioKey = item.path("key").asText("").toUpperCase();
-                Double companyVal = item.hasNonNull("company_value") ? item.path("company_value").asDouble() : null;
-                Double sectorVal = item.hasNonNull("sector_value") ? item.path("sector_value").asDouble() : null;
+                String name = item.path("name").asText(item.path("key").asText("")).trim();
+                String ratioKey = name.toUpperCase();
+                Double companyVal = parseDoubleVal(item.get("company_value"));
+                Double sectorVal = parseDoubleVal(item.get("sector_value"));
+
+                if (companyVal != null && !name.isEmpty()) {
+                    dynamicRatios.put(name, companyVal);
+                }
+                if (sectorVal != null && !name.isEmpty()) {
+                    sectorDynamicRatios.put(name, sectorVal);
+                }
 
                 switch (ratioKey) {
                     case "P/E", "PE" -> {
@@ -146,10 +157,28 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
                         builder.evEbitda(companyVal);
                         builder.sectorEvEbitda(sectorVal);
                     }
-                    default -> log.debug("Unmapped key ratio from Upstox: {}", ratioKey);
+                    case "QUICK RATIO", "QUICK_RATIO" -> {
+                        builder.quickRatio(companyVal);
+                        builder.sectorQuickRatio(sectorVal);
+                    }
+                    case "NIM" -> {
+                        builder.nim(companyVal);
+                        builder.sectorNim(sectorVal);
+                    }
+                    case "NET NPA", "NET_NPA" -> {
+                        builder.netNpa(companyVal);
+                        builder.sectorNetNpa(sectorVal);
+                    }
+                    case "CASA" -> {
+                        builder.casa(companyVal);
+                        builder.sectorCasa(sectorVal);
+                    }
+                    default -> log.debug("Dynamic key ratio from Upstox: {} = {}", name, companyVal);
                 }
             }
         }
+        builder.dynamicRatios(dynamicRatios);
+        builder.sectorDynamicRatios(sectorDynamicRatios);
         return builder.build();
     }
 
@@ -174,12 +203,14 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
         String unit = "₹ " + unitsIn;
 
         Map<String, IncomeStatementEntry.IncomeStatementEntryBuilder> periodMap = new java.util.LinkedHashMap<>();
+        Map<String, Map<String, Double>> periodLineItems = new java.util.LinkedHashMap<>();
 
         // 1. Process full_statement particulars
         JsonNode fullStatement = data.path("full_statement");
         if (fullStatement.isArray()) {
             for (JsonNode row : fullStatement) {
-                String particular = normalizeParticular(row.path("particular").asText(""));
+                String rawName = row.path("particular").asText("");
+                String particular = normalizeParticular(rawName);
                 JsonNode history = row.path("history");
                 if (history.isArray()) {
                     for (JsonNode point : history) {
@@ -190,6 +221,10 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
                         IncomeStatementEntry.IncomeStatementEntryBuilder builder = periodMap.computeIfAbsent(pointPeriod, p ->
                                 IncomeStatementEntry.builder().period(p).type(type).timePeriod(period).unit(unit)
                         );
+
+                        if (val != null && !rawName.trim().isEmpty()) {
+                            periodLineItems.computeIfAbsent(pointPeriod, p -> new java.util.LinkedHashMap<>()).put(rawName.trim(), val);
+                        }
 
                         switch (particular) {
                             case "revenue" -> builder.revenue(val);
@@ -235,7 +270,12 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
         }
 
         List<IncomeStatementEntry> result = new ArrayList<>();
-        periodMap.values().forEach(b -> result.add(b.build()));
+        periodMap.forEach((p, b) -> {
+            if (periodLineItems.containsKey(p)) {
+                b.lineItems(periodLineItems.get(p));
+            }
+            result.add(b.build());
+        });
         return result;
     }
 
@@ -258,12 +298,14 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
         String unit = "₹ " + unitsIn;
 
         Map<String, BalanceSheetEntry.BalanceSheetEntryBuilder> periodMap = new java.util.LinkedHashMap<>();
+        Map<String, Map<String, Double>> periodLineItems = new java.util.LinkedHashMap<>();
 
         // 1. Process full_statement particulars
         JsonNode fullStatement = data.path("full_statement");
         if (fullStatement.isArray()) {
             for (JsonNode row : fullStatement) {
-                String particular = normalizeParticular(row.path("particular").asText(""));
+                String rawName = row.path("particular").asText("");
+                String particular = normalizeParticular(rawName);
                 JsonNode history = row.path("history");
                 if (history.isArray()) {
                     for (JsonNode point : history) {
@@ -274,6 +316,10 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
                         BalanceSheetEntry.BalanceSheetEntryBuilder builder = periodMap.computeIfAbsent(pointPeriod, p ->
                                 BalanceSheetEntry.builder().period(p).type(type).unit(unit)
                         );
+
+                        if (val != null && !rawName.trim().isEmpty()) {
+                            periodLineItems.computeIfAbsent(pointPeriod, p -> new java.util.LinkedHashMap<>()).put(rawName.trim(), val);
+                        }
 
                         switch (particular) {
                             case "non-current assets", "non_current_assets" -> builder.nonCurrentAssets(val);
@@ -312,7 +358,12 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
         }
 
         List<BalanceSheetEntry> result = new ArrayList<>();
-        periodMap.values().forEach(b -> result.add(b.build()));
+        periodMap.forEach((p, b) -> {
+            if (periodLineItems.containsKey(p)) {
+                b.lineItems(periodLineItems.get(p));
+            }
+            result.add(b.build());
+        });
         return result;
     }
 
@@ -335,12 +386,14 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
         String unit = "₹ " + unitsIn;
 
         Map<String, CashFlowEntry.CashFlowEntryBuilder> periodMap = new java.util.LinkedHashMap<>();
+        Map<String, Map<String, Double>> periodLineItems = new java.util.LinkedHashMap<>();
 
         // 1. Process full_statement particulars
         JsonNode fullStatement = data.path("full_statement");
         if (fullStatement.isArray()) {
             for (JsonNode row : fullStatement) {
-                String particular = normalizeParticular(row.path("particular").asText(""));
+                String rawName = row.path("particular").asText("");
+                String particular = normalizeParticular(rawName);
                 JsonNode history = row.path("history");
                 if (history.isArray()) {
                     for (JsonNode point : history) {
@@ -351,6 +404,10 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
                         CashFlowEntry.CashFlowEntryBuilder builder = periodMap.computeIfAbsent(pointPeriod, p ->
                                 CashFlowEntry.builder().period(p).type(type).unit(unit)
                         );
+
+                        if (val != null && !rawName.trim().isEmpty()) {
+                            periodLineItems.computeIfAbsent(pointPeriod, p -> new java.util.LinkedHashMap<>()).put(rawName.trim(), val);
+                        }
 
                         switch (particular) {
                             case "cash flow from operations", "cash flow from operating activities", "operating" -> builder.operatingCashFlow(val);
@@ -390,7 +447,12 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
         }
 
         List<CashFlowEntry> result = new ArrayList<>();
-        periodMap.values().forEach(b -> result.add(b.build()));
+        periodMap.forEach((p, b) -> {
+            if (periodLineItems.containsKey(p)) {
+                b.lineItems(periodLineItems.get(p));
+            }
+            result.add(b.build());
+        });
         return result;
     }
 
@@ -518,6 +580,18 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
         try {
             String cleaned = percentStr.replace("%", "").replace("+", "").trim();
             return Double.parseDouble(cleaned);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Double parseDoubleVal(JsonNode node) {
+        if (node == null || node.isNull() || node.isMissingNode()) return null;
+        if (node.isNumber()) return node.asDouble();
+        String text = node.asText("").replace("%", "").replace(",", "").trim();
+        if (text.isEmpty() || "-".equals(text) || "null".equalsIgnoreCase(text)) return null;
+        try {
+            return Double.parseDouble(text);
         } catch (Exception e) {
             return null;
         }

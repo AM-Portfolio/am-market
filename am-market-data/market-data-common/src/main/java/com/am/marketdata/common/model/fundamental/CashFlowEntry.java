@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.Map;
 
 /**
  * Single reporting period line-item breakdown for the Cash Flow Statement.
@@ -42,4 +43,9 @@ public class CashFlowEntry implements Serializable {
     private Double operatingCashFlowChangePercent;
     private Double investingCashFlowChangePercent;
     private Double financingCashFlowChangePercent;
+
+    /**
+     * Dynamic line-items map to preserve all raw and sector-specific financial particulars from provider.
+     */
+    private Map<String, Double> lineItems;
 }

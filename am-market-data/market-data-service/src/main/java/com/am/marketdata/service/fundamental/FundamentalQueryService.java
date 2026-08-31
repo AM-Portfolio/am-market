@@ -177,6 +177,31 @@ public class FundamentalQueryService {
     }
 
     /**
+     * Directly retrieves fundamental data by ISIN without triggering lazy seeding.
+     */
+    public Optional<FundamentalData> getExistingFundamentalsByIsin(String isin) {
+        if (isin == null || isin.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        return fundamentalDataRepository.findByIsin(isin.trim().toUpperCase());
+    }
+
+    /**
+     * Resolves security metadata by ISIN from MongoDB.
+     */
+    public Optional<SecurityDocument> getSecurityByIsin(String isin) {
+        if (isin == null || isin.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.ofNullable(securityRepository.findByIsin(isin.trim().toUpperCase()));
+        } catch (Exception e) {
+            log.debug("Failed to lookup security document for isin={}: {}", isin, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Synchronously fetches essentials (Company Profile, Key Ratios) so the UI responds immediately.
      */
     public FundamentalData seedInitialEssentials(String isin) {

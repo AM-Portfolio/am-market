@@ -6,9 +6,10 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.Map;
 
 /**
- * Competitor peer data enriched with both fundamental ratios and real-time market pricing.
+ * Competitor peer data enriched with both fundamental ratios, banking metrics, and real-time market pricing.
  */
 @Data
 @Builder
@@ -54,4 +55,13 @@ public class CompetitorPeer implements Serializable {
     private Double roce;
     private Double roa;
     private Double evEbitda;
+    private Double quickRatio;
+    private Double nim;
+    private Double netNpa;
+    private Double casa;
+
+    /**
+     * Dynamic ratios map for custom or provider-specific peer comparisons.
+     */
+    private Map<String, Double> dynamicRatios;
 }

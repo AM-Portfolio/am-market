@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.Map;
 
 /**
  * Single reporting period line-item breakdown for the Balance Sheet.
@@ -44,4 +45,9 @@ public class BalanceSheetEntry implements Serializable {
     private Double totalLiabilities;
     private Double equityCapital;
     private Double totalEquityAndLiabilities;
+
+    /**
+     * Dynamic line-items map to preserve all raw and sector-specific financial particulars from provider.
+     */
+    private Map<String, Double> lineItems;
 }

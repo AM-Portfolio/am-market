@@ -6,9 +6,11 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.Map;
 
 /**
- * Domain model representing valuation and profitability ratios alongside sector benchmarks.
+ * Domain model representing valuation, profitability, banking, and liquidity ratios alongside sector benchmarks.
+ * Features a dynamic extension map for future-proof provider and sector adaptivity.
  */
 @Data
 @Builder
@@ -76,4 +78,54 @@ public class KeyRatios implements Serializable {
      * Benchmark EV/EBITDA for the company's sector.
      */
     private Double sectorEvEbitda;
+
+    /**
+     * Quick Ratio (Acid Test) for corporate liquidity.
+     */
+    private Double quickRatio;
+
+    /**
+     * Benchmark Quick Ratio for the company's sector.
+     */
+    private Double sectorQuickRatio;
+
+    /**
+     * Net Interest Margin percentage (NIM) for banking institutions.
+     */
+    private Double nim;
+
+    /**
+     * Benchmark NIM for banking sector.
+     */
+    private Double sectorNim;
+
+    /**
+     * Net Non-Performing Assets percentage (Net NPA) for banking institutions.
+     */
+    private Double netNpa;
+
+    /**
+     * Benchmark Net NPA for banking sector.
+     */
+    private Double sectorNetNpa;
+
+    /**
+     * Current Account Savings Account ratio percentage (CASA) for banking institutions.
+     */
+    private Double casa;
+
+    /**
+     * Benchmark CASA for banking sector.
+     */
+    private Double sectorCasa;
+
+    /**
+     * Dynamic sector-adaptive ratios map to preserve any provider-specific metric without schema locks.
+     */
+    private Map<String, Double> dynamicRatios;
+
+    /**
+     * Dynamic sector benchmarks map.
+     */
+    private Map<String, Double> sectorDynamicRatios;
 }

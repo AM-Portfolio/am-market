@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.Map;
 
 /**
  * Single reporting period line-item breakdown for the Income Statement (P&L).
@@ -53,4 +54,9 @@ public class IncomeStatementEntry implements Serializable {
     private Double revenueChangePercent;
     private Double operatingProfitChangePercent;
     private Double netProfitChangePercent;
+
+    /**
+     * Dynamic line-items map to preserve all raw and sector-specific financial particulars from provider.
+     */
+    private Map<String, Double> lineItems;
 }
