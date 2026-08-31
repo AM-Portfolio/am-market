@@ -391,10 +391,32 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                 }
             }
 
+            // Gracefully resolve clean company name and description
+            String rawName = peer.getCompanyName();
+            String description = peer.getDescription();
+            String cleanName = rawName;
+
+            // If stored companyName is actually a paragraph description (from old database records), fix it gracefully at runtime
+            if (rawName != null && rawName.length() > 60) {
+                if (description == null) {
+                    description = rawName;
+                }
+                int isIndex = rawName.indexOf(" is ");
+                if (isIndex > 0 && isIndex < 50) {
+                    cleanName = rawName.substring(0, isIndex).trim();
+                } else {
+                    int firstDot = rawName.indexOf('.');
+                    cleanName = (firstDot > 0 && firstDot < 80) ? rawName.substring(0, firstDot).trim() : rawName.substring(0, 50).trim();
+                }
+            }
+
             CompetitorPeer.CompetitorPeerBuilder builder = CompetitorPeer.builder()
                     .instrumentKey(peer.getInstrumentKey())
                     .isin(isin)
-                    .companyName(peer.getCompanyName())
+                    .companyName(cleanName)
+                    .description(description)
+                    .sectorMarketCapInr(peer.getSectorMarketCapInr())
+                    .sectorMarketCapUsd(peer.getSectorMarketCapUsd())
                     .sector(peer.getSector());
 
             String resolvedSymbol = null;

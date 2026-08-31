@@ -43,6 +43,21 @@ public class CompetitorPeer implements Serializable {
      */
     private String sector;
 
+    /**
+     * Short company profile / business summary description.
+     */
+    private String description;
+
+    /**
+     * Total sector market capitalization in INR (crore).
+     */
+    private Double sectorMarketCapInr;
+
+    /**
+     * Total sector market capitalization in USD (billion).
+     */
+    private Double sectorMarketCapUsd;
+
     // Real-time market data (populated via existing market data service)
     private Double currentPrice;
     private Double dayChange;

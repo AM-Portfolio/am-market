@@ -560,10 +560,34 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
                 peerIsin = key.substring(key.indexOf("|") + 1);
             }
 
+            String rawProfile = node.hasNonNull("company_profile") ? node.path("company_profile").asText(null) : null;
+            String rawName = node.hasNonNull("company_name") ? node.path("company_name").asText(null) : null;
+
+            // Graceful fallback for companyName:
+            // If company_name is absent, extract company name title from company_profile phrase or default to null
+            String cleanName = rawName;
+            if ((cleanName == null || cleanName.length() > 60) && rawProfile != null) {
+                int firstDot = rawProfile.indexOf('.');
+                if (firstDot > 0 && firstDot < 80) {
+                    cleanName = rawProfile.substring(0, firstDot).trim();
+                } else if (rawProfile.length() > 60) {
+                    int isIndex = rawProfile.indexOf(" is ");
+                    cleanName = (isIndex > 0 && isIndex < 50) ? rawProfile.substring(0, isIndex).trim() : rawProfile.substring(0, 50).trim();
+                } else {
+                    cleanName = rawProfile;
+                }
+            }
+
+            Double capInr = getDoubleOrNull(node.path("sector_market_cap_inr"), "value");
+            Double capUsd = getDoubleOrNull(node.path("sector_market_cap_usd"), "value");
+
             list.add(CompetitorPeer.builder()
                     .instrumentKey(key)
                     .isin(peerIsin)
-                    .companyName(node.path("company_profile").asText(null))
+                    .companyName(cleanName)
+                    .description(rawProfile)
+                    .sectorMarketCapInr(capInr)
+                    .sectorMarketCapUsd(capUsd)
                     .sector(node.path("sector").asText(null))
                     .build());
         }
