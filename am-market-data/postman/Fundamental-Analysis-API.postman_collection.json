@@ -1,0 +1,89 @@
+{
+  "info": {
+    "_postman_id": "73e7575b-c3f1-4021-bf4c-966c9f4c0f5a",
+    "name": "Fundamental Analysis API",
+    "description": "Dedicated Postman collection for testing Granular Fundamental Analysis endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Unified Overview (Deprecated)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "1. Company Profile",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/profile", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "profile" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "2. Valuation & Ratios",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/ratios", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "ratios" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "3. Financial Statements",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/financials", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "financials" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "4. Shareholding Patterns",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/shareholding", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "shareholding" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "5. Corporate Actions",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/corporate-actions", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "corporate-actions" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "6. Competitor Peers",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/peers", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "peers" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "7. Health Analytics",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/analytics", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "analytics" ] }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://am-dev.asrax.in/market",
+      "type": "string"
+    }
+  ]
+}
