@@ -79,4 +79,9 @@ public class CompetitorPeer implements Serializable {
      * Dynamic ratios map for custom or provider-specific peer comparisons.
      */
     private Map<String, Double> dynamicRatios;
+
+    /**
+     * Broker-agnostic dynamic container to capture additional / newly introduced upstream attributes.
+     */
+    private Map<String, Object> additionalFields;
 }

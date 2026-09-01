@@ -581,6 +581,13 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
             Double capInr = getDoubleOrNull(node.path("sector_market_cap_inr"), "value");
             Double capUsd = getDoubleOrNull(node.path("sector_market_cap_usd"), "value");
 
+            Map<String, Object> additionalFields = new LinkedHashMap<>();
+            node.fieldNames().forEachRemaining(field -> {
+                if (!List.of("instrument_key", "company_profile", "company_name", "sector", "sector_market_cap_inr", "sector_market_cap_usd").contains(field)) {
+                    additionalFields.put(field, objectMapper.convertValue(node.get(field), Object.class));
+                }
+            });
+
             list.add(CompetitorPeer.builder()
                     .instrumentKey(key)
                     .isin(peerIsin)
@@ -589,6 +596,7 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
                     .sectorMarketCapInr(capInr)
                     .sectorMarketCapUsd(capUsd)
                     .sector(node.path("sector").asText(null))
+                    .additionalFields(additionalFields.isEmpty() ? null : additionalFields)
                     .build());
         }
         return list;
