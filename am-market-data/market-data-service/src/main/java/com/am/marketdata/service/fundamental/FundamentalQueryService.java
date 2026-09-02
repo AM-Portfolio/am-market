@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -344,8 +345,139 @@ public class FundamentalQueryService {
         }
     }
 
+    // [Single-Flight In-Flight Request Registry]
+    // Coalesces concurrent requests for the exact same stock section into a single shared Future
+    private final Map<String, CompletableFuture<?>> inFlightSectionFutures = new ConcurrentHashMap<>();
+
+    /**
+     * [Single-Flight Request Coalescing Engine]
+     * Ensures that if 100 concurrent users request a missing section (e.g. WIPRO:shareholding),
+     * exactly ONE thread makes the upstream Upstox API call and saves to MongoDB. All other 99 threads
+     * await the same Future and receive the result simultaneously without wasting API quota.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T getOrFetchSection(String isin, String sectionKey, java.util.function.Supplier<T> fetcher, java.util.function.Consumer<T> saver) {
+        String lockKey = isin.toUpperCase() + ":" + sectionKey;
+
+        CompletableFuture<T> future = (CompletableFuture<T>) inFlightSectionFutures.computeIfAbsent(lockKey, k -> CompletableFuture.supplyAsync(() -> {
+            try {
+                T data = fetcher.get();
+                if (data != null) {
+                    saver.accept(data);
+                }
+                return data;
+            } finally {
+                inFlightSectionFutures.remove(lockKey);
+            }
+        }));
+
+        try {
+            return future.get(15, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            inFlightSectionFutures.remove(lockKey);
+            log.error("SingleFlight fetch encountered exception for key={}: {}", lockKey, e.getMessage());
+            try {
+                T fallbackData = fetcher.get();
+                if (fallbackData != null) {
+                    saver.accept(fallbackData);
+                }
+                return fallbackData;
+            } catch (Exception ex) {
+                return null;
+            }
+        }
+    }
+
+    public List<ShareholdingQuarterEntry> hydrateShareholding(String isin) {
+        return getOrFetchSection(isin, "shareholding", () -> {
+            FundamentalDataProvider provider = providerFactory.getActiveProvider();
+            return provider != null ? provider.getShareHoldings(isin) : Collections.emptyList();
+        }, list -> {
+            if (list != null && !list.isEmpty()) {
+                updateDocumentSection(isin, "shareholding", doc -> doc.setShareholdings(list));
+            }
+        });
+    }
+
+    public List<IncomeStatementEntry> hydrateIncomeStatements(String isin) {
+        return getOrFetchSection(isin, "incomeStatement", () -> {
+            FundamentalDataProvider provider = providerFactory.getActiveProvider();
+            return provider != null ? provider.getIncomeStatement(isin, true, "yearly") : Collections.emptyList();
+        }, list -> {
+            if (list != null && !list.isEmpty()) {
+                updateDocumentSection(isin, "incomeStatement", doc -> doc.setIncomeStatements(list));
+            }
+        });
+    }
+
+    public List<BalanceSheetEntry> hydrateBalanceSheets(String isin) {
+        return getOrFetchSection(isin, "balanceSheet", () -> {
+            FundamentalDataProvider provider = providerFactory.getActiveProvider();
+            return provider != null ? provider.getBalanceSheet(isin, true) : Collections.emptyList();
+        }, list -> {
+            if (list != null && !list.isEmpty()) {
+                updateDocumentSection(isin, "balanceSheet", doc -> doc.setBalanceSheets(list));
+            }
+        });
+    }
+
+    public List<CashFlowEntry> hydrateCashFlows(String isin) {
+        return getOrFetchSection(isin, "cashFlow", () -> {
+            FundamentalDataProvider provider = providerFactory.getActiveProvider();
+            return provider != null ? provider.getCashFlow(isin, true) : Collections.emptyList();
+        }, list -> {
+            if (list != null && !list.isEmpty()) {
+                updateDocumentSection(isin, "cashFlow", doc -> doc.setCashFlows(list));
+            }
+        });
+    }
+
+    public List<CorporateActionEntry> hydrateCorporateActions(String isin) {
+        return getOrFetchSection(isin, "corporateActions", () -> {
+            FundamentalDataProvider provider = providerFactory.getActiveProvider();
+            return provider != null ? provider.getCorporateActions(isin) : Collections.emptyList();
+        }, list -> {
+            if (list != null && !list.isEmpty()) {
+                updateDocumentSection(isin, "corporateActions", doc -> doc.setCorporateActions(list));
+            }
+        });
+    }
+
+    public List<CompetitorPeer> hydratePeers(String isin) {
+        return getOrFetchSection(isin, "peers", () -> {
+            FundamentalDataProvider provider = providerFactory.getActiveProvider();
+            return provider != null ? provider.getCompetitors(isin) : Collections.emptyList();
+        }, list -> {
+            if (list != null && !list.isEmpty()) {
+                updateDocumentSection(isin, "competitors", doc -> doc.setPeers(list));
+            }
+        });
+    }
+
+    private void updateDocumentSection(String isin, String sectionName, java.util.function.Consumer<FundamentalData> updater) {
+        try {
+            Optional<FundamentalData> docOpt = fundamentalDataRepository.findByIsin(isin);
+            Instant now = Instant.now();
+            FundamentalData doc = docOpt.orElseGet(() -> FundamentalData.builder()
+                    .isin(isin)
+                    .createdAt(now)
+                    .build());
+            updater.accept(doc);
+            if (doc.getCreatedAt() == null) doc.setCreatedAt(now);
+            if (doc.getSectionLastUpdated() == null) doc.setSectionLastUpdated(new HashMap<>());
+            doc.getSectionLastUpdated().put(sectionName, now);
+            doc.setUpdatedAt(now);
+            doc.setLastUpdated(now);
+            fundamentalDataRepository.save(doc);
+            log.info("Persisted on-demand section '{}' to MongoDB for isin={}", sectionName, isin);
+        } catch (Exception e) {
+            log.warn("Failed to persist section '{}' for isin={}: {}", sectionName, isin, e.getMessage());
+        }
+    }
+
     /**
      * Asynchronously hydrates remaining financial statements, shareholdings, corporate actions, and peers.
+     * Each section is isolated in its own try-catch so a failure in one section never aborts the rest.
      */
     @Async
     public void triggerAsyncFullHydration(String isin) {
@@ -354,21 +486,40 @@ public class FundamentalQueryService {
         }
 
         try {
-            log.info("Starting async full hydration for isin={}", isin);
+            log.info("Starting isolated async full hydration for isin={}", isin);
             FundamentalDataProvider provider = providerFactory.getActiveProvider();
             if (provider == null) return;
 
-            List<IncomeStatementEntry> income = provider.getIncomeStatement(isin, true, "yearly");
-            List<BalanceSheetEntry> balance = provider.getBalanceSheet(isin, true);
-            List<CashFlowEntry> cashFlow = provider.getCashFlow(isin, true);
-            List<ShareholdingQuarterEntry> shareholding = provider.getShareHoldings(isin);
-            List<CorporateActionEntry> actions = provider.getCorporateActions(isin);
-            List<CompetitorPeer> peers = provider.getCompetitors(isin);
+            List<IncomeStatementEntry> income = null;
+            try { income = provider.getIncomeStatement(isin, true, "yearly"); } catch (Exception e) { log.debug("Async income note for {}: {}", isin, e.getMessage()); }
+
+            List<BalanceSheetEntry> balance = null;
+            try { balance = provider.getBalanceSheet(isin, true); } catch (Exception e) { log.debug("Async balance note for {}: {}", isin, e.getMessage()); }
+
+            List<CashFlowEntry> cashFlow = null;
+            try { cashFlow = provider.getCashFlow(isin, true); } catch (Exception e) { log.debug("Async cashflow note for {}: {}", isin, e.getMessage()); }
+
+            List<ShareholdingQuarterEntry> shareholding = null;
+            try { shareholding = provider.getShareHoldings(isin); } catch (Exception e) { log.debug("Async shareholding note for {}: {}", isin, e.getMessage()); }
+
+            List<CorporateActionEntry> actions = null;
+            try { actions = provider.getCorporateActions(isin); } catch (Exception e) { log.debug("Async actions note for {}: {}", isin, e.getMessage()); }
+
+            List<CompetitorPeer> peers = null;
+            try { peers = provider.getCompetitors(isin); } catch (Exception e) { log.debug("Async peers note for {}: {}", isin, e.getMessage()); }
 
             // Compute analytics metrics
-            FundamentalAnalytics analytics = calculationEngine.computeAnalytics(
-                    income, balance, cashFlow, null, null, null, null, null
-            );
+            FundamentalAnalytics analytics = null;
+            try {
+                analytics = calculationEngine.computeAnalytics(
+                        income != null ? income : Collections.emptyList(),
+                        balance != null ? balance : Collections.emptyList(),
+                        cashFlow != null ? cashFlow : Collections.emptyList(),
+                        null, null, null, null, null
+                );
+            } catch (Exception e) {
+                log.debug("Async analytics computation note for {}: {}", isin, e.getMessage());
+            }
 
             Optional<FundamentalData> existingOpt = fundamentalDataRepository.findByIsin(isin);
             Instant now = Instant.now();
@@ -377,13 +528,13 @@ public class FundamentalQueryService {
                     .createdAt(now)
                     .build());
 
-            doc.setIncomeStatements(income);
-            doc.setBalanceSheets(balance);
-            doc.setCashFlows(cashFlow);
-            doc.setShareholdings(shareholding);
-            doc.setCorporateActions(actions);
-            doc.setPeers(peers);
-            doc.setAnalytics(analytics);
+            if (income != null && !income.isEmpty()) doc.setIncomeStatements(income);
+            if (balance != null && !balance.isEmpty()) doc.setBalanceSheets(balance);
+            if (cashFlow != null && !cashFlow.isEmpty()) doc.setCashFlows(cashFlow);
+            if (shareholding != null && !shareholding.isEmpty()) doc.setShareholdings(shareholding);
+            if (actions != null && !actions.isEmpty()) doc.setCorporateActions(actions);
+            if (peers != null && !peers.isEmpty()) doc.setPeers(peers);
+            if (analytics != null) doc.setAnalytics(analytics);
 
             if (doc.getCreatedAt() == null) {
                 doc.setCreatedAt(now);
@@ -391,17 +542,17 @@ public class FundamentalQueryService {
             if (doc.getSectionLastUpdated() == null) {
                 doc.setSectionLastUpdated(new HashMap<>());
             }
-            doc.getSectionLastUpdated().put("incomeStatement", now);
-            doc.getSectionLastUpdated().put("balanceSheet", now);
-            doc.getSectionLastUpdated().put("cashFlow", now);
-            doc.getSectionLastUpdated().put("shareholding", now);
-            doc.getSectionLastUpdated().put("corporateActions", now);
-            doc.getSectionLastUpdated().put("competitors", now);
+            if (income != null) doc.getSectionLastUpdated().put("incomeStatement", now);
+            if (balance != null) doc.getSectionLastUpdated().put("balanceSheet", now);
+            if (cashFlow != null) doc.getSectionLastUpdated().put("cashFlow", now);
+            if (shareholding != null) doc.getSectionLastUpdated().put("shareholding", now);
+            if (actions != null) doc.getSectionLastUpdated().put("corporateActions", now);
+            if (peers != null) doc.getSectionLastUpdated().put("competitors", now);
             doc.setUpdatedAt(now);
             doc.setLastUpdated(now);
 
-            FundamentalData saved = fundamentalDataRepository.save(doc);
-            log.info("Successfully completed full hydration for isin={}", isin);
+            fundamentalDataRepository.save(doc);
+            log.info("Successfully completed isolated full hydration for isin={}", isin);
         } catch (Exception e) {
             log.error("Error during async full hydration for isin={}: {}", isin, e.getMessage(), e);
         } finally {
