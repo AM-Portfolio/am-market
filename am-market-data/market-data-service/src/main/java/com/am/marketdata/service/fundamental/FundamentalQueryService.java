@@ -62,25 +62,85 @@ public class FundamentalQueryService {
             return cleaned.toUpperCase();
         }
 
-        // 1. Direct MongoTemplate query on 'securities' collection (Bypasses class mapping)
+        // Generate candidate variations for robust fuzzy matching (handles spaces, hyphens, underscores, dots)
+        List<String> candidates = new ArrayList<>();
+        candidates.add(cleaned);
+
+        String compact = cleaned.replaceAll("[\\s\\-_.]+", "");
+        if (!compact.isEmpty() && !candidates.contains(compact)) {
+            candidates.add(compact);
+        }
+
+        String hyphenated = cleaned.replaceAll("[\\s_.]+", "-");
+        if (!hyphenated.isEmpty() && !candidates.contains(hyphenated)) {
+            candidates.add(hyphenated);
+        }
+
+        String underscored = cleaned.replaceAll("[\\s\\-.]+", "_");
+        if (!underscored.isEmpty() && !candidates.contains(underscored)) {
+            candidates.add(underscored);
+        }
+
+        if (cleaned.toUpperCase().contains(" AND ")) {
+            String ampersand = cleaned.replaceAll("(?i)\\s+and\\s+", "&");
+            if (!candidates.contains(ampersand)) candidates.add(ampersand);
+        } else if (cleaned.contains("&")) {
+            String andVariant = cleaned.replaceAll("&", " AND ");
+            if (!candidates.contains(andVariant)) candidates.add(andVariant);
+        }
+
+        // Try candidate symbol lookups across collections
+        for (String candidate : candidates) {
+            String isin = queryIsinByExactSymbol(candidate);
+            if (isin != null) {
+                return isin;
+            }
+        }
+
+        // Fallback 1: Match by Company Name prefix/exact in fundamental_analysis & securities
+        String isinByCompany = queryIsinByCompanyName(cleaned);
+        if (isinByCompany != null) {
+            return isinByCompany;
+        }
+
+        // Fallback 2: SecurityRepository text search
+        for (String candidate : candidates) {
+            try {
+                List<SecurityDocument> searchResults = securityRepository.search(candidate);
+                if (searchResults != null && !searchResults.isEmpty()) {
+                    SecurityDocument sec = searchResults.get(0);
+                    if (sec.getKey() != null && sec.getKey().getIsin() != null) {
+                        return sec.getKey().getIsin().toUpperCase();
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Error in search lookup for {}: {}", candidate, e.getMessage());
+            }
+        }
+
+        return null;
+    }
+
+    private String queryIsinByExactSymbol(String symbolCandidate) {
+        // 1. Direct MongoTemplate query on 'securities' collection
         try {
-            org.bson.Document query = new org.bson.Document("key.symbol", java.util.regex.Pattern.compile("^" + java.util.regex.Pattern.quote(cleaned) + "$", java.util.regex.Pattern.CASE_INSENSITIVE));
+            org.bson.Document query = new org.bson.Document("key.symbol", java.util.regex.Pattern.compile("^" + java.util.regex.Pattern.quote(symbolCandidate) + "$", java.util.regex.Pattern.CASE_INSENSITIVE));
             org.bson.Document found = mongoTemplate.getCollection("securities").find(query).first();
             if (found != null) {
                 org.bson.Document keyDoc = found.get("key", org.bson.Document.class);
                 if (keyDoc != null && keyDoc.getString("isin") != null) {
                     String isin = keyDoc.getString("isin").toUpperCase();
-                    log.info("Resolved symbol={} to isin={} via securities collection", cleaned, isin);
+                    log.info("Resolved symbolCandidate={} to isin={} via securities collection", symbolCandidate, isin);
                     return isin;
                 }
             }
         } catch (Exception e) {
-            log.debug("Direct MongoDB symbol lookup note for {}: {}", cleaned, e.getMessage());
+            log.debug("Direct MongoDB symbol lookup note for {}: {}", symbolCandidate, e.getMessage());
         }
 
-        // 2. Also check 'stock_indices_market_data' collection for existing constituent stock by symbol
+        // 2. Check 'stock_indices_market_data' collection
         try {
-            org.bson.Document query = new org.bson.Document("data.symbol", java.util.regex.Pattern.compile("^" + java.util.regex.Pattern.quote(cleaned) + "$", java.util.regex.Pattern.CASE_INSENSITIVE));
+            org.bson.Document query = new org.bson.Document("data.symbol", java.util.regex.Pattern.compile("^" + java.util.regex.Pattern.quote(symbolCandidate) + "$", java.util.regex.Pattern.CASE_INSENSITIVE));
             org.bson.Document found = mongoTemplate.getCollection("stock_indices_market_data").find(query).first();
             if (found != null) {
                 List<?> dataList = found.get("data", List.class);
@@ -89,8 +149,8 @@ public class FundamentalQueryService {
                         if (item instanceof org.bson.Document doc) {
                             String sym = doc.getString("symbol");
                             String isin = doc.getString("isin");
-                            if (sym != null && isin != null && sym.equalsIgnoreCase(cleaned)) {
-                                log.info("Resolved symbol={} to isin={} via stock_indices_market_data", cleaned, isin.toUpperCase());
+                            if (sym != null && isin != null && sym.equalsIgnoreCase(symbolCandidate)) {
+                                log.info("Resolved symbolCandidate={} to isin={} via stock_indices_market_data", symbolCandidate, isin.toUpperCase());
                                 return isin.toUpperCase();
                             }
                         }
@@ -98,33 +158,39 @@ public class FundamentalQueryService {
                 }
             }
         } catch (Exception e) {
-            log.debug("stock_indices_market_data symbol lookup note for {}: {}", cleaned, e.getMessage());
+            log.debug("stock_indices_market_data symbol lookup note for {}: {}", symbolCandidate, e.getMessage());
         }
 
-        // 3. Also check 'fundamental_analysis' collection for existing document by symbol
+        // 3. Check 'fundamental_analysis' collection
         try {
-            org.bson.Document query = new org.bson.Document("symbol", java.util.regex.Pattern.compile("^" + java.util.regex.Pattern.quote(cleaned) + "$", java.util.regex.Pattern.CASE_INSENSITIVE));
+            org.bson.Document query = new org.bson.Document("symbol", java.util.regex.Pattern.compile("^" + java.util.regex.Pattern.quote(symbolCandidate) + "$", java.util.regex.Pattern.CASE_INSENSITIVE));
             org.bson.Document found = mongoTemplate.getCollection("fundamental_analysis").find(query).first();
             if (found != null && found.getString("isin") != null) {
                 String isin = found.getString("isin").toUpperCase();
-                log.info("Resolved symbol={} to isin={} via fundamental_analysis collection", cleaned, isin);
+                log.info("Resolved symbolCandidate={} to isin={} via fundamental_analysis collection", symbolCandidate, isin);
                 return isin;
             }
         } catch (Exception e) {
-            log.debug("Direct fundamental_analysis lookup note for {}: {}", cleaned, e.getMessage());
+            log.debug("Direct fundamental_analysis lookup note for {}: {}", symbolCandidate, e.getMessage());
         }
 
-        // 4. Fallback: SecurityRepository search
+        return null;
+    }
+
+    private String queryIsinByCompanyName(String nameCandidate) {
+        if (nameCandidate == null || nameCandidate.trim().length() < 3) {
+            return null;
+        }
         try {
-            List<SecurityDocument> searchResults = securityRepository.search(cleaned);
-            if (searchResults != null && !searchResults.isEmpty()) {
-                SecurityDocument sec = searchResults.get(0);
-                if (sec.getKey() != null && sec.getKey().getIsin() != null) {
-                    return sec.getKey().getIsin().toUpperCase();
-                }
+            org.bson.Document query = new org.bson.Document("companyName", java.util.regex.Pattern.compile("^" + java.util.regex.Pattern.quote(nameCandidate.trim()) + ".*", java.util.regex.Pattern.CASE_INSENSITIVE));
+            org.bson.Document found = mongoTemplate.getCollection("fundamental_analysis").find(query).first();
+            if (found != null && found.getString("isin") != null) {
+                String isin = found.getString("isin").toUpperCase();
+                log.info("Resolved nameCandidate='{}' to isin={} via companyName in fundamental_analysis", nameCandidate, isin);
+                return isin;
             }
         } catch (Exception e) {
-            log.debug("Error in search lookup for {}: {}", cleaned, e.getMessage());
+            log.debug("Company name lookup note for {}: {}", nameCandidate, e.getMessage());
         }
 
         return null;
