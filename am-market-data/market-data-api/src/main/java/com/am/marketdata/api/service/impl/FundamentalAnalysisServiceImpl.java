@@ -100,13 +100,42 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                         .build();
             }
 
-            // Construct Financials Section
+            // Construct Financials Section with on-demand hydration if missing
+            List<IncomeStatementEntry> income = data.getIncomeStatements();
+            if (income == null || income.isEmpty()) {
+                income = fundamentalQueryService.hydrateIncomeStatements(data.getIsin());
+            }
+            List<BalanceSheetEntry> balance = data.getBalanceSheets();
+            if (balance == null || balance.isEmpty()) {
+                balance = fundamentalQueryService.hydrateBalanceSheets(data.getIsin());
+            }
+            List<CashFlowEntry> cashFlow = data.getCashFlows();
+            if (cashFlow == null || cashFlow.isEmpty()) {
+                cashFlow = fundamentalQueryService.hydrateCashFlows(data.getIsin());
+            }
+
             FundamentalAnalysisResponse.FinancialsSection financialsSection = FundamentalAnalysisResponse.FinancialsSection
                     .builder()
-                    .incomeStatement(data.getIncomeStatements() != null ? data.getIncomeStatements() : Collections.emptyList())
-                    .balanceSheet(data.getBalanceSheets() != null ? data.getBalanceSheets() : Collections.emptyList())
-                    .cashFlow(data.getCashFlows() != null ? data.getCashFlows() : Collections.emptyList())
+                    .incomeStatement(income != null ? income : Collections.emptyList())
+                    .balanceSheet(balance != null ? balance : Collections.emptyList())
+                    .cashFlow(cashFlow != null ? cashFlow : Collections.emptyList())
                     .build();
+
+            // Resolve shareholding, corporate actions, and peers with on-demand hydration
+            List<ShareholdingQuarterEntry> shareholdings = data.getShareholdings();
+            if (shareholdings == null || shareholdings.isEmpty()) {
+                shareholdings = fundamentalQueryService.hydrateShareholding(data.getIsin());
+            }
+
+            List<CorporateActionEntry> corporateActions = data.getCorporateActions();
+            if (corporateActions == null || corporateActions.isEmpty()) {
+                corporateActions = fundamentalQueryService.hydrateCorporateActions(data.getIsin());
+            }
+
+            List<CompetitorPeer> peers = data.getPeers();
+            if (peers == null || peers.isEmpty()) {
+                peers = fundamentalQueryService.hydratePeers(data.getIsin());
+            }
 
             // Build Final Unified Response
             FundamentalAnalysisResponse response = FundamentalAnalysisResponse.builder()
@@ -114,9 +143,9 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                     .valuation(ratios)
                     .profitability(profitabilitySection)
                     .financials(financialsSection)
-                    .shareholding(data.getShareholdings() != null ? data.getShareholdings() : Collections.emptyList())
-                    .corporateActions(data.getCorporateActions() != null ? data.getCorporateActions() : Collections.emptyList())
-                    .peers(enrichPeers(data.getPeers()))
+                    .shareholding(shareholdings != null ? shareholdings : Collections.emptyList())
+                    .corporateActions(corporateActions != null ? corporateActions : Collections.emptyList())
+                    .peers(enrichPeers(peers))
                     .analytics(computeAnalyticsIfAbsent(data))
                     .build();
 
@@ -172,30 +201,58 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
 
     @Override
     public FundamentalAnalysisResponse.FinancialsSection getFinancials(String symbol) {
-        return processGranularRequest(symbol, "financials",
-                data -> FundamentalAnalysisResponse.FinancialsSection.builder()
-                        .incomeStatement(data.getIncomeStatements() != null ? data.getIncomeStatements() : Collections.emptyList())
-                        .balanceSheet(data.getBalanceSheets() != null ? data.getBalanceSheets() : Collections.emptyList())
-                        .cashFlow(data.getCashFlows() != null ? data.getCashFlows() : Collections.emptyList())
-                        .build());
+        return processGranularRequest(symbol, "financials", data -> {
+            List<IncomeStatementEntry> income = data.getIncomeStatements();
+            if (income == null || income.isEmpty()) {
+                income = fundamentalQueryService.hydrateIncomeStatements(data.getIsin());
+            }
+            List<BalanceSheetEntry> balance = data.getBalanceSheets();
+            if (balance == null || balance.isEmpty()) {
+                balance = fundamentalQueryService.hydrateBalanceSheets(data.getIsin());
+            }
+            List<CashFlowEntry> cashFlow = data.getCashFlows();
+            if (cashFlow == null || cashFlow.isEmpty()) {
+                cashFlow = fundamentalQueryService.hydrateCashFlows(data.getIsin());
+            }
+            return FundamentalAnalysisResponse.FinancialsSection.builder()
+                    .incomeStatement(income != null ? income : Collections.emptyList())
+                    .balanceSheet(balance != null ? balance : Collections.emptyList())
+                    .cashFlow(cashFlow != null ? cashFlow : Collections.emptyList())
+                    .build();
+        });
     }
 
     @Override
     public List<ShareholdingQuarterEntry> getShareholding(String symbol) {
-        return processGranularRequest(symbol, "shareholding",
-                data -> data.getShareholdings() != null ? data.getShareholdings() : Collections.emptyList());
+        return processGranularRequest(symbol, "shareholding", data -> {
+            List<ShareholdingQuarterEntry> list = data.getShareholdings();
+            if (list == null || list.isEmpty()) {
+                list = fundamentalQueryService.hydrateShareholding(data.getIsin());
+            }
+            return list != null ? list : Collections.emptyList();
+        });
     }
 
     @Override
     public List<CorporateActionEntry> getCorporateActions(String symbol) {
-        return processGranularRequest(symbol, "corporateActions",
-                data -> data.getCorporateActions() != null ? data.getCorporateActions() : Collections.emptyList());
+        return processGranularRequest(symbol, "corporateActions", data -> {
+            List<CorporateActionEntry> list = data.getCorporateActions();
+            if (list == null || list.isEmpty()) {
+                list = fundamentalQueryService.hydrateCorporateActions(data.getIsin());
+            }
+            return list != null ? list : Collections.emptyList();
+        });
     }
 
     @Override
     public List<CompetitorPeer> getPeers(String symbol) {
-        return processGranularRequest(symbol, "peers",
-                data -> enrichPeers(data.getPeers()));
+        return processGranularRequest(symbol, "peers", data -> {
+            List<CompetitorPeer> list = data.getPeers();
+            if (list == null || list.isEmpty()) {
+                list = fundamentalQueryService.hydratePeers(data.getIsin());
+            }
+            return enrichPeers(list);
+        });
     }
 
     @Override
