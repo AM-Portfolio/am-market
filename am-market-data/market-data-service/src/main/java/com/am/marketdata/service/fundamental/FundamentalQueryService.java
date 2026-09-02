@@ -224,7 +224,7 @@ public class FundamentalQueryService {
         }
 
         // 1. Direct MongoDB Query (Fast B-Tree Indexed Lookup on 'isin')
-        Optional<FundamentalData> mongoDataOpt = fundamentalDataRepository.findByIsin(cleanIsin);
+        Optional<FundamentalData> mongoDataOpt = fundamentalDataRepository.findFirstByIsin(cleanIsin);
         if (mongoDataOpt.isPresent()) {
             log.debug("MongoDB HIT for fundamentals isin={}", cleanIsin);
             return mongoDataOpt;
@@ -249,7 +249,7 @@ public class FundamentalQueryService {
         if (isin == null || isin.trim().isEmpty()) {
             return Optional.empty();
         }
-        return fundamentalDataRepository.findByIsin(isin.trim().toUpperCase());
+        return fundamentalDataRepository.findFirstByIsin(isin.trim().toUpperCase());
     }
 
     /**

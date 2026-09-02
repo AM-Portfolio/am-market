@@ -406,7 +406,11 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                     cleanName = rawName.substring(0, isIndex).trim();
                 } else {
                     int firstDot = rawName.indexOf('.');
-                    cleanName = (firstDot > 0 && firstDot < 80) ? rawName.substring(0, firstDot).trim() : rawName.substring(0, 50).trim();
+                    if (firstDot > 0 && firstDot < 80) {
+                        cleanName = rawName.substring(0, firstDot).trim();
+                    } else {
+                        cleanName = rawName.length() > 50 ? rawName.substring(0, 50).trim() : rawName.trim();
+                    }
                 }
             }
 
