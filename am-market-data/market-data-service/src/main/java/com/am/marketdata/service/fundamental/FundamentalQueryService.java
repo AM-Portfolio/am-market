@@ -50,7 +50,11 @@ public class FundamentalQueryService {
             return null;
         }
 
-        String cleaned = symbolOrIsin.trim();
+        // Sanitize incoming input: strip quotes, brackets, and extra whitespace
+        String cleaned = symbolOrIsin.replaceAll("[\"']", "").trim();
+        if (cleaned.isEmpty()) {
+            return null;
+        }
         if (cleaned.contains("|")) {
             cleaned = cleaned.substring(cleaned.indexOf("|") + 1).trim();
         }
@@ -109,9 +113,14 @@ public class FundamentalQueryService {
             try {
                 List<SecurityDocument> searchResults = securityRepository.search(candidate);
                 if (searchResults != null && !searchResults.isEmpty()) {
-                    SecurityDocument sec = searchResults.get(0);
-                    if (sec.getKey() != null && sec.getKey().getIsin() != null) {
-                        return sec.getKey().getIsin().toUpperCase();
+                    // Pick first non-delisted security
+                    for (SecurityDocument sec : searchResults) {
+                        if (sec.getMetadata() != null && "DELISTED".equalsIgnoreCase(sec.getMetadata().getStatus())) {
+                            continue;
+                        }
+                        if (sec.getKey() != null && sec.getKey().getIsin() != null) {
+                            return sec.getKey().getIsin().toUpperCase();
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -128,11 +137,19 @@ public class FundamentalQueryService {
             org.bson.Document query = new org.bson.Document("key.symbol", java.util.regex.Pattern.compile("^" + java.util.regex.Pattern.quote(symbolCandidate) + "$", java.util.regex.Pattern.CASE_INSENSITIVE));
             org.bson.Document found = mongoTemplate.getCollection("securities").find(query).first();
             if (found != null) {
+                org.bson.Document metaDoc = found.get("metadata", org.bson.Document.class);
+                boolean isDelisted = metaDoc != null && "DELISTED".equalsIgnoreCase(metaDoc.getString("status"));
+
                 org.bson.Document keyDoc = found.get("key", org.bson.Document.class);
                 if (keyDoc != null && keyDoc.getString("isin") != null) {
                     String isin = keyDoc.getString("isin").toUpperCase();
-                    log.info("Resolved symbolCandidate={} to isin={} via securities collection", symbolCandidate, isin);
-                    return isin;
+
+                    // If not delisted, return immediately
+                    if (!isDelisted) {
+                        log.info("Resolved symbolCandidate={} to isin={} via securities collection", symbolCandidate, isin);
+                        return isin;
+                    }
+                    log.info("Found isin={} for symbolCandidate={} in securities, but marked DELISTED. Searching active survivor...", isin, symbolCandidate);
                 }
             }
         } catch (Exception e) {
