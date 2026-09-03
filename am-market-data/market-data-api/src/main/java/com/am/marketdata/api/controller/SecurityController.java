@@ -30,12 +30,19 @@ public class SecurityController {
     private final com.am.marketdata.service.SecurityBulkUpdateService securityBulkUpdateService;
 
     @GetMapping("/search")
-    @Operation(summary = "Fuzzy search securities by symbol, ISIN, or company name", description = "Search across symbol, ISIN, and company name using case-insensitive fuzzy matching. "
-            +
-            "Returns all securities that partially match the query in any of these fields.")
-    public ResponseEntity<List<SecurityDocument>> search(@RequestParam String query) {
+    @com.am.marketdata.common.annotation.SmartRecommendation(category = "STOCKS", limit = 10)
+    @Operation(summary = "Search securities by symbol or company name with smart recommendations",
+            description = "Supports fast Redis-backed, market-cap-ranked recommendations when smartRecommendations=true. " +
+                    "Defaults to exact legacy search when smartRecommendations=false.")
+    public ResponseEntity<List<SecurityDocument>> search(
+            @RequestParam String query,
+            @RequestParam(name = "smartRecommendations", required = false, defaultValue = "false") boolean smartRecommendations,
+            @RequestParam(name = "category", required = false, defaultValue = "STOCKS") String category,
+            @RequestParam(name = "limit", required = false, defaultValue = "10") Integer limit) {
         try (FlowSpan span = flowLogger.start("security.search", "query", query)) {
             try {
+                // If aspect is active and smartRecommendations=true, aspect intercepts and returns recommendations.
+                // Otherwise, legacy search is executed transparently.
                 List<SecurityDocument> results = securityService.search(query);
                 flowLogger.complete(span, "resultCount", results.size());
                 return ResponseEntity.ok(results);

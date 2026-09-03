@@ -88,9 +88,9 @@ public class StockDataEnricher {
         }
 
         public boolean hasValidPrice() {
-            // Only require lastPrice to be non-null
-            // Allow percentChange to be 0 or null (getter will return 0.0)
-            return lastPrice != null;
+            // Require lastPrice to be non-null and strictly positive (> 0.0)
+            // Stocks with 0.0 lastPrice must not appear as -100% loss in movers
+            return lastPrice != null && lastPrice > 0.0;
         }
     }
 
