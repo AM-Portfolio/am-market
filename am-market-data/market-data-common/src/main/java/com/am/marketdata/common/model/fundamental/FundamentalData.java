@@ -66,9 +66,15 @@ public class FundamentalData implements Serializable {
     private KeyRatios keyRatios;
 
     /**
-     * Historical Income Statement (P&L) reporting periods.
+     * Historical Income Statement (P&L) reporting periods (Annual / Yearly).
      */
     private List<IncomeStatementEntry> incomeStatements;
+
+    /**
+     * Historical Quarterly Income Statement reporting periods (Q1, Q2, Q3, Q4).
+     * Populated via broker-agnostic adapter to enable seamless annual vs quarterly switching in UI.
+     */
+    private List<IncomeStatementEntry> quarterlyIncomeStatements;
 
     /**
      * Historical Balance Sheet reporting periods.

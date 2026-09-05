@@ -427,6 +427,21 @@ public class FundamentalQueryService {
         });
     }
 
+    /**
+     * Hydrates quarterly income statements (Q1..Q4) from active provider on-demand.
+     * Persists results in MongoDB 'quarterlyIncomeStatements' array to enable zero-lag client toggling.
+     */
+    public List<IncomeStatementEntry> hydrateQuarterlyIncomeStatements(String isin) {
+        return getOrFetchSection(isin, "quarterlyIncomeStatement", () -> {
+            FundamentalDataProvider provider = providerFactory.getActiveProvider();
+            return provider != null ? provider.getIncomeStatement(isin, true, "quarterly") : Collections.emptyList();
+        }, list -> {
+            if (list != null && !list.isEmpty()) {
+                updateDocumentSection(isin, "quarterlyIncomeStatement", doc -> doc.setQuarterlyIncomeStatements(list));
+            }
+        });
+    }
+
     public List<BalanceSheetEntry> hydrateBalanceSheets(String isin) {
         return getOrFetchSection(isin, "balanceSheet", () -> {
             FundamentalDataProvider provider = providerFactory.getActiveProvider();
