@@ -96,8 +96,25 @@ public class FundamentalAnalysisResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class FinancialsSection implements Serializable {
+        /**
+         * Annual multi-year income statements.
+         */
         private List<IncomeStatementEntry> incomeStatement;
+
+        /**
+         * Quarterly income statements (Q1..Q4) for granular performance inspection.
+         * Null or empty if broker does not support quarterly filings.
+         */
+        private List<IncomeStatementEntry> quarterlyIncomeStatement;
+
+        /**
+         * Balance sheet filings (audited annual).
+         */
         private List<BalanceSheetEntry> balanceSheet;
+
+        /**
+         * Cash flow statements (audited annual).
+         */
         private List<CashFlowEntry> cashFlow;
     }
 }

@@ -100,10 +100,17 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                         .build();
             }
 
-            // Construct Financials Section with on-demand hydration if missing
+            // Construct Financials Section with on-demand hydration if missing.
+            // Hydrates both Annual (yearly) and Quarterly income statements so the frontend Equity Insider
+            // toggle can transition seamlessly between Annual and Quarterly views without extra network delays.
             List<IncomeStatementEntry> income = data.getIncomeStatements();
             if (income == null || income.isEmpty()) {
                 income = fundamentalQueryService.hydrateIncomeStatements(data.getIsin());
+            }
+            // On-demand hydration for Quarterly P&L (Q1-Q4) with single-flight request coalescing
+            List<IncomeStatementEntry> quarterlyIncome = data.getQuarterlyIncomeStatements();
+            if (quarterlyIncome == null || quarterlyIncome.isEmpty()) {
+                quarterlyIncome = fundamentalQueryService.hydrateQuarterlyIncomeStatements(data.getIsin());
             }
             List<BalanceSheetEntry> balance = data.getBalanceSheets();
             if (balance == null || balance.isEmpty()) {
@@ -117,6 +124,7 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             FundamentalAnalysisResponse.FinancialsSection financialsSection = FundamentalAnalysisResponse.FinancialsSection
                     .builder()
                     .incomeStatement(income != null ? income : Collections.emptyList())
+                    .quarterlyIncomeStatement(quarterlyIncome != null ? quarterlyIncome : Collections.emptyList())
                     .balanceSheet(balance != null ? balance : Collections.emptyList())
                     .cashFlow(cashFlow != null ? cashFlow : Collections.emptyList())
                     .build();
@@ -202,9 +210,15 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
     @Override
     public FundamentalAnalysisResponse.FinancialsSection getFinancials(String symbol) {
         return processGranularRequest(symbol, "financials", data -> {
+            // Retrieve Annual (yearly) income statements
             List<IncomeStatementEntry> income = data.getIncomeStatements();
             if (income == null || income.isEmpty()) {
                 income = fundamentalQueryService.hydrateIncomeStatements(data.getIsin());
+            }
+            // Retrieve Quarterly income statements (cached in Mongo or hydrated via single-flight upstream call)
+            List<IncomeStatementEntry> quarterlyIncome = data.getQuarterlyIncomeStatements();
+            if (quarterlyIncome == null || quarterlyIncome.isEmpty()) {
+                quarterlyIncome = fundamentalQueryService.hydrateQuarterlyIncomeStatements(data.getIsin());
             }
             List<BalanceSheetEntry> balance = data.getBalanceSheets();
             if (balance == null || balance.isEmpty()) {
@@ -216,6 +230,7 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             }
             return FundamentalAnalysisResponse.FinancialsSection.builder()
                     .incomeStatement(income != null ? income : Collections.emptyList())
+                    .quarterlyIncomeStatement(quarterlyIncome != null ? quarterlyIncome : Collections.emptyList())
                     .balanceSheet(balance != null ? balance : Collections.emptyList())
                     .cashFlow(cashFlow != null ? cashFlow : Collections.emptyList())
                     .build();
