@@ -1,7 +1,6 @@
 # Git directories in submodules (keep for easy module copying, but ignore in main repo)
 am-common-investment-data/.git/
 am-market-data/.git/
-am-market-web/.git/
 am-parser/.git/
 am_market_sdk_flutter/.git/
 market-data-analysis-py/.git/

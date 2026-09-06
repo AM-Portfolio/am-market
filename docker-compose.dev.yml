@@ -12,12 +12,6 @@ services:
       dockerfile: Dockerfile.base-python
     image: am-python-base:latest
 
-  am-flutter-base:
-    build:
-      context: .
-      dockerfile: Dockerfile.base-flutter
-    image: am-flutter-base:latest
-
   # Market Data Backend
   market-data-service:
     container_name: market-data-service
@@ -125,21 +119,6 @@ services:
       - am-network
       - am-infra_am-net
     restart: unless-stopped
-
-  # Market Data Web (Dev)
-  market-data-web:
-    container_name: market-data-web
-    build:
-      context: ../
-      dockerfile: am-market/am_market_ui/live/Dockerfile.dev
-    depends_on:
-      - am-flutter-base
-    ports:
-      - "9002:80"
-    networks:
-      - am-network
-    restart: unless-stopped
-
 
 networks:
   am-network:
