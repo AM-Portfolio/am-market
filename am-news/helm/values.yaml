@@ -9,6 +9,8 @@ security:
 global:
   vault:
     serviceAccountName: "am-backend-sa"
+    csi:
+      enabled: false
 
 image:
   repository: am-news

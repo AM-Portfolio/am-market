@@ -1,6 +1,11 @@
 environment: prod
 replicaCount: 1
 
+global:
+  vault:
+    csi:
+      enabled: false
+
 resources:
   limits:
     cpu: 500m
