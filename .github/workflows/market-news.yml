@@ -15,7 +15,7 @@ jobs:
   publish:
     name: Publish News
     permissions:
-      contents: read
+      contents: write
       packages: write
     uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
     with:
