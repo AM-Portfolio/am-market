@@ -1,0 +1,20 @@
+vault:
+  secretPaths:
+    mongodb:
+      mappings:
+        MONGO_URI: "url"
+    redis:
+      mappings:
+        REDIS_HOSTNAME: "host"
+        REDIS_PASSWORD: "password"
+        REDIS_PORT: "port"
+    identity-oidc:
+      mappings:
+        OIDC_JWKS_URL: "OIDC_JWKS_URL"
+        OIDC_ISSUER: "OIDC_ISSUER"
+    market:
+      mappings:
+        MARKET_DATA_URL: "URL"
+    otel:
+      mappings:
+        TRACING_SAMPLING_PROBABILITY: "TRACING_SAMPLING_PROBABILITY"

@@ -1,0 +1,40 @@
+<mxfile host="app.diagrams.net" modified="2026-09-06T13:50:00.000Z" agent="AM News docs" version="22.1.0" type="device">
+  <diagram id="cross-repo" name="cross-repo">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="ui" value="am-modern-ui&#10;feature/dashboard-news&#10;&#10;Dashboard news slot&#10;news-ui-enabled&#10;EnvDomains.news = $apiBase/news" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="260" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="infra" value="am-infra&#10;feature/am-news-ingress&#10;&#10;Traefik strip /news&#10;dev + preprod + prod middlewares&#10;Ingress -&gt; Service am-news" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="360" y="40" width="260" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="market" value="am-market&#10;feature/am-news&#10;&#10;am-news service (after review)&#10;am-market-data resolve NIFTY 50 (ingest only)&#10;Helm values live here" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="680" y="40" width="280" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="gitops" value="am-gitops&#10;feature/am-news-app&#10;&#10;Argo Application YAML&#10;image-tags&#10;prod: am-apps-prod / am-vps-prod&#10;releaseName am-news (bare)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="40" width="260" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="ext" value="Not git&#10;&#10;GrowthBook news-ui-enabled (create in UI)&#10;Keycloak JWT (admin on am-realm; super_admin on preprod)&#10;Upstox GET /v2/news (admin ingest only)&#10;Mongo news_articles + lineage&#10;Redis shared with market-data (token + snapshots)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="360" y="260" width="600" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="rules" value="Rules: UI never talks to Upstox or /v1/admin. Public paths have no am-news segment. User path never talks to am-market-data. Helm values: am-market. Image tags + Application YAML: am-gitops. Ingress: am-infra. Same Redis as market-data for market_data:upstox:access_token." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="450" width="1240" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="JWT POST /news/v1/insight" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="ui" target="infra">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="infra" target="market">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="helm values from am-market" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="gitops" target="market">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" value="admin ingest only" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="market" target="ext">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,209 @@
+{
+  "info": {
+    "name": "AM News",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "AM News product API (Redis then Mongo for users). Set collection variables: baseUrl, userJwt, adminJwt. Local baseUrl is http://localhost:8080. Cluster is https://am-dev.asrax.in/news or https://am.asrax.in/news. Do not put tokens in git."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://am-dev.asrax.in/news"
+    },
+    {
+      "key": "userJwt",
+      "value": ""
+    },
+    {
+      "key": "adminJwt",
+      "value": ""
+    },
+    {
+      "key": "rawId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "Ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/ready"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Current affairs (no JWT, expect 401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/current-affairs"
+          }
+        },
+        {
+          "name": "Current affairs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userJwt}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/current-affairs"
+          }
+        },
+        {
+          "name": "Insight",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userJwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\"RELIANCE\", \"TCS\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/insight"
+          }
+        },
+        {
+          "name": "Holdings news",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userJwt}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/holdings?symbols=RELIANCE&symbols=TCS"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Start NIFTY 50 feed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminJwt}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/admin/feed/start"
+          }
+        },
+        {
+          "name": "User cannot start feed (expect 403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userJwt}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/admin/feed/start"
+          }
+        },
+        {
+          "name": "Feed status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminJwt}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/admin/feed"
+          }
+        },
+        {
+          "name": "List raw batches",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminJwt}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/admin/raw"
+          }
+        },
+        {
+          "name": "Replay pending",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminJwt}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/admin/replay"
+          }
+        },
+        {
+          "name": "Replay one raw id",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminJwt}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/admin/replay/{{rawId}}"
+          }
+        },
+        {
+          "name": "Stop feed lock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminJwt}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/admin/feed/stop"
+          }
+        }
+      ]
+    }
+  ]
+}
