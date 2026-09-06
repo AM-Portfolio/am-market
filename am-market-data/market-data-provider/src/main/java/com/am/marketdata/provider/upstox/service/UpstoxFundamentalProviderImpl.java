@@ -284,7 +284,14 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
             if (periodLineItems.containsKey(p)) {
                 b.lineItems(periodLineItems.get(p));
             }
-            result.add(b.build());
+            IncomeStatementEntry entry = b.build();
+            // Fallback: If operating profit is omitted by broker, calculate Revenue - Total Expenses
+            if (entry.getOperatingProfit() == null && entry.getRevenue() != null && entry.getTotalExpenses() != null) {
+                entry.setOperatingProfit(entry.getRevenue() - entry.getTotalExpenses());
+            } else if (entry.getOperatingProfit() == null && entry.getTotalRevenue() != null && entry.getTotalExpenses() != null) {
+                entry.setOperatingProfit(entry.getTotalRevenue() - entry.getTotalExpenses());
+            }
+            result.add(entry);
         });
         return result;
     }
