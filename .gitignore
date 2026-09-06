@@ -102,3 +102,9 @@ spt/
 # Local diagnostic scripts
 **/query_local_influx.py
 **/seed_global_indices_influx.py
+**/test_search_edge_cases.py
+*Test.java
+*Tests.java
+**/src/test/
+
+

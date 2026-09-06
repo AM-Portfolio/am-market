@@ -100,13 +100,50 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                         .build();
             }
 
-            // Construct Financials Section
+            // Construct Financials Section with on-demand hydration if missing.
+            // Hydrates both Annual (yearly) and Quarterly income statements so the frontend Equity Insider
+            // toggle can transition seamlessly between Annual and Quarterly views without extra network delays.
+            List<IncomeStatementEntry> income = data.getIncomeStatements();
+            if (income == null || income.isEmpty()) {
+                income = fundamentalQueryService.hydrateIncomeStatements(data.getIsin());
+            }
+            // On-demand hydration for Quarterly P&L (Q1-Q4) with single-flight request coalescing
+            List<IncomeStatementEntry> quarterlyIncome = data.getQuarterlyIncomeStatements();
+            if (isQuarterlyDataInvalidOrMirrored(quarterlyIncome, income)) {
+                quarterlyIncome = fundamentalQueryService.hydrateQuarterlyIncomeStatements(data.getIsin());
+            }
+            List<BalanceSheetEntry> balance = data.getBalanceSheets();
+            if (balance == null || balance.isEmpty()) {
+                balance = fundamentalQueryService.hydrateBalanceSheets(data.getIsin());
+            }
+            List<CashFlowEntry> cashFlow = data.getCashFlows();
+            if (cashFlow == null || cashFlow.isEmpty()) {
+                cashFlow = fundamentalQueryService.hydrateCashFlows(data.getIsin());
+            }
+
             FundamentalAnalysisResponse.FinancialsSection financialsSection = FundamentalAnalysisResponse.FinancialsSection
                     .builder()
-                    .incomeStatement(data.getIncomeStatements() != null ? data.getIncomeStatements() : Collections.emptyList())
-                    .balanceSheet(data.getBalanceSheets() != null ? data.getBalanceSheets() : Collections.emptyList())
-                    .cashFlow(data.getCashFlows() != null ? data.getCashFlows() : Collections.emptyList())
+                    .incomeStatement(income != null ? income : Collections.emptyList())
+                    .quarterlyIncomeStatement(quarterlyIncome != null ? quarterlyIncome : Collections.emptyList())
+                    .balanceSheet(balance != null ? balance : Collections.emptyList())
+                    .cashFlow(cashFlow != null ? cashFlow : Collections.emptyList())
                     .build();
+
+            // Resolve shareholding, corporate actions, and peers with on-demand hydration
+            List<ShareholdingQuarterEntry> shareholdings = data.getShareholdings();
+            if (shareholdings == null || shareholdings.isEmpty()) {
+                shareholdings = fundamentalQueryService.hydrateShareholding(data.getIsin());
+            }
+
+            List<CorporateActionEntry> corporateActions = data.getCorporateActions();
+            if (corporateActions == null || corporateActions.isEmpty()) {
+                corporateActions = fundamentalQueryService.hydrateCorporateActions(data.getIsin());
+            }
+
+            List<CompetitorPeer> peers = data.getPeers();
+            if (peers == null || peers.isEmpty()) {
+                peers = fundamentalQueryService.hydratePeers(data.getIsin());
+            }
 
             // Build Final Unified Response
             FundamentalAnalysisResponse response = FundamentalAnalysisResponse.builder()
@@ -114,9 +151,9 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                     .valuation(ratios)
                     .profitability(profitabilitySection)
                     .financials(financialsSection)
-                    .shareholding(data.getShareholdings() != null ? data.getShareholdings() : Collections.emptyList())
-                    .corporateActions(data.getCorporateActions() != null ? data.getCorporateActions() : Collections.emptyList())
-                    .peers(enrichPeers(data.getPeers()))
+                    .shareholding(shareholdings != null ? shareholdings : Collections.emptyList())
+                    .corporateActions(corporateActions != null ? corporateActions : Collections.emptyList())
+                    .peers(enrichPeers(peers))
                     .analytics(computeAnalyticsIfAbsent(data))
                     .build();
 
@@ -172,30 +209,65 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
 
     @Override
     public FundamentalAnalysisResponse.FinancialsSection getFinancials(String symbol) {
-        return processGranularRequest(symbol, "financials",
-                data -> FundamentalAnalysisResponse.FinancialsSection.builder()
-                        .incomeStatement(data.getIncomeStatements() != null ? data.getIncomeStatements() : Collections.emptyList())
-                        .balanceSheet(data.getBalanceSheets() != null ? data.getBalanceSheets() : Collections.emptyList())
-                        .cashFlow(data.getCashFlows() != null ? data.getCashFlows() : Collections.emptyList())
-                        .build());
+        return processGranularRequest(symbol, "financials", data -> {
+            // Retrieve Annual (yearly) income statements
+            List<IncomeStatementEntry> income = data.getIncomeStatements();
+            if (income == null || income.isEmpty()) {
+                income = fundamentalQueryService.hydrateIncomeStatements(data.getIsin());
+            }
+            // Retrieve Quarterly income statements (cached in Mongo or hydrated via single-flight upstream call)
+            List<IncomeStatementEntry> quarterlyIncome = data.getQuarterlyIncomeStatements();
+            if (isQuarterlyDataInvalidOrMirrored(quarterlyIncome, income)) {
+                quarterlyIncome = fundamentalQueryService.hydrateQuarterlyIncomeStatements(data.getIsin());
+            }
+            List<BalanceSheetEntry> balance = data.getBalanceSheets();
+            if (balance == null || balance.isEmpty()) {
+                balance = fundamentalQueryService.hydrateBalanceSheets(data.getIsin());
+            }
+            List<CashFlowEntry> cashFlow = data.getCashFlows();
+            if (cashFlow == null || cashFlow.isEmpty()) {
+                cashFlow = fundamentalQueryService.hydrateCashFlows(data.getIsin());
+            }
+            return FundamentalAnalysisResponse.FinancialsSection.builder()
+                    .incomeStatement(income != null ? income : Collections.emptyList())
+                    .quarterlyIncomeStatement(quarterlyIncome != null ? quarterlyIncome : Collections.emptyList())
+                    .balanceSheet(balance != null ? balance : Collections.emptyList())
+                    .cashFlow(cashFlow != null ? cashFlow : Collections.emptyList())
+                    .build();
+        });
     }
 
     @Override
     public List<ShareholdingQuarterEntry> getShareholding(String symbol) {
-        return processGranularRequest(symbol, "shareholding",
-                data -> data.getShareholdings() != null ? data.getShareholdings() : Collections.emptyList());
+        return processGranularRequest(symbol, "shareholding", data -> {
+            List<ShareholdingQuarterEntry> list = data.getShareholdings();
+            if (list == null || list.isEmpty()) {
+                list = fundamentalQueryService.hydrateShareholding(data.getIsin());
+            }
+            return list != null ? list : Collections.emptyList();
+        });
     }
 
     @Override
     public List<CorporateActionEntry> getCorporateActions(String symbol) {
-        return processGranularRequest(symbol, "corporateActions",
-                data -> data.getCorporateActions() != null ? data.getCorporateActions() : Collections.emptyList());
+        return processGranularRequest(symbol, "corporateActions", data -> {
+            List<CorporateActionEntry> list = data.getCorporateActions();
+            if (list == null || list.isEmpty()) {
+                list = fundamentalQueryService.hydrateCorporateActions(data.getIsin());
+            }
+            return list != null ? list : Collections.emptyList();
+        });
     }
 
     @Override
     public List<CompetitorPeer> getPeers(String symbol) {
-        return processGranularRequest(symbol, "peers",
-                data -> enrichPeers(data.getPeers()));
+        return processGranularRequest(symbol, "peers", data -> {
+            List<CompetitorPeer> list = data.getPeers();
+            if (list == null || list.isEmpty()) {
+                list = fundamentalQueryService.hydratePeers(data.getIsin());
+            }
+            return enrichPeers(list);
+        });
     }
 
     @Override
@@ -406,7 +478,11 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                     cleanName = rawName.substring(0, isIndex).trim();
                 } else {
                     int firstDot = rawName.indexOf('.');
-                    cleanName = (firstDot > 0 && firstDot < 80) ? rawName.substring(0, firstDot).trim() : rawName.substring(0, 50).trim();
+                    if (firstDot > 0 && firstDot < 80) {
+                        cleanName = rawName.substring(0, firstDot).trim();
+                    } else {
+                        cleanName = rawName.length() > 50 ? rawName.substring(0, 50).trim() : rawName.trim();
+                    }
                 }
             }
 
@@ -477,5 +553,39 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             enrichedList.add(builder.build());
         }
         return enrichedList;
+    }
+
+    /**
+     * Checks if quarterly income statements are missing, empty, or mistakenly mirroring annual figures.
+     */
+    private boolean isQuarterlyDataInvalidOrMirrored(List<IncomeStatementEntry> quarterlyIncome, List<IncomeStatementEntry> annualIncome) {
+        if (quarterlyIncome == null || quarterlyIncome.isEmpty()) {
+            return true;
+        }
+        // If quarterly size matches annual size and top revenue is identical to annual revenue, it's corrupted/mirrored data
+        if (annualIncome != null && !annualIncome.isEmpty() && quarterlyIncome.size() == annualIncome.size()) {
+            Double qRev = quarterlyIncome.get(0).getRevenue();
+            Double aRev = annualIncome.get(0).getRevenue();
+            String qPeriod = quarterlyIncome.get(0).getPeriod();
+            String aPeriod = annualIncome.get(0).getPeriod();
+            if (qRev != null && qRev.equals(aRev) && qPeriod != null && qPeriod.equalsIgnoreCase(aPeriod)) {
+                log.warn("Detected quarterly income statements mirroring annual data (period={}, revenue={}); forcing on-demand hydration", qPeriod, qRev);
+                return true;
+            }
+        }
+        // Check if periods don't look quarterly (e.g. all Mar 2026, Mar 2025, Mar 2024...)
+        if (quarterlyIncome.size() > 1) {
+            String p0 = quarterlyIncome.get(0).getPeriod();
+            String p1 = quarterlyIncome.get(1).getPeriod();
+            if (p0 != null && p1 != null) {
+                String[] parts0 = p0.trim().split("\\s+");
+                String[] parts1 = p1.trim().split("\\s+");
+                if (parts0.length == 2 && parts1.length == 2 && parts0[0].equalsIgnoreCase(parts1[0]) && !parts0[1].equalsIgnoreCase(parts1[1])) {
+                    log.warn("Detected quarterly income statements having multi-year intervals ({}, {}); forcing on-demand hydration", p0, p1);
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }
