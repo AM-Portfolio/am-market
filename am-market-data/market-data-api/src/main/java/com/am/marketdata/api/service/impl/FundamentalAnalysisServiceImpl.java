@@ -109,7 +109,7 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             }
             // On-demand hydration for Quarterly P&L (Q1-Q4) with single-flight request coalescing
             List<IncomeStatementEntry> quarterlyIncome = data.getQuarterlyIncomeStatements();
-            if (quarterlyIncome == null || quarterlyIncome.isEmpty()) {
+            if (isQuarterlyDataInvalidOrMirrored(quarterlyIncome, income)) {
                 quarterlyIncome = fundamentalQueryService.hydrateQuarterlyIncomeStatements(data.getIsin());
             }
             List<BalanceSheetEntry> balance = data.getBalanceSheets();
@@ -217,7 +217,7 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             }
             // Retrieve Quarterly income statements (cached in Mongo or hydrated via single-flight upstream call)
             List<IncomeStatementEntry> quarterlyIncome = data.getQuarterlyIncomeStatements();
-            if (quarterlyIncome == null || quarterlyIncome.isEmpty()) {
+            if (isQuarterlyDataInvalidOrMirrored(quarterlyIncome, income)) {
                 quarterlyIncome = fundamentalQueryService.hydrateQuarterlyIncomeStatements(data.getIsin());
             }
             List<BalanceSheetEntry> balance = data.getBalanceSheets();
@@ -553,5 +553,39 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             enrichedList.add(builder.build());
         }
         return enrichedList;
+    }
+
+    /**
+     * Checks if quarterly income statements are missing, empty, or mistakenly mirroring annual figures.
+     */
+    private boolean isQuarterlyDataInvalidOrMirrored(List<IncomeStatementEntry> quarterlyIncome, List<IncomeStatementEntry> annualIncome) {
+        if (quarterlyIncome == null || quarterlyIncome.isEmpty()) {
+            return true;
+        }
+        // If quarterly size matches annual size and top revenue is identical to annual revenue, it's corrupted/mirrored data
+        if (annualIncome != null && !annualIncome.isEmpty() && quarterlyIncome.size() == annualIncome.size()) {
+            Double qRev = quarterlyIncome.get(0).getRevenue();
+            Double aRev = annualIncome.get(0).getRevenue();
+            String qPeriod = quarterlyIncome.get(0).getPeriod();
+            String aPeriod = annualIncome.get(0).getPeriod();
+            if (qRev != null && qRev.equals(aRev) && qPeriod != null && qPeriod.equalsIgnoreCase(aPeriod)) {
+                log.warn("Detected quarterly income statements mirroring annual data (period={}, revenue={}); forcing on-demand hydration", qPeriod, qRev);
+                return true;
+            }
+        }
+        // Check if periods don't look quarterly (e.g. all Mar 2026, Mar 2025, Mar 2024...)
+        if (quarterlyIncome.size() > 1) {
+            String p0 = quarterlyIncome.get(0).getPeriod();
+            String p1 = quarterlyIncome.get(1).getPeriod();
+            if (p0 != null && p1 != null) {
+                String[] parts0 = p0.trim().split("\\s+");
+                String[] parts1 = p1.trim().split("\\s+");
+                if (parts0.length == 2 && parts1.length == 2 && parts0[0].equalsIgnoreCase(parts1[0]) && !parts0[1].equalsIgnoreCase(parts1[1])) {
+                    log.warn("Detected quarterly income statements having multi-year intervals ({}, {}); forcing on-demand hydration", p0, p1);
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

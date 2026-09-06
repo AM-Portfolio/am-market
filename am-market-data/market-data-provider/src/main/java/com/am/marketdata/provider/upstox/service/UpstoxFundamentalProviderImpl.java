@@ -212,7 +212,26 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
 
         // 1. Process full_statement particulars
         JsonNode fullStatement = data.path("full_statement");
-        if (fullStatement.isArray()) {
+        boolean isQuarterlyRequest = "quarterly".equalsIgnoreCase(period);
+        boolean fullStatementIsYearlyOnly = false;
+
+        // Inspect if full_statement is mistakenly returning annual (yearly) data even on quarterly requests
+        if (isQuarterlyRequest && fullStatement.isArray() && !fullStatement.isEmpty()) {
+            JsonNode firstRowHistory = fullStatement.get(0).path("history");
+            if (firstRowHistory.isArray() && firstRowHistory.size() > 1) {
+                // If periods across consecutive points have different years with the same month (e.g. Mar 2026, Mar 2025), full_statement is annual!
+                String p0 = firstRowHistory.get(0).path("period").asText("");
+                String p1 = firstRowHistory.get(1).path("period").asText("");
+                String[] m0 = p0.split(" ");
+                String[] m1 = p1.split(" ");
+                if (m0.length == 2 && m1.length == 2 && m0[0].equalsIgnoreCase(m1[0])) {
+                    fullStatementIsYearlyOnly = true;
+                    log.warn("Upstox full_statement for isin={} returned yearly periods ({}, {}) on a quarterly request; will populate quarterly periods from income_statement array instead", isin, p0, p1);
+                }
+            }
+        }
+
+        if (fullStatement.isArray() && !fullStatementIsYearlyOnly) {
             for (JsonNode row : fullStatement) {
                 String rawName = row.path("particular").asText("");
                 String particular = normalizeParticular(rawName);
@@ -252,7 +271,7 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
             }
         }
 
-        // 2. Process growth metrics from income_statement summary array
+        // 2. Process growth metrics and populate periods from income_statement summary array
         JsonNode summary = data.path("income_statement");
         if (summary.isArray()) {
             for (JsonNode cat : summary) {
@@ -261,17 +280,37 @@ public class UpstoxFundamentalProviderImpl implements FundamentalDataProvider {
                 if (history.isArray()) {
                     for (JsonNode point : history) {
                         String pointPeriod = point.path("period").asText(null);
-                        if (pointPeriod == null || !periodMap.containsKey(pointPeriod))
+                        if (pointPeriod == null || pointPeriod.trim().isEmpty())
                             continue;
 
+                        Double pointVal = point.hasNonNull("value") ? point.path("value").asDouble() : null;
                         Double changeVal = parsePercentOrNull(point.path("change").asText(null));
-                        IncomeStatementEntry.IncomeStatementEntryBuilder builder = periodMap.get(pointPeriod);
-                        if (builder != null && changeVal != null) {
-                            switch (category) {
-                                case "revenue" -> builder.revenueChangePercent(changeVal);
-                                case "operating profit", "operating_profit" ->
-                                    builder.operatingProfitChangePercent(changeVal);
-                                case "net profit", "net_profit" -> builder.netProfitChangePercent(changeVal);
+
+                        IncomeStatementEntry.IncomeStatementEntryBuilder builder = periodMap.computeIfAbsent(
+                                pointPeriod,
+                                p -> IncomeStatementEntry.builder().period(p).type(type).timePeriod(period).unit(unit));
+
+                        switch (category) {
+                            case "revenue" -> {
+                                if (pointVal != null && (builder.build().getRevenue() == null || fullStatementIsYearlyOnly)) {
+                                    builder.revenue(pointVal);
+                                    periodLineItems.computeIfAbsent(pointPeriod, p -> new java.util.LinkedHashMap<>()).put("Revenue", pointVal);
+                                }
+                                if (changeVal != null) builder.revenueChangePercent(changeVal);
+                            }
+                            case "operating profit", "operating_profit" -> {
+                                if (pointVal != null && (builder.build().getOperatingProfit() == null || fullStatementIsYearlyOnly)) {
+                                    builder.operatingProfit(pointVal);
+                                    periodLineItems.computeIfAbsent(pointPeriod, p -> new java.util.LinkedHashMap<>()).put("Operating Profit", pointVal);
+                                }
+                                if (changeVal != null) builder.operatingProfitChangePercent(changeVal);
+                            }
+                            case "net profit", "net_profit" -> {
+                                if (pointVal != null && (builder.build().getProfitAfterTax() == null || fullStatementIsYearlyOnly)) {
+                                    builder.profitAfterTax(pointVal);
+                                    periodLineItems.computeIfAbsent(pointPeriod, p -> new java.util.LinkedHashMap<>()).put("Profit After Tax", pointVal);
+                                }
+                                if (changeVal != null) builder.netProfitChangePercent(changeVal);
                             }
                         }
                     }
