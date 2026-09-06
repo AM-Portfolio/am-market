@@ -1,0 +1,28 @@
+name: Market News Publish
+
+on:
+  push:
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
+    paths:
+      - "am-news/**"
+  pull_request:
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
+    paths:
+      - "am-news/**"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish News
+    permissions:
+      contents: read
+      packages: write
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
+    with:
+      language: "python"
+      working_directory: "am-news"
+      image_name: "am-news"
+      preprod_namespace: "am-apps-preprod"
+      prod_namespace: "am-apps-prod"
+      deploy_prod: true
+    secrets: inherit

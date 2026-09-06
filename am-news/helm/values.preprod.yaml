@@ -1,0 +1,53 @@
+environment: preprod
+replicaCount: 1
+
+env:
+  ENVIRONMENT: "preprod"
+  MONGO_DB: "am_news"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  NEWS_SYNC_ENABLED: "1"
+  NEWS_DOCS_ENABLED: "1"
+  LOG_LEVEL: "INFO"
+
+probes:
+  port: 8080
+  startup:
+    path: /health
+    timeoutSeconds: 10
+    failureThreshold: 30
+    periodSeconds: 10
+  liveness:
+    path: /health
+    timeoutSeconds: 10
+  readiness:
+    path: /ready
+    timeoutSeconds: 10
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-preprod-global-cors@kubernetescrd,
+      am-apps-preprod-strip-prefix-apps@kubernetescrd
+  hosts:
+    - host: am-preprod.asrax.in
+      paths:
+        - path: /news
+          pathType: Prefix
+
+vault:
+  enabled: true
+  secretPaths:
+    otel:
+      path: "apps/data/preprod/infra/observability"
+    mongodb:
+      path: "apps/data/preprod/infra/mongodb"
+    redis:
+      path: "apps/data/preprod/infra/redis"
+    identity-oidc:
+      path: "apps/data/preprod/services/am-identity"
+    market:
+      path: "apps/data/preprod/services/am-market-data"
