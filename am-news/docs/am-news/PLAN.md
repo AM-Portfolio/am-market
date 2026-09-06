@@ -227,7 +227,7 @@ Postman is generated from that spec, not a second hand-written contract:
 
 - `am-news/postman/AM-News.postman_collection.json` imported from `/openapi.json`
 - Folders = OpenAPI tags (Current affairs, Insight, Holdings, Admin)
-- Collection vars: `baseUrl` (local `http://localhost:{port}` or `https://am-dev.asrax.in/news`), `userJwt`, `adminJwt`
+- Collection vars: `news_base_url` (prod default `https://am.asrax.in/news`; prerequest maps `platform_env` / `am_env`), `identity_base_url`, `access_token` (same Identity login capture)
 - Separate vendor collection `Upstox News (AM ingest)` stays vendor-only (see CONTEXT). Product collection is not hand-written in Phase 1
 - Test: `tests/test_openapi_schema.py` fails if a 2xx lacks a named schema or `operationId`
 
@@ -288,7 +288,7 @@ Target: cluster am-vps-prod, namespace `am-apps-prod`, public prefix `https://am
 
 Prereqs on prod: `/news` on prod-middlewares, Ingress backend Service `am-news`, Vault mappings (mongo, same Redis as prod am-market-data, OIDC), Argo Application `am-news-prod`, image tag in `prod/image-tags/am-news.yaml`. Confirm `market_data:upstox:access_token` exists on that Redis (otherwise feed status is `token_missing` and we stop).
 
-Admin feed test (Postman AM News, `adminJwt` with `admin` or `super_admin`):
+Admin feed test (Postman AM News, `access_token` from an `admin` login):
 
 1. `GET /news/v1/admin/feed` -> not running, token present
 2. `POST /news/v1/admin/feed/start` -> 202. Universe = all NIFTY 50 instrument keys from `news_instrument_cache` (loaded from am-market-data at start). Walker uses batches of 30. Second start while running -> 409

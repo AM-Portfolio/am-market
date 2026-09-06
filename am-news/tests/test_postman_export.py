@@ -22,7 +22,7 @@ def test_committed_postman_collection_is_runnable():
     collection = json.loads(OUT.read_text(encoding="utf-8"))
     assert collection["info"]["name"] == "AM News"
     folders = {folder["name"] for folder in collection["item"]}
-    assert {"Health", "User", "Admin"} <= folders
+    assert {"Auth", "Health", "User", "Admin"} <= folders
     insight = next(
         req
         for folder in collection["item"]
@@ -33,5 +33,20 @@ def test_committed_postman_collection_is_runnable():
     assert insight["request"]["method"] == "POST"
     assert "/v1/insight" in insight["request"]["url"]
     assert "symbols" in insight["request"]["body"]["raw"]
+    assert "{{news_base_url}}" in insight["request"]["url"]
+    assert "{{userJwt}}" not in json.dumps(collection)
+    assert "{{adminJwt}}" not in json.dumps(collection)
+    assert "{{baseUrl}}" not in json.dumps(collection)
     keys = {var["key"] for var in collection["variable"]}
-    assert {"baseUrl", "userJwt", "adminJwt"} <= keys
+    assert {"news_base_url", "identity_base_url", "access_token"} <= keys
+    values = {var["key"]: var["value"] for var in collection["variable"]}
+    assert values["news_base_url"] == "https://am.asrax.in/news"
+    assert collection["auth"]["type"] == "bearer"
+    login = next(
+        req
+        for folder in collection["item"]
+        if folder["name"] == "Auth"
+        for req in folder["item"]
+        if req["name"] == "Login (Web)"
+    )
+    assert login["request"]["url"] == "{{identity_base_url}}/auth/login"

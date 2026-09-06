@@ -18,13 +18,13 @@ Check off in git as work lands. Canonical hub: this directory.
 - [x] Admin use cases + `am_platform_security` roles (`admin` / `super_admin`)
 - [x] Helm values + vault-mappings (same Redis as market-data); `market-news.yml` CI; direct-deploy including prod
 - [ ] After `am test` green and merge to main: deploy am-apps-prod / am-vps-prod. Admin `startFeed` for all NIFTY 50. Verify status/raw/articles/Redis. User 401/200, user cannot start feed
-- [ ] Then full UI integration. GB production stays OFF until that is signed off
+- [ ] Then full UI integration.
 
 ## am-modern-ui (`feature/dashboard-news`)
 
 - [x] Pointer README under `docs/am-news/`
 - [x] `FeatureFlagKeys.newsUiEnabled` + `newsUiEnabledProvider` defaultValue true except production flavor false
-- [ ] GrowthBook force ON dev/preprod, OFF production/spt (create flag in GB UI; MCP create failed)
+- [x] GrowthBook `news-ui-enabled` force ON production/dev/preprod (spt off)
 - [x] `DashboardWidgetId.news` + default layout + catalog builder
 - [x] `EnvDomains.news` = `$apiBase/news` then client paths `/v1/insight` (not `/v1/news/insight`). `NewsApiConfig` + `NewsRepository` JWT, 800ms timeout
 - [x] Holdings symbols from portfolio holdings (not movers); parallel kickoff; skeleton/empty copy
@@ -47,7 +47,7 @@ Check off in git as work lands. Canonical hub: this directory.
 - [x] Live GET `/v2/news` + redacted fixture
 - [x] Enable Upstox MCP OAuth (no news tool; REST ingest)
 - [x] Vendor Postman News folder (fallback collection; original UpstoxAPI is 403)
-- [ ] Create `news-ui-enabled`; force ON dev/preprod, OFF production/spt (GB UI; MCP blocked on missing datasource)
+- [x] Create `news-ui-enabled`; force ON production/dev/preprod, OFF spt
 - [x] Vault path names for mongo/redis/oidc. Same Redis as market-data
 - [ ] Cluster confirm Redis key `market_data:upstox:access_token` on prod
 - [ ] After service: `am test` -> deploy prod VPS `am-apps-prod` -> admin NIFTY 50 feed -> user 401/200 -> then dashboard integration
