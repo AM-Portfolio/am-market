@@ -12,6 +12,8 @@ services:
       dockerfile: Dockerfile.base-python
     image: am-python-base:latest
 
+
+
   # Market Data Backend
   market-data-service:
     container_name: market-data-service
