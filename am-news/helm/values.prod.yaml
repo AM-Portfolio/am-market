@@ -1,0 +1,61 @@
+environment: prod
+replicaCount: 1
+
+global:
+  vault:
+    csi:
+      enabled: false
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+env:
+  ENVIRONMENT: "prod"
+  MONGO_DB: "am_news"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  NEWS_SYNC_ENABLED: "1"
+  NEWS_DOCS_ENABLED: "0"
+  LOG_LEVEL: "INFO"
+
+probes:
+  port: 8080
+  liveness:
+    path: /health
+    timeoutSeconds: 10
+  readiness:
+    path: /ready
+    timeoutSeconds: 10
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-prod-global-cors@kubernetescrd,
+      am-apps-prod-strip-prefix-apps@kubernetescrd
+  hosts:
+    - host: am.asrax.in
+      paths:
+        - path: /news
+          pathType: Prefix
+
+vault:
+  enabled: true
+  secretPaths:
+    otel:
+      path: "apps/data/prod/infra/observability"
+    mongodb:
+      path: "apps/data/prod/infra/mongodb"
+    redis:
+      path: "apps/data/prod/infra/redis"
+    identity-oidc:
+      path: "apps/data/prod/services/am-identity"
+    market:
+      path: "apps/data/prod/services/am-market-data"

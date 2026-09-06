@@ -1,0 +1,56 @@
+replicaCount: 1
+service:
+  port: 8080
+language: python
+port: 8080
+entrypoint: "exec uvicorn am_news.main:app --host 0.0.0.0 --port 8080"
+
+security:
+  automountServiceAccountToken: true
+
+global:
+  vault:
+    serviceAccountName: "am-backend-sa"
+    csi:
+      enabled: false
+
+image:
+  repository: am-news
+  pullPolicy: Always
+
+ingress:
+  enabled: false
+  className: "traefik"
+  hosts: []
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+environment: preprod
+
+vault:
+  enabled: true
+  role: "am-backend-role"
+  serviceAccountName: "am-backend-sa"
+  secretPaths: {}
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+env:
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318/v1/traces"

@@ -1,0 +1,18 @@
+# Local amctl identity — matches CI image_name
+name: am-news
+release: am-news
+image: ghcr.io/am-portfolio/am-news
+runtime: python
+language: python
+entrypoint: am_news.main:app
+port: 8080
+dockerfile: Dockerfile
+context: .
+github:
+  repo: AM-Portfolio/am-market
+  deploy_workflow: direct-deploy.yml
+  service: am-news
+  ref: main
+deploy:
+  via: helm
+  rebuild: on-change

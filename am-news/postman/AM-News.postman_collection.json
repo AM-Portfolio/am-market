@@ -1,0 +1,278 @@
+{
+  "info": {
+    "name": "AM News",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "AM News product API. Select an AM env (AM Platform — Prod, AM — Dev, AM — Preprod, AM — Local). URLs use `news_base_url` so they do not collide with identity `base_url` / `baseUrl`. Login saves `access_token` the same way Identity does (`pm.environment.set` + collection var). Admin routes use that same token; login as a user with the `admin` role. Do not put tokens in git.\n\nHosts: local `http://localhost:8080`, dev `https://am-dev.asrax.in/news`, preprod `https://am-preprod.asrax.in/news`, prod `https://am.asrax.in/news`."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const hosts = {",
+          "  local: 'http://localhost:8080',",
+          "  dev: 'https://am-dev.asrax.in/news',",
+          "  preprod: 'https://am-preprod.asrax.in/news',",
+          "  prod: 'https://am.asrax.in/news'",
+          "};",
+          "const identityHosts = {",
+          "  local: 'http://localhost:8113',",
+          "  dev: 'https://am-dev.asrax.in/identity',",
+          "  preprod: 'https://am-preprod.asrax.in/identity',",
+          "  prod: 'https://am.asrax.in/identity'",
+          "};",
+          "const envName = String(pm.environment.get('platform_env') || pm.environment.get('am_env') || '').toLowerCase();",
+          "if (!pm.environment.get('news_base_url') && envName && hosts[envName]) {",
+          "  pm.collectionVariables.set('news_base_url', hosts[envName]);",
+          "}",
+          "if (!pm.environment.get('identity_base_url') && envName && identityHosts[envName]) {",
+          "  pm.collectionVariables.set('identity_base_url', identityHosts[envName]);",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (pm.response.code < 200 || pm.response.code >= 300) {",
+          "  return;",
+          "}",
+          "try {",
+          "  const body = pm.response.json();",
+          "  if (body.access_token) {",
+          "    pm.environment.set('access_token', body.access_token);",
+          "    pm.collectionVariables.set('access_token', body.access_token);",
+          "  }",
+          "  if (body.refresh_token) {",
+          "    pm.environment.set('refresh_token', body.refresh_token);",
+          "    pm.collectionVariables.set('refresh_token', body.refresh_token);",
+          "  }",
+          "  if (body.tokens && body.tokens.access_token) {",
+          "    pm.environment.set('access_token', body.tokens.access_token);",
+          "    pm.collectionVariables.set('access_token', body.tokens.access_token);",
+          "  }",
+          "  if (body.tokens && body.tokens.refresh_token) {",
+          "    pm.environment.set('refresh_token', body.tokens.refresh_token);",
+          "    pm.collectionVariables.set('refresh_token', body.tokens.refresh_token);",
+          "  }",
+          "} catch (e) {}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "news_base_url",
+      "value": "https://am.asrax.in/news"
+    },
+    {
+      "key": "identity_base_url",
+      "value": "https://am.asrax.in/identity"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "rawId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Same login as AM Identity. Uses `identity_base_url`, `test_email`, and `test_password` from the selected AM env. Saves `access_token` onto that env.",
+      "auth": {
+        "type": "noauth"
+      },
+      "item": [
+        {
+          "name": "Login (Web)",
+          "description": "Password grant as Web (`am-web-client`). Writes `access_token` like Identity Login (Web).",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\",\n  \"platform\": \"web\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{identity_base_url}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "auth": {
+        "type": "noauth"
+      },
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{news_base_url}}/health"
+          }
+        },
+        {
+          "name": "Ready",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{news_base_url}}/ready"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Current affairs (no JWT, expect 401)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{news_base_url}}/v1/current-affairs"
+          }
+        },
+        {
+          "name": "Current affairs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{news_base_url}}/v1/current-affairs"
+          }
+        },
+        {
+          "name": "Insight",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\"RELIANCE\", \"TCS\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{news_base_url}}/v1/insight"
+          }
+        },
+        {
+          "name": "Holdings news",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{news_base_url}}/v1/holdings?symbols=RELIANCE&symbols=TCS"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Needs `access_token` from a user with the `admin` role. Login (Web) first with that account.",
+      "item": [
+        {
+          "name": "Start NIFTY 50 feed",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{news_base_url}}/v1/admin/feed/start"
+          }
+        },
+        {
+          "name": "User cannot start feed (expect 403)",
+          "description": "Run after Login (Web) as a non-admin user. Expect 403.",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{news_base_url}}/v1/admin/feed/start"
+          }
+        },
+        {
+          "name": "Feed status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{news_base_url}}/v1/admin/feed"
+          }
+        },
+        {
+          "name": "List raw batches",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{news_base_url}}/v1/admin/raw"
+          }
+        },
+        {
+          "name": "Replay pending",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{news_base_url}}/v1/admin/replay"
+          }
+        },
+        {
+          "name": "Replay one raw id",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{news_base_url}}/v1/admin/replay/{{rawId}}"
+          }
+        },
+        {
+          "name": "Stop feed lock",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{news_base_url}}/v1/admin/feed/stop"
+          }
+        }
+      ]
+    }
+  ]
+}
