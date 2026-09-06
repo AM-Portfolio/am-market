@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     )
     oidc_issuer: str = ""
     oidc_jwks_url: str = ""
+    jwt_secret: str = ""
+    oauth2_client_id: str = ""
+    oauth2_client_secret: str = ""
+    upstox_access_token: str = ""
     raw_ttl_days: int = 14
     affairs_ttl_seconds: int = 120
     holdings_ttl_seconds: int = 60

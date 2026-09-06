@@ -48,7 +48,7 @@ class RedisStores:
 
     async def get_upstox_token(self) -> str | None:
         value = await self._redis.get(TOKEN_KEY)
-        return value or None
+        return value or settings.upstox_access_token or None
 
     async def acquire(self) -> bool:
         return bool(await self._redis.set(LOCK_KEY, "1", nx=True, ex=settings.feed_lock_ttl_seconds))

@@ -2,6 +2,8 @@ replicaCount: 1
 service:
   port: 8080
 language: python
+port: 8080
+entrypoint: "exec uvicorn am_news.main:app --host 0.0.0.0 --port 8080"
 
 security:
   automountServiceAccountToken: true

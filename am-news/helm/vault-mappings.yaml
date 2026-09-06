@@ -14,7 +14,8 @@ vault:
         OIDC_ISSUER: "OIDC_ISSUER"
     market:
       mappings:
-        MARKET_DATA_URL: "URL"
+        JWT_SECRET: "JWT_SECRET_KEY"
+        UPSTOX_ACCESS_TOKEN: "UPSTOCK_ACCESS_TOKEN"
     otel:
       mappings:
         TRACING_SAMPLING_PROBABILITY: "TRACING_SAMPLING_PROBABILITY"
