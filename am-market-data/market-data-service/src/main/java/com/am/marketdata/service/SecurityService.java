@@ -810,9 +810,143 @@ public class SecurityService {
                     Criteria.where("key.isin").regex(regex, "i")));
         }
 
+        // 0. OPT-IN SMART RECOMMENDATION FAST-PATH:
+        // When client explicitly requests smart recommendations, route to Redis-backed, market-cap-ranked pipeline.
+        if (Boolean.TRUE.equals(request.getSmartRecommendations())) {
+            return smartRecommend(request.getQuery(), request.getCategory(), request.getLimit());
+        }
+
         // 4. QUERY EXECUTION:
         // Executes indexed query against MongoDB (utilizes Text Index and B-Tree indexes for <1ms latency)
         return mongoTemplate.find(query, SecurityDocument.class);
+    }
+
+    /**
+     * Centralized smart recommendation method:
+     * 1. Sanitizes query by stripping quotes and extra whitespace.
+     * 2. Returns pre-cached NIFTY 50 blue chips for empty or single-character inputs.
+     * 3. Checks Redis ("search:suggest:<category>:<query>") for sub-millisecond cache hits.
+     * 4. On cache miss, queries active MongoDB cash equities (status != DELISTED),
+     *    sorts candidates by market_cap_value DESC, and writes through to Redis (24h TTL).
+     */
+    public List<SecurityDocument> smartRecommend(String rawQuery, String category, Integer limit) {
+        String query = rawQuery == null ? "" : rawQuery.replaceAll("[\"']", "").trim();
+        int maxResults = (limit != null && limit > 0) ? Math.min(limit, 50) : 8;
+        String cat = (category != null && !category.isBlank()) ? category.trim().toUpperCase() : "STOCKS";
+
+        // Handle empty or 1-char input: return top trending large-cap stocks
+        if (query.length() < 2) {
+            return getTrendingBlueChips(maxResults);
+        }
+
+        // Step 1: Check Redis distributed cache for instant response (<1ms)
+        String cacheKey = "search:suggest:" + cat + ":" + query.toUpperCase();
+        try {
+            Object cached = redisTemplate.opsForValue().get(cacheKey);
+            if (cached instanceof List<?> list && !list.isEmpty()) {
+                List<SecurityDocument> deserialized = objectMapper.convertValue(
+                        list, new TypeReference<List<SecurityDocument>>() {});
+                if (deserialized != null && !deserialized.isEmpty()) {
+                    return deserialized.size() > maxResults ? deserialized.subList(0, maxResults) : deserialized;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("smartRecommend", "Redis cache read error for " + cacheKey + ": " + e.getMessage());
+        }
+
+        // Step 2: Query MongoDB with active delisting filter & anchored prefix matching
+        Query mongoQuery = new Query();
+        mongoQuery.fields().include("key").include("metadata");
+
+        // Suppress delisted/suspended securities (e.g. delisted 2023 HDFC Ltd)
+        mongoQuery.addCriteria(Criteria.where("metadata.status").ne("DELISTED"));
+
+        Pattern symbolPattern = Pattern.compile("^" + Pattern.quote(query), Pattern.CASE_INSENSITIVE);
+        Pattern nameWordPattern = Pattern.compile("\\b" + Pattern.quote(query), Pattern.CASE_INSENSITIVE);
+
+        Criteria searchCriteria = new Criteria().orOperator(
+                Criteria.where("key.symbol").regex(symbolPattern),
+                Criteria.where("metadata.company_name").regex(nameWordPattern),
+                Criteria.where("metadata.companyName").regex(nameWordPattern)
+        );
+        mongoQuery.addCriteria(searchCriteria);
+
+        // Sort by Market Cap descending: Large caps (HDFCBANK) float to the top naturally
+        mongoQuery.with(org.springframework.data.domain.Sort.by(
+                org.springframework.data.domain.Sort.Direction.DESC, "metadata.market_cap_value"
+        ));
+        mongoQuery.limit(maxResults);
+
+        List<SecurityDocument> results = mongoTemplate.find(mongoQuery, SecurityDocument.class);
+
+        // Step 3: Loose substring fallback if prefix search yielded 0 results
+        if (results.isEmpty()) {
+            Query fallbackQuery = new Query();
+            fallbackQuery.fields().include("key").include("metadata");
+            fallbackQuery.addCriteria(Criteria.where("metadata.status").ne("DELISTED"));
+
+            Pattern substringPattern = Pattern.compile(Pattern.quote(query), Pattern.CASE_INSENSITIVE);
+            fallbackQuery.addCriteria(new Criteria().orOperator(
+                    Criteria.where("key.symbol").regex(substringPattern),
+                    Criteria.where("metadata.company_name").regex(substringPattern),
+                    Criteria.where("metadata.companyName").regex(substringPattern)
+            ));
+            fallbackQuery.with(org.springframework.data.domain.Sort.by(
+                    org.springframework.data.domain.Sort.Direction.DESC, "metadata.market_cap_value"
+            ));
+            fallbackQuery.limit(maxResults);
+            results = mongoTemplate.find(fallbackQuery, SecurityDocument.class);
+        }
+
+        // Step 4: Write-through to Redis cache with 24-hour TTL
+        if (!results.isEmpty()) {
+            try {
+                redisTemplate.opsForValue().set(cacheKey, results, Duration.ofHours(24));
+            } catch (Exception e) {
+                log.warn("smartRecommend", "Redis cache write error for " + cacheKey + ": " + e.getMessage());
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * Retrieves Top Blue Chip stocks (NIFTY 50 heavyweights) from Redis / MongoDB
+     * for zero-state empty or single-character search prompts.
+     */
+    public List<SecurityDocument> getTrendingBlueChips(int limit) {
+        String cacheKey = "search:trending:stocks";
+        try {
+            Object cached = redisTemplate.opsForValue().get(cacheKey);
+            if (cached instanceof List<?> list && !list.isEmpty()) {
+                List<SecurityDocument> deserialized = objectMapper.convertValue(
+                        list, new TypeReference<List<SecurityDocument>>() {});
+                if (deserialized != null && !deserialized.isEmpty()) {
+                    return deserialized.size() > limit ? deserialized.subList(0, limit) : deserialized;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("getTrendingBlueChips", "Redis read error: " + e.getMessage());
+        }
+
+        Query query = new Query();
+        query.fields().include("key").include("metadata");
+        query.addCriteria(Criteria.where("metadata.status").ne("DELISTED"));
+        query.addCriteria(Criteria.where("metadata.market_cap_type").is("LARGE_CAP"));
+        query.with(org.springframework.data.domain.Sort.by(
+                org.springframework.data.domain.Sort.Direction.DESC, "metadata.market_cap_value"
+        ));
+        query.limit(limit > 0 ? limit : 8);
+
+        List<SecurityDocument> trending = mongoTemplate.find(query, SecurityDocument.class);
+        if (!trending.isEmpty()) {
+            try {
+                redisTemplate.opsForValue().set(cacheKey, trending, Duration.ofHours(24));
+            } catch (Exception e) {
+                log.warn("getTrendingBlueChips", "Redis write error: " + e.getMessage());
+            }
+        }
+        return trending;
     }
 
     // In-Memory Search Fallback

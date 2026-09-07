@@ -1,46 +1,54 @@
 name: Market Data Publish
 
 on:
-  push:
-    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
-    paths:
-      - 'am-market-data/**'
-      - 'am-common-investment-data/**'
-  pull_request:
-    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
-    paths:
-      - 'am-market-data/**'
-      - 'am-common-investment-data/**'
   workflow_dispatch:
+    inputs:
+      deploy_preprod_helm:
+        description: "Helm roll to Kind preprod (image_name-preprod). Feature branches always; on main needs force or gitops off."
+        required: false
+        type: boolean
+        default: true
+      gitops_write_preprod:
+        description: "On main: auto-commit image tag to am-gitops (Argo). Preferred for main."
+        required: false
+        type: boolean
+        default: true
+      force_preprod_helm:
+        description: "Helm on main even when gitops is on / Argo Auto-Sync (may fight selfHeal)."
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches: ["main", "develop", "dev", "test/**", "feature/**", "hotfix/**", "fix/**"]
+    paths:
+      - "am-market-data/**"
+      - "am-common-investment-data/**"
+      - ".github/workflows/market-data.yml"
+  pull_request:
+    branches: ["main", "develop", "dev", "test/**", "feature/**", "hotfix/**", "fix/**"]
+    paths:
+      - "am-market-data/**"
+      - "am-common-investment-data/**"
 
 jobs:
-  install-common-lib:
-    name: Install Common Investment Lib
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-      - name: Build and install am-common-investment-data
-        working-directory: am-common-investment-data
-        run: mvn clean install -DskipTests -B
-
   publish:
-    name: Publish Market Data
-    needs: install-common-lib
+    name: Build, Publish and Deploy to Dev
     permissions:
-      contents: read
+      contents: write
       packages: write
+      id-token: write
     uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
     with:
-      language: 'java'
-      working_directory: 'am-market-data'
-      image_name: 'am-market-data'
-      build_context: '..'
-      preprod_namespace: 'am-apps-preprod'
-      prod_namespace: 'am-apps-prod'
+      language: "java"
+      working_directory: "am-market-data"
+      image_name: "am-market-data"
+      build_context: ".."
+      preprod_namespace: "am-apps-preprod"
+      prod_namespace: "am-apps-prod"
+      dev_namespace: "am-apps-dev"
+      deploy_dev: true
       deploy_prod: true
+      deploy_preprod: ${{ github.event_name != 'workflow_dispatch' && true || inputs.deploy_preprod_helm }}
+      gitops_write_preprod: ${{ github.event_name != 'workflow_dispatch' && true || inputs.gitops_write_preprod }}
+      force_preprod_helm: ${{ github.event_name == 'workflow_dispatch' && inputs.force_preprod_helm || false }}
     secrets: inherit

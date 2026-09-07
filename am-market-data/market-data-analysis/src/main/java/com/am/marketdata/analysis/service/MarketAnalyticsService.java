@@ -65,7 +65,11 @@ public class MarketAnalyticsService {
                 from = to.minusDays(1);
                 break;
             case "1W":
-                interval = "1H";
+                // [Upstox Compatible Interval Mapping]
+                // Upstox API accepts intervals: '1minute', '30minute', 'day', 'week', 'month'.
+                // '1H' is not supported by Upstox v2/v3 and causes 0 data points.
+                // Using '30m' provides rich 30-minute historical candle progression for the 1-week window across both Stocks & Indices.
+                interval = "30m";
                 from = to.minusWeeks(1);
                 break;
             case "1M":
