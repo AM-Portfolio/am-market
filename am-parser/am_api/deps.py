@@ -3,6 +3,10 @@ from typing import AsyncGenerator
 
 from am_etf.holdings_service import ETFHoldingsService, create_etf_holdings_service
 from am_etf.lookup_service import EtfLookupService
+from am_etf.performance_service import (
+    FundPerformanceService,
+    create_fund_performance_service,
+)
 from am_etf.service import ETFService, create_etf_service
 from am_etf.smart_holdings_service import (
     SmartETFHoldingsService,
@@ -43,3 +47,11 @@ async def get_etf_lookup_service() -> AsyncGenerator[EtfLookupService, None]:
     finally:
         await holdings_service.close()
         await etf_service.close()
+
+
+async def get_fund_performance_service() -> AsyncGenerator[FundPerformanceService, None]:
+    service = create_fund_performance_service()
+    try:
+        yield service
+    finally:
+        await service.close()
