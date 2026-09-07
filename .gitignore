@@ -104,3 +104,8 @@ spt/
 
 # Local newman artifacts
 am-parser/docs/feature-basket/postman/newman-prod-report.json
+
+**/test_search_edge_cases.py
+*Test.java
+*Tests.java
+**/src/test/

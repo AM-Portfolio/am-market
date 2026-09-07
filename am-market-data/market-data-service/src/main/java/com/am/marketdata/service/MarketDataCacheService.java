@@ -438,11 +438,16 @@ public class MarketDataCacheService {
                             double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
                             OHLCQuote quote = entries.get(i).getValue();
 
-                            if (overlayLiveLastPrice && latestPrice > 0) {
-                                quote.setLastPrice(latestPrice);
-                            }
                             if (prevClose > 0) {
                                 quote.setPreviousClose(prevClose);
+                            }
+                            if (latestPrice > 0) {
+                                // While market is open, live tick wins.
+                                // When market is closed, if official close was not applied (e.g. quote.getLastPrice() == 0.0 or unchanged),
+                                // the closing session price from Redis is the verified fallback.
+                                if (overlayLiveLastPrice || quote.getLastPrice() == 0.0) {
+                                    quote.setLastPrice(latestPrice);
+                                }
                             }
                         } catch (Exception parseEx) {
                             log.warn("overlayLatestPrices", "Failed to parse Redis latest-price JSON for symbol {}: {}",
@@ -1038,7 +1043,7 @@ public class MarketDataCacheService {
             for (String symbol : normalizedSymbols) {
                 String rawSymbol = normalizedToRaw.get(symbol);
                 OHLCQuote quote = quotes.get(rawSymbol);
-                if (quote == null) {
+                if (quote == null || quote.getLastPrice() <= 0.0) {
                     continue;
                 }
 
@@ -1084,13 +1089,13 @@ public class MarketDataCacheService {
                 latestPriceRedisWrites.put("market:latest-price:" + symbol, json);
             }
 
-            // Step 4: Execute bulk Redis pipelined write for latest prices (6 hours TTL)
+            // Step 4: Execute bulk Redis pipelined write for latest prices (7 days TTL - weekend & holiday resilient)
             if (!latestPriceRedisWrites.isEmpty()) {
                 redisTemplate.executePipelined((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
                     for (Map.Entry<String, String> e : latestPriceRedisWrites.entrySet()) {
                         byte[] keyBytes = redisTemplate.getStringSerializer().serialize(e.getKey());
                         byte[] valueBytes = redisTemplate.getStringSerializer().serialize(e.getValue());
-                        connection.setEx(keyBytes, 6 * 3600, valueBytes); // 6 hours expiration
+                        connection.setEx(keyBytes, 7 * 24 * 3600, valueBytes); // 7 days expiration
                     }
                     return null;
                 });
@@ -1165,11 +1170,13 @@ public class MarketDataCacheService {
                 if (json != null) {
                     Map<String, Object> map = objectMapper.readValue(json, Map.class);
 
-                    // Ignore Redis prices older than 15 minutes (900,000 ms)
+                    // Only ignore Redis prices as stale during active market hours.
+                    // When market is closed, the closing session price remains valid until the next session.
                     long updatedAt = ((Number) map.getOrDefault("updatedAt", 0L)).longValue();
                     long ageMs = System.currentTimeMillis() - updatedAt;
-                    if (ageMs > 15 * 60 * 1000) {
-                        log.warn("getLatestPrices", "Redis price for " + cleanSymbol + " is stale (age: " + (ageMs / 1000) + "s). Ignoring.");
+                    boolean isMarketOpen = isLiveTickOverlayAllowed();
+                    if (isMarketOpen && ageMs > 15 * 60 * 1000) {
+                        log.warn("getLatestPrices", "Redis price for " + cleanSymbol + " is stale during market hours (age: " + (ageMs / 1000) + "s). Ignoring.");
                         continue;
                     }
 

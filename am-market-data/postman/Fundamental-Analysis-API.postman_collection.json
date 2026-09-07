@@ -2,79 +2,97 @@
   "info": {
     "_postman_id": "73e7575b-c3f1-4021-bf4c-966c9f4c0f5a",
     "name": "Fundamental Analysis API",
-    "description": "Dedicated Postman collection for testing Granular Fundamental Analysis endpoints.",
+    "description": "Dedicated Postman collection for Fundamental Analysis APIs in AM-Portfolio Market Data, covering company profiles, valuation/profitability ratios, P&L, balance sheets, cash flows, ownership trends, peer comparisons, and derived health analytics.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "0. Unified Overview (Deprecated)",
+      "name": "0. Unified Overview (HDFC Bank)",
       "request": {
         "method": "GET",
         "header": [ { "key": "Accept", "value": "application/json" } ],
-        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025" ] }
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/HDFCBANK", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "HDFCBANK" ] }
       },
       "response": []
     },
     {
-      "name": "1. Company Profile",
+      "name": "1. Company Profile (HDFC Bank)",
       "request": {
         "method": "GET",
         "header": [ { "key": "Accept", "value": "application/json" } ],
-        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/profile", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "profile" ] }
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/HDFCBANK/profile", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "HDFCBANK", "profile" ] }
       },
       "response": []
     },
     {
-      "name": "2. Valuation & Ratios",
+      "name": "2. Valuation & Ratios (HDFC Bank)",
       "request": {
         "method": "GET",
         "header": [ { "key": "Accept", "value": "application/json" } ],
-        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/ratios", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "ratios" ] }
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/HDFCBANK/ratios", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "HDFCBANK", "ratios" ] }
       },
       "response": []
     },
     {
-      "name": "3. Financial Statements",
+      "name": "3. Financial Statements (HDFC Bank)",
       "request": {
         "method": "GET",
         "header": [ { "key": "Accept", "value": "application/json" } ],
-        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/financials", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "financials" ] }
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/HDFCBANK/financials", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "HDFCBANK", "financials" ] }
       },
       "response": []
     },
     {
-      "name": "4. Shareholding Patterns",
+      "name": "4. Shareholding Patterns (HDFC Bank)",
       "request": {
         "method": "GET",
         "header": [ { "key": "Accept", "value": "application/json" } ],
-        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/shareholding", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "shareholding" ] }
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/HDFCBANK/shareholding", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "HDFCBANK", "shareholding" ] }
       },
       "response": []
     },
     {
-      "name": "5. Corporate Actions",
+      "name": "5. Corporate Actions (HDFC Bank)",
       "request": {
         "method": "GET",
         "header": [ { "key": "Accept", "value": "application/json" } ],
-        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/corporate-actions", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "corporate-actions" ] }
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/HDFCBANK/corporate-actions", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "HDFCBANK", "corporate-actions" ] }
       },
       "response": []
     },
     {
-      "name": "6. Competitor Peers",
+      "name": "6. Competitor Peers (HDFC Bank)",
       "request": {
         "method": "GET",
         "header": [ { "key": "Accept", "value": "application/json" } ],
-        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/peers", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "peers" ] }
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/HDFCBANK/peers", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "HDFCBANK", "peers" ] }
       },
       "response": []
     },
     {
-      "name": "7. Health Analytics",
+      "name": "7. Competitor Peers (TCS)",
       "request": {
         "method": "GET",
         "header": [ { "key": "Accept", "value": "application/json" } ],
-        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE154A01025/analytics", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE154A01025", "analytics" ] }
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/TCS/peers", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "TCS", "peers" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "8. Competitor Peers by ISIN (HDFC Bank)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/INE040A01034/peers", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "INE040A01034", "peers" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "9. Health Analytics (HDFC Bank)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/v1/fundamentals/HDFCBANK/analytics", "host": [ "{{baseUrl}}" ], "path": [ "v1", "fundamentals", "HDFCBANK", "analytics" ] }
       },
       "response": []
     }
@@ -82,7 +100,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "https://am-dev.asrax.in/market",
+      "value": "https://am.asrax.in/market",
       "type": "string"
     }
   ]
