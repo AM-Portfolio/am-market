@@ -17,13 +17,15 @@ import java.util.Optional;
 public interface FundamentalDataRepository extends MongoRepository<FundamentalData, String> {
 
     /**
-     * Find complete fundamental profile by unique ISIN.
+     * Find complete fundamental profile by unique ISIN (first match if duplicates exist).
      */
+    Optional<FundamentalData> findFirstByIsin(String isin);
     Optional<FundamentalData> findByIsin(String isin);
 
     /**
-     * Find complete fundamental profile by trading symbol.
+     * Find complete fundamental profile by trading symbol (first match if duplicates exist).
      */
+    Optional<FundamentalData> findFirstBySymbol(String symbol);
     Optional<FundamentalData> findBySymbol(String symbol);
 
     /**

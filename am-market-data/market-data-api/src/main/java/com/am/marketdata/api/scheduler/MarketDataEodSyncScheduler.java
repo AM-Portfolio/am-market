@@ -16,6 +16,8 @@ public class MarketDataEodSyncScheduler {
     private final AppLogger log = AppLogger.getLogger();
     private final StockIndicesService stockIndicesService;
     private final com.am.marketdata.scraper.config.NSEIndicesConfig nseIndicesConfig;
+    private final com.am.marketdata.service.MarketDataService marketDataService;
+    private final java.util.Optional<com.am.marketdata.service.SymbolOrchestratorService> symbolOrchestratorService;
 
     /**
      * Runs Monday to Friday at 3:40 PM IST (15:40) to sync final EOD prices 
@@ -54,10 +56,55 @@ public class MarketDataEodSyncScheduler {
                 );
             }
 
-            // Force a refresh (forceRefresh = true) to fetch the official exchange-adjusted 
-            // post-market closing prices from Upstox instead of copying the raw 3:30 PM ticks from Redis.
-            stockIndicesService.getLatestIndicesData(allIndices, true);
+            // 1. Force a refresh to fetch the official exchange-adjusted post-market closing prices
+            // for the index headers and update MongoDB.
+            List<com.am.common.investment.model.stockindice.StockIndicesMarketData> indexResults =
+                    stockIndicesService.getLatestIndicesData(allIndices, true);
             log.info(methodName, "Successfully completed EOD Index Price Sync for " + allIndices.size() + " indices.");
+
+            // 2. Collect all unique constituent symbols across the synced indices
+            java.util.Set<String> uniqueSymbols = new java.util.HashSet<>();
+            if (indexResults != null) {
+                for (com.am.common.investment.model.stockindice.StockIndicesMarketData idx : indexResults) {
+                    if (idx.getData() != null) {
+                        for (com.am.common.investment.model.stockindice.StockData stock : idx.getData()) {
+                            if (stock.getSymbol() != null && !stock.getSymbol().trim().isEmpty()) {
+                                uniqueSymbols.add(stock.getSymbol().trim().toUpperCase());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Include all active user portfolio holdings so small-caps are pre-cached
+            symbolOrchestratorService.ifPresent(orchestrator -> {
+                try {
+                    java.util.Set<String> portfolioSymbols = orchestrator.findDistinctSymbols();
+                    if (portfolioSymbols != null) {
+                        for (String sym : portfolioSymbols) {
+                            if (sym != null && !sym.isBlank() && !sym.startsWith("GLOBAL_")) {
+                                String clean = sym.contains(":") ? sym.substring(sym.indexOf(":") + 1) : sym;
+                                uniqueSymbols.add(clean.trim().toUpperCase());
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.warn(methodName, "Failed to append portfolio symbols to EOD sync: " + ex.getMessage());
+                }
+            });
+
+            // 4. Batch fetch and cache the official closing quotes in ONE single Upstox pass.
+            // This hydrates Redis with 7-day TTL and saves to MongoDB.
+            if (!uniqueSymbols.isEmpty()) {
+                log.info(methodName, "Syncing EOD constituent quotes for " + uniqueSymbols.size() + " unique stocks...");
+                marketDataService.getOHLC(
+                        new java.util.ArrayList<>(uniqueSymbols),
+                        com.am.marketdata.common.model.TimeFrame.DAY,
+                        true,
+                        null
+                );
+                log.info(methodName, "Successfully synced and cached EOD constituent quotes for " + uniqueSymbols.size() + " stocks.");
+            }
         } catch (Exception e) {
             log.error(methodName, "Error during EOD Index Price Sync", e);
         }

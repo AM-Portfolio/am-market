@@ -110,4 +110,15 @@ insert_missing_indices.py
 show_dbs_and_collections.py
 test_external_batch.py
 trigger_prev_close_now.py
+test_search_edge_cases.py
+
+# Ignore local test files
+*Test.java
+*Tests.java
+**/src/test/
+**/SmartRecommendationServiceTest.java
+**/MarketDataCacheServiceTest.java
+**/SmartStockServiceTest.java
+
+
 
