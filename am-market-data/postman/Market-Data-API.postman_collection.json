@@ -760,6 +760,246 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Custom Multi-Watchlists",
+      "item": [
+        {
+          "name": "Get All Watchlists",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "demo-user"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlists"
+              ]
+            },
+            "description": "Retrieves all custom watchlists for the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Custom Watchlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "demo-user"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Banking Stocks\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlists"
+              ]
+            },
+            "description": "Creates a new custom watchlist for the user (Max 5)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Watchlist Name",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "demo-user"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Core Tech Watchlist\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlists/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlists",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "WATCHLIST_ID_HERE"
+                }
+              ]
+            },
+            "description": "Renames an existing custom watchlist."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Custom Watchlist",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "demo-user"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlists/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlists",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "WATCHLIST_ID_HERE"
+                }
+              ]
+            },
+            "description": "Deletes a custom watchlist and its items (Default watchlist cannot be deleted)."
+          },
+          "response": []
+        },
+        {
+          "name": "Check Stock In Watchlists",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "demo-user"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlists/check/:symbol",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlists",
+                "check",
+                ":symbol"
+              ],
+              "variable": [
+                {
+                  "key": "symbol",
+                  "value": "TCS"
+                }
+              ]
+            },
+            "description": "Checks containment of a stock symbol across all user watchlists."
+          },
+          "response": []
+        },
+        {
+          "name": "Add Stock To Watchlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "demo-user"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbol\": \"TCS\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlists/:id/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlists",
+                ":id",
+                "items"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "WATCHLIST_ID_HERE"
+                }
+              ]
+            },
+            "description": "Adds a stock symbol to a specific watchlist (Max 50 stocks per watchlist)."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Stock From Watchlist",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "demo-user"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlists/:id/items/:symbol",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlists",
+                ":id",
+                "items",
+                ":symbol"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "WATCHLIST_ID_HERE"
+                },
+                {
+                  "key": "symbol",
+                  "value": "TCS"
+                }
+              ]
+            },
+            "description": "Removes a stock symbol from a watchlist."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "event": [
