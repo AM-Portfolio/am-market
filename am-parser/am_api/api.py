@@ -47,6 +47,7 @@ from am_persistence.file_upload_repository import FileUploadRepository
 # Import job API
 from am_api.job_api import router as job_router
 from am_api.etf_api import router as etf_router
+from am_api.routers.funds_v2 import router as funds_v2_router
 from am_services.job_queue_service import get_job_queue
 
 
@@ -213,6 +214,7 @@ app.add_middleware(
 # Include routers
 app.include_router(job_router, prefix="/v1")
 app.include_router(etf_router, prefix="/v1/etf")
+app.include_router(funds_v2_router, prefix="/v2/funds")
 
 
 @app.get("/health/live")

@@ -1,7 +1,6 @@
 env:
-  ENVIRONMENT: "preprod"
   MONGO_DB: "mutual_funds"
-  MARKET_DATA_URL: "http://am-market-data:8080"
+  MARKET_DATA_URL: "http://am-market-data-preprod:8080"
   LOG_LEVEL: "INFO"
   ETF_LIST_CACHE_MINUTES: "60"
   ETF_HOLDINGS_CACHE_DAYS: "1"

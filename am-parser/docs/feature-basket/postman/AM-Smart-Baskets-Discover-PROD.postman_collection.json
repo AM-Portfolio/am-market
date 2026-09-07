@@ -1,0 +1,342 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "AM Smart Baskets Discover — PROD",
+    "description": "One-click accuracy contract for Discover (parser /v2/funds + portfolio /v1/basket) against production.\n\nRun: Collection Runner or `newman run` with the PROD environment.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "parserBase", "value": "{{parserBaseUrl}}" },
+    { "key": "portfolioBase", "value": "{{portfolioBaseUrl}}" },
+    { "key": "symbol", "value": "NIFTYBEES" }
+  ],
+  "item": [
+    {
+      "name": "A — am-parser Funds v2",
+      "item": [
+        {
+          "name": "A1 Parser health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('healthy', () => pm.expect(j.status).to.eql('healthy'));",
+                  "pm.test('db connected', () => pm.expect(j.database).to.eql('connected'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{parserBaseUrl}}/health"
+          }
+        },
+        {
+          "name": "A2 v1 ETF holdings (frozen)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('etfs present', () => pm.expect(j.etfs).to.be.an('array').that.is.not.empty);",
+                  "pm.test('no funds key (v1 shape)', () => pm.expect(j.funds).to.be.undefined);",
+                  "pm.test('holdings non-empty', () => pm.expect(j.etfs[0].holdings).to.be.an('array').that.is.not.empty);",
+                  "pm.test('no return1Y on v1', () => pm.expect(j.etfs[0].return1Y).to.be.undefined);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\"{{symbol}}\"]\n}"
+            },
+            "url": "{{parserBaseUrl}}/v1/etf/holdings"
+          }
+        },
+        {
+          "name": "A3 v2 funds holdings ETF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('funds array', () => pm.expect(j.funds).to.be.an('array').that.is.not.empty);",
+                  "const f = j.funds[0];",
+                  "pm.test('productType ETF', () => pm.expect(f.productType).to.eql('ETF'));",
+                  "pm.test('symbol present', () => pm.expect(f.symbol).to.be.a('string').and.not.empty);",
+                  "pm.test('holdings array', () => pm.expect(f.holdings).to.be.an('array'));",
+                  "pm.test('return1Y number or null', () => pm.expect(f.return1Y === null || typeof f.return1Y === 'number').to.be.true);",
+                  "pm.test('return3Y number or null', () => pm.expect(f.return3Y === null || typeof f.return3Y === 'number').to.be.true);",
+                  "pm.test('return5Y number or null', () => pm.expect(f.return5Y === null || typeof f.return5Y === 'number').to.be.true);",
+                  "if (f.sparklineCloses != null) {",
+                  "  pm.test('sparkline length <= 24', () => pm.expect(f.sparklineCloses.length).to.be.at.most(24));",
+                  "  pm.test('sparkline non-empty when present', () => pm.expect(f.sparklineCloses.length).to.be.above(0));",
+                  "}",
+                  "pm.test('PROD expect live returns', () => {",
+                  "  pm.expect(f.return1Y, 'return1Y').to.be.a('number');",
+                  "  pm.expect(f.sparklineCloses, 'sparkline').to.be.an('array').with.lengthOf.at.least(2);",
+                  "});",
+                  "if (j.notFound) pm.test('notFound excludes found', () => pm.expect(j.notFound).to.not.include(f.symbol));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\"{{symbol}}\"],\n  \"productTypes\": [\"ETF\"]\n}"
+            },
+            "url": "{{parserBaseUrl}}/v2/funds/holdings"
+          }
+        },
+        {
+          "name": "A4 v2 MF stub",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('funds empty', () => pm.expect(j.funds || []).to.be.an('array').that.is.empty);",
+                  "pm.test('notFound has item', () => pm.expect(j.notFound).to.be.an('array').that.is.not.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\"ANY\"],\n  \"productTypes\": [\"MUTUAL_FUND\"]\n}"
+            },
+            "url": "{{parserBaseUrl}}/v2/funds/holdings"
+          }
+        },
+        {
+          "name": "A5 v2 funds search",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('totalFound > 0', () => pm.expect(j.totalFound).to.be.above(0));",
+                  "const list = j.funds || j.etfs || [];",
+                  "pm.test('results present', () => pm.expect(list).to.be.an('array').that.is.not.empty);",
+                  "if (list[0].productType) pm.test('ETF-shaped', () => pm.expect(list[0].productType).to.eql('ETF'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{parserBaseUrl}}/v2/funds/search?query=NIFTY&limit=5&productTypes=ETF",
+              "host": ["{{parserBaseUrl}}"],
+              "path": ["v2", "funds", "search"],
+              "query": [
+                { "key": "query", "value": "NIFTY" },
+                { "key": "limit", "value": "5" },
+                { "key": "productTypes", "value": "ETF" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "A6 v2 holdings bulk",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('totalFunds or funds', () => {",
+                  "  const ok = (j.totalFunds && j.totalFunds > 0) || (j.funds && j.funds.length > 0) || (j.etfs && j.etfs.length > 0);",
+                  "  pm.expect(ok).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{parserBaseUrl}}/v2/funds/holdings/bulk?limit=3",
+              "host": ["{{parserBaseUrl}}"],
+              "path": ["v2", "funds", "holdings", "bulk"],
+              "query": [{ "key": "limit", "value": "3" }]
+            }
+          }
+        },
+        {
+          "name": "A7 v2 performance batch",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('results array', () => pm.expect(j.results).to.be.an('array').that.is.not.empty);",
+                  "const r = j.results[0];",
+                  "pm.test('symbol', () => pm.expect(r.symbol).to.be.a('string'));",
+                  "pm.test('return1Y number or null', () => pm.expect(r.return1Y === null || typeof r.return1Y === 'number').to.be.true);",
+                  "pm.test('PROD expect live returns', () => {",
+                  "  pm.expect(r.return1Y).to.be.a('number');",
+                  "  pm.expect(r.sparklineCloses).to.be.an('array').with.lengthOf.at.least(2);",
+                  "  pm.expect(r.sparklineCloses.length).to.be.at.most(24);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\"NIFTYBEES\", \"BANKBEES\"]\n}"
+            },
+            "url": "{{parserBaseUrl}}/v2/funds/performance/batch"
+          }
+        },
+        {
+          "name": "A8 v2 performance refresh (ops)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('results', () => pm.expect(j.results).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\"{{symbol}}\"]\n}"
+            },
+            "url": "{{parserBaseUrl}}/v2/funds/performance/refresh"
+          }
+        }
+      ]
+    },
+    {
+      "name": "B — am-portfolio Basket Discover",
+      "item": [
+        {
+          "name": "B1 Portfolio health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('UP', () => pm.expect(j.status).to.eql('UP'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolioBaseUrl}}/actuator/health"
+          }
+        },
+        {
+          "name": "B2 Basket catalog",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('themes non-empty', () => pm.expect(j.themes).to.be.an('array').that.is.not.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{portfolioBaseUrl}}/v1/basket/catalog"
+          }
+        },
+        {
+          "name": "B3 Basket opportunities (Discover)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "const rows = Array.isArray(j) ? j : (j.opportunities || j.data || []);",
+                  "pm.test('rows non-empty', () => pm.expect(rows).to.be.an('array').that.is.not.empty);",
+                  "const r = rows[0];",
+                  "pm.test('etfSymbol present', () => pm.expect(r.etfSymbol).to.be.a('string').and.not.empty);",
+                  "pm.test('categoryLabel present', () => pm.expect(r.categoryLabel).to.be.a('string').and.not.empty);",
+                  "pm.test('matchScore present', () => pm.expect(r).to.have.property('matchScore'));",
+                  "pm.test('return1Y number or null (never fake missing as required)', () => {",
+                  "  pm.expect(r.return1Y === null || typeof r.return1Y === 'number').to.be.true;",
+                  "});",
+                  "pm.test('PROD expect live discover enrichment', () => {",
+                  "  pm.expect(r.return1Y).to.be.a('number');",
+                  "  pm.expect(r.sparklineCloses).to.be.an('array').with.lengthOf.at.least(2);",
+                  "  pm.expect(r.sparklineCloses.length).to.be.at.most(24);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{{symbol}}\"\n}"
+            },
+            "url": "{{portfolioBaseUrl}}/v1/basket/opportunities"
+          }
+        }
+      ]
+    }
+  ]
+}
