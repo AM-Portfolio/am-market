@@ -48,8 +48,14 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
 
     market_data_url: str = "http://localhost:8093"
+    # Vault CSI maps market URL as MARKET_DATA_API_URL (see helm/vault-mappings.yaml).
+    # Prefer that over Helm MARKET_DATA_URL when both are set (short service names often DNS-fail).
+    market_data_api_url: Optional[str] = None
     etf_list_cache_minutes: int = 60
     etf_holdings_cache_days: int = 1
+    # Fund performance (Discover /v2/funds) — L2 Mongo TTL hours
+    fund_performance_cache_hours: int = 6
+    fund_performance_chart_timeout_s: float = 20.0
     moneycontrol_holdings_url_template: str = (
         "https://mf.moneycontrol.com/service/etf/v1/getSchemeHoldingData"
         "?isin={isin}&key=Stocks"
@@ -69,6 +75,14 @@ class Settings(BaseSettings):
     @property
     def effective_etf_db(self) -> str:
         return self.etf_db_name or self.mongo_db
+
+    @property
+    def effective_market_data_url(self) -> str:
+        """Prefer Vault MARKET_DATA_API_URL when present."""
+        api = (self.market_data_api_url or "").strip()
+        if api:
+            return api
+        return self.market_data_url
 
     @property
     def is_local(self) -> bool:
@@ -114,7 +128,7 @@ def get_mongo_debug_info() -> dict:
         "environment": settings.environment,
         "mongo_target": get_mongo_target_label(),
         "mongo_db": settings.mongo_db,
-        "market_data_url": settings.market_data_url,
+        "market_data_url": settings.effective_market_data_url,
         "os_env_mongo_uri_set": bool(os.environ.get("MONGO_URI")),
         "os_env_mongo_tail": (
             os.environ.get("MONGO_URI", "").split("@")[-1]

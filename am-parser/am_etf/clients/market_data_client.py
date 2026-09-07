@@ -1,5 +1,5 @@
-"""Market-data service client for holdings ISIN enrichment."""
-from typing import List
+"""Market-data service client for holdings ISIN enrichment and charts."""
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -56,7 +56,7 @@ async def enrich_holdings_with_isins(holdings: List[ETFHoldingRecord]) -> None:
     if not stock_names:
         return
 
-    api_url = f"{settings.market_data_url.rstrip('/')}/v1/securities/batch-search"
+    api_url = f"{settings.effective_market_data_url.rstrip('/')}/v1/securities/batch-search"
     chunk_size = 500
 
     try:
@@ -76,3 +76,61 @@ async def enrich_holdings_with_isins(holdings: List[ETFHoldingRecord]) -> None:
                     _log.warning("Batch search chunk failed: %s", req_err)
     except Exception as e:
         _log.warning("Holdings enrichment failed: %s", e)
+
+
+async def fetch_historical_chart_points(
+    symbol: str,
+    *,
+    range_value: str = "5Y",
+    is_index_symbol: bool = False,
+    timeout_s: float = 20.0,
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Fetch OHLCV points for an ETF/equity symbol from market-data.
+    Always prefer range=5Y (plan); fail-open returns None.
+    """
+    if not symbol or not str(symbol).strip():
+        return None
+    base = settings.effective_market_data_url.rstrip("/")
+    url = f"{base}/v1/analysis/historical-charts"
+    params = {
+        "symbols": symbol.strip().upper(),
+        "range": range_value,
+        "isIndexSymbol": str(is_index_symbol).lower(),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=timeout_s) as client:
+            response = await client.get(url, params=params)
+            if response.status_code >= 400:
+                _log.warning(
+                    "historical-charts HTTP %s for %s: %s",
+                    response.status_code,
+                    symbol,
+                    response.text[:200],
+                )
+                return None
+            body = response.json()
+    except Exception as e:
+        _log.warning("historical-charts failed for %s: %s", symbol, e)
+        return None
+
+    if not isinstance(body, dict):
+        return None
+    if body.get("error"):
+        _log.warning(
+            "historical-charts error for %s: %s", symbol, body.get("error")
+        )
+        return None
+
+    data = body.get("data") or {}
+    hist = None
+    if isinstance(data, dict):
+        hist = data.get(symbol) or data.get(symbol.upper()) or data.get(symbol.lower())
+        if hist is None and len(data) == 1:
+            hist = next(iter(data.values()))
+    if not isinstance(hist, dict):
+        return None
+    points = hist.get("dataPoints") or hist.get("data_points") or []
+    if not isinstance(points, list):
+        return None
+    return points

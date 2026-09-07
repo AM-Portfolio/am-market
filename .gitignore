@@ -102,3 +102,6 @@ spt/
 # Local diagnostic scripts
 **/query_local_influx.py
 **/seed_global_indices_influx.py
+
+# Local newman artifacts
+am-parser/docs/feature-basket/postman/newman-prod-report.json
