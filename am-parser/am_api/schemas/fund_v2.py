@@ -18,7 +18,8 @@ class FundHoldingsLookupRequest(BaseModel):
     items: List[str] = Field(
         ...,
         min_length=1,
-        description="Symbols, ISINs, or name queries",
+        max_length=50,
+        description="Symbols, ISINs, or name queries (max 50)",
         examples=[["NIFTYBEES", "BANKBEES"]],
     )
     product_types: Optional[List[ProductType]] = Field(
@@ -33,7 +34,12 @@ class FundHoldingsLookupRequest(BaseModel):
 class FundPerformanceBatchRequest(BaseModel):
     """POST /v2/funds/performance/batch and /refresh"""
 
-    items: List[str] = Field(..., min_length=1, examples=[["NIFTYBEES"]])
+    items: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        examples=[["NIFTYBEES"]],
+    )
     product_types: Optional[List[ProductType]] = Field(
         default=None,
         alias="productTypes",

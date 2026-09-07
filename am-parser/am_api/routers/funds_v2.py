@@ -107,10 +107,33 @@ async def post_fund_holdings_lookup(
                 detail=f"Failed to lookup fund holdings: {str(e)}",
             )
         for etf in v1.etfs:
-            symbol = (etf.get("symbol") or "").strip().upper()
-            perf = await perf_svc.get_performance(symbol) if symbol else {}
-            funds.append(_etf_dict_to_fund(etf, perf))
+            funds.append(_etf_dict_to_fund(etf, {}))
         not_found.extend(v1.not_found)
+        symbols = [
+            (etf.get("symbol") or "").strip().upper()
+            for etf in v1.etfs
+            if (etf.get("symbol") or "").strip()
+        ]
+        if symbols:
+            try:
+                batch = await perf_svc.get_performance_batch(symbols, force_refresh=False)
+                by_sym = {
+                    (r.symbol or "").upper(): r
+                    for r in batch
+                    if r and r.symbol
+                }
+                for fund in funds:
+                    sym = (fund.symbol or "").upper()
+                    perf = by_sym.get(sym)
+                    if not perf:
+                        continue
+                    fund.return_1y = perf.return_1y
+                    fund.return_3y = perf.return_3y
+                    fund.return_5y = perf.return_5y
+                    fund.returns_as_of = perf.returns_as_of
+                    fund.sparkline_closes = perf.sparkline_closes
+            except Exception:
+                log.exception("v2 holdings performance batch failed — fail-open without returns")
     elif _wants_mf(types):
         # MF stub: accept productType, return empty with notFound
         not_found = list(
@@ -250,9 +273,9 @@ async def performance_refresh(
     lookup: EtfLookupService = Depends(get_etf_lookup_service),
     perf_svc: FundPerformanceService = Depends(get_fund_performance_service),
 ):
-    """Ops: force recompute from charts (idempotent)."""
+    """Ops: force recompute from charts. Hard-capped to 20 items to limit abuse."""
     types = _default_product_types(body.product_types)
-    items = list(dict.fromkeys([s.strip() for s in body.items if s and s.strip()]))
+    items = list(dict.fromkeys([s.strip() for s in body.items if s and s.strip()]))[:20]
     if not _wants_etf(types):
         return FundPerformanceBatchResponse(items=items, results=[])
 
@@ -271,5 +294,5 @@ async def performance_refresh(
             if sym:
                 symbols.append(sym)
 
-    results = await perf_svc.get_performance_batch(symbols, force_refresh=True)
+    results = await perf_svc.get_performance_batch(symbols[:20], force_refresh=True)
     return FundPerformanceBatchResponse(items=items, results=results)
