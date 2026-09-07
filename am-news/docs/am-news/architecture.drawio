@@ -1,0 +1,94 @@
+<mxfile host="app.diagrams.net" modified="2026-09-06T13:50:00.000Z" agent="AM News docs" version="22.1.0" type="device">
+  <diagram id="am-news-in-repo" name="am-news in-repo">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="note" value="User routers never import Upstox, Mongo, or Redis. No arrow from user path to Upstox. Public paths have no am-news segment." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="720" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="http" value="HTTP routers (thin)" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=0;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="220" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="r1" value="GET /v1/current-affairs" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="http">
+          <mxGeometry y="30" width="220" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="r2" value="POST /v1/insight" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="http">
+          <mxGeometry y="65" width="220" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="r3" value="GET /v1/holdings" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="http">
+          <mxGeometry y="100" width="220" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="r4" value="POST /v1/admin/feed" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="http">
+          <mxGeometry y="135" width="220" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="app" value="application use cases" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=0;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="320" y="70" width="220" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="u1" value="GetCurrentAffairs" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="app">
+          <mxGeometry y="30" width="220" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="u2" value="GetInsight (insight + holdings)" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="app">
+          <mxGeometry y="66" width="220" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="u3" value="StartFeed / ReplayRaw" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="app">
+          <mxGeometry y="102" width="220" height="38" as="geometry"/>
+        </mxCell>
+        <mxCell id="user" value="User path (JWT) Redis then Mongo" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=36;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=0;marginBottom=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="600" y="70" width="280" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="s1" value="cache snapshots&#10;news:affairs:v1  TTL 120s&#10;news:holdings:v1:{sha1}  TTL 60s" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="user">
+          <mxGeometry y="36" width="280" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="s2" value="miss -&gt; news_articles + news_article_symbols" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="user">
+          <mxGeometry y="100" width="280" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="admin" value="Admin path (JWT admin / super_admin)" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=36;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=0;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="320" y="280" width="560" height="220" as="geometry"/>
+        </mxCell>
+        <mxCell id="a1" value="feed walker (NIFTY 50, batches of 30)" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="admin">
+          <mxGeometry y="36" width="560" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="a2" value="UpstoxNewsAdapter  GET /v2/news  browser User-Agent" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="admin">
+          <mxGeometry y="66" width="560" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="a3" value="news_raw_batches.body  (full vendor JSON, TTL 14d)" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="admin">
+          <mxGeometry y="96" width="560" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="a4" value="process stored body -&gt; articles + Redis snapshots" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="admin">
+          <mxGeometry y="126" width="560" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="a5" value="replay scheduler: pending/failed, parse body only, no second vendor call" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="admin">
+          <mxGeometry y="156" width="560" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="a6" value="IST sync 30m 09:00-16:00 plus 08:30 and 18:00, same feed lock, token Redis market_data:upstox:access_token" style="text;strokeColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="admin">
+          <mxGeometry y="186" width="560" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="ports" value="Ports: NewsFetchPort + NewsParsePort. Tests: FakeNewsProvider + tests/fixtures/upstox_news_page.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="540" width="840" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="r1" target="u1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="r2" target="u2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="r3" target="u2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="r4" target="u3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="u1" target="s1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="u2" target="s1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="u3" target="a1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

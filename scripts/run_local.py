@@ -129,45 +129,6 @@ def run_analysis():
     # market-data-analysis uses app.main:app
     run_service("Market Data Analysis API", target_dir, 8010, am_repos_root, repo_root, app_entry="app.main:app", log_name="market-data-analysis")
 
-def get_best_flutter_device():
-    """Identify available devices and return the best option (chrome or web-server fallback)."""
-    try:
-        output = subprocess.check_output(["flutter", "devices"], text=True)
-        if "chrome" in output.lower():
-            return "chrome"
-        return "web-server"
-    except Exception:
-        return "web-server"
-
-def run_ui():
-    """Run AM Market UI (Local Flutter)."""
-    target_dir = os.path.join(repo_root, "am_market_ui")
-    print(f"🚀 Starting Market UI locally in {target_dir}...")
-    
-    device = get_best_flutter_device()
-    print(f"💡 Selected Flutter Device: {device}")
-    
-    cmd = ["flutter", "run", "-d", device]
-    if device in ["chrome", "web-server"]:
-        cmd += ["--web-port=9000"]
-        
-    is_windows = os.name == "nt"
-    
-    logs_dir = os.path.join(repo_root, "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-    log_file = os.path.join(logs_dir, "market-ui.log")
-    
-    print(f"📖 Logging output to {log_file}")
-    try:
-        if is_windows:
-            subprocess.run(cmd, cwd=target_dir, shell=True)
-        else:
-            # Use | tee pipeline to preserve interactive stdin keys like r/R for hot reload
-            cmd_str = " ".join(cmd) + f" | tee -a {log_file}"
-            subprocess.run(cmd_str, cwd=target_dir, shell=True)
-    except KeyboardInterrupt:
-        print("\nStopped Market UI.")
-
 def install_common_data():
     """Run `mvn clean install` in `am-common-investment-data`."""
     target_dir = os.path.join(repo_root, "am-common-investment-data")
@@ -255,7 +216,6 @@ if __name__ == "__main__":
         elif cmd == "build": build_market()
         elif cmd == "parser": run_parser()
         elif cmd == "analysis": run_analysis()
-        elif cmd == "ui": run_ui()
         elif cmd == "install-data": install_common_data()
         elif cmd == "all": run_all()
         else: print(f"Unknown command: {cmd}")

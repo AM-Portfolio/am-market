@@ -10,6 +10,7 @@ on:
         options:
           - am-market-data
           - am-parser
+          - am-news
           - market-analytics
           - market-ui
       environment:
@@ -17,6 +18,7 @@ on:
         required: true
         type: choice
         options:
+          - dev
           - preprod
           - prod
       image_tag:
@@ -43,6 +45,9 @@ jobs:
           elif [ "${{ github.event.inputs.service }}" == "am-parser" ]; then
              echo "working_directory=am-parser" >> $GITHUB_OUTPUT
              echo "language=python" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.service }}" == "am-news" ]; then
+             echo "working_directory=am-news" >> $GITHUB_OUTPUT
+             echo "language=python" >> $GITHUB_OUTPUT
           elif [ "${{ github.event.inputs.service }}" == "market-analytics" ]; then
              echo "working_directory=market-analytics" >> $GITHUB_OUTPUT
              echo "language=python" >> $GITHUB_OUTPUT
@@ -54,6 +59,8 @@ jobs:
           # Namespace Mappings
           if [ "${{ github.event.inputs.environment }}" == "prod" ]; then
              echo "namespace=am-apps-prod" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.environment }}" == "dev" ]; then
+             echo "namespace=am-apps-dev" >> $GITHUB_OUTPUT
           else
              echo "namespace=am-apps-preprod" >> $GITHUB_OUTPUT
           fi

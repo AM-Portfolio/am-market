@@ -1,0 +1,50 @@
+{
+  "status": "success",
+  "data": {
+    "NSE_EQ|INE002A01018": [
+      {
+        "heading": "Weekly Wrap: NIFTY50, SENSEX drop 1% this week as Adani Enterprises, Eicher Motors, Maruti Suzuki, others drag losses",
+        "summary": "Both NIFTY50 and SENSEX ended lower on a weekly basis as of Friday, September 4, with investors exercising caution amid the elevated geopolitical risk and higher crude oil prices in the market.",
+        "thumbnail": "https://assets.upstox.com/content/assets/images/news/marketfallssept1.webp",
+        "article_link": "https://upstox.com/news/market-news/stocks/weekly-wrap-nifty-50-sensex-drop-1-this-week-as-adani-enterprises-eicher-motors-maruti-suzuki-others-drag-losses/article-199849/",
+        "published_time": 1788585096693
+      },
+      {
+        "heading": "SENSEX, NIFTY50 snap 4-day losing streak on strong global cues",
+        "summary": "The SENSEX rose as much as 730 points and NIFTY50 index touched an intraday high of 24,005 led by gains in index heavyweights like Reliance Industries, HDFC Bank, Tata Steel and Bajaj Finance.",
+        "thumbnail": "https://assets.upstox.com/content/assets/images/news/buzzing-stocks-july-31.webp",
+        "article_link": "https://upstox.com/news/market-news/stocks/sensex-nifty-50-snap-4-day-losing-streak-on-strong-global-cues/article-199835/",
+        "published_time": 1788518668745
+      },
+      {
+        "heading": "Kwality Wall's, Vadilal Industries: Why ice cream stocks fell over 3.6% after RIL's entry; explained",
+        "summary": "Reliance Consumer Products Ltd (RCPL), the FMCG arm of RIL, on Tuesday announced its entry into the ice cream market with the brand Bombay Creamery.",
+        "thumbnail": "https://assets.upstox.com/content/assets/images/news/ice-cream-pixabay.jpg",
+        "article_link": "https://upstox.com/news/market-news/stocks/kwality-wall-s-vadilal-industries-ice-cream-stocks-in-spotlight-as-ril-enters-segment-check-details/article-199637/",
+        "published_time": 1788333155548
+      },
+      {
+        "heading": "Stocks to watch, Sept 2: RIL, EPL, ONGC, HPCL, BPCL, Adani Green, Mphasis, Coal India",
+        "summary": "Oil prices rose nearly 1% in early trade on Wednesday. The sharp rise in crude prices is likely to keep oil-sensitive sectors such as paints, tyres, aviation and chemicals under pressure, as higher input and fuel costs could weigh on margins. ",
+        "thumbnail": "https://assets.upstox.com/content/assets/images/news/trading-stocks-sept-2.webp",
+        "article_link": "https://upstox.com/news/market-news/stocks/stocks-to-watch-sept-2-ril-ongc-hpcl-bpcl-epl-ltd-adani-green-energy-mphasis-coal-india-paints-aviation/article-199630/",
+        "published_time": 1788332498648
+      },
+      {
+        "heading": "Stocks to watch, August 31: FMCG stocks, HDFC Bank, RIL, Tata Chemicals, Ather Energy, Ola Electric, Sterlite Tech",
+        "summary": "Shares of HDFC Bank are likely to remain in focus on Monday, August 31, after Managing Director & Chief Executive Officer (MD & CEO) Sashidhar Jagdishan conveyed his decision to the board on Saturday not to seek reappointment to the top post.",
+        "thumbnail": "https://assets.upstox.com/content/assets/images/news/stocks-to-watch-august-31-2026.webp",
+        "article_link": "https://upstox.com/news/market-news/stocks/stocks-to-watch-august-31-fmcg-stocks-hdfc-bank-ril-tata-chemicals-ather-energy-ola-sterlite-tech/article-199466/",
+        "published_time": 1788144260758
+      }
+    ]
+  },
+  "metadata": {
+    "page": {
+      "page_number": 1,
+      "page_size": 100,
+      "total_records": 5,
+      "total_pages": 1
+    }
+  }
+}
