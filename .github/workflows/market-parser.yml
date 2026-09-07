@@ -5,10 +5,12 @@ on:
     branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - "am-parser/**"
+      - ".github/workflows/market-parser.yml"
   pull_request:
     branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - "am-parser/**"
+      - ".github/workflows/market-parser.yml"
   workflow_dispatch:
 
 jobs:
