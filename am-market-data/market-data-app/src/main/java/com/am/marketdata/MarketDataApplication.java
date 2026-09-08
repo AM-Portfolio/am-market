@@ -27,6 +27,8 @@ import com.am.marketdata.internal.config.MarketDataInternalConfig;
 import com.am.marketdata.scheduler.config.MarketDataSchedulerConfig;
 import com.am.marketdata.kafka.config.MarketDataKafkaModuleConfig;
 
+import com.am.marketdata.watchlist.config.WatchlistModuleConfig;
+
 @SpringBootApplication(exclude = {
                 DataSourceAutoConfiguration.class,
                 org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration.class
@@ -34,7 +36,7 @@ import com.am.marketdata.kafka.config.MarketDataKafkaModuleConfig;
 @EnableConfigurationProperties
 @Import({ MetricsConfig.class, SecurityConfig.class,
                 MarketDataInternalConfig.class, MarketDataSchedulerConfig.class,
-                MarketDataKafkaModuleConfig.class })
+                MarketDataKafkaModuleConfig.class, WatchlistModuleConfig.class })
 @ComponentScans({
                 @ComponentScan(
                                 basePackages = "com.am.marketdata",

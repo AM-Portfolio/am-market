@@ -13,9 +13,15 @@ import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDateTime;
 
+/**
+ * MongoDB Document representing a stock item added to a specific Watchlist.
+ */
 @Document(collection = "watchlist_items")
 @CompoundIndexes({
-        @CompoundIndex(name = "idx_watchlist_user_symbol", def = "{'userId': 1, 'symbol': 1}", unique = true)
+        // Enforces unique stock symbol inside a single watchlist
+        @CompoundIndex(name = "idx_watchlist_item_unique", def = "{'watchlistId': 1, 'symbol': 1}", unique = true),
+        // Fast lookups per user & symbol across all user watchlists
+        @CompoundIndex(name = "idx_user_symbol", def = "{'userId': 1, 'symbol': 1}")
 })
 @Data
 @Builder
@@ -26,11 +32,26 @@ public class WatchlistItem {
     @Id
     private String id;
 
+    /**
+     * ID of the parent Watchlist container.
+     */
+    @Field("watchlist_id")
+    private String watchlistId;
+
+    /**
+     * User ID owning this item (for user-level isolation).
+     */
     @Field("user_id")
     private String userId;
 
+    /**
+     * Ticker or trading symbol (e.g. "TCS", "HDFCBANK").
+     */
     private String symbol;
 
+    /**
+     * Display order sequence inside the specific watchlist.
+     */
     @Field("display_order")
     @Builder.Default
     private Integer displayOrder = 0;
