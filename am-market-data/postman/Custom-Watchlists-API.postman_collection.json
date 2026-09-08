@@ -1,0 +1,160 @@
+{
+  "info": {
+    "_postman_id": "c8f29402-911e-4509-a16f-bc3a18921a99",
+    "name": "Custom Watchlists API",
+    "description": "Postman collection for multi-watchlist management in AM Portfolio Market Data, covering custom watchlists, 5-list limits, 50-stock capacities, stock containment checks, and CRUD operations.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Get User Watchlists (Auto-Seeds Default)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "X-User-Id", "value": "demo-user" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/v1/watchlists",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "v1", "watchlists" ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "2. Create Custom Watchlist (IT Giants)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-User-Id", "value": "demo-user" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"IT Giants\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/watchlists",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "v1", "watchlists" ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "3. Add Stock (TCS) to Custom Watchlist",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-User-Id", "value": "demo-user" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"symbol\": \"TCS\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/watchlists/{{watchlistId}}/items",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "v1", "watchlists", "{{watchlistId}}", "items" ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "4. Check Stock Containment Across Watchlists (TCS)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "X-User-Id", "value": "demo-user" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/v1/watchlists/check/TCS",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "v1", "watchlists", "check", "TCS" ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "5. Get Items in Watchlist",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "X-User-Id", "value": "demo-user" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/v1/watchlists/{{watchlistId}}/items",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "v1", "watchlists", "{{watchlistId}}", "items" ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "6. Rename Watchlist",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-User-Id", "value": "demo-user" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Top Tech Picks\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/watchlists/{{watchlistId}}",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "v1", "watchlists", "{{watchlistId}}" ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "7. Remove Stock (TCS) from Watchlist",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "X-User-Id", "value": "demo-user" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/v1/watchlists/{{watchlistId}}/items/TCS",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "v1", "watchlists", "{{watchlistId}}", "items", "TCS" ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "8. Delete Watchlist",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "X-User-Id", "value": "demo-user" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/v1/watchlists/{{watchlistId}}",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "v1", "watchlists", "{{watchlistId}}" ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "watchlistId",
+      "value": "demo-watchlist-id",
+      "type": "string"
+    }
+  ]
+}
