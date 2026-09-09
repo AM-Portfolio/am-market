@@ -28,23 +28,32 @@ public class WatchlistService {
 
     public static final String DEFAULT_ACTIVE_SET_KEY = "market:active-symbols";
     public static final String DEFAULT_WATCHLIST_NAME = "My Watch List";
-    public static final int MAX_WATCHLISTS_PER_USER = 5;
-    public static final int MAX_STOCKS_PER_WATCHLIST = 50;
+    public static final int DEFAULT_MAX_WATCHLISTS_PER_USER = 5;
+    public static final int DEFAULT_MAX_STOCKS_PER_WATCHLIST = 50;
 
     private final WatchlistRepository watchlistRepository;
     private final WatchlistItemRepository watchlistItemRepository;
     private final StringRedisTemplate stringRedisTemplate;
     private final String activeSetRedisKey;
+    private final int maxWatchlistsPerUser;
+    private final int maxStocksPerWatchlist;
+    private final String defaultWatchlistName;
 
     public WatchlistService(
             WatchlistRepository watchlistRepository,
             WatchlistItemRepository watchlistItemRepository,
             @Nullable StringRedisTemplate stringRedisTemplate,
-            @Value("${market.active-symbols.redis-key:" + DEFAULT_ACTIVE_SET_KEY + "}") String activeSetRedisKey) {
+            @Value("${market.active-symbols.redis-key:" + DEFAULT_ACTIVE_SET_KEY + "}") String activeSetRedisKey,
+            @Value("${market.watchlist.max-per-user:" + DEFAULT_MAX_WATCHLISTS_PER_USER + "}") int maxWatchlistsPerUser,
+            @Value("${market.watchlist.max-stocks-per-list:" + DEFAULT_MAX_STOCKS_PER_WATCHLIST + "}") int maxStocksPerWatchlist,
+            @Value("${market.watchlist.default-name:" + DEFAULT_WATCHLIST_NAME + "}") String defaultWatchlistName) {
         this.watchlistRepository = watchlistRepository;
         this.watchlistItemRepository = watchlistItemRepository;
         this.stringRedisTemplate = stringRedisTemplate;
         this.activeSetRedisKey = activeSetRedisKey;
+        this.maxWatchlistsPerUser = maxWatchlistsPerUser;
+        this.maxStocksPerWatchlist = maxStocksPerWatchlist;
+        this.defaultWatchlistName = defaultWatchlistName;
     }
 
     /**
@@ -54,10 +63,10 @@ public class WatchlistService {
     public Watchlist getOrCreateDefaultWatchlist(String userId) {
         return watchlistRepository.findByUserIdAndIsDefaultTrue(userId)
                 .orElseGet(() -> {
-                    log.info("Auto-seeding default watchlist '{}' for user {}", DEFAULT_WATCHLIST_NAME, userId);
+                    log.info("Auto-seeding default watchlist '{}' for user {}", defaultWatchlistName, userId);
                     Watchlist defaultList = Watchlist.builder()
                             .userId(userId)
-                            .name(DEFAULT_WATCHLIST_NAME)
+                            .name(defaultWatchlistName)
                             .isDefault(true)
                             .displayOrder(0)
                             .createdAt(LocalDateTime.now())
@@ -96,11 +105,11 @@ public class WatchlistService {
             throw new IllegalArgumentException("Watchlist name cannot be empty");
         }
 
-        // Limit Check: Maximum 5 watchlists per user
+        // Limit Check: Maximum watchlists per user
         long currentCount = watchlistRepository.countByUserId(userId);
-        if (currentCount >= MAX_WATCHLISTS_PER_USER) {
-            log.warn("User {} exceeded maximum limit of {} watchlists", userId, MAX_WATCHLISTS_PER_USER);
-            throw new IllegalArgumentException("Maximum limit of " + MAX_WATCHLISTS_PER_USER + " watchlists reached");
+        if (currentCount >= maxWatchlistsPerUser) {
+            log.warn("User {} exceeded maximum limit of {} watchlists", userId, maxWatchlistsPerUser);
+            throw new IllegalArgumentException("Maximum limit of " + maxWatchlistsPerUser + " watchlists reached");
         }
 
         // Check for duplicate name for this user
@@ -183,7 +192,7 @@ public class WatchlistService {
 
     /**
      * Adds a stock symbol to a specific watchlist owned by the user.
-     * Enforces strict capacity limit of maximum 50 stocks per watchlist.
+     * Enforces strict capacity limit of maximum stocks per watchlist.
      */
     public WatchlistItemDto addStockToWatchlist(String userId, String watchlistId, String symbol) {
         String cleanSymbol = symbol != null ? symbol.trim().toUpperCase(Locale.ROOT) : "";
@@ -193,11 +202,11 @@ public class WatchlistService {
         Watchlist watchlist = watchlistRepository.findByUserIdAndId(userId, watchlistId)
                 .orElseThrow(() -> new IllegalArgumentException("Watchlist not found or access denied"));
 
-        // Capacity Check: Max 50 stocks per watchlist
+        // Capacity Check: Max stocks per watchlist
         long itemCount = watchlistItemRepository.countByWatchlistId(watchlistId);
-        if (itemCount >= MAX_STOCKS_PER_WATCHLIST) {
-            log.warn("Watchlist {} exceeded maximum capacity of {} stocks", watchlistId, MAX_STOCKS_PER_WATCHLIST);
-            throw new IllegalArgumentException("Watchlist has reached maximum capacity of " + MAX_STOCKS_PER_WATCHLIST + " stocks");
+        if (itemCount >= maxStocksPerWatchlist) {
+            log.warn("Watchlist {} exceeded maximum capacity of {} stocks", watchlistId, maxStocksPerWatchlist);
+            throw new IllegalArgumentException("Watchlist has reached maximum capacity of " + maxStocksPerWatchlist + " stocks");
         }
 
         if (watchlistItemRepository.existsByWatchlistIdAndSymbol(watchlistId, cleanSymbol)) {
