@@ -11,13 +11,32 @@
       "request": {
         "method": "GET",
         "header": [
-          { "key": "Accept", "value": "application/json" },
-          { "key": "X-User-Id", "value": "demo-user" }
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "User-Agent",
+            "value": "PostmanRuntime/7.39.0"
+          }
         ],
         "url": {
           "raw": "{{baseUrl}}/v1/watchlists",
-          "host": [ "{{baseUrl}}" ],
-          "path": [ "v1", "watchlists" ]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "watchlists"
+          ]
         }
       },
       "response": []
@@ -27,8 +46,22 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "X-User-Id", "value": "demo-user" }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "User-Agent",
+            "value": "PostmanRuntime/7.39.0"
+          }
         ],
         "body": {
           "mode": "raw",
@@ -36,8 +69,13 @@
         },
         "url": {
           "raw": "{{baseUrl}}/v1/watchlists",
-          "host": [ "{{baseUrl}}" ],
-          "path": [ "v1", "watchlists" ]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "watchlists"
+          ]
         }
       },
       "response": []
@@ -47,8 +85,22 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "X-User-Id", "value": "demo-user" }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "User-Agent",
+            "value": "PostmanRuntime/7.39.0"
+          }
         ],
         "body": {
           "mode": "raw",
@@ -56,8 +108,15 @@
         },
         "url": {
           "raw": "{{baseUrl}}/v1/watchlists/{{watchlistId}}/items",
-          "host": [ "{{baseUrl}}" ],
-          "path": [ "v1", "watchlists", "{{watchlistId}}", "items" ]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "watchlists",
+            "{{watchlistId}}",
+            "items"
+          ]
         }
       },
       "response": []
@@ -67,13 +126,34 @@
       "request": {
         "method": "GET",
         "header": [
-          { "key": "Accept", "value": "application/json" },
-          { "key": "X-User-Id", "value": "demo-user" }
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "User-Agent",
+            "value": "PostmanRuntime/7.39.0"
+          }
         ],
         "url": {
           "raw": "{{baseUrl}}/v1/watchlists/check/TCS",
-          "host": [ "{{baseUrl}}" ],
-          "path": [ "v1", "watchlists", "check", "TCS" ]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "watchlists",
+            "check",
+            "TCS"
+          ]
         }
       },
       "response": []
@@ -83,13 +163,34 @@
       "request": {
         "method": "GET",
         "header": [
-          { "key": "Accept", "value": "application/json" },
-          { "key": "X-User-Id", "value": "demo-user" }
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "User-Agent",
+            "value": "PostmanRuntime/7.39.0"
+          }
         ],
         "url": {
           "raw": "{{baseUrl}}/v1/watchlists/{{watchlistId}}/items",
-          "host": [ "{{baseUrl}}" ],
-          "path": [ "v1", "watchlists", "{{watchlistId}}", "items" ]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "watchlists",
+            "{{watchlistId}}",
+            "items"
+          ]
         }
       },
       "response": []
@@ -99,8 +200,22 @@
       "request": {
         "method": "PUT",
         "header": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "X-User-Id", "value": "demo-user" }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "User-Agent",
+            "value": "PostmanRuntime/7.39.0"
+          }
         ],
         "body": {
           "mode": "raw",
@@ -108,8 +223,14 @@
         },
         "url": {
           "raw": "{{baseUrl}}/v1/watchlists/{{watchlistId}}",
-          "host": [ "{{baseUrl}}" ],
-          "path": [ "v1", "watchlists", "{{watchlistId}}" ]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "watchlists",
+            "{{watchlistId}}"
+          ]
         }
       },
       "response": []
@@ -119,12 +240,31 @@
       "request": {
         "method": "DELETE",
         "header": [
-          { "key": "X-User-Id", "value": "demo-user" }
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "User-Agent",
+            "value": "PostmanRuntime/7.39.0"
+          }
         ],
         "url": {
           "raw": "{{baseUrl}}/v1/watchlists/{{watchlistId}}/items/TCS",
-          "host": [ "{{baseUrl}}" ],
-          "path": [ "v1", "watchlists", "{{watchlistId}}", "items", "TCS" ]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "watchlists",
+            "{{watchlistId}}",
+            "items",
+            "TCS"
+          ]
         }
       },
       "response": []
@@ -134,12 +274,29 @@
       "request": {
         "method": "DELETE",
         "header": [
-          { "key": "X-User-Id", "value": "demo-user" }
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "User-Agent",
+            "value": "PostmanRuntime/7.39.0"
+          }
         ],
         "url": {
           "raw": "{{baseUrl}}/v1/watchlists/{{watchlistId}}",
-          "host": [ "{{baseUrl}}" ],
-          "path": [ "v1", "watchlists", "{{watchlistId}}" ]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "watchlists",
+            "{{watchlistId}}"
+          ]
         }
       },
       "response": []
@@ -148,7 +305,17 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:8080",
+      "value": "https://am.asrax.in/market",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "PASTE_BEARER_TOKEN_HERE",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "2c1c4fba-ee6c-4fbf-915b-aad7e4fdd929",
       "type": "string"
     },
     {
