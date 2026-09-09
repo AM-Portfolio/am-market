@@ -20,9 +20,19 @@ public interface WatchlistItemRepository extends MongoRepository<WatchlistItem, 
     List<WatchlistItem> findByWatchlistIdOrderByDisplayOrderAsc(String watchlistId);
 
     /**
-     * Checks if a symbol exists inside a specific watchlist.
+     * Checks if a symbol exists inside a specific watchlist on a specific exchange.
+     */
+    boolean existsByWatchlistIdAndSymbolAndExchange(String watchlistId, String symbol, String exchange);
+
+    /**
+     * Checks if a symbol exists inside a specific watchlist (defaults to matching symbol).
      */
     boolean existsByWatchlistIdAndSymbol(String watchlistId, String symbol);
+
+    /**
+     * Finds a specific item entry by watchlist ID, symbol, and exchange.
+     */
+    Optional<WatchlistItem> findByWatchlistIdAndSymbolAndExchange(String watchlistId, String symbol, String exchange);
 
     /**
      * Finds a specific item entry by watchlist ID and symbol.
@@ -33,6 +43,11 @@ public interface WatchlistItemRepository extends MongoRepository<WatchlistItem, 
      * Counts items in a watchlist to enforce the maximum 50-stock limit.
      */
     long countByWatchlistId(String watchlistId);
+
+    /**
+     * Deletes a stock symbol from a specific watchlist on a specific exchange.
+     */
+    void deleteByWatchlistIdAndSymbolAndExchange(String watchlistId, String symbol, String exchange);
 
     /**
      * Deletes a stock symbol from a specific watchlist.

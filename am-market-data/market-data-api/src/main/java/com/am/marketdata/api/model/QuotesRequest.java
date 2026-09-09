@@ -18,4 +18,10 @@ public class QuotesRequest {
     private String timeFrame = TimeFrame.FIVE_MINUTE.getApiValue(); // Default to 5-minute timeframe
     private boolean forceRefresh = false;
     private boolean indexSymbol = false;
+
+    /**
+     * Target exchange for symbols (e.g. "NSE", "BSE", "NSE_FO").
+     * Defaults to "NSE" when omitted.
+     */
+    private String exchange = "NSE";
 }

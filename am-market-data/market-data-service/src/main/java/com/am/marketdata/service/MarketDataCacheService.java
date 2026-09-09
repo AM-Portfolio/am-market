@@ -406,30 +406,67 @@ public class MarketDataCacheService {
         final boolean overlayLiveLastPrice = OfficialClosePolicy.shouldOverlayLiveLastPrice(
                 isLiveTickOverlayAllowed());
 
-        // OPTIMIZATION: Combine 500 individual Redis GET calls into 1 single Redis MGET (multiGet) call.
-        // This eliminates 500 network roundtrips and cleans up Grafana Tempo traces.
+        // OPTIMIZATION: Combine individual Redis GET calls into 1 single Redis MGET (multiGet) call.
+        // Support exchange-namespaced keys (e.g. market:latest-price:BSE:RELIANCE or market:latest-price:RELIANCE).
         List<Map.Entry<String, OHLCQuote>> entries = new ArrayList<>(result.entrySet());
-        List<String> keys = new ArrayList<>(entries.size());
+        List<String> primaryKeys = new ArrayList<>(entries.size());
+        List<String> fallbackKeys = new ArrayList<>(entries.size());
 
         for (Map.Entry<String, OHLCQuote> entry : entries) {
-            String symbol = entry.getKey();
-            if (symbol.contains("|")) {
-                symbol = symbol.substring(symbol.indexOf("|") + 1);
+            String raw = entry.getKey();
+            String exchange = "NSE";
+            String cleanSymbol = raw;
+
+            if (cleanSymbol.contains("|")) {
+                String[] parts = cleanSymbol.split("\\|", 2);
+                exchange = parts[0];
+                cleanSymbol = parts[1];
+            } else if (cleanSymbol.contains(":")) {
+                String[] parts = cleanSymbol.split(":", 2);
+                exchange = parts[0];
+                cleanSymbol = parts[1];
             }
-            if (symbol.contains(":")) {
-                symbol = symbol.substring(symbol.indexOf(":") + 1);
-            }
-            symbol = symbol.toUpperCase().trim();
-            keys.add("market:latest-price:" + symbol);
+            cleanSymbol = cleanSymbol.toUpperCase().trim();
+            exchange = exchange.toUpperCase().trim();
+
+            // Primary: market:latest-price:EXCHANGE:SYMBOL
+            primaryKeys.add("market:latest-price:" + exchange + ":" + cleanSymbol);
+            // Fallback: market:latest-price:SYMBOL (for backward compatibility)
+            fallbackKeys.add("market:latest-price:" + cleanSymbol);
         }
 
         try {
-            // Batch retrieve all latest price JSONs in 1 single Redis MGET command
-            List<String> jsonList = redisTemplate.opsForValue().multiGet(keys);
+            // Batch retrieve exchange-specific latest prices (e.g. market:latest-price:NSE:INFY)
+            List<String> jsonList = redisTemplate.opsForValue().multiGet(primaryKeys);
+            
+            // Check if any symbols missed in primary exchange-specific keys
+            // Note: Immutable lists in Java 9+ (e.g. List.of()) throw NullPointerException on contains(null),
+            // so we inspect elements manually.
+            List<String> fallbackJsonList = null;
+            boolean hasNulls = false;
+            if (jsonList == null || jsonList.isEmpty()) {
+                hasNulls = true;
+            } else {
+                for (String item : jsonList) {
+                    if (item == null) {
+                        hasNulls = true;
+                        break;
+                    }
+                }
+            }
 
-            if (jsonList != null) {
+            if (hasNulls) {
+                try {
+                    fallbackJsonList = redisTemplate.opsForValue().multiGet(fallbackKeys);
+                } catch (Exception ignore) {}
+            }
+
+            if (jsonList != null || fallbackJsonList != null) {
                 for (int i = 0; i < entries.size(); i++) {
-                    String json = jsonList.get(i);
+                    String json = (jsonList != null && i < jsonList.size()) ? jsonList.get(i) : null;
+                    if (json == null && fallbackJsonList != null && i < fallbackJsonList.size()) {
+                        json = fallbackJsonList.get(i);
+                    }
                     if (json != null) {
                         try {
                             @SuppressWarnings("unchecked")
@@ -457,7 +494,7 @@ public class MarketDataCacheService {
                 }
             }
         } catch (Exception ex) {
-            log.warn("overlayLatestPrices", "Batch overlay failed for {} symbols: {}", keys.size(), ex.getMessage());
+            log.warn("overlayLatestPrices", "Batch overlay failed for {} symbols: {}", primaryKeys.size(), ex.getMessage(), ex);
         }
 
         // FALLBACK: Query MongoDB for any symbols where previousClose is still 0.0
@@ -1086,7 +1123,18 @@ public class MarketDataCacheService {
                 cacheData.put("source", "UPSTOX_WS");
 
                 String json = objectMapper.writeValueAsString(cacheData);
+                // 1. Write standard plain key for backward compatibility
                 latestPriceRedisWrites.put("market:latest-price:" + symbol, json);
+                // 2. Write exchange-qualified key if rawSymbol has exchange prefix (e.g. BSE:RELIANCE or BSE_EQ|...)
+                if (rawSymbol.contains(":") || rawSymbol.contains("|")) {
+                    String ex = "NSE";
+                    if (rawSymbol.contains(":")) {
+                        ex = rawSymbol.split(":", 2)[0].trim().toUpperCase();
+                    } else if (rawSymbol.contains("|")) {
+                        ex = rawSymbol.split("\\|", 2)[0].trim().toUpperCase();
+                    }
+                    latestPriceRedisWrites.put("market:latest-price:" + ex + ":" + symbol, json);
+                }
             }
 
             // Step 4: Execute bulk Redis pipelined write for latest prices (7 days TTL - weekend & holiday resilient)

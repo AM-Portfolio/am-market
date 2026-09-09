@@ -29,6 +29,13 @@ public class OHLCRequest {
     @JsonProperty("refresh")
     private boolean forceRefresh = false;
 
+    /**
+     * Target exchange for symbols (e.g. "NSE", "BSE", "NSE_FO").
+     * Defaults to "NSE" when omitted.
+     */
+    @JsonProperty("exchange")
+    private String exchange = "NSE";
+
     public boolean isIndexSymbol() {
         return indexSymbol;
     }

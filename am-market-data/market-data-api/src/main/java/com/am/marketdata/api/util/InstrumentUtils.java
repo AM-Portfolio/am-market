@@ -58,19 +58,21 @@ public class InstrumentUtils {
             return new HashSet<>();
         }
 
-        // Normalize all raw requested symbols to uppercase and strip exchange prefixes (e.g. NSE:RELIANCE -> RELIANCE)
+        // Normalize raw requested symbols to uppercase.
+        // If fetchIndexStocks is false, preserve any explicit exchange prefix (e.g. "BSE:RELIANCE", "NSE_FO:NIFTY...")
+        // If fetchIndexStocks is true (index expansion), strip prefix to match index collection symbols.
         List<String> upperRawSymbols = rawSymbols.stream()
                 .map(String::trim)
                 .map(String::toUpperCase)
-                .map(s -> s.contains(":") ? s.substring(s.indexOf(":") + 1) : s)
+                .map(s -> (fetchIndexStocks && s.contains(":")) ? s.substring(s.indexOf(":") + 1) : s)
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toList());
 
         Set<String> candidateSymbols = new HashSet<>();
 
         if (!fetchIndexStocks) {
-            // fetchIndexStocks=false means the caller already knows these are regular stock symbols.
-            // No MongoDB lookup needed — just add them all directly.
+            // fetchIndexStocks=false means the caller already knows these are regular stock symbols or prefixed exchange symbols.
+            // No MongoDB index lookup needed — just add them all directly.
             log.debug("fetchIndexStocks=false, returning normalized symbols: {}", upperRawSymbols);
             candidateSymbols.addAll(upperRawSymbols);
         } else {

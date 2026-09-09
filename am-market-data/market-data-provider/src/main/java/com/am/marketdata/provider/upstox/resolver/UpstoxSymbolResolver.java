@@ -63,7 +63,7 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                     "Symbols not resolved as indices (will lookup in DB): " + symbolsForDb);
         }
 
-        // 3. Lookup remaining symbols
+        // 3. Lookup remaining symbols with exchange awareness
         List<com.am.marketdata.common.model.UpstoxInstrument> dbInstruments = resolveInstruments(symbolsForDb);
 
         // 4. Combine both sources
@@ -76,11 +76,10 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                     .map(com.am.marketdata.common.model.UpstoxInstrument::getInstrumentKey)
                     .collect(Collectors.toList()));
 
-            keyToSymbolMap.putAll(dbInstruments.stream()
-                    .collect(Collectors.toMap(
-                            com.am.marketdata.common.model.UpstoxInstrument::getInstrumentKey,
-                            com.am.marketdata.common.model.UpstoxInstrument::getTradingSymbol,
-                            (existing, replacement) -> existing)));
+            // Build reverse lookup from instrument key to trading symbol or original input
+            for (com.am.marketdata.common.model.UpstoxInstrument inst : dbInstruments) {
+                keyToSymbolMap.put(inst.getInstrumentKey(), inst.getTradingSymbol());
+            }
         }
 
         // Add Mapped Indices
@@ -103,34 +102,36 @@ public class UpstoxSymbolResolver implements SymbolResolver {
     }
 
     /**
-     * Resolve instruments from database.
-     * Detects whether the input symbols are ISIN codes (e.g. INE095N01031)
-     * or trading symbols (e.g. RELIANCE) and queries accordingly.
-     * Mixed lists are split and queried separately, then merged.
+     * Resolve instruments from database with exchange grouping.
+     * Detects whether input has an exchange prefix (e.g. BSE:RELIANCE vs NSE:RELIANCE)
+     * and filters DB search criteria by the explicit exchange.
      */
     private List<com.am.marketdata.common.model.UpstoxInstrument> resolveInstruments(List<String> symbols) {
         if (symbols == null || symbols.isEmpty()) {
             return new ArrayList<>();
         }
 
+        // Group trading symbols by exchange: Exchange -> List of Clean Trading Symbols
+        Map<String, List<String>> symbolsByExchange = new HashMap<>();
         List<String> isinSymbols = new ArrayList<>();
-        List<String> tradingSymbols = new ArrayList<>();
 
         for (String s : symbols) {
-            // Strip exchange prefix if present (e.g., NSE:RELIANCE -> RELIANCE)
+            String exchange = "NSE"; // Default to NSE
             String cleaned = s;
+
             if (cleaned.contains("|")) {
                 cleaned = cleaned.substring(cleaned.indexOf("|") + 1);
-            }
-            if (cleaned.contains(":")) {
-                cleaned = cleaned.substring(cleaned.indexOf(":") + 1);
+            } else if (cleaned.contains(":")) {
+                String[] parts = cleaned.split(":", 2);
+                exchange = parts[0].trim().toUpperCase();
+                cleaned = parts[1].trim().toUpperCase();
             }
 
             // ISINs are 12-char alphanumeric codes starting with two uppercase letters (e.g. INE, IN2)
             if (cleaned.matches("^[A-Z]{2}[A-Z0-9]{10}$")) {
                 isinSymbols.add(cleaned);
             } else {
-                tradingSymbols.add(cleaned);
+                symbolsByExchange.computeIfAbsent(exchange, k -> new ArrayList<>()).add(cleaned);
             }
         }
 
@@ -150,17 +151,23 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             }
         }
 
-        // Query by trading symbol
-        if (!tradingSymbols.isEmpty()) {
-            log.info("UpstoxSymbolResolver",
-                    "Querying DB by trading symbol for " + tradingSymbols.size() + " symbols");
-            com.am.marketdata.common.dto.InstrumentSearchCriteria criteria =
-                    new com.am.marketdata.common.dto.InstrumentSearchCriteria();
-            criteria.setTradingSymbols(tradingSymbols);
-            criteria.setProvider("UPSTOX");
-            List<?> found = (List<?>) instrumentDataProvider.searchInstruments(criteria);
-            if (found != null) {
-                found.forEach(i -> results.add((com.am.marketdata.common.model.UpstoxInstrument) i));
+        // Query by trading symbol grouped by exchange
+        for (Map.Entry<String, List<String>> entry : symbolsByExchange.entrySet()) {
+            String exchange = entry.getKey();
+            List<String> tradingSymbols = entry.getValue();
+
+            if (!tradingSymbols.isEmpty()) {
+                log.info("UpstoxSymbolResolver",
+                        String.format("Querying DB for exchange %s with %d symbols", exchange, tradingSymbols.size()));
+                com.am.marketdata.common.dto.InstrumentSearchCriteria criteria =
+                        new com.am.marketdata.common.dto.InstrumentSearchCriteria();
+                criteria.setTradingSymbols(tradingSymbols);
+                criteria.setExchanges(List.of(exchange));
+                criteria.setProvider("UPSTOX");
+                List<?> found = (List<?>) instrumentDataProvider.searchInstruments(criteria);
+                if (found != null) {
+                    found.forEach(i -> results.add((com.am.marketdata.common.model.UpstoxInstrument) i));
+                }
             }
         }
 
