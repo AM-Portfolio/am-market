@@ -639,17 +639,50 @@ public class MarketDataService {
             if (cachedData != null && !cachedData.isEmpty()) {
                 log.info("[CACHE] Found {} live prices in cache", cachedData.size());
 
-                // Convert cached OHLC data to EquityPrice
-                Map<String, LTPQuote> ltpMap = new HashMap<>();
+                // Map OHLC cache → EquityPrice including previousClose so callers
+                // (live-ltp) do not need a second OHLC round-trip for day change.
                 for (Map.Entry<String, OHLCQuote> entry : cachedData.entrySet()) {
-                    LTPQuote ltp = new LTPQuote();
-                    ltp.lastPrice = entry.getValue().getLastPrice();
-                    ltp.instrumentToken = 0;
-                    ltpMap.put(entry.getKey(), ltp);
+                    String key = entry.getKey();
+                    OHLCQuote quote = entry.getValue();
+                    if (quote == null) {
+                        continue;
+                    }
+                    String exchange = "NSE";
+                    String symbol = key;
+                    if (key.contains(":")) {
+                        String[] parts = key.split(":", 2);
+                        exchange = parts[0];
+                        symbol = parts[1];
+                    }
+                    Double last = quote.getLastPrice() > 0
+                            ? quote.getLastPrice()
+                            : (quote.getOhlc() != null ? quote.getOhlc().getClose() : null);
+                    double prev = quote.getPreviousClose();
+                    if (prev <= 0 && quote.getOhlc() != null) {
+                        prev = quote.getOhlc().getClose();
+                    }
+                    EquityPrice price = new EquityPrice();
+                    price.setSymbol(symbol);
+                    price.setExchange(exchange);
+                    price.setLastPrice(last);
+                    if (prev > 0) {
+                        price.setPreviousClose(prev);
+                        if (last != null) {
+                            double change = last - prev;
+                            price.setChange(change);
+                            price.setChangePercent(prev != 0 ? (change / prev) * 100.0 : 0.0);
+                        }
+                    }
+                    if (quote.getOhlc() != null) {
+                        price.setOhlcv(com.am.common.investment.model.historical.OHLCVTPoint.builder()
+                                .open(quote.getOhlc().getOpen())
+                                .high(quote.getOhlc().getHigh())
+                                .low(quote.getOhlc().getLow())
+                                .close(quote.getOhlc().getClose())
+                                .build());
+                    }
+                    result.add(price);
                 }
-
-                List<EquityPrice> cachedPrices = genericMapper.mapLTPquoteToEquityPrices(ltpMap);
-                result.addAll(cachedPrices);
 
                 // Remove symbols found in cache from remaining
                 cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE_EQ:", "").replace("NSE:", "")));
