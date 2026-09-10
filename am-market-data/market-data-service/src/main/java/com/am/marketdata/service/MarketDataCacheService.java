@@ -292,15 +292,15 @@ public class MarketDataCacheService {
 
     public Map<String, OHLCQuote> getOHLCFromCache(List<String> tradingSymbols, TimeFrame timeFrame) {
         try {
-            // Clean symbols (remove exchange prefixes)
+            // Clean symbols (remove NSE exchange prefix, but keep BSE/other exchange prefixes intact to avoid cache collisions)
             List<String> cleanSymbols = tradingSymbols.stream()
                     .map(symbol -> {
-                        String clean = symbol;
+                        String clean = symbol != null ? symbol.trim() : "";
                         if (clean.contains("|")) {
                             clean = clean.substring(clean.indexOf("|") + 1);
                         }
-                        if (clean.contains(":")) {
-                            clean = clean.substring(clean.indexOf(":") + 1);
+                        if (clean.toUpperCase().startsWith("NSE:")) {
+                            clean = clean.substring(4);
                         }
                         return clean.toUpperCase().trim();
                     })

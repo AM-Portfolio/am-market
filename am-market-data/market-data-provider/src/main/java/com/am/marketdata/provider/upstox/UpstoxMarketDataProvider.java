@@ -275,7 +275,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         callCount++;
 
                         // Resolve instrument key for this symbol, stripping exchange prefixes if present
-                        String cleanSymbol = symbol.replace("NSE_EQ:", "").replace("NSE:", "").trim();
+                        String cleanSymbol = symbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim();
                         String instrumentKey = context.keyToSymbolMap.entrySet().stream()
                                 .filter(e -> e.getValue().equals(cleanSymbol) || e.getValue().equals(symbol))
                                 .map(Map.Entry::getKey)
