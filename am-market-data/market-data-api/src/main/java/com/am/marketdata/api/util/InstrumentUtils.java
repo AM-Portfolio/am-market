@@ -58,15 +58,17 @@ public class InstrumentUtils {
             return new HashSet<>();
         }
 
+        log.info("[EXCHANGE_DIAG] resolveSymbols called: rawSymbols={} fetchIndexStocks={}",
+                rawSymbols, fetchIndexStocks);
+
         // Normalize raw requested symbols to uppercase.
-        // If fetchIndexStocks is false, preserve any explicit exchange prefix (e.g. "BSE:RELIANCE", "NSE_FO:NIFTY...")
-        // If fetchIndexStocks is true (index expansion), strip prefix to match index collection symbols.
+        // Keep explicit exchange prefixes (e.g. "BSE:TCS") intact so exchange routing is preserved.
         List<String> upperRawSymbols = rawSymbols.stream()
                 .map(String::trim)
                 .map(String::toUpperCase)
-                .map(s -> (fetchIndexStocks && s.contains(":")) ? s.substring(s.indexOf(":") + 1) : s)
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toList());
+        log.info("[EXCHANGE_DIAG] resolveSymbols normalized: upperRawSymbols={}", upperRawSymbols);
 
         Set<String> candidateSymbols = new HashSet<>();
 
@@ -76,14 +78,17 @@ public class InstrumentUtils {
             log.debug("fetchIndexStocks=false, returning normalized symbols: {}", upperRawSymbols);
             candidateSymbols.addAll(upperRawSymbols);
         } else {
-            // fetchIndexStocks=true means some symbols might be index names (e.g. "NIFTY50").
-            // OPTIMIZATION: Instead of calling findByIndexSymbol() once per symbol in a loop
-            // (which would fire N individual MongoDB queries), we do ONE batch query to fetch
-            // all known index documents at once, then expand constituents in memory.
-            Set<String> upperSymbolSet = new HashSet<>(upperRawSymbols);
+            // fetchIndexStocks=true means some symbols might be index names (e.g. "NIFTY50", "NSE:NIFTY50").
+            // Include both original symbol and base symbol (without prefix) in index search query.
+            Set<String> searchSymbols = new HashSet<>(upperRawSymbols);
+            for (String s : upperRawSymbols) {
+                if (s.contains(":")) {
+                    searchSymbols.add(s.substring(s.indexOf(":") + 1));
+                }
+            }
             Map<String, StockIndicesMarketData> indexDocsBySymbol = new HashMap<>();
             try {
-                List<StockIndicesMarketData> indexDocs = stockIndicesMarketDataService.findByIndexSymbols(upperSymbolSet);
+                List<StockIndicesMarketData> indexDocs = stockIndicesMarketDataService.findByIndexSymbols(searchSymbols);
                 if (indexDocs != null) {
                     for (StockIndicesMarketData doc : indexDocs) {
                         if (doc != null && doc.getIndexSymbol() != null) {
@@ -98,7 +103,11 @@ public class InstrumentUtils {
             // Now resolve each symbol: if it is a known index, expand its constituents;
             // otherwise treat it as a regular stock symbol.
             for (String symbol : upperRawSymbols) {
+                String baseSymbol = symbol.contains(":") ? symbol.substring(symbol.indexOf(":") + 1) : symbol;
                 StockIndicesMarketData indexData = indexDocsBySymbol.get(symbol);
+                if (indexData == null) {
+                    indexData = indexDocsBySymbol.get(baseSymbol);
+                }
                 if (indexData != null && indexData.getData() != null) {
                     // It's an index — keep the index symbol itself and add all constituent stocks
                     candidateSymbols.add(symbol);
@@ -149,6 +158,7 @@ public class InstrumentUtils {
                         .collect(Collectors.toList());
                 List<String> symbolCandidates = nonIndexCandidates.stream()
                         .filter(s -> !looksLikeIsin(s))
+                        .map(s -> s.contains(":") ? s.substring(s.indexOf(":") + 1).trim() : s)
                         .collect(Collectors.toList());
 
                 if (!symbolCandidates.isEmpty()) {
@@ -179,12 +189,16 @@ public class InstrumentUtils {
 
         for (String sym : candidateSymbols) {
             String upper = sym.toUpperCase();
-            if (upper.startsWith("GLOBAL_") || matchingIndices.contains(upper) || whitelist.contains(upper)) {
+            String baseSymbol = sym.contains(":") ? sym.substring(sym.indexOf(":") + 1).trim() : sym;
+            String upperBase = baseSymbol.toUpperCase();
+            if (upper.startsWith("GLOBAL_") || matchingIndices.contains(upper) || whitelist.contains(upper) || whitelist.contains(upperBase)) {
                 resolvedSymbols.add(sym);
-            } else if (isinToTicker.containsKey(upper)) {
+            } else if (isinToTicker.containsKey(upper) || isinToTicker.containsKey(upperBase)) {
                 // Upstox quotes by trading symbol, not ISIN
-                resolvedSymbols.add(isinToTicker.get(upper));
-            } else if (validTradingSymbols.contains(sym) || validTradingSymbols.contains(upper)) {
+                String ticker = isinToTicker.getOrDefault(upper, isinToTicker.get(upperBase));
+                resolvedSymbols.add(sym.contains(":") ? sym.substring(0, sym.indexOf(":") + 1) + ticker : ticker);
+            } else if (validTradingSymbols.contains(sym) || validTradingSymbols.contains(upper)
+                    || validTradingSymbols.contains(baseSymbol) || validTradingSymbols.contains(upperBase)) {
                 resolvedSymbols.add(sym);
             } else {
                 unresolvedSymbols.add(sym);
@@ -205,6 +219,8 @@ public class InstrumentUtils {
             });
         }
 
+        log.info("[EXCHANGE_DIAG] resolveSymbols result: {} symbols resolved from {} candidates, unresolved={}",
+                resolvedSymbols.size(), candidateSymbols.size(), unresolvedSymbols);
         return resolvedSymbols;
     }
 

@@ -78,7 +78,27 @@ public class UpstoxSymbolResolver implements SymbolResolver {
 
             // Build reverse lookup from instrument key to trading symbol or original input
             for (com.am.marketdata.common.model.UpstoxInstrument inst : dbInstruments) {
-                keyToSymbolMap.put(inst.getInstrumentKey(), inst.getTradingSymbol());
+                String tradingSymbol = inst.getTradingSymbol();
+                String exchange = inst.getExchange();
+                String instrumentKey = inst.getInstrumentKey();
+
+                // Check if any requested symbol matches this instrument's exchange and trading symbol
+                String matchedSymbol = null;
+                for (String req : symbols) {
+                    if (req.equalsIgnoreCase(tradingSymbol)
+                            || req.equalsIgnoreCase(exchange + ":" + tradingSymbol)
+                            || req.equalsIgnoreCase(inst.getSegment() + ":" + tradingSymbol)
+                            || req.equalsIgnoreCase(instrumentKey)) {
+                        matchedSymbol = req;
+                        break;
+                    }
+                }
+
+                if (matchedSymbol != null) {
+                    keyToSymbolMap.put(instrumentKey, matchedSymbol);
+                } else {
+                    keyToSymbolMap.put(instrumentKey, tradingSymbol);
+                }
             }
         }
 
