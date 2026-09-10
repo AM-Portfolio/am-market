@@ -673,7 +673,9 @@ public class MarketDataController {
                     tf = TimeFrame.DAY;
                 }
 
-                Map<String, OHLCQuote> historicalData = marketDataCacheService.getOHLC(symbolList, indexSymbol, tf, false);
+                // Single cache/provider read. Day change uses previousClose on EquityPrice
+                // (populated from Redis OHLC cache) — avoid a second sequential getOHLC
+                // that often hits the provider (~2–3s) on small cache misses.
                 Map<String, Object> livePrices = marketDataCacheService.getLivePrices(symbolList, indexSymbol,
                         forceRefresh);
 
@@ -689,17 +691,19 @@ public class MarketDataController {
                             continue;
 
                         Double currentPrice = priceData.getLastPrice();
-                        OHLCQuote historical = historicalData.get(symbol);
-                        if (historical == null) {
-                            historical = historicalData.get("NSE:" + symbol);
+                        if (currentPrice == null) {
+                            continue;
                         }
 
+                        // previousClose baseline from ohlcv.close (cache path stores
+                        // Redis previousClose or day close there — avoids EquityPrice
+                        // fields that older published jars may lack).
                         double previousClose = 0.0;
-                        if (historical != null && historical.getOhlc() != null) {
-                            previousClose = historical.getOhlc().getClose();
+                        if (priceData.getOhlcv() != null && priceData.getOhlcv().getClose() > 0) {
+                            previousClose = priceData.getOhlcv().getClose();
                         }
 
-                        double change = currentPrice - previousClose;
+                        double change = previousClose > 0 ? (currentPrice - previousClose) : 0.0;
                         double changePercent = previousClose != 0 ? (change / previousClose) * 100 : 0.0;
 
                         Map<String, Object> ltpData = new HashMap<>();
