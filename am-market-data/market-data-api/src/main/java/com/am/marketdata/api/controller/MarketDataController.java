@@ -695,21 +695,16 @@ public class MarketDataController {
                             continue;
                         }
 
+                        // previousClose baseline from ohlcv.close (cache path stores
+                        // Redis previousClose or day close there — avoids EquityPrice
+                        // fields that older published jars may lack).
                         double previousClose = 0.0;
-                        if (priceData.getPreviousClose() != null && priceData.getPreviousClose() > 0) {
-                            previousClose = priceData.getPreviousClose();
-                        } else if (priceData.getOhlcv() != null && priceData.getOhlcv().getClose() > 0) {
+                        if (priceData.getOhlcv() != null && priceData.getOhlcv().getClose() > 0) {
                             previousClose = priceData.getOhlcv().getClose();
                         }
 
                         double change = previousClose > 0 ? (currentPrice - previousClose) : 0.0;
                         double changePercent = previousClose != 0 ? (change / previousClose) * 100 : 0.0;
-                        if (priceData.getChange() != null) {
-                            change = priceData.getChange();
-                        }
-                        if (priceData.getChangePercent() != null) {
-                            changePercent = priceData.getChangePercent();
-                        }
 
                         Map<String, Object> ltpData = new HashMap<>();
                         ltpData.put("symbol", symbol);

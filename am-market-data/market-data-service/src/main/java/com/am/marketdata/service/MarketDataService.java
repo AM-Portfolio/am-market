@@ -639,8 +639,9 @@ public class MarketDataService {
             if (cachedData != null && !cachedData.isEmpty()) {
                 log.info("[CACHE] Found {} live prices in cache", cachedData.size());
 
-                // Map OHLC cache → EquityPrice including previousClose so callers
-                // (live-ltp) do not need a second OHLC round-trip for day change.
+                // Map OHLC cache → EquityPrice (lastPrice + ohlcv). Day change for
+                // live-ltp uses ohlcv.close as previousClose baseline — do not call
+                // setPreviousClose/setChange (not on all published EquityPrice jars).
                 for (Map.Entry<String, OHLCQuote> entry : cachedData.entrySet()) {
                     String key = entry.getKey();
                     OHLCQuote quote = entry.getValue();
@@ -657,28 +658,20 @@ public class MarketDataService {
                     Double last = quote.getLastPrice() > 0
                             ? quote.getLastPrice()
                             : (quote.getOhlc() != null ? quote.getOhlc().getClose() : null);
-                    double prev = quote.getPreviousClose();
-                    if (prev <= 0 && quote.getOhlc() != null) {
-                        prev = quote.getOhlc().getClose();
-                    }
                     EquityPrice price = new EquityPrice();
                     price.setSymbol(symbol);
                     price.setExchange(exchange);
                     price.setLastPrice(last);
-                    if (prev > 0) {
-                        price.setPreviousClose(prev);
-                        if (last != null) {
-                            double change = last - prev;
-                            price.setChange(change);
-                            price.setChangePercent(prev != 0 ? (change / prev) * 100.0 : 0.0);
-                        }
-                    }
                     if (quote.getOhlc() != null) {
+                        // Prefer true previousClose when Redis has it; else day close.
+                        double closeForChange = quote.getPreviousClose() > 0
+                                ? quote.getPreviousClose()
+                                : quote.getOhlc().getClose();
                         price.setOhlcv(com.am.common.investment.model.historical.OHLCVTPoint.builder()
                                 .open(quote.getOhlc().getOpen())
                                 .high(quote.getOhlc().getHigh())
                                 .low(quote.getOhlc().getLow())
-                                .close(quote.getOhlc().getClose())
+                                .close(closeForChange)
                                 .build());
                     }
                     result.add(price);
