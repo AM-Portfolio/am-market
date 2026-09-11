@@ -47,6 +47,60 @@ public class UpStockClient {
         return executeGet(url, HistoricalDataResponse.class);
     }
 
+    public String getOptionContractsRaw(String instrumentKey) {
+        String url = BASE_URL + "/option/contract";
+        log.info("=== Executing GET Option Contract from Upstox API ===");
+        try {
+            var request = Unirest.get(url)
+                    .header("Authorization", "Bearer " + getAccessToken())
+                    .header("Accept", "application/json")
+                    .header("Api-Version", "2.0")
+                    .queryString("instrument_key", instrumentKey);
+
+            HttpResponse<String> response = request.asString();
+            log.info("Option contract response status: {}", response.getStatus());
+            if (response.getStatus() >= 200 && response.getStatus() < 300) {
+                return response.getBody();
+            } else {
+                log.error("Upstox option contract error response: status={} body={}", response.getStatus(), response.getBody());
+                throw new RuntimeException("Upstox option contract API returned status " + response.getStatus() + ": " + response.getBody());
+            }
+        } catch (Exception e) {
+            log.error("Failed to execute option contract GET. instrumentKey={}, Error: {}",
+                    instrumentKey, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    public String getOptionChainRaw(String instrumentKey, String expiryDate) {
+        String url = BASE_URL + "/option/chain";
+        log.info("=== Executing GET Option Chain from Upstox API ===");
+        try {
+            var request = Unirest.get(url)
+                    .header("Authorization", "Bearer " + getAccessToken())
+                    .header("Accept", "application/json")
+                    .header("Api-Version", "2.0")
+                    .queryString("instrument_key", instrumentKey);
+
+            if (expiryDate != null && !expiryDate.isEmpty()) {
+                request.queryString("expiry_date", expiryDate);
+            }
+
+            HttpResponse<String> response = request.asString();
+            log.info("Option chain response status: {}", response.getStatus());
+            if (response.getStatus() >= 200 && response.getStatus() < 300) {
+                return response.getBody();
+            } else {
+                log.error("Upstox option chain error response: status={} body={}", response.getStatus(), response.getBody());
+                throw new RuntimeException("Upstox option chain API returned status " + response.getStatus() + ": " + response.getBody());
+            }
+        } catch (Exception e) {
+            log.error("Failed to execute option chain GET. instrumentKey={}, expiryDate={}, Error: {}",
+                    instrumentKey, expiryDate, e.getMessage(), e);
+            throw e;
+        }
+    }
+
     private String getAccessToken() {
         try {
             String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);

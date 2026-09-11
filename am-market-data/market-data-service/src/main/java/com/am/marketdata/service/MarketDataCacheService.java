@@ -1253,4 +1253,112 @@ public class MarketDataCacheService {
         }
         return result;
     }
+
+    /**
+     * Cache option chain data with dynamic TTL.
+     * Also updates a 24-hour stale backup cache for disaster recovery / upstream downtime.
+     */
+    public void cacheOptionChain(String underlyingSymbol, String expiryDate, Map<String, Object> data, boolean isMarketOpen) {
+        if (underlyingSymbol == null || data == null || data.isEmpty()) {
+            return;
+        }
+        String cleanSymbol = normalizeSymbol(underlyingSymbol);
+        String expiryKey = (expiryDate != null && !expiryDate.isEmpty()) ? expiryDate : "DEFAULT";
+        String primaryKey = "market:optionchain:" + cleanSymbol + ":" + expiryKey;
+        String staleKey = "market:optionchain:stale:" + cleanSymbol + ":" + expiryKey;
+
+        try {
+            String json = objectMapper.writeValueAsString(data);
+            // Live market: 60s. After-hours / weekend / holiday: 12 hours
+            long ttlSeconds = isMarketOpen ? 60L : 43200L;
+            redisTemplate.opsForValue().set(primaryKey, json, ttlSeconds, TimeUnit.SECONDS);
+
+            // Stale backup key valid for 24 hours
+            redisTemplate.opsForValue().set(staleKey, json, 86400L, TimeUnit.SECONDS);
+            log.info("cacheOptionChain", "Cached option chain for key: " + primaryKey + " with TTL: " + ttlSeconds + "s");
+        } catch (Exception e) {
+            log.warn("cacheOptionChain", "Failed to cache option chain in Redis: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get fresh option chain from Redis.
+     */
+    public Map<String, Object> getOptionChainFromCache(String underlyingSymbol, String expiryDate) {
+        if (underlyingSymbol == null) {
+            return null;
+        }
+        String cleanSymbol = normalizeSymbol(underlyingSymbol);
+        String expiryKey = (expiryDate != null && !expiryDate.isEmpty()) ? expiryDate : "DEFAULT";
+        String primaryKey = "market:optionchain:" + cleanSymbol + ":" + expiryKey;
+
+        try {
+            String json = redisTemplate.opsForValue().get(primaryKey);
+            if (json != null && !json.isEmpty()) {
+                return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            }
+        } catch (Exception e) {
+            log.warn("getOptionChainFromCache", "Error reading option chain cache for key: " + primaryKey + ": " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Get stale fallback option chain when upstream (Upstox) fails.
+     */
+    public Map<String, Object> getStaleOptionChain(String underlyingSymbol, String expiryDate) {
+        if (underlyingSymbol == null) {
+            return null;
+        }
+        String cleanSymbol = normalizeSymbol(underlyingSymbol);
+        String expiryKey = (expiryDate != null && !expiryDate.isEmpty()) ? expiryDate : "DEFAULT";
+        String staleKey = "market:optionchain:stale:" + cleanSymbol + ":" + expiryKey;
+
+        try {
+            String json = redisTemplate.opsForValue().get(staleKey);
+            if (json != null && !json.isEmpty()) {
+                Map<String, Object> map = objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                if (map != null) {
+                    map.put("isStale", true);
+                }
+                return map;
+            }
+        } catch (Exception e) {
+            log.warn("getStaleOptionChain", "Error reading stale option chain cache: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Acquire a distributed lock for option chain calculation/fetching (Cache Stampede / Thundering Herd shield).
+     * Returns true if lock was acquired.
+     */
+    public boolean acquireOptionChainLock(String underlyingSymbol, String expiryDate, long lockSeconds) {
+        String cleanSymbol = normalizeSymbol(underlyingSymbol);
+        String expiryKey = (expiryDate != null && !expiryDate.isEmpty()) ? expiryDate : "DEFAULT";
+        String lockKey = "lock:optionchain:" + cleanSymbol + ":" + expiryKey;
+
+        try {
+            Boolean acquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "LOCKED", lockSeconds, TimeUnit.SECONDS);
+            return Boolean.TRUE.equals(acquired);
+        } catch (Exception e) {
+            log.warn("acquireOptionChainLock", "Redis lock error: " + e.getMessage());
+            return true; // fail open if redis lock fails
+        }
+    }
+
+    /**
+     * Release distributed lock for option chain.
+     */
+    public void releaseOptionChainLock(String underlyingSymbol, String expiryDate) {
+        String cleanSymbol = normalizeSymbol(underlyingSymbol);
+        String expiryKey = (expiryDate != null && !expiryDate.isEmpty()) ? expiryDate : "DEFAULT";
+        String lockKey = "lock:optionchain:" + cleanSymbol + ":" + expiryKey;
+
+        try {
+            redisTemplate.delete(lockKey);
+        } catch (Exception e) {
+            log.warn("releaseOptionChainLock", "Failed to release lock: " + e.getMessage());
+        }
+    }
 }

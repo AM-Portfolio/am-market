@@ -749,6 +749,187 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     }
 
     @Override
+    public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate) {
+        if (underlyingSymbol == null || underlyingSymbol.trim().isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        try {
+            // Resolve instrument key using symbol resolver
+            com.am.marketdata.provider.common.InstrumentContext context =
+                    symbolResolver.resolveContext(Collections.singletonList(underlyingSymbol));
+            String instrumentKey = null;
+            if (context != null && !context.getInstrumentKeys().isEmpty()) {
+                instrumentKey = context.getInstrumentKeys().get(0);
+            }
+
+            if (instrumentKey == null) {
+                // Fallback direct heuristic if resolver did not match
+                String clean = underlyingSymbol.toUpperCase().trim();
+                if (clean.equals("NIFTY") || clean.equals("NIFTY 50") || clean.equals("NIFTY50")) {
+                    instrumentKey = "NSE_INDEX|Nifty 50";
+                } else if (clean.equals("BANKNIFTY") || clean.equals("NIFTY BANK")) {
+                    instrumentKey = "NSE_INDEX|Nifty Bank";
+                } else if (clean.equals("FINNIFTY") || clean.equals("NIFTY FIN SERVICE")) {
+                    instrumentKey = "NSE_INDEX|Nifty Fin Service";
+                } else {
+                    instrumentKey = "NSE_EQ|" + clean;
+                }
+            }
+
+            String formattedExpiry = null;
+            if (expiryDate != null) {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+                formattedExpiry = sdf.format(expiryDate);
+            } else {
+                // If expiry date is not supplied, fetch contract list from Upstox to find the nearest active expiry
+                try {
+                    String contractJson = upstoxApiService.getOptionContracts(instrumentKey);
+                    if (contractJson != null && !contractJson.isEmpty()) {
+                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                        com.fasterxml.jackson.databind.JsonNode cRoot = mapper.readTree(contractJson);
+                        com.fasterxml.jackson.databind.JsonNode cData = cRoot.get("data");
+                        if (cData != null && cData.isArray()) {
+                            java.util.TreeSet<String> expiries = new java.util.TreeSet<>();
+                            for (com.fasterxml.jackson.databind.JsonNode cn : cData) {
+                                if (cn.has("expiry") && !cn.get("expiry").isNull()) {
+                                    expiries.add(cn.get("expiry").asText());
+                                }
+                            }
+                            if (!expiries.isEmpty()) {
+                                formattedExpiry = expiries.first();
+                                log.info("getOptionChain", "Auto-resolved nearest expiry date: " + formattedExpiry + " for symbol: " + underlyingSymbol);
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.warn("getOptionChain", "Failed to auto-resolve nearest expiry from Upstox contracts: " + ex.getMessage());
+                }
+            }
+
+            log.info("getOptionChain", "Fetching option chain from Upstox. symbol=" + underlyingSymbol
+                    + ", instrumentKey=" + instrumentKey + ", expiry=" + formattedExpiry);
+
+            String rawJson = upstoxApiService.getOptionChain(instrumentKey, formattedExpiry);
+            if (rawJson == null || rawJson.trim().isEmpty()) {
+                return Collections.emptyMap();
+            }
+
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(rawJson);
+            com.fasterxml.jackson.databind.JsonNode dataArray = rootNode.get("data");
+
+            if (dataArray == null || !dataArray.isArray() || dataArray.isEmpty()) {
+                log.warn("getOptionChain", "Empty data array in Upstox option chain response for symbol: " + underlyingSymbol);
+                return Collections.emptyMap();
+            }
+
+            String resolvedExpiry = formattedExpiry;
+            Double spotPrice = null;
+            List<Map<String, Object>> strikesList = new ArrayList<>();
+
+            for (com.fasterxml.jackson.databind.JsonNode node : dataArray) {
+                if (resolvedExpiry == null && node.has("expiry")) {
+                    resolvedExpiry = node.get("expiry").asText();
+                }
+                if (spotPrice == null && node.has("underlying_spot_price")) {
+                    spotPrice = node.get("underlying_spot_price").asDouble();
+                }
+
+                Map<String, Object> strikeMap = new HashMap<>();
+                double strikePrice = node.has("strike_price") ? node.get("strike_price").asDouble() : 0.0;
+                strikeMap.put("strikePrice", strikePrice);
+
+                if (node.has("pcr")) {
+                    strikeMap.put("pcr", node.get("pcr").asDouble());
+                }
+
+                // Map Call Option
+                if (node.has("call_options") && !node.get("call_options").isNull()) {
+                    com.fasterxml.jackson.databind.JsonNode callNode = node.get("call_options");
+                    Map<String, Object> callMap = new HashMap<>();
+                    if (callNode.has("instrument_key")) {
+                        callMap.put("instrumentKey", callNode.get("instrument_key").asText());
+                    }
+                    if (callNode.has("market_data")) {
+                        com.fasterxml.jackson.databind.JsonNode md = callNode.get("market_data");
+                        callMap.put("ltp", md.has("ltp") ? md.get("ltp").asDouble() : 0.0);
+                        callMap.put("volume", md.has("volume") ? md.get("volume").asLong() : 0L);
+                        callMap.put("oi", md.has("oi") ? md.get("oi").asDouble() : 0.0);
+                        callMap.put("closePrice", md.has("close_price") ? md.get("close_price").asDouble() : 0.0);
+                        callMap.put("bidPrice", md.has("bid_price") ? md.get("bid_price").asDouble() : 0.0);
+                        callMap.put("bidQty", md.has("bid_qty") ? md.get("bid_qty").asInt() : 0);
+                        callMap.put("askPrice", md.has("ask_price") ? md.get("ask_price").asDouble() : 0.0);
+                        callMap.put("askQty", md.has("ask_qty") ? md.get("ask_qty").asInt() : 0);
+                        callMap.put("prevOi", md.has("prev_oi") ? md.get("prev_oi").asDouble() : 0.0);
+                    }
+                    if (callNode.has("option_greeks")) {
+                        com.fasterxml.jackson.databind.JsonNode og = callNode.get("option_greeks");
+                        Map<String, Object> greeksMap = new HashMap<>();
+                        greeksMap.put("vega", og.has("vega") ? og.get("vega").asDouble() : 0.0);
+                        greeksMap.put("theta", og.has("theta") ? og.get("theta").asDouble() : 0.0);
+                        greeksMap.put("gamma", og.has("gamma") ? og.get("gamma").asDouble() : 0.0);
+                        greeksMap.put("delta", og.has("delta") ? og.get("delta").asDouble() : 0.0);
+                        greeksMap.put("iv", og.has("iv") ? og.get("iv").asDouble() : 0.0);
+                        greeksMap.put("pop", og.has("pop") ? og.get("pop").asDouble() : 0.0);
+                        callMap.put("greeks", greeksMap);
+                    }
+                    strikeMap.put("call", callMap);
+                }
+
+                // Map Put Option
+                if (node.has("put_options") && !node.get("put_options").isNull()) {
+                    com.fasterxml.jackson.databind.JsonNode putNode = node.get("put_options");
+                    Map<String, Object> putMap = new HashMap<>();
+                    if (putNode.has("instrument_key")) {
+                        putMap.put("instrumentKey", putNode.get("instrument_key").asText());
+                    }
+                    if (putNode.has("market_data")) {
+                        com.fasterxml.jackson.databind.JsonNode md = putNode.get("market_data");
+                        putMap.put("ltp", md.has("ltp") ? md.get("ltp").asDouble() : 0.0);
+                        putMap.put("volume", md.has("volume") ? md.get("volume").asLong() : 0L);
+                        putMap.put("oi", md.has("oi") ? md.get("oi").asDouble() : 0.0);
+                        putMap.put("closePrice", md.has("close_price") ? md.get("close_price").asDouble() : 0.0);
+                        putMap.put("bidPrice", md.has("bid_price") ? md.get("bid_price").asDouble() : 0.0);
+                        putMap.put("bidQty", md.has("bid_qty") ? md.get("bid_qty").asInt() : 0);
+                        putMap.put("askPrice", md.has("ask_price") ? md.get("ask_price").asDouble() : 0.0);
+                        putMap.put("askQty", md.has("ask_qty") ? md.get("ask_qty").asInt() : 0);
+                        putMap.put("prevOi", md.has("prev_oi") ? md.get("prev_oi").asDouble() : 0.0);
+                    }
+                    if (putNode.has("option_greeks")) {
+                        com.fasterxml.jackson.databind.JsonNode og = putNode.get("option_greeks");
+                        Map<String, Object> greeksMap = new HashMap<>();
+                        greeksMap.put("vega", og.has("vega") ? og.get("vega").asDouble() : 0.0);
+                        greeksMap.put("theta", og.has("theta") ? og.get("theta").asDouble() : 0.0);
+                        greeksMap.put("gamma", og.has("gamma") ? og.get("gamma").asDouble() : 0.0);
+                        greeksMap.put("delta", og.has("delta") ? og.get("delta").asDouble() : 0.0);
+                        greeksMap.put("iv", og.has("iv") ? og.get("iv").asDouble() : 0.0);
+                        greeksMap.put("pop", og.has("pop") ? og.get("pop").asDouble() : 0.0);
+                        putMap.put("greeks", greeksMap);
+                    }
+                    strikeMap.put("put", putMap);
+                }
+
+                strikesList.add(strikeMap);
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("underlying", underlyingSymbol.toUpperCase());
+            response.put("underlyingKey", instrumentKey);
+            response.put("underlyingLtp", spotPrice != null ? spotPrice : 0.0);
+            response.put("expiry", resolvedExpiry);
+            response.put("timestamp", System.currentTimeMillis() / 1000);
+            response.put("isStale", false);
+            response.put("strikes", strikesList);
+
+            return response;
+        } catch (Exception e) {
+            log.error("getOptionChain", "Failed to fetch/parse option chain for symbol: " + underlyingSymbol + ", error: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to fetch option chain: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
     public String getProviderName() {
         return "upstox";
     }
