@@ -44,6 +44,70 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     // Delay between batch requests to prevent triggering HTTP 429 Rate Limits.
     private static final int BATCH_DELAY_MS = 150;
 
+    // ---------------------------------------------------------------------------
+    // DynamicJsonMapper configuration for Upstox option-chain responses
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Maps Upstox-specific snake_case keys to our standard camelCase contract keys.
+     * Any key NOT in this map will be converted automatically via snake→camelCase.
+     */
+    private static final java.util.Map<String, String> UPSTOX_OPTION_ALIASES;
+
+    /**
+     * Upstox fields that are internal/redundant and must be dropped from the response.
+     */
+    private static final java.util.Set<String> UPSTOX_OPTION_EXCLUDES;
+
+    /**
+     * Contract keys that MUST always be stored as Double for type-safety.
+     * Prevents a broker sending an integer 0 for a price field from being stored as Long.
+     */
+    private static final java.util.Set<String> UPSTOX_CORE_DOUBLE_TYPES;
+
+    static {
+        java.util.Map<String, String> aliases = new java.util.HashMap<>();
+        // Market-data sub-object
+        aliases.put("ltp",            "ltp");           // keep as-is (explicit)
+        aliases.put("close_price",    "closePrice");
+        aliases.put("prev_oi",        "prevOi");
+        aliases.put("bid_price",      "bidPrice");
+        aliases.put("bid_qty",        "bidQty");
+        aliases.put("ask_price",      "askPrice");
+        aliases.put("ask_qty",        "askQty");
+        // Greeks sub-object
+        aliases.put("vega",   "vega");
+        aliases.put("theta",  "theta");
+        aliases.put("gamma",  "gamma");
+        aliases.put("delta",  "delta");
+        aliases.put("iv",     "iv");
+        aliases.put("pop",    "pop");
+        UPSTOX_OPTION_ALIASES = java.util.Collections.unmodifiableMap(aliases);
+
+        java.util.Set<String> excludes = new java.util.HashSet<>();
+        // Drop Upstox internal fields that pollute the payload
+        excludes.add("short_name");
+        excludes.add("company_name");
+        excludes.add("freeze_qty");
+        excludes.add("lot_size");    // exposed separately at the strike level if needed
+        UPSTOX_OPTION_EXCLUDES = java.util.Collections.unmodifiableSet(excludes);
+
+        java.util.Set<String> coreDoubles = new java.util.HashSet<>();
+        coreDoubles.add("ltp");
+        coreDoubles.add("closePrice");
+        coreDoubles.add("bidPrice");
+        coreDoubles.add("askPrice");
+        coreDoubles.add("oi");
+        coreDoubles.add("prevOi");
+        coreDoubles.add("vega");
+        coreDoubles.add("theta");
+        coreDoubles.add("gamma");
+        coreDoubles.add("delta");
+        coreDoubles.add("iv");
+        coreDoubles.add("pop");
+        UPSTOX_CORE_DOUBLE_TYPES = java.util.Collections.unmodifiableSet(coreDoubles);
+    }
+
     public UpstoxMarketDataProvider(
             UpstoxApiService upstoxApiService,
             UpstoxSdkService upstoxSdkService,
@@ -844,7 +908,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                     strikeMap.put("pcr", node.get("pcr").asDouble());
                 }
 
-                // Map Call Option
+                // Map Call Option — dynamic extraction via DynamicJsonMapper
                 if (node.has("call_options") && !node.get("call_options").isNull()) {
                     com.fasterxml.jackson.databind.JsonNode callNode = node.get("call_options");
                     Map<String, Object> callMap = new HashMap<>();
@@ -852,32 +916,21 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         callMap.put("instrumentKey", callNode.get("instrument_key").asText());
                     }
                     if (callNode.has("market_data")) {
-                        com.fasterxml.jackson.databind.JsonNode md = callNode.get("market_data");
-                        callMap.put("ltp", md.has("ltp") ? md.get("ltp").asDouble() : 0.0);
-                        callMap.put("volume", md.has("volume") ? md.get("volume").asLong() : 0L);
-                        callMap.put("oi", md.has("oi") ? md.get("oi").asDouble() : 0.0);
-                        callMap.put("closePrice", md.has("close_price") ? md.get("close_price").asDouble() : 0.0);
-                        callMap.put("bidPrice", md.has("bid_price") ? md.get("bid_price").asDouble() : 0.0);
-                        callMap.put("bidQty", md.has("bid_qty") ? md.get("bid_qty").asInt() : 0);
-                        callMap.put("askPrice", md.has("ask_price") ? md.get("ask_price").asDouble() : 0.0);
-                        callMap.put("askQty", md.has("ask_qty") ? md.get("ask_qty").asInt() : 0);
-                        callMap.put("prevOi", md.has("prev_oi") ? md.get("prev_oi").asDouble() : 0.0);
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                callNode.get("market_data"), callMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
                     }
                     if (callNode.has("option_greeks")) {
-                        com.fasterxml.jackson.databind.JsonNode og = callNode.get("option_greeks");
                         Map<String, Object> greeksMap = new HashMap<>();
-                        greeksMap.put("vega", og.has("vega") ? og.get("vega").asDouble() : 0.0);
-                        greeksMap.put("theta", og.has("theta") ? og.get("theta").asDouble() : 0.0);
-                        greeksMap.put("gamma", og.has("gamma") ? og.get("gamma").asDouble() : 0.0);
-                        greeksMap.put("delta", og.has("delta") ? og.get("delta").asDouble() : 0.0);
-                        greeksMap.put("iv", og.has("iv") ? og.get("iv").asDouble() : 0.0);
-                        greeksMap.put("pop", og.has("pop") ? og.get("pop").asDouble() : 0.0);
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                callNode.get("option_greeks"), greeksMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
                         callMap.put("greeks", greeksMap);
                     }
                     strikeMap.put("call", callMap);
                 }
 
-                // Map Put Option
+                // Map Put Option — dynamic extraction via DynamicJsonMapper
                 if (node.has("put_options") && !node.get("put_options").isNull()) {
                     com.fasterxml.jackson.databind.JsonNode putNode = node.get("put_options");
                     Map<String, Object> putMap = new HashMap<>();
@@ -885,26 +938,15 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         putMap.put("instrumentKey", putNode.get("instrument_key").asText());
                     }
                     if (putNode.has("market_data")) {
-                        com.fasterxml.jackson.databind.JsonNode md = putNode.get("market_data");
-                        putMap.put("ltp", md.has("ltp") ? md.get("ltp").asDouble() : 0.0);
-                        putMap.put("volume", md.has("volume") ? md.get("volume").asLong() : 0L);
-                        putMap.put("oi", md.has("oi") ? md.get("oi").asDouble() : 0.0);
-                        putMap.put("closePrice", md.has("close_price") ? md.get("close_price").asDouble() : 0.0);
-                        putMap.put("bidPrice", md.has("bid_price") ? md.get("bid_price").asDouble() : 0.0);
-                        putMap.put("bidQty", md.has("bid_qty") ? md.get("bid_qty").asInt() : 0);
-                        putMap.put("askPrice", md.has("ask_price") ? md.get("ask_price").asDouble() : 0.0);
-                        putMap.put("askQty", md.has("ask_qty") ? md.get("ask_qty").asInt() : 0);
-                        putMap.put("prevOi", md.has("prev_oi") ? md.get("prev_oi").asDouble() : 0.0);
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                putNode.get("market_data"), putMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
                     }
                     if (putNode.has("option_greeks")) {
-                        com.fasterxml.jackson.databind.JsonNode og = putNode.get("option_greeks");
                         Map<String, Object> greeksMap = new HashMap<>();
-                        greeksMap.put("vega", og.has("vega") ? og.get("vega").asDouble() : 0.0);
-                        greeksMap.put("theta", og.has("theta") ? og.get("theta").asDouble() : 0.0);
-                        greeksMap.put("gamma", og.has("gamma") ? og.get("gamma").asDouble() : 0.0);
-                        greeksMap.put("delta", og.has("delta") ? og.get("delta").asDouble() : 0.0);
-                        greeksMap.put("iv", og.has("iv") ? og.get("iv").asDouble() : 0.0);
-                        greeksMap.put("pop", og.has("pop") ? og.get("pop").asDouble() : 0.0);
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                putNode.get("option_greeks"), greeksMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
                         putMap.put("greeks", greeksMap);
                     }
                     strikeMap.put("put", putMap);
@@ -916,7 +958,9 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             Map<String, Object> response = new HashMap<>();
             response.put("underlying", underlyingSymbol.toUpperCase());
             response.put("underlyingKey", instrumentKey);
-            response.put("underlyingLtp", spotPrice != null ? spotPrice : 0.0);
+            // Preserve null instead of silently defaulting to 0.0 — consumers must handle
+            // null gracefully (shows 'price unavailable' instead of a misleading ₹0.00).
+            response.put("underlyingLtp", spotPrice);
             response.put("expiry", resolvedExpiry);
             response.put("timestamp", System.currentTimeMillis() / 1000);
             response.put("isStale", false);
