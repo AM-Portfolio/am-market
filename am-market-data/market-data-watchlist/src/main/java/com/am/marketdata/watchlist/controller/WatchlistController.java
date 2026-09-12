@@ -130,19 +130,21 @@ public class WatchlistController {
 
     /**
      * Adds a stock symbol to a specific watchlist (enforces max 50 stock capacity limit).
+     * Supports optional 'exchange' field in request body (defaults to "NSE").
      */
     @PostMapping("/{watchlistId}/items")
     public ResponseEntity<WatchlistItemDto> addStockToWatchlist(
             @RequestHeader(value = "X-User-Id", required = false, defaultValue = "demo-user") String userId,
             @PathVariable String watchlistId,
             @Valid @RequestBody AddToWatchlistRequest request) {
-        try (FlowSpan span = flowLogger.start("watchlists.add_item", "userId", userId, "watchlistId", watchlistId, "symbol", request.getSymbol())) {
+        String exchange = (request.getExchange() != null && !request.getExchange().isBlank()) ? request.getExchange() : "NSE";
+        try (FlowSpan span = flowLogger.start("watchlists.add_item", "userId", userId, "watchlistId", watchlistId, "symbol", request.getSymbol(), "exchange", exchange)) {
             try {
-                WatchlistItemDto item = watchlistService.addStockToWatchlist(userId, watchlistId, request.getSymbol());
+                WatchlistItemDto item = watchlistService.addStockToWatchlist(userId, watchlistId, request.getSymbol(), exchange);
                 flowLogger.complete(span);
                 return ResponseEntity.status(HttpStatus.CREATED).body(item);
             } catch (Exception e) {
-                log.error("Error adding symbol {} to watchlist {} for user {}", request.getSymbol(), watchlistId, userId, e);
+                log.error("Error adding symbol {}:{} to watchlist {} for user {}", exchange, request.getSymbol(), watchlistId, userId, e);
                 flowLogger.fail(span, e);
                 throw e;
             }
@@ -151,19 +153,21 @@ public class WatchlistController {
 
     /**
      * Removes a stock symbol from a specific watchlist owned by the user.
+     * Supports optional 'exchange' query parameter (defaults to "NSE").
      */
     @DeleteMapping("/{watchlistId}/items/{symbol}")
     public ResponseEntity<Void> removeStockFromWatchlist(
             @RequestHeader(value = "X-User-Id", required = false, defaultValue = "demo-user") String userId,
             @PathVariable String watchlistId,
-            @PathVariable String symbol) {
-        try (FlowSpan span = flowLogger.start("watchlists.remove_item", "userId", userId, "watchlistId", watchlistId, "symbol", symbol)) {
+            @PathVariable String symbol,
+            @RequestParam(value = "exchange", required = false, defaultValue = "NSE") String exchange) {
+        try (FlowSpan span = flowLogger.start("watchlists.remove_item", "userId", userId, "watchlistId", watchlistId, "symbol", symbol, "exchange", exchange)) {
             try {
-                watchlistService.removeStockFromWatchlist(userId, watchlistId, symbol);
+                watchlistService.removeStockFromWatchlist(userId, watchlistId, symbol, exchange);
                 flowLogger.complete(span);
                 return ResponseEntity.noContent().build();
             } catch (Exception e) {
-                log.error("Error removing symbol {} from watchlist {} for user {}", symbol, watchlistId, userId, e);
+                log.error("Error removing symbol {}:{} from watchlist {} for user {}", exchange, symbol, watchlistId, userId, e);
                 flowLogger.fail(span, e);
                 throw e;
             }
@@ -173,18 +177,20 @@ public class WatchlistController {
     /**
      * Checks stock symbol containment status across all user watchlists.
      * Used by the "Add to Watchlist" popup modal in the UI.
+     * Supports optional 'exchange' query parameter (defaults to "NSE").
      */
     @GetMapping("/check/{symbol}")
     public ResponseEntity<List<WatchlistCheckStatusDto>> checkSymbolAcrossWatchlists(
             @RequestHeader(value = "X-User-Id", required = false, defaultValue = "demo-user") String userId,
-            @PathVariable String symbol) {
-        try (FlowSpan span = flowLogger.start("watchlists.check_symbol", "userId", userId, "symbol", symbol)) {
+            @PathVariable String symbol,
+            @RequestParam(value = "exchange", required = false, defaultValue = "NSE") String exchange) {
+        try (FlowSpan span = flowLogger.start("watchlists.check_symbol", "userId", userId, "symbol", symbol, "exchange", exchange)) {
             try {
-                List<WatchlistCheckStatusDto> statuses = watchlistService.checkSymbolAcrossWatchlists(userId, symbol);
+                List<WatchlistCheckStatusDto> statuses = watchlistService.checkSymbolAcrossWatchlists(userId, symbol, exchange);
                 flowLogger.complete(span);
                 return ResponseEntity.ok(statuses);
             } catch (Exception e) {
-                log.error("Error checking symbol {} across watchlists for user {}", symbol, userId, e);
+                log.error("Error checking symbol {}:{} across watchlists for user {}", exchange, symbol, userId, e);
                 flowLogger.fail(span, e);
                 throw e;
             }

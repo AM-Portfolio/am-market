@@ -160,10 +160,11 @@ public class MarketDataController {
     })
     public ResponseEntity<Map<String, Object>> getQuotes(
             @RequestParam("symbols") String symbols,
+            @RequestParam(name = "exchange", required = false, defaultValue = "NSE") String exchange,
             @RequestParam(name = "timeFrame", defaultValue = "5m") String timeFrameStr,
             @RequestParam(name = "refresh", defaultValue = "false") boolean forceRefresh) {
 
-        Set<String> symbolList = parseSymbols(symbols);
+        Set<String> symbolList = parseSymbols(symbols, exchange);
         try (FlowSpan span = flowLogger.start("market.quotes.fetch",
                 "symbolsCount", symbolList.size(), "timeFrame", timeFrameStr, "forceRefresh", forceRefresh)) {
             try {
@@ -230,7 +231,7 @@ public class MarketDataController {
                     )
             )
             @RequestBody QuotesRequest request) {
-        Set<String> symbolList = parseSymbols(request.getSymbols());
+        Set<String> symbolList = parseSymbols(request.getSymbols(), request.getExchange());
         try (FlowSpan span = flowLogger.start("market.quotes.fetch.post",
                 "symbolsCount", symbolList.size(), "timeFrame", request.getTimeFrame(), "forceRefresh",
                 request.isForceRefresh())) {
@@ -291,7 +292,7 @@ public class MarketDataController {
                     )
             )
             @RequestBody OHLCRequest request) {
-        Set<String> symbolList = parseSymbols(request.getSymbols());
+        Set<String> symbolList = parseSymbols(request.getSymbols(), request.getExchange());
         try (FlowSpan span = flowLogger.start("market.ohlc.fetch",
                 "symbolsCount", symbolList.size(), "timeFrame", request.getTimeFrame(), "indexSymbol",
                 request.isIndexSymbol(), "forceRefresh", request.isForceRefresh())) {
@@ -599,9 +600,10 @@ public class MarketDataController {
     })
     public ResponseEntity<Map<String, Object>> getLivePrices(
             @RequestParam(name = "symbols", required = false) String symbols,
+            @RequestParam(name = "exchange", required = false, defaultValue = "NSE") String exchange,
             @RequestParam(name = "isIndexSymbol", required = false) boolean indexSymbol,
             @RequestParam(name = "refresh", defaultValue = "false") boolean forceRefresh) {
-        Set<String> symbolList = parseSymbols(symbols);
+        Set<String> symbolList = parseSymbols(symbols, exchange);
         try (FlowSpan span = flowLogger.start("market.liveprices.fetch",
                 "symbolsCount", symbolList.size(), "isIndex", indexSymbol, "forceRefresh", forceRefresh)) {
             try {
@@ -636,6 +638,7 @@ public class MarketDataController {
      * Get live LTP with change calculation based on historical closing price
      * 
      * @param symbols     Comma-separated list of symbols
+     * @param exchange    Target exchange (e.g. NSE, BSE)
      * @param timeframe   Timeframe for historical comparison (1D, 1W, 1M, 1Y)
      * @param indexSymbol Whether symbols are indices
      * @return Map containing LTP, change, and changePercent for each symbol
@@ -648,11 +651,12 @@ public class MarketDataController {
     })
     public ResponseEntity<Map<String, Object>> getLiveLTP(
             @RequestParam(name = "symbols", required = true) String symbols,
+            @RequestParam(name = "exchange", required = false, defaultValue = "NSE") String exchange,
             @RequestParam(name = "timeframe", defaultValue = "1D") String timeframe,
             @RequestParam(name = "isIndexSymbol", required = false, defaultValue = "true") boolean indexSymbol,
             @RequestParam(name = "refresh", defaultValue = "false") boolean forceRefresh) {
 
-        Set<String> symbolList = parseSymbols(symbols);
+        Set<String> symbolList = parseSymbols(symbols, exchange);
         try (FlowSpan span = flowLogger.start("market.live.ltp.fetch",
                 "symbolsCount", symbolList.size(), "timeframe", timeframe, "isIndex", indexSymbol, "forceRefresh",
                 forceRefresh)) {
@@ -734,20 +738,40 @@ public class MarketDataController {
     }
 
     /**
-     * Utility method to convert comma-separated string to Set of symbols
+     * Utility method to convert comma-separated string to Set of symbols.
+     * If an exchange is specified and the symbol does not already contain an exchange prefix,
+     * it prepends the exchange (e.g. "BSE:RELIANCE") so downstream providers know the exchange.
      * 
-     * @param symbols Comma-separated string of symbols
-     * @return Set of trimmed symbols, or empty set if input is null/empty
+     * @param symbols  Comma-separated string of symbols
+     * @param exchange Default exchange for symbols lacking an explicit prefix (e.g., "NSE", "BSE")
+     * @return Set of resolved symbols
      */
-    private Set<String> parseSymbols(String symbols) {
+    private Set<String> parseSymbols(String symbols, String exchange) {
         if (symbols == null || symbols.isEmpty()) {
             return new HashSet<>();
         }
 
+        String defaultExchange = (exchange != null && !exchange.isBlank()) ? exchange.trim().toUpperCase() : "NSE";
+
         return Arrays.stream(symbols.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
+                .map(s -> {
+                    // If the symbol already specifies an exchange prefix or segment (e.g., "BSE:RELIANCE", "NSE_FO:NIFTY24..."), keep it
+                    if (s.contains(":") || s.contains("|")) {
+                        return s;
+                    }
+                    // Otherwise, qualify with the requested exchange
+                    return defaultExchange + ":" + s;
+                })
                 .collect(Collectors.toSet());
+    }
+
+    /**
+     * Backward-compatible parseSymbols without explicit exchange (defaults to NSE).
+     */
+    private Set<String> parseSymbols(String symbols) {
+        return parseSymbols(symbols, "NSE");
     }
 }
 
