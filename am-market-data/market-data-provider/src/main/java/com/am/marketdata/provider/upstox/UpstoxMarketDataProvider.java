@@ -841,34 +841,32 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 }
             }
 
+            java.util.TreeSet<String> expiries = new java.util.TreeSet<>();
+            try {
+                String contractJson = upstoxApiService.getOptionContracts(instrumentKey);
+                if (contractJson != null && !contractJson.isEmpty()) {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    com.fasterxml.jackson.databind.JsonNode cRoot = mapper.readTree(contractJson);
+                    com.fasterxml.jackson.databind.JsonNode cData = cRoot.get("data");
+                    if (cData != null && cData.isArray()) {
+                        for (com.fasterxml.jackson.databind.JsonNode cn : cData) {
+                            if (cn.has("expiry") && !cn.get("expiry").isNull()) {
+                                expiries.add(cn.get("expiry").asText());
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                log.warn("getOptionChain", "Failed to fetch option contract expiries from Upstox: " + ex.getMessage());
+            }
+
             String formattedExpiry = null;
             if (expiryDate != null) {
                 SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
                 formattedExpiry = sdf.format(expiryDate);
-            } else {
-                // If expiry date is not supplied, fetch contract list from Upstox to find the nearest active expiry
-                try {
-                    String contractJson = upstoxApiService.getOptionContracts(instrumentKey);
-                    if (contractJson != null && !contractJson.isEmpty()) {
-                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                        com.fasterxml.jackson.databind.JsonNode cRoot = mapper.readTree(contractJson);
-                        com.fasterxml.jackson.databind.JsonNode cData = cRoot.get("data");
-                        if (cData != null && cData.isArray()) {
-                            java.util.TreeSet<String> expiries = new java.util.TreeSet<>();
-                            for (com.fasterxml.jackson.databind.JsonNode cn : cData) {
-                                if (cn.has("expiry") && !cn.get("expiry").isNull()) {
-                                    expiries.add(cn.get("expiry").asText());
-                                }
-                            }
-                            if (!expiries.isEmpty()) {
-                                formattedExpiry = expiries.first();
-                                log.info("getOptionChain", "Auto-resolved nearest expiry date: " + formattedExpiry + " for symbol: " + underlyingSymbol);
-                            }
-                        }
-                    }
-                } catch (Exception ex) {
-                    log.warn("getOptionChain", "Failed to auto-resolve nearest expiry from Upstox contracts: " + ex.getMessage());
-                }
+            } else if (!expiries.isEmpty()) {
+                formattedExpiry = expiries.first();
+                log.info("getOptionChain", "Auto-resolved nearest expiry date: " + formattedExpiry + " for symbol: " + underlyingSymbol);
             }
 
             log.info("getOptionChain", "Fetching option chain from Upstox. symbol=" + underlyingSymbol
@@ -962,6 +960,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             // null gracefully (shows 'price unavailable' instead of a misleading ₹0.00).
             response.put("underlyingLtp", spotPrice);
             response.put("expiry", resolvedExpiry);
+            response.put("expiries", new ArrayList<>(expiries));
             response.put("timestamp", System.currentTimeMillis() / 1000);
             response.put("isStale", false);
             response.put("strikes", strikesList);
