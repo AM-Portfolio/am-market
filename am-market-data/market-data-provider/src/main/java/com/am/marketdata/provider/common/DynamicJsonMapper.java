@@ -8,6 +8,7 @@ import java.util.Set;
 
 /**
  * Utility for dynamically mapping a broker's JSON response node into a Java Map.
+ * Trigger deployment pipeline.
  *
  * <p>Responsibilities:
  * <ol>
