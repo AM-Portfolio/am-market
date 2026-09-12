@@ -67,6 +67,7 @@ public class MarketDataService {
     private final FlowLogger flowLogger;
     private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService;
     private final MarketHoursService marketHoursService;
+    private final MarketDataCacheService cacheService;
 
     public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
             MeterRegistry meterRegistry, InstrumentMapper instrumentMapper,
@@ -75,7 +76,8 @@ public class MarketDataService {
             java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
             com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
             FlowLogger flowLogger,
-            java.util.Optional<MarketHoursService> marketHoursService) {
+            java.util.Optional<MarketHoursService> marketHoursService,
+            @org.springframework.beans.factory.annotation.Qualifier("serviceModuleMarketDataCacheService") MarketDataCacheService cacheService) {
         this.providerFactory = providerFactory;
         this.instrumentService = instrumentService;
         this.meterRegistry = meterRegistry;
@@ -87,6 +89,7 @@ public class MarketDataService {
         this.stockIndicesService = stockIndicesService;
         this.flowLogger = flowLogger;
         this.marketHoursService = marketHoursService.orElse(null);
+        this.cacheService = cacheService;
     }
 
     private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh) {
@@ -704,6 +707,100 @@ public class MarketDataService {
 
         log.warn("No constituents found for index: {}", indexSymbol);
         return new java.util.ArrayList<>();
+    }
+
+    /**
+     * Get Option Chain data for an underlying instrument.
+     * Features:
+     * 1. Cache-aside with dynamic TTL (60s live, 12h after-hours/holidays)
+     * 2. Thundering-herd / Cache-stampede shield using distributed mutex lock
+     * 3. Disaster recovery / Stale fallback if upstream provider fails
+     */
+    public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate, String providerName, boolean forceRefresh) {
+        if (underlyingSymbol == null || underlyingSymbol.trim().isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        String provider = (providerName != null && !providerName.isEmpty()) ? providerName : defaultProvider;
+        String formattedExpiry = null;
+        if (expiryDate != null) {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd");
+            formattedExpiry = sdf.format(expiryDate);
+        }
+
+        // 1. Check Redis Cache first (unless forceRefresh is requested)
+        if (!forceRefresh) {
+            Map<String, Object> cached = cacheService.getOptionChainFromCache(underlyingSymbol, formattedExpiry);
+            if (cached != null && !cached.isEmpty()) {
+                log.debug("Serving option chain from cache for symbol={} expiry={}", underlyingSymbol, formattedExpiry);
+                return cached;
+            }
+        }
+
+        // 2. Thundering Herd Shield: Acquire mutex lock so only 1 thread fetches from Upstox
+        boolean lockAcquired = cacheService.acquireOptionChainLock(underlyingSymbol, formattedExpiry, 5);
+        if (!lockAcquired) {
+            // Another thread is already refreshing the cache; wait briefly and read from cache
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ignored) {}
+            Map<String, Object> cachedAfterWait = cacheService.getOptionChainFromCache(underlyingSymbol, formattedExpiry);
+            if (cachedAfterWait != null && !cachedAfterWait.isEmpty()) {
+                return cachedAfterWait;
+            }
+        }
+
+        try {
+            MarketDataProvider dataProvider = providerFactory.getProvider(provider);
+            if (dataProvider == null) {
+                log.error("Provider {} not found for option chain", provider);
+                // Try fallback stale cache
+                Map<String, Object> stale = cacheService.getStaleOptionChain(underlyingSymbol, formattedExpiry);
+                return stale != null ? stale : Collections.emptyMap();
+            }
+
+            log.info("Fetching fresh option chain via provider={} for symbol={} expiry={}", provider, underlyingSymbol, formattedExpiry);
+            Map<String, Object> freshData = dataProvider.getOptionChain(underlyingSymbol, expiryDate);
+
+            if (freshData != null && !freshData.isEmpty()) {
+                // Determine market open status for dynamic TTL
+                boolean isMarketOpen = marketHoursService != null && marketHoursService.isMarketOpen();
+
+                // Failsafe: If marketHoursService reported closed, check if timestamp is fresh (< 5 min)
+                if (!isMarketOpen && freshData.containsKey("timestamp")) {
+                    try {
+                        long ts = ((Number) freshData.get("timestamp")).longValue();
+                        long currentTs = System.currentTimeMillis() / 1000;
+                        if (Math.abs(currentTs - ts) < 300) {
+                            log.info("Recent timestamp detected in option chain ({}s ago), treating market as active for TTL", Math.abs(currentTs - ts));
+                            isMarketOpen = true;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // Cache the fresh result
+                cacheService.cacheOptionChain(underlyingSymbol, formattedExpiry, freshData, isMarketOpen);
+                return freshData;
+            }
+
+            // If empty response from provider, fall back to stale cache if available
+            Map<String, Object> stale = cacheService.getStaleOptionChain(underlyingSymbol, formattedExpiry);
+            return stale != null ? stale : Collections.emptyMap();
+
+        } catch (Exception e) {
+            log.error("Error fetching option chain from provider={}: {}", provider, e.getMessage());
+            // Upstream failure resilience: Serve stale data tagged with isStale: true
+            Map<String, Object> stale = cacheService.getStaleOptionChain(underlyingSymbol, formattedExpiry);
+            if (stale != null && !stale.isEmpty()) {
+                log.warn("Serving stale fallback option chain for symbol={} due to upstream error", underlyingSymbol);
+                return stale;
+            }
+            throw new RuntimeException("Failed to fetch option chain: " + e.getMessage(), e);
+        } finally {
+            if (lockAcquired) {
+                cacheService.releaseOptionChainLock(underlyingSymbol, formattedExpiry);
+            }
+        }
     }
 }
 

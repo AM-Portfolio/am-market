@@ -44,6 +44,70 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     // Delay between batch requests to prevent triggering HTTP 429 Rate Limits.
     private static final int BATCH_DELAY_MS = 150;
 
+    // ---------------------------------------------------------------------------
+    // DynamicJsonMapper configuration for Upstox option-chain responses
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Maps Upstox-specific snake_case keys to our standard camelCase contract keys.
+     * Any key NOT in this map will be converted automatically via snake→camelCase.
+     */
+    private static final java.util.Map<String, String> UPSTOX_OPTION_ALIASES;
+
+    /**
+     * Upstox fields that are internal/redundant and must be dropped from the response.
+     */
+    private static final java.util.Set<String> UPSTOX_OPTION_EXCLUDES;
+
+    /**
+     * Contract keys that MUST always be stored as Double for type-safety.
+     * Prevents a broker sending an integer 0 for a price field from being stored as Long.
+     */
+    private static final java.util.Set<String> UPSTOX_CORE_DOUBLE_TYPES;
+
+    static {
+        java.util.Map<String, String> aliases = new java.util.HashMap<>();
+        // Market-data sub-object
+        aliases.put("ltp",            "ltp");           // keep as-is (explicit)
+        aliases.put("close_price",    "closePrice");
+        aliases.put("prev_oi",        "prevOi");
+        aliases.put("bid_price",      "bidPrice");
+        aliases.put("bid_qty",        "bidQty");
+        aliases.put("ask_price",      "askPrice");
+        aliases.put("ask_qty",        "askQty");
+        // Greeks sub-object
+        aliases.put("vega",   "vega");
+        aliases.put("theta",  "theta");
+        aliases.put("gamma",  "gamma");
+        aliases.put("delta",  "delta");
+        aliases.put("iv",     "iv");
+        aliases.put("pop",    "pop");
+        UPSTOX_OPTION_ALIASES = java.util.Collections.unmodifiableMap(aliases);
+
+        java.util.Set<String> excludes = new java.util.HashSet<>();
+        // Drop Upstox internal fields that pollute the payload
+        excludes.add("short_name");
+        excludes.add("company_name");
+        excludes.add("freeze_qty");
+        excludes.add("lot_size");    // exposed separately at the strike level if needed
+        UPSTOX_OPTION_EXCLUDES = java.util.Collections.unmodifiableSet(excludes);
+
+        java.util.Set<String> coreDoubles = new java.util.HashSet<>();
+        coreDoubles.add("ltp");
+        coreDoubles.add("closePrice");
+        coreDoubles.add("bidPrice");
+        coreDoubles.add("askPrice");
+        coreDoubles.add("oi");
+        coreDoubles.add("prevOi");
+        coreDoubles.add("vega");
+        coreDoubles.add("theta");
+        coreDoubles.add("gamma");
+        coreDoubles.add("delta");
+        coreDoubles.add("iv");
+        coreDoubles.add("pop");
+        UPSTOX_CORE_DOUBLE_TYPES = java.util.Collections.unmodifiableSet(coreDoubles);
+    }
+
     public UpstoxMarketDataProvider(
             UpstoxApiService upstoxApiService,
             UpstoxSdkService upstoxSdkService,
@@ -275,7 +339,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         callCount++;
 
                         // Resolve instrument key for this symbol, stripping exchange prefixes if present
-                        String cleanSymbol = symbol.replace("NSE_EQ:", "").replace("NSE:", "").trim();
+                        String cleanSymbol = symbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim();
                         String instrumentKey = context.keyToSymbolMap.entrySet().stream()
                                 .filter(e -> e.getValue().equals(cleanSymbol) || e.getValue().equals(symbol))
                                 .map(Map.Entry::getKey)
@@ -746,6 +810,167 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             return Long.parseLong((String) value);
         }
         return 0L;
+    }
+
+    @Override
+    public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate) {
+        if (underlyingSymbol == null || underlyingSymbol.trim().isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        try {
+            // Resolve instrument key using symbol resolver
+            com.am.marketdata.provider.common.InstrumentContext context =
+                    symbolResolver.resolveContext(Collections.singletonList(underlyingSymbol));
+            String instrumentKey = null;
+            if (context != null && !context.getInstrumentKeys().isEmpty()) {
+                instrumentKey = context.getInstrumentKeys().get(0);
+            }
+
+            if (instrumentKey == null) {
+                // Fallback direct heuristic if resolver did not match
+                String clean = underlyingSymbol.toUpperCase().trim();
+                if (clean.equals("NIFTY") || clean.equals("NIFTY 50") || clean.equals("NIFTY50")) {
+                    instrumentKey = "NSE_INDEX|Nifty 50";
+                } else if (clean.equals("BANKNIFTY") || clean.equals("NIFTY BANK")) {
+                    instrumentKey = "NSE_INDEX|Nifty Bank";
+                } else if (clean.equals("FINNIFTY") || clean.equals("NIFTY FIN SERVICE")) {
+                    instrumentKey = "NSE_INDEX|Nifty Fin Service";
+                } else {
+                    instrumentKey = "NSE_EQ|" + clean;
+                }
+            }
+
+            String formattedExpiry = null;
+            if (expiryDate != null) {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+                formattedExpiry = sdf.format(expiryDate);
+            } else {
+                // If expiry date is not supplied, fetch contract list from Upstox to find the nearest active expiry
+                try {
+                    String contractJson = upstoxApiService.getOptionContracts(instrumentKey);
+                    if (contractJson != null && !contractJson.isEmpty()) {
+                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                        com.fasterxml.jackson.databind.JsonNode cRoot = mapper.readTree(contractJson);
+                        com.fasterxml.jackson.databind.JsonNode cData = cRoot.get("data");
+                        if (cData != null && cData.isArray()) {
+                            java.util.TreeSet<String> expiries = new java.util.TreeSet<>();
+                            for (com.fasterxml.jackson.databind.JsonNode cn : cData) {
+                                if (cn.has("expiry") && !cn.get("expiry").isNull()) {
+                                    expiries.add(cn.get("expiry").asText());
+                                }
+                            }
+                            if (!expiries.isEmpty()) {
+                                formattedExpiry = expiries.first();
+                                log.info("getOptionChain", "Auto-resolved nearest expiry date: " + formattedExpiry + " for symbol: " + underlyingSymbol);
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.warn("getOptionChain", "Failed to auto-resolve nearest expiry from Upstox contracts: " + ex.getMessage());
+                }
+            }
+
+            log.info("getOptionChain", "Fetching option chain from Upstox. symbol=" + underlyingSymbol
+                    + ", instrumentKey=" + instrumentKey + ", expiry=" + formattedExpiry);
+
+            String rawJson = upstoxApiService.getOptionChain(instrumentKey, formattedExpiry);
+            if (rawJson == null || rawJson.trim().isEmpty()) {
+                return Collections.emptyMap();
+            }
+
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(rawJson);
+            com.fasterxml.jackson.databind.JsonNode dataArray = rootNode.get("data");
+
+            if (dataArray == null || !dataArray.isArray() || dataArray.isEmpty()) {
+                log.warn("getOptionChain", "Empty data array in Upstox option chain response for symbol: " + underlyingSymbol);
+                return Collections.emptyMap();
+            }
+
+            String resolvedExpiry = formattedExpiry;
+            Double spotPrice = null;
+            List<Map<String, Object>> strikesList = new ArrayList<>();
+
+            for (com.fasterxml.jackson.databind.JsonNode node : dataArray) {
+                if (resolvedExpiry == null && node.has("expiry")) {
+                    resolvedExpiry = node.get("expiry").asText();
+                }
+                if (spotPrice == null && node.has("underlying_spot_price")) {
+                    spotPrice = node.get("underlying_spot_price").asDouble();
+                }
+
+                Map<String, Object> strikeMap = new HashMap<>();
+                double strikePrice = node.has("strike_price") ? node.get("strike_price").asDouble() : 0.0;
+                strikeMap.put("strikePrice", strikePrice);
+
+                if (node.has("pcr")) {
+                    strikeMap.put("pcr", node.get("pcr").asDouble());
+                }
+
+                // Map Call Option — dynamic extraction via DynamicJsonMapper
+                if (node.has("call_options") && !node.get("call_options").isNull()) {
+                    com.fasterxml.jackson.databind.JsonNode callNode = node.get("call_options");
+                    Map<String, Object> callMap = new HashMap<>();
+                    if (callNode.has("instrument_key")) {
+                        callMap.put("instrumentKey", callNode.get("instrument_key").asText());
+                    }
+                    if (callNode.has("market_data")) {
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                callNode.get("market_data"), callMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
+                    }
+                    if (callNode.has("option_greeks")) {
+                        Map<String, Object> greeksMap = new HashMap<>();
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                callNode.get("option_greeks"), greeksMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
+                        callMap.put("greeks", greeksMap);
+                    }
+                    strikeMap.put("call", callMap);
+                }
+
+                // Map Put Option — dynamic extraction via DynamicJsonMapper
+                if (node.has("put_options") && !node.get("put_options").isNull()) {
+                    com.fasterxml.jackson.databind.JsonNode putNode = node.get("put_options");
+                    Map<String, Object> putMap = new HashMap<>();
+                    if (putNode.has("instrument_key")) {
+                        putMap.put("instrumentKey", putNode.get("instrument_key").asText());
+                    }
+                    if (putNode.has("market_data")) {
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                putNode.get("market_data"), putMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
+                    }
+                    if (putNode.has("option_greeks")) {
+                        Map<String, Object> greeksMap = new HashMap<>();
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                putNode.get("option_greeks"), greeksMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
+                        putMap.put("greeks", greeksMap);
+                    }
+                    strikeMap.put("put", putMap);
+                }
+
+                strikesList.add(strikeMap);
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("underlying", underlyingSymbol.toUpperCase());
+            response.put("underlyingKey", instrumentKey);
+            // Preserve null instead of silently defaulting to 0.0 — consumers must handle
+            // null gracefully (shows 'price unavailable' instead of a misleading ₹0.00).
+            response.put("underlyingLtp", spotPrice);
+            response.put("expiry", resolvedExpiry);
+            response.put("timestamp", System.currentTimeMillis() / 1000);
+            response.put("isStale", false);
+            response.put("strikes", strikesList);
+
+            return response;
+        } catch (Exception e) {
+            log.error("getOptionChain", "Failed to fetch/parse option chain for symbol: " + underlyingSymbol + ", error: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to fetch option chain: " + e.getMessage(), e);
+        }
     }
 
     @Override

@@ -49,11 +49,12 @@ public class FundamentalAnalysisController {
                         @ApiResponse(responseCode = "500", description = "Internal server error occurred while retrieving fundamental data", content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, examples = @ExampleObject(name = "Server Error Example", value = "{\"error\": \"INTERNAL_ERROR\", \"message\": \"Failed to retrieve fundamental analysis\"}")))
         })
         public ResponseEntity<FundamentalAnalysisResponse> getFundamentals(
-                        @Parameter(name = "symbol", description = "NSE / BSE Stock Trading Symbol (case-insensitive, e.g., 'TCS', 'tcs', 'INFY')", required = true, example = "TCS") @PathVariable("symbol") String symbol) {
+                        @Parameter(name = "symbol", description = "NSE / BSE Stock Trading Symbol (case-insensitive, e.g., 'TCS', 'tcs', 'INFY')", required = true, example = "TCS") @PathVariable("symbol") String symbol,
+                        @Parameter(name = "exchange", description = "Stock exchange (NSE or BSE, defaults to NSE)", required = false, example = "NSE") @RequestParam(name = "exchange", required = false, defaultValue = "NSE") String exchange) {
                 if (symbol == null || symbol.trim().isEmpty()) {
                         return ResponseEntity.badRequest().build();
                 }
-                return ResponseEntity.ok(fundamentalAnalysisService.getFundamentals(symbol));
+                return ResponseEntity.ok(fundamentalAnalysisService.getFundamentals(symbol, exchange));
         }
 
         @GetMapping(value = "/{symbol}/profile", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -65,11 +66,12 @@ public class FundamentalAnalysisController {
                         @ApiResponse(responseCode = "500", description = "Internal server error")
         })
         public ResponseEntity<FundamentalAnalysisResponse.CompanyOverviewSection> getCompanyProfile(
-                        @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol) {
+                        @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol,
+                        @Parameter(name = "exchange", description = "Stock exchange (NSE or BSE, defaults to NSE)", required = false, example = "NSE") @RequestParam(name = "exchange", required = false, defaultValue = "NSE") String exchange) {
                 if (symbol == null || symbol.trim().isEmpty()) {
                         return ResponseEntity.badRequest().build();
                 }
-                return ResponseEntity.ok(fundamentalAnalysisService.getCompanyProfile(symbol));
+                return ResponseEntity.ok(fundamentalAnalysisService.getCompanyProfile(symbol, exchange));
         }
 
         @GetMapping(value = "/{symbol}/ratios", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -81,11 +83,12 @@ public class FundamentalAnalysisController {
                         @ApiResponse(responseCode = "500", description = "Internal server error")
         })
         public ResponseEntity<FundamentalRatiosResponse> getRatios(
-                        @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol) {
+                        @Parameter(name = "symbol", description = "Stock trading symbol", required = true, example = "TCS") @PathVariable("symbol") String symbol,
+                        @Parameter(name = "exchange", description = "Stock exchange (NSE or BSE, defaults to NSE)", required = false, example = "NSE") @RequestParam(name = "exchange", required = false, defaultValue = "NSE") String exchange) {
                 if (symbol == null || symbol.trim().isEmpty()) {
                         return ResponseEntity.badRequest().build();
                 }
-                return ResponseEntity.ok(fundamentalAnalysisService.getRatios(symbol));
+                return ResponseEntity.ok(fundamentalAnalysisService.getRatios(symbol, exchange));
         }
 
         @GetMapping(value = "/{symbol}/financials", produces = MediaType.APPLICATION_JSON_VALUE)
