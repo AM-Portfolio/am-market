@@ -1,4 +1,4 @@
-﻿package com.am.marketdata.api.controller;
+package com.am.marketdata.api.controller;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
