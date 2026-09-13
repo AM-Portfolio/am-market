@@ -812,6 +812,16 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
         return 0L;
     }
 
+    /**
+     * Fetches option chain for an underlying symbol (e.g., NIFTY, BANKNIFTY, RELIANCE).
+     * 
+     * PURPOSE & LATENCY OPTIMIZATIONS:
+     * 1. Decoupled Provider: Loose coupling ensures provider switching (Upstox -> Zerodha) works seamlessly.
+     * 2. Parallel Async Execution: Uses CompletableFuture to execute Upstox API calls (option contracts 
+     *    and option chain) concurrently in parallel, reducing overall API response latency to milliseconds.
+     * 3. Dynamic Expiry & Lot Size Resolution: Automatically extracts valid expiries list and dynamic 
+     *    lot size for indices and equity stocks.
+     */
     @Override
     public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate) {
         if (underlyingSymbol == null || underlyingSymbol.trim().isEmpty()) {
@@ -819,7 +829,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
         }
 
         try {
-            // Resolve instrument key using symbol resolver
+            // Step 1: Resolve provider-agnostic symbol to Upstox instrument key (e.g., NSE_INDEX|Nifty Bank)
             com.am.marketdata.provider.common.InstrumentContext context =
                     symbolResolver.resolveContext(Collections.singletonList(underlyingSymbol));
             String instrumentKey = null;
@@ -853,7 +863,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             final String initialExpiry = formattedExpiry;
             final String targetKey = instrumentKey;
 
-            // Restore Parallel Async Execution (CompletableFuture) for maximum performance
+            // Step 2: Parallel Async Execution — Fetch Option Contracts (expiries & lot size) concurrently
             java.util.concurrent.CompletableFuture<String> contractFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
                 try {
                     return upstoxApiService.getOptionContracts(targetKey);
@@ -863,7 +873,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 }
             });
 
-            // Execute chainFuture in parallel if expiryDate is already specified
+            // Step 3: Parallel Async Execution — Fetch Option Chain concurrently if target expiry is known
             java.util.concurrent.CompletableFuture<String> chainFuture = (initialExpiry != null)
                     ? java.util.concurrent.CompletableFuture.supplyAsync(() -> {
                         try {
@@ -901,6 +911,51 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 log.info("getOptionChain", "Auto-resolved nearest expiry date: " + formattedExpiry + " for symbol: " + underlyingSymbol);
             }
 
+            // Fallback for Equity stocks if primary instrument key (e.g., ISIN-based) returned no contract expiries
+            if (formattedExpiry == null && instrumentKey != null && !instrumentKey.startsWith("NSE_INDEX")) {
+                List<String> altKeys = List.of(
+                    "NSE_FO|" + underlyingSymbol.toUpperCase().trim(),
+                    "NSE_EQ|" + underlyingSymbol.toUpperCase().trim()
+                );
+                for (String altKey : altKeys) {
+                    if (!altKey.equals(instrumentKey)) {
+                        log.info("getOptionChain", "Attempting fallback contract lookup using alt key: " + altKey);
+                        try {
+                            String altContractJson = upstoxApiService.getOptionContracts(altKey);
+                            if (altContractJson != null && !altContractJson.isEmpty()) {
+                                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                                com.fasterxml.jackson.databind.JsonNode cRoot = mapper.readTree(altContractJson);
+                                com.fasterxml.jackson.databind.JsonNode cData = cRoot.get("data");
+                                if (cData != null && cData.isArray()) {
+                                    for (com.fasterxml.jackson.databind.JsonNode cn : cData) {
+                                        if (cn.has("expiry") && !cn.get("expiry").isNull()) {
+                                            expiries.add(cn.get("expiry").asText());
+                                        }
+                                        if (resolvedLotSize == null && cn.has("lot_size") && !cn.get("lot_size").isNull()) {
+                                            resolvedLotSize = cn.get("lot_size").asDouble();
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (Exception ex) {
+                            log.warn("getOptionChain", "Fallback contract lookup failed for alt key: " + altKey + ", error: " + ex.getMessage());
+                        }
+                        if (!expiries.isEmpty()) {
+                            formattedExpiry = expiries.first();
+                            instrumentKey = altKey;
+                            log.info("getOptionChain", "Resolved expiry date via alt key: " + altKey + " -> " + formattedExpiry);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Guard: If no valid expiry date could be resolved, return an empty mutable map cleanly instead of throwing 400/500
+            if (formattedExpiry == null) {
+                log.warn("getOptionChain", "No active option contract expiries found for symbol: " + underlyingSymbol);
+                return new HashMap<>();
+            }
+
             String rawJson = null;
             if (chainFuture != null && formattedExpiry.equals(initialExpiry)) {
                 rawJson = chainFuture.join();
@@ -908,7 +963,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 rawJson = upstoxApiService.getOptionChain(instrumentKey, formattedExpiry);
             }
             if (rawJson == null || rawJson.trim().isEmpty()) {
-                return Collections.emptyMap();
+                return new HashMap<>();
             }
 
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
@@ -917,7 +972,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
             if (dataArray == null || !dataArray.isArray() || dataArray.isEmpty()) {
                 log.warn("getOptionChain", "Empty data array in Upstox option chain response for symbol: " + underlyingSymbol);
-                return Collections.emptyMap();
+                return new HashMap<>();
             }
 
             String resolvedExpiry = formattedExpiry;
