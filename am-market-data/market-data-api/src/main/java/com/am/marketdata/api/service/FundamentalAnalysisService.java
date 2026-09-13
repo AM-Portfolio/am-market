@@ -11,11 +11,23 @@ import java.util.List;
 
 public interface FundamentalAnalysisService {
 
-    FundamentalAnalysisResponse getFundamentals(String symbol);
+    default FundamentalAnalysisResponse getFundamentals(String symbol) {
+        return getFundamentals(symbol, "NSE");
+    }
 
-    FundamentalAnalysisResponse.CompanyOverviewSection getCompanyProfile(String symbol);
+    FundamentalAnalysisResponse getFundamentals(String symbol, String exchange);
 
-    FundamentalRatiosResponse getRatios(String symbol);
+    default FundamentalAnalysisResponse.CompanyOverviewSection getCompanyProfile(String symbol) {
+        return getCompanyProfile(symbol, "NSE");
+    }
+
+    FundamentalAnalysisResponse.CompanyOverviewSection getCompanyProfile(String symbol, String exchange);
+
+    default FundamentalRatiosResponse getRatios(String symbol) {
+        return getRatios(symbol, "NSE");
+    }
+
+    FundamentalRatiosResponse getRatios(String symbol, String exchange);
 
     FundamentalAnalysisResponse.FinancialsSection getFinancials(String symbol);
 

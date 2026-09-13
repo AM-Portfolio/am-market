@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -39,11 +40,17 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
 
     @Override
     public FundamentalAnalysisResponse getFundamentals(String symbol) {
+        return getFundamentals(symbol, "NSE");
+    }
+
+    @Override
+    public FundamentalAnalysisResponse getFundamentals(String symbol, String exchange) {
         String rawSymbol = symbol.trim();
+        String targetExchange = (exchange != null && !exchange.isBlank()) ? exchange.trim().toUpperCase() : "NSE";
         String resolvedIsin = fundamentalQueryService.resolveIsin(rawSymbol);
 
         try (FlowSpan span = flowLogger.start("market.fundamentals.fetch", "symbol", rawSymbol, "isin",
-                resolvedIsin != null ? resolvedIsin : "UNRESOLVED")) {
+                resolvedIsin != null ? resolvedIsin : "UNRESOLVED", "exchange", targetExchange)) {
             
             if (resolvedIsin == null) {
                 log.warn("Unable to resolve trading symbol={} to ISIN", rawSymbol);
@@ -59,8 +66,8 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
 
             FundamentalData data = dataOpt.get();
 
-            // Enrich with live price data using quotes flow
-            Double[] prices = fetchLivePrice(data.getSymbol() != null ? data.getSymbol() : rawSymbol.toUpperCase());
+            // Enrich with live price data using quotes flow for the requested exchange
+            Double[] prices = fetchLivePrice(data.getSymbol() != null ? data.getSymbol() : rawSymbol.toUpperCase(), targetExchange);
             Double livePrice = prices[0];
             Double dayHigh = prices[1];
             Double dayLow = prices[2];
@@ -83,31 +90,45 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                     .dayLow(dayLow)
                     .dayChange(dayChange)
                     .dayChangePercent(dayChangePercent)
+                    .exchange(targetExchange)
+                    .stalePrice(livePrice == null || livePrice <= 0)
                     .build();
 
             // Construct Profitability Section
             KeyRatios ratios = data.getKeyRatios();
-            FundamentalAnalysisResponse.ProfitabilitySection profitabilitySection = null;
+            KeyRatios dynamicRatios = ratios;
             if (ratios != null) {
-                profitabilitySection = FundamentalAnalysisResponse.ProfitabilitySection
-                        .builder()
+                dynamicRatios = KeyRatios.builder()
+                        .sectorPe(ratios.getSectorPe())
+                        .sectorPb(ratios.getSectorPb())
                         .roa(ratios.getRoa())
                         .sectorRoa(ratios.getSectorRoa())
                         .roe(ratios.getRoe())
-                        .sectorRoe(ratios.getSectorRoe())
-                        .roce(ratios.getRoce())
                         .sectorRoce(ratios.getSectorRoce())
+                        .roce(ratios.getRoce())
+                        .pe(ratios.getPe())
+                        .pb(ratios.getPb())
+                        .build();
+            }
+
+            FundamentalAnalysisResponse.ProfitabilitySection profitabilitySection = null;
+            if (dynamicRatios != null) {
+                profitabilitySection = FundamentalAnalysisResponse.ProfitabilitySection
+                        .builder()
+                        .roa(dynamicRatios.getRoa())
+                        .sectorRoa(dynamicRatios.getSectorRoa())
+                        .roe(dynamicRatios.getRoe())
+                        .sectorRoe(dynamicRatios.getSectorRoe())
+                        .roce(dynamicRatios.getRoce())
+                        .sectorRoce(dynamicRatios.getSectorRoce())
                         .build();
             }
 
             // Construct Financials Section with on-demand hydration if missing.
-            // Hydrates both Annual (yearly) and Quarterly income statements so the frontend Equity Insider
-            // toggle can transition seamlessly between Annual and Quarterly views without extra network delays.
             List<IncomeStatementEntry> income = data.getIncomeStatements();
             if (income == null || income.isEmpty()) {
                 income = fundamentalQueryService.hydrateIncomeStatements(data.getIsin());
             }
-            // On-demand hydration for Quarterly P&L (Q1-Q4) with single-flight request coalescing
             List<IncomeStatementEntry> quarterlyIncome = data.getQuarterlyIncomeStatements();
             if (isQuarterlyDataInvalidOrMirrored(quarterlyIncome, income)) {
                 quarterlyIncome = fundamentalQueryService.hydrateQuarterlyIncomeStatements(data.getIsin());
@@ -148,12 +169,12 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             // Build Final Unified Response
             FundamentalAnalysisResponse response = FundamentalAnalysisResponse.builder()
                     .company(companySection)
-                    .valuation(ratios)
+                    .valuation(dynamicRatios)
                     .profitability(profitabilitySection)
                     .financials(financialsSection)
                     .shareholding(shareholdings != null ? shareholdings : Collections.emptyList())
                     .corporateActions(corporateActions != null ? corporateActions : Collections.emptyList())
-                    .peers(enrichPeers(peers))
+                    .peers(enrichPeers(peers, targetExchange))
                     .analytics(computeAnalyticsIfAbsent(data))
                     .build();
 
@@ -169,9 +190,15 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
 
     @Override
     public FundamentalAnalysisResponse.CompanyOverviewSection getCompanyProfile(String symbol) {
+        return getCompanyProfile(symbol, "NSE");
+    }
+
+    @Override
+    public FundamentalAnalysisResponse.CompanyOverviewSection getCompanyProfile(String symbol, String exchange) {
+        String targetExchange = (exchange != null && !exchange.isBlank()) ? exchange.trim().toUpperCase() : "NSE";
         return processGranularRequest(symbol, "profile", data -> {
             CompanyProfile profile = data.getCompanyProfile();
-            Double[] prices = fetchLivePrice(data.getSymbol() != null ? data.getSymbol() : symbol.trim().toUpperCase());
+            Double[] prices = fetchLivePrice(data.getSymbol() != null ? data.getSymbol() : symbol.trim().toUpperCase(), targetExchange);
             return FundamentalAnalysisResponse.CompanyOverviewSection.builder()
                     .isin(data.getIsin())
                     .symbol(data.getSymbol() != null ? data.getSymbol() : symbol.trim().toUpperCase())
@@ -185,23 +212,48 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                     .dayLow(prices[2])
                     .dayChange(prices[3])
                     .dayChangePercent(prices[4])
+                    .exchange(targetExchange)
+                    .stalePrice(prices[0] == null || prices[0] <= 0)
                     .build();
         });
     }
 
     @Override
     public FundamentalRatiosResponse getRatios(String symbol) {
+        return getRatios(symbol, "NSE");
+    }
+
+    @Override
+    public FundamentalRatiosResponse getRatios(String symbol, String exchange) {
+        String targetExchange = (exchange != null && !exchange.isBlank()) ? exchange.trim().toUpperCase() : "NSE";
         return processGranularRequest(symbol, "ratios", data -> {
             KeyRatios ratios = data.getKeyRatios();
-            FundamentalAnalysisResponse.ProfitabilitySection profitability = ratios != null
+            KeyRatios dynamicRatios = ratios;
+            Double[] prices = fetchLivePrice(data.getSymbol() != null ? data.getSymbol() : symbol.trim().toUpperCase(), targetExchange);
+            if (ratios != null && prices[0] != null && prices[0] > 0) {
+                dynamicRatios = KeyRatios.builder()
+                        .sectorPe(ratios.getSectorPe())
+                        .sectorPb(ratios.getSectorPb())
+                        .roa(ratios.getRoa())
+                        .sectorRoa(ratios.getSectorRoa())
+                        .roe(ratios.getRoe())
+                        .sectorRoe(ratios.getSectorRoe())
+                        .roce(ratios.getRoce())
+                        .sectorRoce(ratios.getSectorRoce())
+                        .pe(ratios.getPe())
+                        .pb(ratios.getPb())
+                        .build();
+            }
+
+            FundamentalAnalysisResponse.ProfitabilitySection profitability = dynamicRatios != null
                     ? FundamentalAnalysisResponse.ProfitabilitySection.builder()
-                    .roa(ratios.getRoa()).sectorRoa(ratios.getSectorRoa())
-                    .roe(ratios.getRoe()).sectorRoe(ratios.getSectorRoe())
-                    .roce(ratios.getRoce()).sectorRoce(ratios.getSectorRoce())
+                    .roa(dynamicRatios.getRoa()).sectorRoa(dynamicRatios.getSectorRoa())
+                    .roe(dynamicRatios.getRoe()).sectorRoe(dynamicRatios.getSectorRoe())
+                    .roce(dynamicRatios.getRoce()).sectorRoce(dynamicRatios.getSectorRoce())
                     .build()
                     : null;
             return FundamentalRatiosResponse.builder()
-                    .valuation(ratios)
+                    .valuation(dynamicRatios)
                     .profitability(profitability)
                     .build();
         });
@@ -398,36 +450,92 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
     }
 
     private Double[] fetchLivePrice(String symbol) {
+        return fetchLivePrice(symbol, "NSE");
+    }
+
+    private Double[] fetchLivePrice(String symbol, String exchange) {
         Double[] prices = new Double[5];
+        String targetExchange = (exchange != null && !exchange.isBlank()) ? exchange.trim().toUpperCase() : "NSE";
+        String qualifiedSymbol = targetExchange + ":" + symbol;
+        log.info("[EXCHANGE_DIAG] fetchLivePrice called: symbol={} targetExchange={} qualifiedSymbol={}",
+                symbol, targetExchange, qualifiedSymbol);
         try {
-            Map<String, Object> quotesMap = marketDataFetchService.getQuotes(Set.of(symbol), false, TimeFrame.DAY, false);
+            // First attempt with target exchange
+            Map<String, Object> quotesMap = marketDataFetchService.getQuotes(Set.of(qualifiedSymbol), false, TimeFrame.DAY, false);
             if (quotesMap != null && quotesMap.get("quotes") instanceof Map<?, ?> map) {
-                Object quoteObj = map.get(symbol);
+                log.info("[EXCHANGE_DIAG] quotes map keys returned for qualifiedSymbol={}: {}",
+                        qualifiedSymbol, map.keySet());
+                Object quoteObj = map.get(qualifiedSymbol);
+                String hitKey = qualifiedSymbol;
                 if (quoteObj == null) {
-                    quoteObj = map.get("NSE:" + symbol);
+                    quoteObj = map.get(symbol);
+                    hitKey = symbol;
                 }
                 if (quoteObj == null && !map.isEmpty()) {
-                    quoteObj = map.values().iterator().next();
+                    Map.Entry<?, ?> first = ((Map<?, ?>) map).entrySet().iterator().next();
+                    quoteObj = first.getValue();
+                    hitKey = String.valueOf(first.getKey());
+                    log.warn("[EXCHANGE_DIAG] Exact key miss for qualifiedSymbol={}; falling back to first map entry key={}",
+                            qualifiedSymbol, hitKey);
                 }
-                return extractPricesFromQuote(quoteObj);
+                Double[] extracted = extractPricesFromQuote(quoteObj);
+                log.info("[EXCHANGE_DIAG] Price extracted via key={}: lastPrice={} high={} low={} change={} changePct={}",
+                        hitKey, extracted[0], extracted[1], extracted[2], extracted[3], extracted[4]);
+                if (extracted[0] != null && extracted[0] > 0) {
+                    return extracted;
+                }
+            } else {
+                log.warn("[EXCHANGE_DIAG] getQuotes returned null or missing 'quotes' key for qualifiedSymbol={}",
+                        qualifiedSymbol);
+            }
+
+            // Fallback for illiquid / zero-trade stocks on target exchange: try base symbol / alternate exchange
+            if (!"NSE".equalsIgnoreCase(targetExchange)) {
+                log.info("[EXCHANGE_DIAG] fetchLivePrice: Empty/zero price on exchange={}, falling back to NSE for symbol={}",
+                        targetExchange, symbol);
+                Map<String, Object> fallbackMap = marketDataFetchService.getQuotes(Set.of("NSE:" + symbol), false, TimeFrame.DAY, false);
+                if (fallbackMap != null && fallbackMap.get("quotes") instanceof Map<?, ?> map) {
+                    log.info("[EXCHANGE_DIAG] NSE fallback quotes map keys: {}", map.keySet());
+                    Object fallbackObj = map.get("NSE:" + symbol);
+                    if (fallbackObj == null) fallbackObj = map.get(symbol);
+                    if (fallbackObj != null) {
+                        Double[] fallbackPrices = extractPricesFromQuote(fallbackObj);
+                        log.info("[EXCHANGE_DIAG] NSE fallback price for symbol={}: lastPrice={}", symbol, fallbackPrices[0]);
+                        return fallbackPrices;
+                    }
+                }
             }
         } catch (Exception e) {
-            log.debug("Live price lookup failed for symbol={}: {}", symbol, e.getMessage());
+            log.debug("Live price lookup failed for symbol={} exchange={}: {}", symbol, targetExchange, e.getMessage());
         }
+        log.warn("[EXCHANGE_DIAG] fetchLivePrice: no price found for symbol={} exchange={}, returning empty array",
+                symbol, targetExchange);
         return prices;
     }
 
     private Map<String, Double[]> fetchLivePricesBulk(Set<String> symbols) {
+        return fetchLivePricesBulk(symbols, "NSE");
+    }
+
+    private Map<String, Double[]> fetchLivePricesBulk(Set<String> symbols, String exchange) {
         Map<String, Double[]> result = new HashMap<>();
         if (symbols == null || symbols.isEmpty()) {
             return result;
         }
+        String targetExchange = (exchange != null && !exchange.isBlank()) ? exchange.trim().toUpperCase() : "NSE";
+        Set<String> qualifiedSymbols = symbols.stream()
+                .map(s -> s.contains(":") ? s : targetExchange + ":" + s)
+                .collect(Collectors.toSet());
         try {
-            Map<String, Object> quotesMap = marketDataFetchService.getQuotes(symbols, false, TimeFrame.DAY, false);
+            Map<String, Object> quotesMap = marketDataFetchService.getQuotes(qualifiedSymbols, false, TimeFrame.DAY, false);
             if (quotesMap != null && quotesMap.get("quotes") instanceof Map<?, ?> map) {
                 for (String sym : symbols) {
-                    Object quoteObj = map.get(sym);
+                    String qual = targetExchange + ":" + sym;
+                    Object quoteObj = map.get(qual);
                     if (quoteObj == null) {
+                        quoteObj = map.get(sym);
+                    }
+                    if (quoteObj == null && !"NSE".equalsIgnoreCase(targetExchange)) {
                         quoteObj = map.get("NSE:" + sym);
                     }
                     if (quoteObj != null) {
@@ -439,12 +547,16 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                 }
             }
         } catch (Exception e) {
-            log.debug("Bulk live price lookup failed: {}", e.getMessage());
+            log.debug("Bulk live price lookup failed for exchange={}: {}", targetExchange, e.getMessage());
         }
         return result;
     }
 
     private List<CompetitorPeer> enrichPeers(List<CompetitorPeer> rawPeers) {
+        return enrichPeers(rawPeers, "NSE");
+    }
+
+    private List<CompetitorPeer> enrichPeers(List<CompetitorPeer> rawPeers, String exchange) {
         if (rawPeers == null || rawPeers.isEmpty()) {
             return Collections.emptyList();
         }
@@ -537,7 +649,7 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
         }
 
         // Pass 2: Bulk fetch live prices in ONE call
-        Map<String, Double[]> pricesMap = fetchLivePricesBulk(symbolsToFetch);
+        Map<String, Double[]> pricesMap = fetchLivePricesBulk(symbolsToFetch, exchange);
 
         // Pass 3: Attach prices and build
         List<CompetitorPeer> enrichedList = new ArrayList<>();

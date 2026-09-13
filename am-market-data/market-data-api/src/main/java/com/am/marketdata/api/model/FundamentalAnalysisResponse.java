@@ -76,6 +76,8 @@ public class FundamentalAnalysisResponse {
         private Double dayLow;
         private Double dayChange;
         private Double dayChangePercent;
+        private String exchange;
+        private Boolean stalePrice;
     }
 
     @Data

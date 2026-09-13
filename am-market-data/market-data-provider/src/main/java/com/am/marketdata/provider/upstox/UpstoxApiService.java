@@ -156,6 +156,14 @@ public class UpstoxApiService {
         return upStockClient.getHistoricalData(symbol, interval, fromDate, toDate);
     }
 
+    public String getOptionContracts(String instrumentKey) {
+        return upStockClient.getOptionContractsRaw(instrumentKey);
+    }
+
+    public String getOptionChain(String instrumentKey, String expiryDate) {
+        return upStockClient.getOptionChainRaw(instrumentKey, expiryDate);
+    }
+
     public String getAccessToken() {
         return this.accessToken;
     }

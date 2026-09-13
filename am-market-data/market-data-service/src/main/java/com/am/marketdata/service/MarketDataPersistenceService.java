@@ -243,7 +243,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             ));
             List<String> filteredSymbols = tradingSymbols.stream()
                     .filter(symbol -> {
-                        String clean = symbol.replace("NSE:", "").replace("NSE_EQ:", "").trim().toUpperCase();
+                        String clean = symbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
                         return !knownIndices.contains(clean) && 
                                !clean.startsWith("NIFTY ") && 
                                !clean.contains("VIX") && 
@@ -274,7 +274,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
                     // Remove found symbols
                     cachedData.keySet().forEach(key -> {
-                        String symbol = key.replace("NSE:", "").replace("NSE_EQ:", "");
+                        String symbol = key.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "");
                         remainingSymbols.remove(symbol);
                     });
 

@@ -18,10 +18,10 @@ import java.time.LocalDateTime;
  */
 @Document(collection = "watchlist_items")
 @CompoundIndexes({
-        // Enforces unique stock symbol inside a single watchlist
-        @CompoundIndex(name = "idx_watchlist_item_unique", def = "{'watchlistId': 1, 'symbol': 1}", unique = true),
-        // Fast lookups per user & symbol across all user watchlists
-        @CompoundIndex(name = "idx_user_symbol", def = "{'userId': 1, 'symbol': 1}")
+        // Enforces unique stock symbol per exchange inside a single watchlist
+        @CompoundIndex(name = "idx_watchlist_item_unique", def = "{'watchlistId': 1, 'symbol': 1, 'exchange': 1}", unique = true),
+        // Fast lookups per user, symbol, and exchange across all user watchlists
+        @CompoundIndex(name = "idx_user_symbol", def = "{'userId': 1, 'symbol': 1, 'exchange': 1}")
 })
 @Data
 @Builder
@@ -48,6 +48,14 @@ public class WatchlistItem {
      * Ticker or trading symbol (e.g. "TCS", "HDFCBANK").
      */
     private String symbol;
+
+    /**
+     * Exchange for this stock item (e.g. "NSE", "BSE", "NSE_FO").
+     * Defaults to "NSE" for backward compatibility with existing items.
+     */
+    @Field("exchange")
+    @Builder.Default
+    private String exchange = "NSE";
 
     /**
      * Display order sequence inside the specific watchlist.

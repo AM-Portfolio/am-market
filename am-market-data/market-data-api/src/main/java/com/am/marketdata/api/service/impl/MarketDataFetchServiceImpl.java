@@ -266,11 +266,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     @Override
     public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate, boolean forceRefresh) {
         log.debug(
-                "Fetching option chain for symbol={} expiryDate={}", underlyingSymbol, expiryDate);
-        // Option chain functionality not yet migrated to MarketDataService
-        Map<String, Object> result = new HashMap<>();
-        result.put("error", "Option chain not yet supported");
-        return result;
+                "Fetching option chain for symbol={} expiryDate={} forceRefresh={}",
+                underlyingSymbol, expiryDate, forceRefresh);
+        return marketDataService.getOptionChain(underlyingSymbol, expiryDate, null, forceRefresh);
     }
 
     @Override

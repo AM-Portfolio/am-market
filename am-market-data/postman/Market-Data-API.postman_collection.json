@@ -1000,6 +1000,72 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Instrument Management",
+      "item": [
+        {
+          "name": "Update Instruments Master (Seeding)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/instruments/update?filePath=data/upstock/instrument/BSE.json&provider=UPSTOX",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "instruments",
+                "update"
+              ],
+              "query": [
+                {
+                  "key": "filePath",
+                  "value": "data/upstock/instrument/BSE.json",
+                  "description": "Path to the instrument master JSON file (e.g., NSE.json or BSE.json)"
+                },
+                {
+                  "key": "provider",
+                  "value": "UPSTOX",
+                  "description": "Provider name (UPSTOX or ZERODHA)"
+                }
+              ]
+            },
+            "description": "Triggers streaming ingestion of instrument master file into MongoDB (upstock_instruments collection) with upsert-by-ID guarantee to prevent duplicates."
+          },
+          "response": []
+        },
+        {
+          "name": "Search Instruments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tradingSymbols\": [\"RELIANCE\"],\n  \"exchanges\": [\"BSE\"],\n  \"provider\": \"UPSTOX\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/instruments/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "instruments",
+                "search"
+              ]
+            },
+            "description": "Searches for instruments in MongoDB by trading symbol, exchange, segment, or ISIN."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "event": [

@@ -71,7 +71,7 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
             // leaving all symbols "remaining" and causing the provider to be called for 100 symbols
             // instead of just the 4 that are truly missing from Redis.
             Set<String> cleanCacheHits = cachedData.keySet().stream()
-                    .map(s -> s.replace("NSE_EQ:", "").replace("NSE:", "").trim().toUpperCase())
+                    .map(s -> s.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase())
                     .collect(java.util.stream.Collectors.toSet());
 
             // Remove the ORIGINAL-format keys from remainingSymbols by comparing their clean form.
@@ -79,7 +79,7 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
             java.util.Iterator<String> iter = remainingSymbols.iterator();
             while (iter.hasNext()) {
                 String key = iter.next();
-                String cleanKey = key.replace("NSE_EQ:", "").replace("NSE:", "").trim().toUpperCase();
+                String cleanKey = key.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
                 if (cleanCacheHits.contains(cleanKey)) {
                     iter.remove(); // safely removes the ORIGINAL key (e.g., " MARUTI")
                 }
@@ -123,7 +123,7 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
             log.info("[DATABASE] Found {} OHLC quotes in database for timeFrame {}", dbData.size(), tfValue);
 
             // Remove found symbols from the remaining set
-            dbData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE_EQ:", "").replace("NSE:", "")));
+            dbData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "")));
 
             log.info("[DATABASE] {} symbols remaining after database lookup for timeFrame {}", remainingSymbols.size(),
                     tfValue);
@@ -200,12 +200,12 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
                 // If we cache GOLDAXIS, the next request for AXISGOLD will miss the cache.
                 Map<String, OHLCQuote> mappedData = new HashMap<>();
                 for (String reqSymbol : symbols) {
-                    String cleanReq = reqSymbol.replace("NSE_EQ:", "").replace("NSE:", "").trim().toUpperCase();
+                    String cleanReq = reqSymbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
                     
                     // Look for matches in the provider keys
                     boolean matched = false;
                     for (Map.Entry<String, OHLCQuote> entry : providerData.entrySet()) {
-                        String cleanProv = entry.getKey().replace("NSE_EQ:", "").replace("NSE:", "").trim().toUpperCase();
+                        String cleanProv = entry.getKey().replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
                         
                          // Handle known mappings:
                          // 1. Exact match (e.g. RELIANCE == RELIANCE)
