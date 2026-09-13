@@ -445,21 +445,25 @@ public class MarketDataController {
                     }
                 }
 
-                Map<String, Object> response = marketDataCacheService.getOptionChain(underlyingSymbol, expiry,
-                        forceRefresh);
-
-                if (response.containsKey("error")) {
-                    log.warn("Option chain fetch returned error underlying={}", underlyingSymbol);
-                    flowLogger.fail(span, new Exception(String.valueOf(response.get("error"))));
-                    return ResponseEntity.internalServerError().body(response);
+                Map<String, Object> responseMap = marketDataCacheService.getOptionChain(underlyingSymbol, expiry, forceRefresh);
+                if (responseMap == null) {
+                    responseMap = new HashMap<>();
+                } else if (responseMap.isEmpty() || !responseMap.getClass().getName().contains("HashMap")) {
+                    responseMap = new HashMap<>(responseMap);
                 }
 
-                if (!response.containsKey("cached")) {
-                    response.put("cached", !forceRefresh);
+                if (responseMap.containsKey("error")) {
+                    log.warn("Option chain fetch returned error underlying={}", underlyingSymbol);
+                    flowLogger.fail(span, new Exception(String.valueOf(responseMap.get("error"))));
+                    return ResponseEntity.internalServerError().body(responseMap);
+                }
+
+                if (!responseMap.containsKey("cached")) {
+                    responseMap.put("cached", !forceRefresh);
                 }
 
                 flowLogger.complete(span);
-                return ResponseEntity.ok(response);
+                return ResponseEntity.ok(responseMap);
             } catch (Exception e) {
                 log.error("Unexpected error in controller while getting option chain underlying={}", underlyingSymbol, e);
                 Map<String, Object> errorResponse = new HashMap<>();

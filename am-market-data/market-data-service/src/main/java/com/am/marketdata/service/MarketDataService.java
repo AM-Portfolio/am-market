@@ -883,6 +883,16 @@ public class MarketDataService {
                 log.debug("Serving option chain from cache for symbol={} expiry={}", underlyingSymbol, formattedExpiry);
                 return cached;
             }
+
+            // Smart Market-Hours Strategy: If market is currently CLOSED, serve static closing data from cache / stale fallback directly without invoking Upstox API
+            boolean isMarketOpen = marketHoursService != null && marketHoursService.isMarketOpen();
+            if (!isMarketOpen) {
+                log.info("Market is CLOSED for symbol={}. Serving static closing data from local cache without Upstox API call.", underlyingSymbol);
+                Map<String, Object> staticClosingData = cacheService.getStaleOptionChain(underlyingSymbol, formattedExpiry);
+                if (staticClosingData != null && !staticClosingData.isEmpty()) {
+                    return staticClosingData;
+                }
+            }
         }
 
         // 2. Thundering Herd Shield: Acquire mutex lock so only 1 thread fetches from Upstox

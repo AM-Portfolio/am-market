@@ -145,12 +145,18 @@ public class UpstoxInstrumentService implements InstrumentDataProvider {
             orCriteria.add(org.springframework.data.mongodb.core.query.Criteria.where("asset_symbol")
                     .in(criteria.getQueries()));
 
-            // 2. Regex text search for Name and Asset Symbol (excluding Trading Symbol)
+            // 2. Regex text search for Name, Asset Symbol, Trading Symbol, and Underlying Key/Symbol
             for (String text : criteria.getQueries()) {
                 String regex = ".*" + java.util.regex.Pattern.quote(text) + ".*";
                 orCriteria.add(org.springframework.data.mongodb.core.query.Criteria.where("name").regex(regex, "i"));
                 orCriteria.add(
                         org.springframework.data.mongodb.core.query.Criteria.where("asset_symbol").regex(regex, "i"));
+                orCriteria.add(
+                        org.springframework.data.mongodb.core.query.Criteria.where("trading_symbol").regex(regex, "i"));
+                orCriteria.add(
+                        org.springframework.data.mongodb.core.query.Criteria.where("underlying_key").regex(regex, "i"));
+                orCriteria.add(
+                        org.springframework.data.mongodb.core.query.Criteria.where("underlying_symbol").regex(regex, "i"));
             }
 
             // Combine with OR
