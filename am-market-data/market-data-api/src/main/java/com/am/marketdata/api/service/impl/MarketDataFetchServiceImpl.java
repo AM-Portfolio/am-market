@@ -134,6 +134,76 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     }
 
     @Override
+    public Map<String, Object> getLiveLTP(Set<String> symbols, String exchange, String timeframe,
+            boolean indexSymbol, boolean forceRefresh) {
+        TimeFrame tf;
+        try {
+            tf = TimeFrame.fromApiValue(timeframe);
+        } catch (Exception e) {
+            log.warn("Invalid timeframe: {} defaulting to 1D", timeframe);
+            tf = TimeFrame.DAY;
+        }
+
+        // Single cache/provider read. Day change uses previousClose on EquityPrice
+        // (populated from Redis OHLC cache) — avoid a second sequential getOHLC.
+        Map<String, Object> livePrices = getLivePrices(symbols, indexSymbol, forceRefresh);
+
+        Map<String, Map<String, Object>> result = new HashMap<>();
+        Object pricesObj = livePrices.get("prices");
+        if (pricesObj instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<com.am.common.investment.model.equity.EquityPrice> pricesList =
+                    (List<com.am.common.investment.model.equity.EquityPrice>) pricesObj;
+
+            for (com.am.common.investment.model.equity.EquityPrice priceData : pricesList) {
+                String symbol = priceData.getSymbol();
+                if (symbol == null) {
+                    continue;
+                }
+
+                Double currentPrice = priceData.getLastPrice();
+                if (currentPrice == null) {
+                    continue;
+                }
+
+                double previousClose = 0.0;
+                if (priceData.getOhlcv() != null && priceData.getOhlcv().getClose() > 0) {
+                    previousClose = priceData.getOhlcv().getClose();
+                }
+
+                double change = previousClose > 0 ? (currentPrice - previousClose) : 0.0;
+                double changePercent = previousClose != 0 ? (change / previousClose) * 100 : 0.0;
+
+                String priceExchange = priceData.getExchange();
+                if (priceExchange == null || priceExchange.isBlank()) {
+                    priceExchange = exchange;
+                }
+
+                Map<String, Object> ltpData = new HashMap<>();
+                ltpData.put("symbol", symbol);
+                ltpData.put("exchange", priceExchange);
+                ltpData.put("lastPrice", currentPrice);
+                ltpData.put("previousClose", previousClose);
+                ltpData.put("change", change);
+                ltpData.put("changePercent", changePercent);
+                ltpData.put("timeframe", tf.getApiValue());
+
+                String resultKey = (priceExchange != null && !priceExchange.isBlank())
+                        ? priceExchange + ":" + symbol
+                        : symbol;
+                result.put(resultKey, ltpData);
+            }
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("count", result.size());
+        response.put("timeframe", tf.getApiValue());
+        response.put("data", result);
+        response.put("timestamp", new Date());
+        return response;
+    }
+
+    @Override
     public HistoricalDataResponseV1 getHistoricalDataMultipleSymbols(Set<String> symbols,
             Date fromDate, Date toDate,
             TimeFrame interval, String instrumentType,
