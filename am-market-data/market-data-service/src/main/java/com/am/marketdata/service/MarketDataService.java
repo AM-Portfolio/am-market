@@ -31,10 +31,13 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -642,20 +645,42 @@ public class MarketDataService {
             if (cachedData != null && !cachedData.isEmpty()) {
                 log.info("[CACHE] Found {} live prices in cache", cachedData.size());
 
-                // Convert cached OHLC data to EquityPrice
-                Map<String, LTPQuote> ltpMap = new HashMap<>();
+                // Map OHLC cache → EquityPrice (lastPrice + ohlcv). Day change for
+                // live-ltp uses ohlcv.close as previousClose baseline — do not call
+                // setPreviousClose/setChange (not on all published EquityPrice jars).
                 for (Map.Entry<String, OHLCQuote> entry : cachedData.entrySet()) {
-                    LTPQuote ltp = new LTPQuote();
-                    ltp.lastPrice = entry.getValue().getLastPrice();
-                    ltp.instrumentToken = 0;
-                    ltpMap.put(entry.getKey(), ltp);
+                    String key = entry.getKey();
+                    OHLCQuote quote = entry.getValue();
+                    if (quote == null) {
+                        continue;
+                    }
+                    String[] exchangeAndSymbol = resolveExchangeAndSymbol(key, tradingSymbols);
+                    String exchange = exchangeAndSymbol[0];
+                    String symbol = exchangeAndSymbol[1];
+                    Double last = quote.getLastPrice() > 0
+                            ? quote.getLastPrice()
+                            : (quote.getOhlc() != null ? quote.getOhlc().getClose() : null);
+                    EquityPrice price = new EquityPrice();
+                    price.setSymbol(symbol);
+                    price.setExchange(exchange);
+                    price.setLastPrice(last);
+                    if (quote.getOhlc() != null) {
+                        // Prefer true previousClose when Redis has it; else day close.
+                        double closeForChange = quote.getPreviousClose() > 0
+                                ? quote.getPreviousClose()
+                                : quote.getOhlc().getClose();
+                        price.setOhlcv(com.am.common.investment.model.historical.OHLCVTPoint.builder()
+                                .open(quote.getOhlc().getOpen())
+                                .high(quote.getOhlc().getHigh())
+                                .low(quote.getOhlc().getLow())
+                                .close(closeForChange)
+                                .build());
+                    }
+                    result.add(price);
                 }
 
-                List<EquityPrice> cachedPrices = genericMapper.mapLTPquoteToEquityPrices(ltpMap);
-                result.addAll(cachedPrices);
-
-                // Remove symbols found in cache from remaining
-                cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE_EQ:", "").replace("NSE:", "")));
+                // FO/BSE-safe remaining removal (never substring-replace "NSE:" — corrupts NSE_FO:)
+                removeCachedHitsFromRemaining(remainingSymbols, cachedData.keySet());
 
                 log.info("[CACHE] {} symbols remaining after cache lookup", remainingSymbols.size());
             } else {
@@ -682,6 +707,129 @@ public class MarketDataService {
             throw new RuntimeException("Failed to get live prices", e);
         } finally {
             timer.stop(meterRegistry.timer("market.data.request.time", "operation", "getLivePrices"));
+        }
+    }
+
+    /** Segment prefixes for equity, F&O, and other Indian venues (prefix-anchored only). */
+    private static final Pattern SEGMENT_PREFIX = Pattern.compile(
+            "(?i)^(NSE_EQ|NSE_FO|BSE_EQ|BSE_FO|NSE|BSE|NFO|BFO|CDS|MCX):(.+)$");
+
+    /**
+     * Resolve exchange/segment + trading symbol from a cache key.
+     * Prefixed keys win; bare Redis keys (NSE equity convention) inherit exchange from the matching request.
+     */
+    private static String[] resolveExchangeAndSymbol(String key, List<String> tradingSymbols) {
+        if (key == null) {
+            return new String[] { "NSE", "" };
+        }
+        String trimmed = key.trim();
+        Matcher keyed = SEGMENT_PREFIX.matcher(trimmed);
+        if (keyed.matches()) {
+            return new String[] { normalizeExchangeSegment(keyed.group(1)), keyed.group(2) };
+        }
+
+        if (tradingSymbols != null) {
+            for (String req : tradingSymbols) {
+                if (req == null || req.isBlank()) {
+                    continue;
+                }
+                String rq = req.trim();
+                Matcher reqMatch = SEGMENT_PREFIX.matcher(rq);
+                if (reqMatch.matches()) {
+                    if (reqMatch.group(2).equalsIgnoreCase(trimmed)) {
+                        return new String[] { normalizeExchangeSegment(reqMatch.group(1)), trimmed };
+                    }
+                } else if (rq.equalsIgnoreCase(trimmed)) {
+                    return new String[] { "NSE", trimmed };
+                }
+            }
+        }
+        // Unprefixed Redis key with no matching request → NSE equity (main cache convention).
+        return new String[] { "NSE", trimmed };
+    }
+
+    private static String normalizeExchangeSegment(String segment) {
+        if (segment == null || segment.isBlank()) {
+            return "NSE";
+        }
+        String seg = segment.trim().toUpperCase();
+        if ("NSE_EQ".equals(seg)) {
+            return "NSE";
+        }
+        if ("BSE_EQ".equals(seg)) {
+            return "BSE";
+        }
+        return seg;
+    }
+
+    /**
+     * Remove cache hits from remaining request symbols without substring-replacing "NSE:"
+     * (which corrupts NSE_FO:...). Bare cache keys clear NSE equity only; BSE/FO stay segment-scoped.
+     */
+    private static void removeCachedHitsFromRemaining(Set<String> remainingSymbols, Set<String> cacheKeys) {
+        if (remainingSymbols == null || remainingSymbols.isEmpty() || cacheKeys == null || cacheKeys.isEmpty()) {
+            return;
+        }
+
+        for (String cacheKey : cacheKeys) {
+            if (cacheKey == null || cacheKey.isBlank()) {
+                continue;
+            }
+            String ck = cacheKey.trim();
+            Matcher cacheMatch = SEGMENT_PREFIX.matcher(ck);
+            final boolean cachePrefixed = cacheMatch.matches();
+            final String cacheSeg = cachePrefixed ? cacheMatch.group(1).toUpperCase() : null;
+            final String cacheSym = cachePrefixed ? cacheMatch.group(2) : ck;
+            final boolean cacheIsFo = cachePrefixed
+                    && (cacheSeg.contains("_FO") || "NFO".equals(cacheSeg) || "BFO".equals(cacheSeg));
+            final boolean cacheIsBseEquity = cachePrefixed
+                    && ("BSE".equals(cacheSeg) || "BSE_EQ".equals(cacheSeg));
+            final boolean cacheIsNseEquity = !cachePrefixed
+                    || "NSE".equals(cacheSeg) || "NSE_EQ".equals(cacheSeg);
+
+            Iterator<String> iter = remainingSymbols.iterator();
+            while (iter.hasNext()) {
+                String req = iter.next();
+                if (req == null || req.isBlank()) {
+                    continue;
+                }
+                String rq = req.trim();
+                if (rq.equalsIgnoreCase(ck)) {
+                    iter.remove();
+                    continue;
+                }
+
+                Matcher reqMatch = SEGMENT_PREFIX.matcher(rq);
+                if (cacheIsFo) {
+                    if (reqMatch.matches()
+                            && reqMatch.group(1).equalsIgnoreCase(cacheSeg)
+                            && reqMatch.group(2).equalsIgnoreCase(cacheSym)) {
+                        iter.remove();
+                    }
+                } else if (cacheIsBseEquity) {
+                    if (reqMatch.matches()) {
+                        String reqSeg = reqMatch.group(1).toUpperCase();
+                        if (("BSE".equals(reqSeg) || "BSE_EQ".equals(reqSeg))
+                                && reqMatch.group(2).equalsIgnoreCase(cacheSym)) {
+                            iter.remove();
+                        }
+                    }
+                } else if (cacheIsNseEquity) {
+                    if (!reqMatch.matches() && rq.equalsIgnoreCase(cacheSym)) {
+                        iter.remove();
+                    } else if (reqMatch.matches()) {
+                        String reqSeg = reqMatch.group(1).toUpperCase();
+                        if (("NSE".equals(reqSeg) || "NSE_EQ".equals(reqSeg))
+                                && reqMatch.group(2).equalsIgnoreCase(cacheSym)) {
+                            iter.remove();
+                        }
+                    }
+                } else if (cachePrefixed && reqMatch.matches()
+                        && reqMatch.group(1).equalsIgnoreCase(cacheSeg)
+                        && reqMatch.group(2).equalsIgnoreCase(cacheSym)) {
+                    iter.remove();
+                }
+            }
         }
     }
 

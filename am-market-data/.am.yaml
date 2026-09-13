@@ -5,7 +5,7 @@ image: ghcr.io/am-portfolio/am-market-data
 runtime: java
 language: java
 dockerfile: Dockerfile
-context: .
+context: ..
 github:
   repo: AM-Portfolio/am-market
   deploy_workflow: direct-deploy.yml
