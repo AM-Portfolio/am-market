@@ -848,36 +848,10 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             }
 
             java.util.TreeSet<String> expiries = new java.util.TreeSet<>();
-            final String targetExpiry = formattedExpiry;
-            final String targetKey = instrumentKey;
-
-            // Parallel Execution via CompletableFuture to minimize latency
-            java.util.concurrent.CompletableFuture<String> contractFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-                try {
-                    return upstoxApiService.getOptionContracts(targetKey);
-                } catch (Exception ex) {
-                    log.warn("getOptionChain", "Failed to fetch option contract expiries: " + ex.getMessage());
-                    return null;
-                }
-            });
-
-            java.util.concurrent.CompletableFuture<String> chainFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-                try {
-                    return upstoxApiService.getOptionChain(targetKey, targetExpiry);
-                } catch (Exception ex) {
-                    log.warn("getOptionChain", "Failed to fetch option chain: " + ex.getMessage());
-                    return null;
-                }
-            });
-
-            // Join both futures
-            java.util.concurrent.CompletableFuture.allOf(contractFuture, chainFuture).join();
-
-            String contractJson = contractFuture.getNow(null);
-            String rawJson = chainFuture.getNow(null);
-
-            if (contractJson != null && !contractJson.isEmpty()) {
-                try {
+            String contractJson = null;
+            try {
+                contractJson = upstoxApiService.getOptionContracts(instrumentKey);
+                if (contractJson != null && !contractJson.isEmpty()) {
                     com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                     com.fasterxml.jackson.databind.JsonNode cRoot = mapper.readTree(contractJson);
                     com.fasterxml.jackson.databind.JsonNode cData = cRoot.get("data");
@@ -888,17 +862,20 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             }
                         }
                     }
-                } catch (Exception ex) {
-                    log.warn("getOptionChain", "Failed to parse option contract expiries: " + ex.getMessage());
                 }
+            } catch (Exception ex) {
+                log.warn("getOptionChain", "Failed to fetch option contract expiries: " + ex.getMessage());
             }
 
             if (formattedExpiry == null && !expiries.isEmpty()) {
                 formattedExpiry = expiries.first();
                 log.info("getOptionChain", "Auto-resolved nearest expiry date: " + formattedExpiry + " for symbol: " + underlyingSymbol);
-                // If expiry was not provided, re-fetch chain for resolved expiry
-                rawJson = upstoxApiService.getOptionChain(instrumentKey, formattedExpiry);
             }
+
+            log.info("getOptionChain", "Fetching option chain from Upstox. symbol=" + underlyingSymbol
+                    + ", instrumentKey=" + instrumentKey + ", expiry=" + formattedExpiry);
+
+            String rawJson = upstoxApiService.getOptionChain(instrumentKey, formattedExpiry);
             if (rawJson == null || rawJson.trim().isEmpty()) {
                 return Collections.emptyMap();
             }
