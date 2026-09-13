@@ -710,15 +710,25 @@ public class MarketDataController {
                         double change = previousClose > 0 ? (currentPrice - previousClose) : 0.0;
                         double changePercent = previousClose != 0 ? (change / previousClose) * 100 : 0.0;
 
+                        String priceExchange = priceData.getExchange();
+                        if (priceExchange == null || priceExchange.isBlank()) {
+                            priceExchange = exchange;
+                        }
+
                         Map<String, Object> ltpData = new HashMap<>();
                         ltpData.put("symbol", symbol);
+                        ltpData.put("exchange", priceExchange);
                         ltpData.put("lastPrice", currentPrice);
                         ltpData.put("previousClose", previousClose);
                         ltpData.put("change", change);
                         ltpData.put("changePercent", changePercent);
                         ltpData.put("timeframe", tf.getApiValue());
 
-                        result.put(symbol, ltpData);
+                        // Qualify map key so NSE/BSE/FO same ticker do not overwrite each other
+                        String resultKey = (priceExchange != null && !priceExchange.isBlank())
+                                ? priceExchange + ":" + symbol
+                                : symbol;
+                        result.put(resultKey, ltpData);
                     }
                 }
 
