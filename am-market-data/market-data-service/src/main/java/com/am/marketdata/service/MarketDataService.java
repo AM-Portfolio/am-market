@@ -166,6 +166,9 @@ public class MarketDataService {
     }
 
     public Map<String, Object> getQuotes(String[] symbols, String providerName) {
+        if (symbols == null || symbols.length == 0) {
+            return Collections.emptyMap();
+        }
         Timer.Sample timer = Timer.start(meterRegistry);
         try {
             providerName = resolveProviderName(providerName);
@@ -186,6 +189,9 @@ public class MarketDataService {
 
     public Map<String, OHLCQuote> getOHLC(List<String> tradingSymbols, TimeFrame timeFrame, boolean forceRefresh,
             String providerName) {
+        if (tradingSymbols == null || tradingSymbols.isEmpty()) {
+            return Collections.emptyMap();
+        }
         String tfValue = timeFrame != null ? timeFrame.getApiValue() : "default";
         Timer.Sample timer = Timer.start(meterRegistry);
         
@@ -244,6 +250,45 @@ public class MarketDataService {
             return;
         }
 
+        // LATENCY OPTIMIZATION: Redis Fast-Path
+        // -----------------------------------------------------------------------------------------
+        // WHAT PROBLEM IT SOLVES:
+        // Previously, this method unconditionally called getHistoricalDataBatch() for ALL symbols when the
+        // market was closed. That triggered 5-50 sequential InfluxDB HTTP queries, causing a 2-second delay.
+        //
+        // HOW IT WORKS:
+        // Check if Redis already provided a valid previousClose (> 0.0) during overlayLatestPrices().
+        // If yes, update lastPrice and close price directly in 0ms without touching InfluxDB.
+        // We only fetch historical candles for symbols that are genuinely missing from Redis.
+        List<String> missingSymbols = new ArrayList<>();
+        int updatedCount = 0;
+
+        for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
+            OHLCQuote quote = entry.getValue();
+            if (quote != null) {
+                if (quote.getPreviousClose() > 0.0) {
+                    // Fast path: Use Redis-cached previousClose as the official close
+                    quote.setLastPrice(quote.getPreviousClose());
+                    if (quote.getOhlc() != null) {
+                        quote.getOhlc().setClose(quote.getPreviousClose());
+                    }
+                    updatedCount++;
+                } else {
+                    // Missing from Redis: Needs InfluxDB fallback lookup
+                    missingSymbols.add(entry.getKey());
+                }
+            }
+        }
+
+        if (missingSymbols.isEmpty()) {
+            log.info("Applied official daily close via Redis fast-path for {}/{} symbols in 0ms",
+                    updatedCount, quotes.size());
+            return;
+        }
+
+        log.info("Redis missed official close for {}/{} symbols. Triggering InfluxDB fallback batch...",
+                missingSymbols.size(), quotes.size());
+
         java.time.ZoneId ist = java.time.ZoneId.of("Asia/Kolkata");
         java.time.LocalDate today = java.time.LocalDate.now(ist);
         boolean sessionDay = true;
@@ -257,7 +302,7 @@ public class MarketDataService {
 
         try {
             Map<String, HistoricalData> history = getHistoricalDataBatch(
-                    new ArrayList<>(quotes.keySet()),
+                    missingSymbols,
                     fromDate,
                     toDate,
                     TimeFrame.DAY,
@@ -273,8 +318,8 @@ public class MarketDataService {
             }
 
             int updated = 0;
-            for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
-                HistoricalData data = history.get(entry.getKey());
+            for (String symbol : missingSymbols) {
+                HistoricalData data = history.get(symbol);
                 if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
                     continue;
                 }
@@ -283,7 +328,7 @@ public class MarketDataService {
                 if (officialClose == null) {
                     continue;
                 }
-                OHLCQuote quote = entry.getValue();
+                OHLCQuote quote = quotes.get(symbol);
                 if (quote == null) {
                     continue;
                 }
@@ -291,11 +336,12 @@ public class MarketDataService {
                 if (quote.getOhlc() != null) {
                     quote.getOhlc().setClose(officialClose);
                 }
+                quote.setPreviousClose(officialClose);
                 updated++;
             }
             if (updated > 0) {
-                log.info("Applied official daily close after hours for {}/{} symbols (calendarDate={}, sessionDay={})",
-                        updated, quotes.size(), today, sessionDay);
+                log.info("Applied official daily close via InfluxDB fallback for {}/{} missing symbols",
+                        updated, missingSymbols.size());
             }
         } catch (Exception e) {
             log.warn("Official daily close overlay failed; leaving lastPrice as-is: {}", e.getMessage());
@@ -379,6 +425,9 @@ public class MarketDataService {
     public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, Date fromDate, Date toDate,
             TimeFrame interval, boolean continuous, Map<String, Object> additionalParams, String providerName,
             boolean isIndexSymbol, boolean forceRefresh) {
+        if (symbols == null || symbols.isEmpty()) {
+            return Collections.emptyMap();
+        }
         Timer.Sample timer = Timer.start(meterRegistry);
         String tfValue = interval != null ? interval.getApiValue() : "null";
         

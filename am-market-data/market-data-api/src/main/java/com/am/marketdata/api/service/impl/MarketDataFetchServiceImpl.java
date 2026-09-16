@@ -99,6 +99,25 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             if (ohlcData != null) {
                 ohlcData = new HashMap<>(ohlcData);
                 instrumentUtils.aliasQuotesUnderOriginalIsins(tradingSymbols, ohlcData);
+
+                // KEY DUP FIX: Ensure the final map contains ONLY the exact symbol keys requested by the caller.
+                // If caller requested "NSE:INFY", return key "NSE:INFY" and filter out the unrequested base key "INFY".
+                // This prevents returning 10 entries for 5 requested symbols.
+                Map<String, OHLCQuote> sanitizedQuotes = new HashMap<>();
+                for (String requestedSym : tradingSymbols) {
+                    if (ohlcData.containsKey(requestedSym)) {
+                        sanitizedQuotes.put(requestedSym, ohlcData.get(requestedSym));
+                    } else {
+                        // Fallback lookup: match clean symbol if requested symbol had exchange prefix or vice versa
+                        String cleanReq = requestedSym.contains(":") ? requestedSym.substring(requestedSym.indexOf(":") + 1).trim() : requestedSym;
+                        if (ohlcData.containsKey(cleanReq)) {
+                            sanitizedQuotes.put(requestedSym, ohlcData.get(cleanReq));
+                        }
+                    }
+                }
+                if (!sanitizedQuotes.isEmpty()) {
+                    ohlcData = sanitizedQuotes;
+                }
             } else {
                 ohlcData = new HashMap<>();
             }

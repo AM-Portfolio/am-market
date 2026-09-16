@@ -40,7 +40,7 @@ public class FeatureFlaggedStringRedisTemplate extends StringRedisTemplate {
         // direct connection to the self-hosted GrowthBook feature flag dashboard.
         // Setting REDIS_FORCE_ENABLED=true in the run environment forces Redis templates
         // to stay active, bypassing the GrowthBook server check.
-        if ("true".equalsIgnoreCase(System.getenv("REDIS_FORCE_ENABLED"))) {
+        if ("true".equalsIgnoreCase(System.getenv("REDIS_FORCE_ENABLED")) || "true".equalsIgnoreCase(System.getProperty("REDIS_FORCE_ENABLED"))) {
             return true;
         }
         boolean enabled = growthBookService.isOn(flagKey);

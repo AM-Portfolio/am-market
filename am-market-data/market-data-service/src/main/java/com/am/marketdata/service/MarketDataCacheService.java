@@ -150,6 +150,9 @@ public class MarketDataCacheService {
     }
 
     public void cacheOHLCData(Map<String, OHLCQuote> ohlcData, TimeFrame timeFrame) {
+        if (ohlcData == null || ohlcData.isEmpty()) {
+            return;
+        }
         try {
             String interval = timeFrame != null ? timeFrame.getApiValue() : "1D";
             String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
@@ -291,6 +294,9 @@ public class MarketDataCacheService {
     }
 
     public Map<String, OHLCQuote> getOHLCFromCache(List<String> tradingSymbols, TimeFrame timeFrame) {
+        if (tradingSymbols == null || tradingSymbols.isEmpty()) {
+            return Collections.emptyMap();
+        }
         try {
             // Clean symbols (remove NSE exchange prefix, but keep BSE/other exchange prefixes intact to avoid cache collisions)
             List<String> cleanSymbols = tradingSymbols.stream()
@@ -371,11 +377,8 @@ public class MarketDataCacheService {
                 log.info("getOHLCFromCache", "Retrieved OHLC data from cache for {} symbols", result.size());
                 log.debug("getOHLCFromCache", "Retrieved values: {}", cacheHits);
 
-                // Overlay lastPrice and previousClose from Redis Path 2 (market:latest-price:*)
-                // These are written by cacheLatestPrices() on every WebSocket tick.
-                // The intraday bars (Path 1) do not store previousClose, so it defaults to 0.0.
-                // This overlay fixes both: fresh lastPrice on reload and non-zero previousClose.
-                overlayLatestPrices(result);
+                // Note: overlayLatestPrices is now called once at the orchestrator layer (MarketDataService) 
+                // to avoid duplicate Redis MGET queries on cache hits while ensuring all paths are covered.
             }
 
             return result;
@@ -388,14 +391,6 @@ public class MarketDataCacheService {
     }
 
     /**
-     * Overlays Redis websocket ticks onto OHLC quotes.
-     *
-     * <p>While NSE is open, {@code lastPrice} is the last trade — correct for live holdings.
-     * After close, Redis still holds that last trade (often hours old on thin ETFs/SGB).
-     * Brokers then show official day close; overwriting lastPrice with the tick is what
-     * made GOLDBEES / MOHEALTH / SGB diverge. previousClose overlay is unchanged either way.
-     *
-     * <p>If market hours cannot be resolved, keep the old overlay (fail-open) so live
      * trading is not broken by a calendar outage.
      */
     public void overlayLatestPrices(Map<String, OHLCQuote> result) {
@@ -411,6 +406,7 @@ public class MarketDataCacheService {
         List<Map.Entry<String, OHLCQuote>> entries = new ArrayList<>(result.entrySet());
         List<String> primaryKeys = new ArrayList<>(entries.size());
         List<String> fallbackKeys = new ArrayList<>(entries.size());
+        List<String> prevCloseKeys = new ArrayList<>(entries.size());
 
         for (Map.Entry<String, OHLCQuote> entry : entries) {
             String raw = entry.getKey();
@@ -433,15 +429,21 @@ public class MarketDataCacheService {
             primaryKeys.add("market:latest-price:" + exchange + ":" + cleanSymbol);
             // Fallback: market:latest-price:SYMBOL (for backward compatibility)
             fallbackKeys.add("market:latest-price:" + cleanSymbol);
+            // Previous Close: market:prev-close:SYMBOL
+            prevCloseKeys.add("market:prev-close:" + cleanSymbol);
         }
 
         try {
             // Batch retrieve exchange-specific latest prices (e.g. market:latest-price:NSE:INFY)
             List<String> jsonList = redisTemplate.opsForValue().multiGet(primaryKeys);
             
+            // Batch retrieve previous close prices from Redis in parallel (e.g. market:prev-close:INFY)
+            List<String> prevCloseValues = null;
+            try {
+                prevCloseValues = redisTemplate.opsForValue().multiGet(prevCloseKeys);
+            } catch (Exception ignore) {}
+            
             // Check if any symbols missed in primary exchange-specific keys
-            // Note: Immutable lists in Java 9+ (e.g. List.of()) throw NullPointerException on contains(null),
-            // so we inspect elements manually.
             List<String> fallbackJsonList = null;
             boolean hasNulls = false;
             if (jsonList == null || jsonList.isEmpty()) {
@@ -461,8 +463,22 @@ public class MarketDataCacheService {
                 } catch (Exception ignore) {}
             }
 
-            if (jsonList != null || fallbackJsonList != null) {
+            if (jsonList != null || fallbackJsonList != null || prevCloseValues != null) {
                 for (int i = 0; i < entries.size(); i++) {
+                    OHLCQuote quote = entries.get(i).getValue();
+                    if (quote == null) continue;
+
+                    // 1. First populate previousClose from market:prev-close key if available
+                    if (prevCloseValues != null && i < prevCloseValues.size() && prevCloseValues.get(i) != null) {
+                        try {
+                            double pc = Double.parseDouble(prevCloseValues.get(i));
+                            if (pc > 0) {
+                                quote.setPreviousClose(pc);
+                            }
+                        } catch (Exception ignore) {}
+                    }
+
+                    // 2. Populate lastPrice and previousClose from latest-price JSON
                     String json = (jsonList != null && i < jsonList.size()) ? jsonList.get(i) : null;
                     if (json == null && fallbackJsonList != null && i < fallbackJsonList.size()) {
                         json = fallbackJsonList.get(i);
@@ -473,17 +489,28 @@ public class MarketDataCacheService {
                             Map<String, Object> latestData = objectMapper.readValue(json, Map.class);
                             double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
                             double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
-                            OHLCQuote quote = entries.get(i).getValue();
 
-                            if (prevClose > 0) {
+                            if (prevClose > 0 && quote.getPreviousClose() == 0.0) {
                                 quote.setPreviousClose(prevClose);
                             }
                             if (latestPrice > 0) {
-                                // While market is open, live tick wins.
-                                // When market is closed, if official close was not applied (e.g. quote.getLastPrice() == 0.0 or unchanged),
-                                // the closing session price from Redis is the verified fallback.
                                 if (overlayLiveLastPrice || quote.getLastPrice() == 0.0) {
                                     quote.setLastPrice(latestPrice);
+                                }
+                            }
+                            // Populate OHLC from latest-price Redis JSON if missing or zeroes
+                            double openVal = ((Number) latestData.getOrDefault("open", 0.0)).doubleValue();
+                            double highVal = ((Number) latestData.getOrDefault("high", 0.0)).doubleValue();
+                            double lowVal = ((Number) latestData.getOrDefault("low", 0.0)).doubleValue();
+                            double closeVal = latestPrice > 0 ? latestPrice : ((Number) latestData.getOrDefault("close", 0.0)).doubleValue();
+                            if (openVal > 0 || highVal > 0 || lowVal > 0 || closeVal > 0) {
+                                if (quote.getOhlc() == null || quote.getOhlc().getClose() == 0.0) {
+                                    OHLCQuote.OHLC ohlcObj = quote.getOhlc() != null ? quote.getOhlc() : new OHLCQuote.OHLC();
+                                    if (openVal > 0) ohlcObj.setOpen(openVal);
+                                    if (highVal > 0) ohlcObj.setHigh(highVal);
+                                    if (lowVal > 0) ohlcObj.setLow(lowVal);
+                                    if (closeVal > 0) ohlcObj.setClose(closeVal);
+                                    quote.setOhlc(ohlcObj);
                                 }
                             }
                         } catch (Exception parseEx) {
