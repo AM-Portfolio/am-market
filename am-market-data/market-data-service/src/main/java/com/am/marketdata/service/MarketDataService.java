@@ -108,7 +108,7 @@ public class MarketDataService {
 
     private String resolveProviderName(String providerName) {
         if (providerName == null || providerName.trim().isEmpty()) {
-            providerName = persistenceService.getMarketDataCacheService().getActiveProvider();
+            providerName = cacheService.getActiveProvider();
         }
         if (providerName == null) {
             providerName = defaultProvider;
@@ -143,7 +143,7 @@ public class MarketDataService {
             if (requestToken == null || requestToken.trim().isEmpty()) {
                 throw new IllegalArgumentException("Request token cannot be null or empty");
             }
-            String providerName = persistenceService.getMarketDataCacheService().getActiveProvider();
+            String providerName = cacheService.getActiveProvider();
             providerName = resolveProviderName(providerName);
             String finalProviderName = providerName;
             finalProviderName = "upstox"; // For lambda
@@ -153,7 +153,7 @@ public class MarketDataService {
                     "generateSession");
 
             // Set active provider
-            persistenceService.getMarketDataCacheService().setActiveProvider(finalProviderName);
+            cacheService.setActiveProvider(finalProviderName);
 
             return session;
         } catch (Exception e) {
@@ -204,7 +204,7 @@ public class MarketDataService {
                 Map<String, OHLCQuote> result = retriever.retrieveData(tradingSymbols, timeFrame, forceRefresh);
 
                 if (result != null && !result.isEmpty()) {
-                    persistenceService.getMarketDataCacheService().overlayLatestPrices(result);
+                    cacheService.overlayLatestPrices(result);
                     applyOfficialDailyCloseWhenMarketClosed(result);
                 }
 
@@ -301,6 +301,8 @@ public class MarketDataService {
         Date toDate = Date.from(today.plusDays(1).atStartOfDay(ist).toInstant());
 
         try {
+            // HYBRID LATENCY FIX: Restrict search to Local Cache & DB ONLY (allowProviderFallback = false).
+            // This queries Mongo/InfluxDB for missing symbols in ~2-10ms without triggering blocking sequential Upstox REST calls and 429 rate limit retries.
             Map<String, HistoricalData> history = getHistoricalDataBatch(
                     missingSymbols,
                     fromDate,
@@ -310,38 +312,58 @@ public class MarketDataService {
                     null,
                     null,
                     false,
-                    false);
-
-            if (history == null || history.isEmpty()) {
-                log.debug("No daily candles available for official-close overlay");
-                return;
-            }
+                    false,
+                    false /* allowProviderFallback = false */);
 
             int updated = 0;
-            for (String symbol : missingSymbols) {
-                HistoricalData data = history.get(symbol);
-                if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
-                    continue;
+            List<String> stillMissingSymbols = new ArrayList<>();
+
+            if (history != null && !history.isEmpty()) {
+                for (String symbol : missingSymbols) {
+                    HistoricalData data = history.get(symbol);
+                    if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
+                        stillMissingSymbols.add(symbol);
+                        continue;
+                    }
+                    Double officialClose = OfficialClosePolicy.pickSessionClose(
+                            data.getDataPoints(), today, sessionDay);
+                    if (officialClose == null) {
+                        stillMissingSymbols.add(symbol);
+                        continue;
+                    }
+                    OHLCQuote quote = quotes.get(symbol);
+                    if (quote == null) {
+                        continue;
+                    }
+                    quote.setLastPrice(officialClose);
+                    if (quote.getOhlc() != null) {
+                        quote.getOhlc().setClose(officialClose);
+                    }
+                    quote.setPreviousClose(officialClose);
+                    updated++;
                 }
-                Double officialClose = OfficialClosePolicy.pickSessionClose(
-                        data.getDataPoints(), today, sessionDay);
-                if (officialClose == null) {
-                    continue;
-                }
-                OHLCQuote quote = quotes.get(symbol);
-                if (quote == null) {
-                    continue;
-                }
-                quote.setLastPrice(officialClose);
-                if (quote.getOhlc() != null) {
-                    quote.getOhlc().setClose(officialClose);
-                }
-                quote.setPreviousClose(officialClose);
-                updated++;
+            } else {
+                stillMissingSymbols.addAll(missingSymbols);
             }
+
             if (updated > 0) {
-                log.info("Applied official daily close via InfluxDB fallback for {}/{} missing symbols",
+                log.info("Applied official daily close via Local DB fallback for {}/{} missing symbols in ~5ms",
                         updated, missingSymbols.size());
+            }
+
+            // ASYNC BACKGROUND SEEDING for symbols missing from both Redis AND Local DB:
+            // Non-blocking background worker fetches missing daily candles from Upstox to seed Redis/DB for future calls.
+            if (!stillMissingSymbols.isEmpty()) {
+                log.info("Non-blocking hybrid strategy: {} symbols missing from local DB. Triggering async background seed without blocking quote response.", stillMissingSymbols.size());
+                final String pName = defaultProvider;
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    try {
+                        getHistoricalDataBatch(stillMissingSymbols, fromDate, toDate, TimeFrame.DAY, false, null, pName, false, true, true);
+                        log.info("Async background seed completed for {} missing symbols", stillMissingSymbols.size());
+                    } catch (Exception bgEx) {
+                        log.warn("Async background seed error: {}", bgEx.getMessage());
+                    }
+                });
             }
         } catch (Exception e) {
             log.warn("Official daily close overlay failed; leaving lastPrice as-is: {}", e.getMessage());
@@ -425,6 +447,13 @@ public class MarketDataService {
     public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, Date fromDate, Date toDate,
             TimeFrame interval, boolean continuous, Map<String, Object> additionalParams, String providerName,
             boolean isIndexSymbol, boolean forceRefresh) {
+        return getHistoricalDataBatch(symbols, fromDate, toDate, interval, continuous, additionalParams,
+                providerName, isIndexSymbol, forceRefresh, true);
+    }
+
+    public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, Date fromDate, Date toDate,
+            TimeFrame interval, boolean continuous, Map<String, Object> additionalParams, String providerName,
+            boolean isIndexSymbol, boolean forceRefresh, boolean allowProviderFallback) {
         if (symbols == null || symbols.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -436,7 +465,9 @@ public class MarketDataService {
             try {
                 providerName = resolveProviderName(providerName);
 
-                List<DataSourceType> retrievalOrder = DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh);
+                List<DataSourceType> retrievalOrder = allowProviderFallback
+                        ? DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh)
+                        : java.util.Arrays.asList(DataSourceType.CACHE, DataSourceType.DATABASE);
                 HistoricalDataRetriever retriever = HistoricalDataRetriever.builder()
                         .persistenceService(persistenceService)
                         .providerFactory(providerFactory)

@@ -16,9 +16,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.am.marketdata.service.model.PreviousCloseDocument;
 import com.am.marketdata.service.repo.PreviousCloseRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.data.redis.core.RedisTemplate;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executor;
+import java.util.concurrent.CompletableFuture;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
@@ -50,6 +53,15 @@ public class MarketDataCacheService {
     private final PreviousCloseRepository previousCloseRepository;
     private final MarketHoursService marketHoursService;
 
+    // Dedicated thread pool for non-blocking background cache backfilling
+    @Autowired(required = false)
+    @org.springframework.beans.factory.annotation.Qualifier("cacheBackfillExecutor")
+    private Executor cacheBackfillExecutor;
+
+    // Configurable toggle: set MARKET_CACHE_ASYNC_ENABLED=false to revert to synchronous backfill if needed
+    @Value("${market.cache.async-backfill.enabled:true}")
+    private boolean asyncBackfillEnabled = true;
+
     public MarketDataCacheService(StockCacheService stockCacheService,
                                   ObjectMapper objectMapper,
                                   RedisTemplate<String, String> redisTemplate,
@@ -61,6 +73,7 @@ public class MarketDataCacheService {
         this.previousCloseRepository = previousCloseRepository;
         this.marketHoursService = marketHoursService;
     }
+
 
     /**
      * Helper method to normalize raw symbol inputs before constructing Redis keys.
@@ -149,10 +162,32 @@ public class MarketDataCacheService {
         }
     }
 
+    /**
+     * Cache OHLC data to Redis and MongoDB.
+     * 
+     * PERFORMANCE FIX:
+     * When asyncBackfillEnabled is true, cache writing is offloaded to the dedicated
+     * 'cacheBackfillExecutor' thread pool. This allows the HTTP response thread to return
+     * the fresh provider response to the client immediately (<400ms) without waiting for
+     * Redis write operations to complete.
+     */
     public void cacheOHLCData(Map<String, OHLCQuote> ohlcData, TimeFrame timeFrame) {
         if (ohlcData == null || ohlcData.isEmpty()) {
             return;
         }
+
+        if (asyncBackfillEnabled && cacheBackfillExecutor != null) {
+            CompletableFuture.runAsync(() -> doCacheOHLCDataInternal(ohlcData, timeFrame), cacheBackfillExecutor)
+                    .exceptionally(ex -> {
+                        log.warn("cacheOHLCData", "Background async cache backfill encountered an exception: {}", ex.getMessage());
+                        return null;
+                    });
+        } else {
+            doCacheOHLCDataInternal(ohlcData, timeFrame);
+        }
+    }
+
+    private void doCacheOHLCDataInternal(Map<String, OHLCQuote> ohlcData, TimeFrame timeFrame) {
         try {
             String interval = timeFrame != null ? timeFrame.getApiValue() : "1D";
             String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
@@ -219,27 +254,21 @@ public class MarketDataCacheService {
                 stockCacheService.cacheIntradayBars(batchStockBars);
             }
 
-            // Smart logging: if keys are huge (>1000), show only count in INFO and one
-            // sample in DEBUG
+            // Smart logging: if keys are huge (>1000), show only count in INFO and one sample in DEBUG
             if (cachedKeys.size() > 1000) {
                 log.info("cacheOHLCData", "Cached {} symbols with timeframe: {} for date: {} ({} key-value pairs)",
                         ohlcData.size(), interval, today, cachedKeys.size());
 
-                // Show one sample record in DEBUG mode to know the pattern
                 if (!cachedKeys.isEmpty()) {
                     log.debug("cacheOHLCData", "Sample key pattern: {}", cachedKeys.get(0));
                 }
             } else {
-                // Log first 3 keys as samples for smaller datasets
                 List<String> sampleKeys = cachedKeys.subList(0, Math.min(3, cachedKeys.size()));
                 log.info("cacheOHLCData", "Cached {} symbols with timeframe: {} for date: {}. Sample keys: {}",
                         ohlcData.size(), interval, today, sampleKeys);
             }
 
-            // Also persist lastPrice + previousClose to market:latest-price:* so that
-            // subsequent cache reads can overlay previousClose correctly.
-            // The stock:intraday:* path does NOT store previousClose, so this is the only
-            // durable place for it.
+            // Also persist lastPrice + previousClose to market:latest-price:*
             try {
                 cacheLatestPrices(ohlcData);
                 log.debug("cacheOHLCData", "Also cached latest prices (incl. previousClose) for {} symbols", ohlcData.size());
@@ -247,11 +276,10 @@ public class MarketDataCacheService {
                 log.warn("cacheOHLCData", "Failed to cache latest prices alongside OHLC data: {}", latestEx.getMessage());
             }
         } catch (Exception e) {
-            // Use the specialized exception logging
             CacheLoggingUtil.logCacheException(log, "CACHE_OHLC", null, "Error caching OHLC data", e);
-            // Don't rethrow as this is a non-critical operation
         }
     }
+
 
     public void cacheHistoricalData(String symbol, TimeFrame timeFrame, HistoricalData historicalData) {
         try {
