@@ -71,10 +71,11 @@ public class InstrumentUtils {
         log.info("[EXCHANGE_DIAG] resolveSymbols normalized: upperRawSymbols={}", upperRawSymbols);
 
         Set<String> candidateSymbols = new HashSet<>();
+        Map<String, StockIndicesMarketData> indexDocsBySymbol = new HashMap<>();
 
         if (!fetchIndexStocks) {
-            // fetchIndexStocks=false means the caller already knows these are regular stock symbols or prefixed exchange symbols.
-            // No MongoDB index lookup needed — just add them all directly.
+            // fetchIndexStocks=false means the caller already knows these are index symbols or specific symbols.
+            // No MongoDB index expansion needed — just add them all directly as candidates.
             log.debug("fetchIndexStocks=false, returning normalized symbols: {}", upperRawSymbols);
             candidateSymbols.addAll(upperRawSymbols);
         } else {
@@ -86,7 +87,6 @@ public class InstrumentUtils {
                     searchSymbols.add(s.substring(s.indexOf(":") + 1));
                 }
             }
-            Map<String, StockIndicesMarketData> indexDocsBySymbol = new HashMap<>();
             try {
                 List<StockIndicesMarketData> indexDocs = stockIndicesMarketDataService.findByIndexSymbols(searchSymbols);
                 if (indexDocs != null) {
@@ -123,13 +123,15 @@ public class InstrumentUtils {
             }
         }
 
-        // Reuse index symbols found during the initial resolution step above to avoid a 2nd redundant MongoDB roundtrip.
+        // Reuse index symbols found during initial resolution or preserve requested index symbols when fetchIndexStocks=false.
         Set<String> foundIndexSymbols = new HashSet<>();
-        if (!candidateSymbols.isEmpty()) {
+        if (!fetchIndexStocks) {
+            foundIndexSymbols.addAll(candidateSymbols);
+        } else {
             for (String cand : candidateSymbols) {
                 String upper = cand.toUpperCase();
                 String base = cand.contains(":") ? cand.substring(cand.indexOf(":") + 1).toUpperCase() : upper;
-                if (upper.startsWith("GLOBAL_INDEX|") || upper.startsWith("NSE_INDEX|")) {
+                if (indexDocsBySymbol.containsKey(upper) || indexDocsBySymbol.containsKey(base) || upper.startsWith("GLOBAL_") || upper.startsWith("NSE_")) {
                     foundIndexSymbols.add(upper);
                 }
             }

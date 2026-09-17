@@ -471,7 +471,6 @@ public class StockRedisCache {
         }
 
         try {
-            // Parse dates and generate all dates in the range
             LocalDate start = LocalDate.parse(startDate, DateTimeFormatter.ISO_LOCAL_DATE);
             LocalDate end = LocalDate.parse(endDate, DateTimeFormatter.ISO_LOCAL_DATE);
 
@@ -479,12 +478,7 @@ public class StockRedisCache {
                 throw new IllegalArgumentException("End date cannot be before start date");
             }
 
-            List<String> dateRange = new ArrayList<>();
-            LocalDate current = start;
-            while (!current.isAfter(end)) {
-                dateRange.add(current.format(DateTimeFormatter.ISO_LOCAL_DATE));
-                current = current.plusDays(1);
-            }
+            String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
 
             // Initialize result map
             Map<String, List<StockBars>> result = new HashMap<>();
@@ -492,13 +486,82 @@ public class StockRedisCache {
                 result.put(symbol, new ArrayList<>());
             }
 
-            // For each date, get all symbols' data
-            for (String date : dateRange) {
-                Map<String, StockBars> dailyData = getMultiSymbolBars(symbols, interval, date);
+            // --- STEP 1: PRE-GENERATE ALL KEYS (Avoid N+1 Loop) ---
+            List<String> allKeys = new ArrayList<>();
+            List<KeyMetadata> keyMetadataList = new ArrayList<>();
+            
+            LocalDate current = start;
+            while (!current.isAfter(end)) {
+                String dateStr = current.format(DateTimeFormatter.ISO_LOCAL_DATE);
+                // Edge Case 1: Today vs Past Key Mismatch - dynamically assign prefix
+                boolean isToday = dateStr.equals(today);
+                String prefix;
+                if (isToday) {
+                    prefix = INTRADAY_PREFIX;
+                } else {
+                    prefix = HISTORICAL_INTERVALS.contains(interval) ? HISTORICAL_PREFIX : INTRADAY_PREFIX;
+                }
+                
+                for (String symbol : symbols) {
+                    allKeys.add(generateKey(prefix, symbol, interval, dateStr));
+                    keyMetadataList.add(new KeyMetadata(symbol, dateStr, prefix));
+                }
+                current = current.plusDays(1);
+            }
 
-                // Add each symbol's data to its list
-                for (Map.Entry<String, StockBars> entry : dailyData.entrySet()) {
-                    result.get(entry.getKey()).add(entry.getValue());
+            // --- STEP 2: BATCHED MGET WITH MICRO-CHUNKING & RESILIENCY ---
+            int chunkSize = 500; // Micro-chunk size to prevent Redis socket buffer overflow
+            List<String> allJsonValues = new ArrayList<>(allKeys.size());
+            
+            try {
+                for (int i = 0; i < allKeys.size(); i += chunkSize) {
+                    List<String> chunkKeys = allKeys.subList(i, Math.min(i + chunkSize, allKeys.size()));
+                    List<String> chunkValues = redisTemplate.opsForValue().multiGet(chunkKeys);
+                    if (chunkValues != null) {
+                        allJsonValues.addAll(chunkValues);
+                    } else {
+                        // Pad with nulls to maintain index alignment if Redis returns null
+                        allJsonValues.addAll(Collections.nCopies(chunkKeys.size(), null));
+                    }
+                }
+            } catch (Throwable e) {
+                // REDIS ABSENCE RESILIENCY: Treat as Cache MISS, fallback to Database seamlessly
+                log.warn("getMultiSymbolHistoricalBars", "Redis unavailable or cache read failed, falling back to primary DB: " + e.getMessage());
+                return Collections.emptyMap(); 
+            }
+
+            // --- STEP 3: PARSE RESULTS (The Deserialization Trap) ---
+            // Redis `mget` returns a flat List<String> of JSON payloads that correspond 
+            // 1-to-1 with the `allKeys` list. However, because different prefixes 
+            // (e.g., historical vs intraday) have different JSON structures (Single OHLCV vs List<OHLCV>),
+            // we MUST use the KeyMetadata list we built earlier to know which ObjectMapper type reference to use!
+            // If we attempt to parse everything indiscriminately, 
+            // the JSON parser will throw a JsonProcessingException when it encounters an unexpected payload structure.
+            for (int i = 0; i < allJsonValues.size(); i++) {
+                String json = allJsonValues.get(i);
+                if (json == null) continue;
+
+                KeyMetadata meta = keyMetadataList.get(i);
+                
+                try {
+                    if (meta.prefix.equals(HISTORICAL_PREFIX)) {
+                        // Historical parsing (Single Object)
+                        OHLCV bar = redisObjectMapper.readValue(json, OHLCV.class);
+                        StockBars stockBars = StockBars.builder()
+                                .symbol(meta.symbol).interval(interval).startDate(meta.date).endDate(meta.date)
+                                .bars(Collections.singletonList(bar)).build();
+                        result.get(meta.symbol).add(stockBars);
+                    } else {
+                        // Intraday parsing (List)
+                        List<OHLCV> bars = redisObjectMapper.readValue(json, new TypeReference<List<OHLCV>>() {});
+                        StockBars stockBars = StockBars.builder()
+                                .symbol(meta.symbol).interval(interval).startDate(meta.date).endDate(meta.date)
+                                .bars(bars).build();
+                        result.get(meta.symbol).add(stockBars);
+                    }
+                } catch (Exception e) {
+                    log.error("getMultiSymbolHistoricalBars", 
+                        "[REDIS_PARSE_ERROR] Failed to parse " + meta.prefix + " data for " + meta.symbol + " on " + meta.date + ": " + e.getMessage());
                 }
             }
 
@@ -507,6 +570,21 @@ public class StockRedisCache {
         } catch (DateTimeParseException e) {
             log.error("getMultiSymbolHistoricalBars", "Invalid date format: " + e.getMessage());
             throw new IllegalArgumentException("Invalid date format. Use YYYY-MM-DD");
+        }
+    }
+
+    /**
+     * Helper class for tracking key metadata during batching to prevent Deserialization Trap
+     */
+    private static class KeyMetadata {
+        String symbol;
+        String date;
+        String prefix;
+        
+        KeyMetadata(String symbol, String date, String prefix) {
+            this.symbol = symbol;
+            this.date = date;
+            this.prefix = prefix;
         }
     }
 

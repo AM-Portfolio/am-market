@@ -422,6 +422,12 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         Date fromDate;
         Date toDate;
         try {
+            if (request.getFrom() == null || request.getFrom().trim().isEmpty()) {
+                return HistoricalDataResponseV1.builder()
+                        .error("Missing required parameter: from")
+                        .message("The 'from' date parameter (YYYY-MM-DD) is required.")
+                        .build();
+            }
             SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
             fromDate = dateFormat.parse(request.getFrom());
 
