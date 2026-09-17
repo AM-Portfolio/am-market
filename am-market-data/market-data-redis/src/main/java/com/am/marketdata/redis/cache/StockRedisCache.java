@@ -601,17 +601,29 @@ public class StockRedisCache {
         }
     }
 
+    private volatile String cachedActiveProvider = null;
+    private volatile long cachedActiveProviderExpiry = 0L;
+
     /**
-     * Gets the active market data provider.
+     * Gets the active market data provider with JVM in-memory caching (60-second TTL).
      * 
      * @return The provider name, or null if not set.
      */
     public String getActiveProvider() {
+        long now = System.currentTimeMillis();
+        if (cachedActiveProvider != null && now < cachedActiveProviderExpiry) {
+            return cachedActiveProvider;
+        }
         try {
-            return redisTemplate.opsForValue().get("market-data:config:active-provider");
+            String provider = redisTemplate.opsForValue().get("market-data:config:active-provider");
+            if (provider != null) {
+                cachedActiveProvider = provider;
+                cachedActiveProviderExpiry = now + 60_000L; // 60s TTL
+            }
+            return provider;
         } catch (Exception e) {
             log.error("getActiveProvider", "Error getting active provider: " + e.getMessage());
-            return null;
+            return cachedActiveProvider;
         }
     }
 

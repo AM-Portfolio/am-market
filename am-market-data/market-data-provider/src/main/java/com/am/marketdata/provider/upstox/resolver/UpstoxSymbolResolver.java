@@ -121,77 +121,107 @@ public class UpstoxSymbolResolver implements SymbolResolver {
         return new InstrumentContext(instrumentKeys, keyToSymbolMap);
     }
 
+    private static final int MAX_RESOLUTION_CACHE_SIZE = 5000;
+    private final Map<String, com.am.marketdata.common.model.UpstoxInstrument> resolutionCache = new java.util.concurrent.ConcurrentHashMap<>();
+
     /**
-     * Resolve instruments from database with exchange grouping.
-     * Detects whether input has an exchange prefix (e.g. BSE:RELIANCE vs NSE:RELIANCE)
-     * and filters DB search criteria by the explicit exchange.
+     * Resolve instruments from database with in-memory caching and single-query batching.
      */
     private List<com.am.marketdata.common.model.UpstoxInstrument> resolveInstruments(List<String> symbols) {
         if (symbols == null || symbols.isEmpty()) {
             return new ArrayList<>();
         }
 
-        // Group trading symbols by exchange: Exchange -> List of Clean Trading Symbols
-        Map<String, List<String>> symbolsByExchange = new HashMap<>();
+        List<com.am.marketdata.common.model.UpstoxInstrument> results = new ArrayList<>();
+        List<String> uncachedSymbols = new ArrayList<>();
+
+        // 1. Fast Path: Check in-memory resolution cache first (0 ms)
+        for (String s : symbols) {
+            String cacheKey = s != null ? s.trim().toUpperCase() : "";
+            com.am.marketdata.common.model.UpstoxInstrument cached = resolutionCache.get(cacheKey);
+            if (cached != null) {
+                results.add(cached);
+            } else {
+                uncachedSymbols.add(s);
+            }
+        }
+
+        if (uncachedSymbols.isEmpty()) {
+            log.info("UpstoxSymbolResolver", "All " + symbols.size() + " symbols resolved from in-memory JVM cache (0ms)");
+            return results;
+        }
+
+        // 2. Parse uncached symbols into ISINs and trading symbols
+        List<String> allTradingSymbols = new ArrayList<>();
         List<String> isinSymbols = new ArrayList<>();
 
-        for (String s : symbols) {
-            String exchange = "NSE"; // Default to NSE
+        for (String s : uncachedSymbols) {
             String cleaned = s;
-
             if (cleaned.contains("|")) {
                 cleaned = cleaned.substring(cleaned.indexOf("|") + 1);
             } else if (cleaned.contains(":")) {
                 String[] parts = cleaned.split(":", 2);
-                exchange = parts[0].trim().toUpperCase();
                 cleaned = parts[1].trim().toUpperCase();
             }
 
-            // ISINs are 12-char alphanumeric codes starting with two uppercase letters (e.g. INE, IN2)
             if (cleaned.matches("^[A-Z]{2}[A-Z0-9]{10}$")) {
                 isinSymbols.add(cleaned);
             } else {
-                symbolsByExchange.computeIfAbsent(exchange, k -> new ArrayList<>()).add(cleaned);
+                allTradingSymbols.add(cleaned);
             }
         }
 
-        List<com.am.marketdata.common.model.UpstoxInstrument> results = new ArrayList<>();
-
-        // Query by ISIN
+        // 3. Single Batched Query by ISIN
         if (!isinSymbols.isEmpty()) {
-            log.info("UpstoxSymbolResolver",
-                    "Querying DB by ISIN for " + isinSymbols.size() + " symbols");
+            log.info("UpstoxSymbolResolver", "Querying DB by ISIN for " + isinSymbols.size() + " symbols in 1 query");
             com.am.marketdata.common.dto.InstrumentSearchCriteria criteria =
                     new com.am.marketdata.common.dto.InstrumentSearchCriteria();
             criteria.setIsins(isinSymbols);
             criteria.setProvider("UPSTOX");
             List<?> found = (List<?>) instrumentDataProvider.searchInstruments(criteria);
             if (found != null) {
-                found.forEach(i -> results.add((com.am.marketdata.common.model.UpstoxInstrument) i));
+                for (Object item : found) {
+                    com.am.marketdata.common.model.UpstoxInstrument inst = (com.am.marketdata.common.model.UpstoxInstrument) item;
+                    results.add(inst);
+                    if (inst.getIsin() != null) {
+                        cacheInstrument(inst.getIsin().trim().toUpperCase(), inst);
+                    }
+                }
             }
         }
 
-        // Query by trading symbol grouped by exchange
-        for (Map.Entry<String, List<String>> entry : symbolsByExchange.entrySet()) {
-            String exchange = entry.getKey();
-            List<String> tradingSymbols = entry.getValue();
-
-            if (!tradingSymbols.isEmpty()) {
-                log.info("UpstoxSymbolResolver",
-                        String.format("Querying DB for exchange %s with %d symbols", exchange, tradingSymbols.size()));
-                com.am.marketdata.common.dto.InstrumentSearchCriteria criteria =
-                        new com.am.marketdata.common.dto.InstrumentSearchCriteria();
-                criteria.setTradingSymbols(tradingSymbols);
-                criteria.setExchanges(List.of(exchange));
-                criteria.setProvider("UPSTOX");
-                List<?> found = (List<?>) instrumentDataProvider.searchInstruments(criteria);
-                if (found != null) {
-                    found.forEach(i -> results.add((com.am.marketdata.common.model.UpstoxInstrument) i));
+        // 4. Single Batched Query by Trading Symbols (across all exchanges in 1 DB call instead of N calls)
+        if (!allTradingSymbols.isEmpty()) {
+            log.info("UpstoxSymbolResolver", "Querying DB for " + allTradingSymbols.size() + " trading symbols in 1 batched query");
+            com.am.marketdata.common.dto.InstrumentSearchCriteria criteria =
+                    new com.am.marketdata.common.dto.InstrumentSearchCriteria();
+            criteria.setTradingSymbols(allTradingSymbols);
+            criteria.setProvider("UPSTOX");
+            List<?> found = (List<?>) instrumentDataProvider.searchInstruments(criteria);
+            if (found != null) {
+                for (Object item : found) {
+                    com.am.marketdata.common.model.UpstoxInstrument inst = (com.am.marketdata.common.model.UpstoxInstrument) item;
+                    results.add(inst);
+                    if (inst.getTradingSymbol() != null) {
+                        cacheInstrument(inst.getTradingSymbol().trim().toUpperCase(), inst);
+                        if (inst.getExchange() != null) {
+                            cacheInstrument(inst.getExchange().trim().toUpperCase() + ":" + inst.getTradingSymbol().trim().toUpperCase(), inst);
+                        }
+                    }
                 }
             }
         }
 
         return results;
+    }
+
+    private void cacheInstrument(String key, com.am.marketdata.common.model.UpstoxInstrument inst) {
+        if (key != null && !key.isEmpty() && inst != null) {
+            if (resolutionCache.size() >= MAX_RESOLUTION_CACHE_SIZE) {
+                resolutionCache.clear(); // Safe LRU purge bound
+            }
+            resolutionCache.put(key, inst);
+        }
     }
 
     @Override

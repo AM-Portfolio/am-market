@@ -434,34 +434,19 @@ public class MarketDataCacheService {
         }
 
         try {
-            // Batch retrieve exchange-specific latest prices (e.g. market:latest-price:NSE:INFY)
-            List<String> jsonList = redisTemplate.opsForValue().multiGet(primaryKeys);
-            
-            // Batch retrieve previous close prices from Redis in parallel (e.g. market:prev-close:INFY)
-            List<String> prevCloseValues = null;
-            try {
-                prevCloseValues = redisTemplate.opsForValue().multiGet(prevCloseKeys);
-            } catch (Exception ignore) {}
-            
-            // Check if any symbols missed in primary exchange-specific keys
-            List<String> fallbackJsonList = null;
-            boolean hasNulls = false;
-            if (jsonList == null || jsonList.isEmpty()) {
-                hasNulls = true;
-            } else {
-                for (String item : jsonList) {
-                    if (item == null) {
-                        hasNulls = true;
-                        break;
-                    }
-                }
-            }
+            // SINGLE BATCH REDIS MGET: Combine primaryKeys, prevCloseKeys, and fallbackKeys into 1 single bulk multiGet call.
+            // This drops 3 sequential Redis network roundtrips down to 1 single TCP roundtrip.
+            List<String> combinedKeys = new ArrayList<>(primaryKeys.size() * 3);
+            combinedKeys.addAll(primaryKeys);
+            combinedKeys.addAll(prevCloseKeys);
+            combinedKeys.addAll(fallbackKeys);
 
-            if (hasNulls) {
-                try {
-                    fallbackJsonList = redisTemplate.opsForValue().multiGet(fallbackKeys);
-                } catch (Exception ignore) {}
-            }
+            List<String> allValues = redisTemplate.opsForValue().multiGet(combinedKeys);
+            
+            int n = entries.size();
+            List<String> jsonList = (allValues != null && allValues.size() >= n) ? allValues.subList(0, n) : null;
+            List<String> prevCloseValues = (allValues != null && allValues.size() >= 2 * n) ? allValues.subList(n, 2 * n) : null;
+            List<String> fallbackJsonList = (allValues != null && allValues.size() >= 3 * n) ? allValues.subList(2 * n, 3 * n) : null;
 
             if (jsonList != null || fallbackJsonList != null || prevCloseValues != null) {
                 for (int i = 0; i < entries.size(); i++) {

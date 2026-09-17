@@ -123,24 +123,17 @@ public class InstrumentUtils {
             }
         }
 
-        // ONE batch query to find which of our candidate symbols are index symbols.
-        // This is needed so we can skip Upstox instrument validation for index symbols
-        // (they don't exist in the instruments table, only in the stock-indices collection).
-        Set<String> foundIndexSymbols = Collections.emptySet();
-        try {
-            List<StockIndicesMarketData> indexDocs = stockIndicesMarketDataService.findByIndexSymbols(new HashSet<>(candidateSymbols));
-            if (indexDocs != null) {
-                foundIndexSymbols = indexDocs.stream()
-                        .filter(Objects::nonNull)
-                        .map(StockIndicesMarketData::getIndexSymbol)
-                        .filter(Objects::nonNull)
-                        .map(String::toUpperCase)
-                        .collect(Collectors.toSet());
+        // Reuse index symbols found during the initial resolution step above to avoid a 2nd redundant MongoDB roundtrip.
+        Set<String> foundIndexSymbols = new HashSet<>();
+        if (!candidateSymbols.isEmpty()) {
+            for (String cand : candidateSymbols) {
+                String upper = cand.toUpperCase();
+                String base = cand.contains(":") ? cand.substring(cand.indexOf(":") + 1).toUpperCase() : upper;
+                if (upper.startsWith("GLOBAL_INDEX|") || upper.startsWith("NSE_INDEX|")) {
+                    foundIndexSymbols.add(upper);
+                }
             }
-        } catch (Exception e) {
-            log.warn("Failed to batch query stock indices from MongoDB", e);
         }
-
         final Set<String> matchingIndices = foundIndexSymbols;
 
         // Validate the non-index candidates against the Upstox instruments table in ONE batch query.

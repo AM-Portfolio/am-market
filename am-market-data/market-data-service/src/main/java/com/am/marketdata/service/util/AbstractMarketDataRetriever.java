@@ -161,6 +161,16 @@ public abstract class AbstractMarketDataRetriever<K, T> {
                     } else {
                         sourceData = retrieveFromDatabase(remainingKeys, timeFrame);
                     }
+
+                    // DUAL-STATE WRITE-BACK: Cache InfluxDB results in Redis so subsequent requests hit cache in <1ms
+                    if (cacheResults && sourceData != null && !sourceData.isEmpty()) {
+                        try {
+                            updateCacheOnly(sourceData);
+                            log.info("[DATABASE_CACHE] Immediately cached {} InfluxDB results in Redis — next request will hit cache in <1ms", sourceData.size());
+                        } catch (Exception e) {
+                            log.warn("[DATABASE_CACHE] Failed to backfill InfluxDB results to Redis: {}", e.getMessage());
+                        }
+                    }
                     break;
                 case PROVIDER:
                     // Call the external broker API for any symbols still not resolved.
