@@ -226,6 +226,11 @@ market:
       core-pool-size: ${MARKET_CACHE_CORE_POOL_SIZE:5}
       max-pool-size: ${MARKET_CACHE_MAX_POOL_SIZE:15}
       queue-capacity: ${MARKET_CACHE_QUEUE_CAPACITY:500}
+  watchlist:
+    default-name: ${MARKET_WATCHLIST_DEFAULT_NAME:My Watch List}
+    max-per-user: ${MARKET_WATCHLIST_MAX_PER_USER:5}
+    max-stocks-per-list: ${MARKET_WATCHLIST_MAX_STOCKS_PER_LIST:50}
+
 
 
 scheduler:
@@ -290,11 +295,8 @@ scheduler:
       enabled: ${SCHEDULER_REDIS_CLEANUP_ENABLED:true}
       cron: "${SCHEDULER_REDIS_CLEANUP_CRON:0 0 2 * * *}"                # 2:00 AM daily
 
-market:
-  watchlist:
-    default-name: ${MARKET_WATCHLIST_DEFAULT_NAME:My Watch List}
-    max-per-user: ${MARKET_WATCHLIST_MAX_PER_USER:5}
-    max-stocks-per-list: ${MARKET_WATCHLIST_MAX_STOCKS_PER_LIST:50}
+ 
+
 
 redis:
   cleanup:
