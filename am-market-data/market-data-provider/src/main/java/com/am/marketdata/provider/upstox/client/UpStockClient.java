@@ -101,6 +101,71 @@ public class UpStockClient {
         }
     }
 
+    public String getFiiRaw(List<String> dataTypes, String interval, String fromOptional) {
+        var request = authorizedGet(BASE_URL + "/market/fii")
+                .queryString("interval", interval);
+        if (dataTypes != null) {
+            dataTypes.stream()
+                    .filter(value -> value != null && !value.isBlank())
+                    .forEach(value -> request.queryString("data_type", value));
+        }
+        addOptionalQuery(request, "from", fromOptional);
+        return executeRaw(request, "FII");
+    }
+
+    public String getDiiRaw(String interval, String fromOptional) {
+        var request = authorizedGet(BASE_URL + "/market/dii")
+                .queryString("data_type", "NSE_EQ|CASH")
+                .queryString("interval", interval);
+        addOptionalQuery(request, "from", fromOptional);
+        return executeRaw(request, "DII");
+    }
+
+    public String getOiRaw(String instrumentKey, String expiry, String date) {
+        var request = authorizedGet(BASE_URL + "/market/oi")
+                .queryString("instrument_key", instrumentKey)
+                .queryString("expiry", expiry)
+                .queryString("date", date);
+        return executeRaw(request, "OI");
+    }
+
+    public String getChangeOiRaw(String instrumentKey, String expiry, String date, int intervalDays) {
+        var request = authorizedGet(BASE_URL + "/market/change-oi")
+                .queryString("instrument_key", instrumentKey)
+                .queryString("expiry", expiry)
+                .queryString("date", date)
+                .queryString("interval", intervalDays);
+        return executeRaw(request, "change OI");
+    }
+
+    private kong.unirest.GetRequest authorizedGet(String url) {
+        return Unirest.get(url)
+                .header("Authorization", "Bearer " + getAccessToken())
+                .header("Accept", "application/json")
+                .header("Api-Version", "2.0");
+    }
+
+    private void addOptionalQuery(kong.unirest.GetRequest request, String name, String value) {
+        if (value != null && !value.isBlank()) {
+            request.queryString(name, value);
+        }
+    }
+
+    private String executeRaw(kong.unirest.GetRequest request, String operation) {
+        try {
+            HttpResponse<String> response = request.asString();
+            if (response.getStatus() >= 200 && response.getStatus() < 300) {
+                return response.getBody();
+            }
+            log.error("Upstox {} error response: status={} body={}", operation, response.getStatus(), response.getBody());
+            throw new RuntimeException("Upstox " + operation + " API returned status "
+                    + response.getStatus() + ": " + response.getBody());
+        } catch (Exception e) {
+            log.error("Failed to execute Upstox {} request: {}", operation, e.getMessage(), e);
+            throw e;
+        }
+    }
+
     private String getAccessToken() {
         try {
             String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
