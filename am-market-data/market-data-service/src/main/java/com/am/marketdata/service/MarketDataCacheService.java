@@ -474,16 +474,6 @@ public class MarketDataCacheService {
             combinedKeys.addAll(primaryKeys);
             combinedKeys.addAll(prevCloseKeys);
             combinedKeys.addAll(fallbackKeys);
-<<<<<<< HEAD
-=======
-
-            List<String> allValues = redisTemplate.opsForValue().multiGet(combinedKeys);
-            
-            int n = entries.size();
-            List<String> jsonList = (allValues != null && allValues.size() >= n) ? allValues.subList(0, n) : null;
-            List<String> prevCloseValues = (allValues != null && allValues.size() >= 2 * n) ? allValues.subList(n, 2 * n) : null;
-            List<String> fallbackJsonList = (allValues != null && allValues.size() >= 3 * n) ? allValues.subList(2 * n, 3 * n) : null;
->>>>>>> 7ab89a4b (perf(market-data): optimize ohlc latency by batching redis mget and MongoDB index lookups)
 
             List<String> allValues = redisTemplate.opsForValue().multiGet(combinedKeys);
             
