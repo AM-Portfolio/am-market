@@ -135,6 +135,15 @@ public class AnalysisController {
         return ResponseEntity.ok(analysisService.getIndicesHistoricalPerformance(years));
     }
 
+    @GetMapping("/indices/constituents/historical-performance")
+    @Operation(summary = "Constituent monthly winners", description = "Top/worst stock among an index's constituents per month")
+    public ResponseEntity<com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse> getConstituentsHistoricalPerformance(
+            @RequestParam String symbol,
+            @RequestParam(defaultValue = "10") int years) {
+
+        return ResponseEntity.ok(analysisService.getConstituentsHistoricalPerformance(symbol, years));
+    }
+
     // --- Migrated Market Analytics Endpoints ---
 
     /**

@@ -287,4 +287,46 @@ public class AnalysisRedisCache {
         }
         return null;
     }
+
+    // --- CONSTITUENTS HISTORICAL PERFORMANCE (PER INDEX) ---
+
+    private static final String CONSTITUENTS_HISTORY_PREFIX = "analysis:history:constituents";
+
+    private String getConstituentsHistoryKey(String indexSymbol, int years) {
+        String norm = indexSymbol == null ? "" : indexSymbol.trim().toUpperCase().replace(' ', '_');
+        return String.format("%s:%s:%d", CONSTITUENTS_HISTORY_PREFIX, norm, years);
+    }
+
+    public void saveConstituentsHistoricalPerformance(
+            com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse response,
+            String indexSymbol, int years) {
+        if (response == null)
+            return;
+        try {
+            String key = getConstituentsHistoryKey(indexSymbol, years);
+            String json = redisObjectMapper.writeValueAsString(response);
+            redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
+            log.debug("saveConstituentsHistoricalPerformance",
+                    "Cached constituents historical performance for " + indexSymbol + " / " + years + "y");
+        } catch (Exception e) {
+            log.error("saveConstituentsHistoricalPerformance",
+                    "Error caching constituents historical performance: " + e.getMessage());
+        }
+    }
+
+    public com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse getConstituentsHistoricalPerformance(
+            String indexSymbol, int years) {
+        try {
+            String key = getConstituentsHistoryKey(indexSymbol, years);
+            String json = redisTemplate.opsForValue().get(key);
+            if (json != null) {
+                return redisObjectMapper.readValue(json,
+                        com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse.class);
+            }
+        } catch (Exception e) {
+            log.error("getConstituentsHistoricalPerformance",
+                    "Error retrieving constituents historical performance: " + e.getMessage());
+        }
+        return null;
+    }
 }
