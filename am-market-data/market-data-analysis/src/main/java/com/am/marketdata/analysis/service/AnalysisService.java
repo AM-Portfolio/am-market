@@ -858,6 +858,134 @@ public class AnalysisService {
         return response;
     }
 
+    /**
+     * Top/worst constituent stock per month for a given index (Mode B Constituents tab).
+     */
+    public com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse getConstituentsHistoricalPerformance(
+            String indexSymbol, int years) {
+        return getConstituentsHistoricalPerformance(indexSymbol, years, false);
+    }
+
+    public com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse getConstituentsHistoricalPerformance(
+            String indexSymbol, int years, boolean bypassCache) {
+        String index = indexSymbol == null ? "" : indexSymbol.trim();
+        if (index.isEmpty()) {
+            return com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse.builder()
+                    .startYear(LocalDate.now().getYear() - years + 1)
+                    .endYear(LocalDate.now().getYear())
+                    .monthlyPerformance(Collections.emptyList())
+                    .build();
+        }
+
+        if (!bypassCache) {
+            com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse cached = analysisRedisCache
+                    .getConstituentsHistoricalPerformance(index, years);
+            if (cached != null) {
+                return cached;
+            }
+        }
+
+        List<String> symbols = marketDataService.getIndexConstituents(index);
+        if (symbols == null || symbols.isEmpty()) {
+            symbols = Collections.singletonList(index);
+        }
+
+        Map<Integer, Map<Integer, List<com.am.marketdata.common.model.analysis.IndexPerformance>>> aggregateMap = new TreeMap<>(
+                Collections.reverseOrder());
+
+        for (String stock : symbols) {
+            try {
+                com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse response = getHistoricalPerformance(
+                        stock, years, false, bypassCache);
+
+                if (response != null && response.getYearlyPerformance() != null) {
+                    for (com.am.marketdata.common.model.analysis.YearlyPerformance yp : response
+                            .getYearlyPerformance()) {
+                        int year = yp.getYear();
+                        Map<String, Double> monthly = yp.getMonthlyReturns();
+
+                        if (monthly != null) {
+                            for (Map.Entry<String, Double> entry : monthly.entrySet()) {
+                                String monthStr = entry.getKey();
+                                Double ret = entry.getValue();
+                                if (ret == null)
+                                    continue;
+
+                                try {
+                                    Month m = Month.valueOf(monthStr);
+                                    int monthVal = m.getValue();
+
+                                    aggregateMap.computeIfAbsent(year, k -> new TreeMap<>())
+                                            .computeIfAbsent(monthVal, k -> new ArrayList<>())
+                                            .add(com.am.marketdata.common.model.analysis.IndexPerformance.builder()
+                                                    .symbol(stock)
+                                                    .returnPercentage(ret)
+                                                    .build());
+                                } catch (IllegalArgumentException e) {
+                                    log.warn("Invalid month string: {}", monthStr);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error fetching historical performance for constituent: {}", stock, e);
+            }
+        }
+
+        List<com.am.marketdata.common.model.analysis.MonthlyIndicesPerformance> performanceList = new ArrayList<>();
+
+        for (Map.Entry<Integer, Map<Integer, List<com.am.marketdata.common.model.analysis.IndexPerformance>>> yearEntry : aggregateMap
+                .entrySet()) {
+            int year = yearEntry.getKey();
+
+            for (Map.Entry<Integer, List<com.am.marketdata.common.model.analysis.IndexPerformance>> monthEntry : yearEntry
+                    .getValue().entrySet()) {
+                int month = monthEntry.getKey();
+                List<com.am.marketdata.common.model.analysis.IndexPerformance> stocksPerf = monthEntry.getValue();
+
+                if (stocksPerf.isEmpty())
+                    continue;
+
+                stocksPerf.sort((a, b) -> Double.compare(b.getReturnPercentage(), a.getReturnPercentage()));
+
+                com.am.marketdata.common.model.analysis.IndexPerformance top = stocksPerf.get(0);
+                com.am.marketdata.common.model.analysis.IndexPerformance worst = stocksPerf
+                        .get(stocksPerf.size() - 1);
+
+                performanceList.add(com.am.marketdata.common.model.analysis.MonthlyIndicesPerformance.builder()
+                        .year(year)
+                        .month(month)
+                        .monthName(Month.of(month).toString())
+                        .topPerformer(top)
+                        .worstPerformer(worst)
+                        .allIndices(stocksPerf)
+                        .build());
+            }
+        }
+
+        performanceList.sort((a, b) -> {
+            if (a.getYear() != b.getYear()) {
+                return b.getYear() - a.getYear();
+            }
+            return b.getMonth() - a.getMonth();
+        });
+
+        LocalDate to = LocalDate.now();
+        int endYear = to.getYear();
+        int startYear = endYear - years + 1;
+
+        com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse response = com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse
+                .builder()
+                .startYear(startYear)
+                .endYear(endYear)
+                .monthlyPerformance(performanceList)
+                .build();
+
+        analysisRedisCache.saveConstituentsHistoricalPerformance(response, index, years);
+        return response;
+    }
+
     private List<String> getAllTrackedIndices() {
         return Arrays.asList(
                 "NIFTY 50",
