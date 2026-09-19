@@ -561,7 +561,26 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             return Collections.emptyList();
         }
 
-        // Pass 1: Resolve ISINs and symbols
+        // Pass 0: Collect all ISINs for 1-shot batched MongoDB lookup
+        Set<String> isinSet = new HashSet<>();
+        for (CompetitorPeer peer : rawPeers) {
+            String isin = peer.getIsin();
+            if (isin == null && peer.getInstrumentKey() != null) {
+                String key = peer.getInstrumentKey();
+                if (key.contains("|")) {
+                    isin = key.substring(key.indexOf("|") + 1);
+                }
+            }
+            if (isin != null && !isin.isBlank()) {
+                isinSet.add(isin.trim().toUpperCase());
+            }
+        }
+
+        // Batched MongoDB queries (2 queries total instead of 20 sequential calls)
+        Map<String, SecurityDocument> secMap = fundamentalQueryService.getSecuritiesByIsins(isinSet);
+        Map<String, FundamentalData> peerDataMap = fundamentalQueryService.getFundamentalsByIsins(isinSet);
+
+        // Pass 1: Resolve ISINs, symbols, and metrics in memory
         Set<String> symbolsToFetch = new HashSet<>();
         List<CompetitorPeer.CompetitorPeerBuilder> builders = new ArrayList<>();
         List<String> resolvedSymbols = new ArrayList<>();
@@ -573,6 +592,9 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                 if (key.contains("|")) {
                     isin = key.substring(key.indexOf("|") + 1);
                 }
+            }
+            if (isin != null) {
+                isin = isin.trim().toUpperCase();
             }
 
             // Gracefully resolve clean company name and description
@@ -608,17 +630,29 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                     .sector(peer.getSector());
 
             String resolvedSymbol = null;
-            if (isin != null) {
-                Optional<SecurityDocument> secOpt = fundamentalQueryService.getSecurityByIsin(isin);
-                if (secOpt.isPresent() && secOpt.get().getKey() != null) {
-                    resolvedSymbol = secOpt.get().getKey().getSymbol();
+            if (isin != null && secMap.containsKey(isin)) {
+                SecurityDocument sec = secMap.get(isin);
+                if (sec != null && sec.getKey() != null) {
+                    resolvedSymbol = sec.getKey().getSymbol();
                 }
             }
 
             if (isin != null) {
-                Optional<FundamentalData> peerDataOpt = fundamentalQueryService.getExistingFundamentalsByIsin(isin);
-                if (peerDataOpt.isPresent()) {
-                    FundamentalData peerData = peerDataOpt.get();
+                FundamentalData peerData = peerDataMap.get(isin);
+                if (peerData == null || peerData.getKeyRatios() == null) {
+                    // Lazy Peer Ratio Seeding Safeguard: Seed essentials from Upstox & persist to MongoDB
+                    try {
+                        peerData = fundamentalQueryService.seedInitialEssentials(isin);
+                        if (peerData != null) {
+                            peerDataMap.put(isin, peerData);
+                            log.info("On-demand peer ratio seeding completed and saved to MongoDB for isin={}", isin);
+                        }
+                    } catch (Exception e) {
+                        log.debug("Peer ratio seeding note for isin={}: {}", isin, e.getMessage());
+                    }
+                }
+
+                if (peerData != null) {
                     if (resolvedSymbol == null) {
                         resolvedSymbol = peerData.getSymbol();
                     }
@@ -648,7 +682,7 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             resolvedSymbols.add(resolvedSymbol);
         }
 
-        // Pass 2: Bulk fetch live prices in ONE call
+        // Pass 2: Bulk fetch live prices in ONE call (resilient to Redis outage)
         Map<String, Double[]> pricesMap = fetchLivePricesBulk(symbolsToFetch, exchange);
 
         // Pass 3: Attach prices and build

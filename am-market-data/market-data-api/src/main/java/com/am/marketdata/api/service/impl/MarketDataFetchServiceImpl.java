@@ -560,6 +560,24 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         if (ohlcData != null) {
             ohlcData = new HashMap<>(ohlcData);
             instrumentUtils.aliasQuotesUnderOriginalIsins(requested, ohlcData);
+
+            // EXCHANGE-AWARE KEY SANITIZATION: Ensure the final map contains ONLY the exact symbol keys requested by the caller.
+            // Preserves NSE vs BSE distinctions (e.g., NSE_EQ:RELIANCE vs BSE_EQ:RELIANCE) without collisions or unrequested bare keys.
+            Map<String, OHLCQuote> sanitizedOHLC = new HashMap<>();
+            for (String requestedSym : requested) {
+                if (ohlcData.containsKey(requestedSym)) {
+                    sanitizedOHLC.put(requestedSym, ohlcData.get(requestedSym));
+                } else {
+                    String cleanReq = requestedSym.contains(":") ? requestedSym.substring(requestedSym.indexOf(":") + 1).trim() : requestedSym;
+                    if (ohlcData.containsKey(cleanReq)) {
+                        sanitizedOHLC.put(requestedSym, ohlcData.get(cleanReq));
+                    }
+                }
+            }
+            if (!sanitizedOHLC.isEmpty()) {
+                ohlcData = sanitizedOHLC;
+            }
+
             log.info("Fetched OHLC data for keys: {}", ohlcData.keySet());
             return ohlcData;
         } else {

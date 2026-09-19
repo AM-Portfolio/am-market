@@ -38,6 +38,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -286,7 +287,7 @@ public class MarketDataService {
             return;
         }
 
-        log.info("Redis missed official close for {}/{} symbols. Triggering InfluxDB fallback batch...",
+        log.info("Redis missed official close for {}/{} symbols. Triggering non-blocking background DB backfill...",
                 missingSymbols.size(), quotes.size());
 
         java.time.ZoneId ist = java.time.ZoneId.of("Asia/Kolkata");
@@ -297,77 +298,70 @@ public class MarketDataService {
         } catch (Exception e) {
             log.warn("Could not resolve session day; requiring today's candle: {}", e.getMessage());
         }
+        final boolean isSessionDay = sessionDay;
         Date fromDate = Date.from(today.minusDays(7).atStartOfDay(ist).toInstant());
         Date toDate = Date.from(today.plusDays(1).atStartOfDay(ist).toInstant());
 
-        try {
-            // HYBRID LATENCY FIX: Restrict search to Local Cache & DB ONLY (allowProviderFallback = false).
-            // This queries Mongo/InfluxDB for missing symbols in ~2-10ms without triggering blocking sequential Upstox REST calls and 429 rate limit retries.
-            Map<String, HistoricalData> history = getHistoricalDataBatch(
-                    missingSymbols,
-                    fromDate,
-                    toDate,
-                    TimeFrame.DAY,
-                    false,
-                    null,
-                    null,
-                    false,
-                    false,
-                    false /* allowProviderFallback = false */);
+        // LATENCY OPTIMIZATION: Execute DB lookup in background so HTTP response is returned immediately
+        CompletableFuture.runAsync(() -> {
+            try {
+                Map<String, HistoricalData> history = getHistoricalDataBatch(
+                        missingSymbols,
+                        fromDate,
+                        toDate,
+                        TimeFrame.DAY,
+                        false,
+                        null,
+                        null,
+                        false,
+                        false,
+                        false /* allowProviderFallback = false */);
 
-            int updated = 0;
-            List<String> stillMissingSymbols = new ArrayList<>();
+                int updated = 0;
+                List<String> stillMissingSymbols = new ArrayList<>();
 
-            if (history != null && !history.isEmpty()) {
-                for (String symbol : missingSymbols) {
-                    HistoricalData data = history.get(symbol);
-                    if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
-                        stillMissingSymbols.add(symbol);
-                        continue;
+                if (history != null && !history.isEmpty()) {
+                    for (String symbol : missingSymbols) {
+                        HistoricalData data = history.get(symbol);
+                        if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
+                            stillMissingSymbols.add(symbol);
+                            continue;
+                        }
+                        Double officialClose = OfficialClosePolicy.pickSessionClose(
+                                data.getDataPoints(), today, isSessionDay);
+                        if (officialClose == null) {
+                            stillMissingSymbols.add(symbol);
+                            continue;
+                        }
+                        OHLCQuote quote = quotes.get(symbol);
+                        if (quote != null) {
+                            quote.setLastPrice(officialClose);
+                            if (quote.getOhlc() != null) {
+                                quote.getOhlc().setClose(officialClose);
+                            }
+                            quote.setPreviousClose(officialClose);
+                            updated++;
+                        }
                     }
-                    Double officialClose = OfficialClosePolicy.pickSessionClose(
-                            data.getDataPoints(), today, sessionDay);
-                    if (officialClose == null) {
-                        stillMissingSymbols.add(symbol);
-                        continue;
-                    }
-                    OHLCQuote quote = quotes.get(symbol);
-                    if (quote == null) {
-                        continue;
-                    }
-                    quote.setLastPrice(officialClose);
-                    if (quote.getOhlc() != null) {
-                        quote.getOhlc().setClose(officialClose);
-                    }
-                    quote.setPreviousClose(officialClose);
-                    updated++;
+                } else {
+                    stillMissingSymbols.addAll(missingSymbols);
                 }
-            } else {
-                stillMissingSymbols.addAll(missingSymbols);
-            }
 
-            if (updated > 0) {
-                log.info("Applied official daily close via Local DB fallback for {}/{} missing symbols in ~5ms",
-                        updated, missingSymbols.size());
-            }
+                if (updated > 0) {
+                    log.info("Applied official daily close via background DB fallback for {}/{} missing symbols",
+                            updated, missingSymbols.size());
+                }
 
-            // ASYNC BACKGROUND SEEDING for symbols missing from both Redis AND Local DB:
-            // Non-blocking background worker fetches missing daily candles from Upstox to seed Redis/DB for future calls.
-            if (!stillMissingSymbols.isEmpty()) {
-                log.info("Non-blocking hybrid strategy: {} symbols missing from local DB. Triggering async background seed without blocking quote response.", stillMissingSymbols.size());
-                final String pName = defaultProvider;
-                java.util.concurrent.CompletableFuture.runAsync(() -> {
-                    try {
-                        getHistoricalDataBatch(stillMissingSymbols, fromDate, toDate, TimeFrame.DAY, false, null, pName, false, true, true);
-                        log.info("Async background seed completed for {} missing symbols", stillMissingSymbols.size());
-                    } catch (Exception bgEx) {
-                        log.warn("Async background seed error: {}", bgEx.getMessage());
-                    }
-                });
+                if (!stillMissingSymbols.isEmpty()) {
+                    log.info("Non-blocking hybrid strategy: {} symbols missing from local DB. Triggering async background seed.", stillMissingSymbols.size());
+                    final String pName = defaultProvider;
+                    getHistoricalDataBatch(stillMissingSymbols, fromDate, toDate, TimeFrame.DAY, false, null, pName, false, true, true);
+                    log.info("Async background seed completed for {} missing symbols", stillMissingSymbols.size());
+                }
+            } catch (Exception e) {
+                log.warn("Official daily close background overlay failed: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Official daily close overlay failed; leaving lastPrice as-is: {}", e.getMessage());
-        }
+        });
     }
 
     public HistoricalData getHistoricalData(String symbol, Date fromDate, Date toDate, TimeFrame interval,

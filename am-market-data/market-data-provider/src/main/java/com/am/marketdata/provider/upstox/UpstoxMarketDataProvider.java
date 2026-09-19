@@ -311,135 +311,136 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             }
 
             log.info("backfillPreviousClose",
-                    "Backfilling previousClose via historical API for {} remaining symbols",
+                    "Triggering background async backfill for {} remaining symbols without blocking HTTP response",
                     remainingSymbols.size());
 
-            java.time.LocalDate today = java.time.LocalDate.now();
-            String toDate = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
-            // Fetch 5 calendar days back to safely cover weekends/holidays
-            String fromDate = today.minusDays(5).format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    java.time.LocalDate today = java.time.LocalDate.now();
+                    String toDate = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+                    String fromDate = today.minusDays(5).format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
 
-            // Reusing existing production BATCH_SIZE (500) and BATCH_DELAY_MS (150ms) to comply with Upstox API limits
-            for (int batchIdx = 0; batchIdx < remainingSymbols.size(); batchIdx += BATCH_SIZE) {
-                int endIdx = Math.min(batchIdx + BATCH_SIZE, remainingSymbols.size());
-                List<String> batchSymbols = remainingSymbols.subList(batchIdx, endIdx);
+                    for (int batchIdx = 0; batchIdx < remainingSymbols.size(); batchIdx += BATCH_SIZE) {
+                        int endIdx = Math.min(batchIdx + BATCH_SIZE, remainingSymbols.size());
+                        List<String> batchSymbols = remainingSymbols.subList(batchIdx, endIdx);
 
-                int callCount = 0;
-                for (String symbol : batchSymbols) {
-                    try {
-                        if (callCount > 0) {
+                        int callCount = 0;
+                        for (String symbol : batchSymbols) {
                             try {
-                                Thread.sleep(250); // Respect Upstox rate limits (capping at 4 requests/sec to stay under 5 req/sec limit)
+                                if (callCount > 0) {
+                                    try {
+                                        Thread.sleep(250); // Respect Upstox rate limits safely in background thread
+                                    } catch (InterruptedException ie) {
+                                        Thread.currentThread().interrupt();
+                                        log.warn("backfillPreviousClose", "Interrupted during backfill rate-limit sleep");
+                                        break;
+                                    }
+                                }
+                                callCount++;
+
+                                String cleanSymbol = symbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim();
+                                String instrumentKey = context.keyToSymbolMap.entrySet().stream()
+                                        .filter(e -> e.getValue().equals(cleanSymbol) || e.getValue().equals(symbol))
+                                        .map(Map.Entry::getKey)
+                                        .findFirst()
+                                        .orElse(null);
+
+                                if (instrumentKey == null) {
+                                    try {
+                                        com.am.marketdata.provider.common.InstrumentContext resolvedContext =
+                                                symbolResolver.resolveContext(java.util.Collections.singletonList(cleanSymbol));
+                                        if (resolvedContext != null && resolvedContext.instrumentKeys != null && !resolvedContext.instrumentKeys.isEmpty()) {
+                                            instrumentKey = resolvedContext.instrumentKeys.get(0);
+                                        }
+                                    } catch (Exception ignore) {}
+                                }
+
+                                if (instrumentKey == null) {
+                                    log.warn("backfillPreviousClose",
+                                            "Could not find instrument key for symbol: {} (cleaned: {}), skipping", symbol, cleanSymbol);
+                                    continue;
+                                }
+
+                                com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
+                                        upstoxSdkService.getHistoricalCandleData(instrumentKey, "days", 1, toDate, fromDate);
+
+                                if (histResponse != null && histResponse.getData() != null
+                                        && histResponse.getData().getCandles() != null
+                                        && !histResponse.getData().getCandles().isEmpty()) {
+
+                                    java.util.List<java.util.List<Object>> candles = histResponse.getData().getCandles();
+                                    double prevClose = 0.0;
+                                    if (!candles.isEmpty()) {
+                                        java.util.List<Object> newestCandle = candles.get(0);
+                                        String candleDateStr = newestCandle.get(0) != null ? newestCandle.get(0).toString() : "";
+                                        
+                                        java.time.LocalDate todayKolkata = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+                                        String todayStr = todayKolkata.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+                                        boolean isTodayCandle = !candleDateStr.isEmpty() && candleDateStr.startsWith(todayStr);
+                                        
+                                        boolean matchesNewestCandle = false;
+                                        OHLCQuote liveQuote = result.get(symbol);
+                                        if (liveQuote != null && liveQuote.getOhlc() != null && newestCandle.size() >= 5) {
+                                            double liveOpen = liveQuote.getOhlc().getOpen();
+                                            double liveClose = liveQuote.getOhlc().getClose();
+                                            double candleOpen = parseDouble(newestCandle.get(1));
+                                            double candleClose = parseDouble(newestCandle.get(4));
+                                            if (liveOpen == candleOpen && liveClose == candleClose) {
+                                                matchesNewestCandle = true;
+                                            }
+                                        }
+
+                                        if ((isTodayCandle || matchesNewestCandle) && candles.size() >= 2) {
+                                            java.util.List<Object> prevCandle = candles.get(1);
+                                            if (prevCandle != null && prevCandle.size() >= 5) {
+                                                Object closeObj = prevCandle.get(4);
+                                                if (closeObj instanceof Number) {
+                                                    prevClose = ((Number) closeObj).doubleValue();
+                                                }
+                                            }
+                                        } else {
+                                            if (newestCandle.size() >= 5) {
+                                                Object closeObj = newestCandle.get(4);
+                                                if (closeObj instanceof Number) {
+                                                    prevClose = ((Number) closeObj).doubleValue();
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (prevClose > 0) {
+                                        result.get(symbol).setPreviousClose(prevClose);
+                                        log.info("backfillPreviousClose",
+                                                "Backfilled previousClose for {}: {}", symbol, prevClose);
+                                    } else {
+                                        log.warn("backfillPreviousClose",
+                                                "Could not extract valid previousClose from historical candles for {}", symbol);
+                                    }
+                                } else {
+                                    log.warn("backfillPreviousClose",
+                                            "No historical candle data returned for symbol: {}", symbol);
+                                }
+                            } catch (Exception ex) {
+                                log.error("backfillPreviousClose",
+                                        "Failed to backfill previousClose for symbol {}: {}", symbol, ex.getMessage());
+                            }
+                        }
+
+                        if (endIdx < remainingSymbols.size()) {
+                            try {
+                                Thread.sleep(BATCH_DELAY_MS);
                             } catch (InterruptedException ie) {
                                 Thread.currentThread().interrupt();
-                                log.warn("backfillPreviousClose", "Interrupted during backfill rate-limit sleep");
                                 break;
                             }
                         }
-                        callCount++;
-
-                        // Resolve instrument key for this symbol, stripping exchange prefixes if present
-                        String cleanSymbol = symbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim();
-                        String instrumentKey = context.keyToSymbolMap.entrySet().stream()
-                                .filter(e -> e.getValue().equals(cleanSymbol) || e.getValue().equals(symbol))
-                                .map(Map.Entry::getKey)
-                                .findFirst()
-                                .orElse(null);
-
-                        // If not found in context map, attempt dynamic instrument resolution
-                        if (instrumentKey == null) {
-                            try {
-                                com.am.marketdata.provider.common.InstrumentContext resolvedContext =
-                                        symbolResolver.resolveContext(java.util.Collections.singletonList(cleanSymbol));
-                                if (resolvedContext != null && resolvedContext.instrumentKeys != null && !resolvedContext.instrumentKeys.isEmpty()) {
-                                    instrumentKey = resolvedContext.instrumentKeys.get(0);
-                                }
-                            } catch (Exception ignore) {}
-                        }
-
-                        if (instrumentKey == null) {
-                            log.warn("backfillPreviousClose",
-                                    "Could not find instrument key for symbol: {} (cleaned: {}), skipping", symbol, cleanSymbol);
-                            continue;
-                        }
-
-                        com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
-                                upstoxSdkService.getHistoricalCandleData(instrumentKey, "days", 1, toDate, fromDate);
-
-                        if (histResponse != null && histResponse.getData() != null
-                                && histResponse.getData().getCandles() != null
-                                && !histResponse.getData().getCandles().isEmpty()) {
-
-                            java.util.List<java.util.List<Object>> candles = histResponse.getData().getCandles();
-                            double prevClose = 0.0;
-                            if (!candles.isEmpty()) {
-                                java.util.List<Object> newestCandle = candles.get(0);
-                                String candleDateStr = newestCandle.get(0) != null ? newestCandle.get(0).toString() : "";
-                                
-                                java.time.LocalDate todayKolkata = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
-                                String todayStr = todayKolkata.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
-                                boolean isTodayCandle = !candleDateStr.isEmpty() && candleDateStr.startsWith(todayStr);
-                                
-                                boolean matchesNewestCandle = false;
-                                OHLCQuote liveQuote = result.get(symbol);
-                                if (liveQuote != null && liveQuote.getOhlc() != null && newestCandle.size() >= 5) {
-                                    double liveOpen = liveQuote.getOhlc().getOpen();
-                                    double liveClose = liveQuote.getOhlc().getClose();
-                                    double candleOpen = parseDouble(newestCandle.get(1));
-                                    double candleClose = parseDouble(newestCandle.get(4));
-                                    if (liveOpen == candleOpen && liveClose == candleClose) {
-                                        matchesNewestCandle = true;
-                                    }
-                                }
-
-                                if ((isTodayCandle || matchesNewestCandle) && candles.size() >= 2) {
-                                    java.util.List<Object> prevCandle = candles.get(1);
-                                    if (prevCandle != null && prevCandle.size() >= 5) {
-                                        Object closeObj = prevCandle.get(4);
-                                        if (closeObj instanceof Number) {
-                                            prevClose = ((Number) closeObj).doubleValue();
-                                        }
-                                    }
-                                } else {
-                                    if (newestCandle.size() >= 5) {
-                                        Object closeObj = newestCandle.get(4);
-                                        if (closeObj instanceof Number) {
-                                            prevClose = ((Number) closeObj).doubleValue();
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (prevClose > 0) {
-                                result.get(symbol).setPreviousClose(prevClose);
-                                log.info("backfillPreviousClose",
-                                        "Backfilled previousClose for {}: {}", symbol, prevClose);
-                            } else {
-                                log.warn("backfillPreviousClose",
-                                        "Could not extract valid previousClose from historical candles for {}", symbol);
-                            }
-                        } else {
-                            log.warn("backfillPreviousClose",
-                                    "No historical candle data returned for symbol: {}", symbol);
-                        }
-                    } catch (Exception ex) {
-                        log.error("backfillPreviousClose",
-                                "Failed to backfill previousClose for symbol {}: {}", symbol, ex.getMessage());
                     }
+                } catch (Exception e) {
+                    log.error("backfillPreviousClose", "Error in backfillPreviousClose: {}", e.getMessage());
                 }
-
-                // Inter-batch delay to comply with Upstox API limits (150ms delay between 500-symbol sub-batches)
-                if (endIdx < remainingSymbols.size()) {
-                    try {
-                        Thread.sleep(BATCH_DELAY_MS);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            }
+            });
         } catch (Exception e) {
-            log.error("backfillPreviousClose", "Error in backfillPreviousClose: {}", e.getMessage());
+            log.error("backfillPreviousClose", "Error in backfillPreviousClose outer wrapper: {}", e.getMessage());
         }
     }
 

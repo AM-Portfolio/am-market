@@ -43,6 +43,9 @@ public class FeatureFlaggedStringRedisTemplate extends StringRedisTemplate {
         if ("true".equalsIgnoreCase(System.getenv("REDIS_FORCE_ENABLED")) || "true".equalsIgnoreCase(System.getProperty("REDIS_FORCE_ENABLED"))) {
             return true;
         }
+        if (growthBookService == null) {
+            return true;
+        }
         boolean enabled = growthBookService.isOn(flagKey);
         if (lastState == null || lastState != enabled) {
             lastState = enabled;

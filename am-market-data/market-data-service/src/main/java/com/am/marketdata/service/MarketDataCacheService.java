@@ -326,22 +326,21 @@ public class MarketDataCacheService {
             return Collections.emptyMap();
         }
         try {
-            // Clean symbols (remove NSE exchange prefix, but keep BSE/other exchange prefixes intact to avoid cache collisions)
+            // Clean symbols (remove NSE_EQ:, NSE:, BSE_EQ:, BSE: exchange prefixes to match Redis keys)
             List<String> cleanSymbols = tradingSymbols.stream()
                     .map(symbol -> {
                         String clean = symbol != null ? symbol.trim() : "";
                         if (clean.contains("|")) {
                             clean = clean.substring(clean.indexOf("|") + 1);
                         }
-                        if (clean.toUpperCase().startsWith("NSE:")) {
-                            clean = clean.substring(4);
-                        }
-                        return clean.toUpperCase().trim();
+                        return clean.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
                     })
+                    .filter(s -> !s.isEmpty())
+                    .distinct()
                     .collect(Collectors.toList());
 
             if (cleanSymbols.isEmpty()) {
-                log.debug("getOHLCFromCache", "All symbols were indices, skipping cache lookup");
+                log.debug("getOHLCFromCache", "All symbols were empty or invalid, skipping cache lookup");
                 return Collections.emptyMap();
             }
 
@@ -393,6 +392,14 @@ public class MarketDataCacheService {
                     // Create OHLCQuote from the latest bar
                     OHLCQuote quote = createOHLCQuoteFromBar(latestBar);
                     result.put(symbol, quote);
+
+                    // Also alias under requested original symbol formats (e.g. NSE_EQ:RELIANCE -> quote)
+                    for (String orig : tradingSymbols) {
+                        String cleanOrig = orig.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
+                        if (cleanOrig.equalsIgnoreCase(symbol)) {
+                            result.put(orig, quote);
+                        }
+                    }
 
                     // Record the cache hit for logging
                     cacheHits.put(symbol, String.format("O:%.2f,H:%.2f,L:%.2f,C:%.2f",
@@ -583,25 +590,24 @@ public class MarketDataCacheService {
             }
 
             if (!finalMissingSymbols.isEmpty()) {
-                try {
-                    com.marketdata.common.MarketDataProvider provider = com.am.marketdata.common.util.ApplicationContextProvider.getBean("upstox", com.marketdata.common.MarketDataProvider.class);
-                    if (provider != null) {
-                        log.info("overlayLatestPrices", "Self-healing: Triggering historical fallback sync for " + finalMissingSymbols.size() + " symbols: " + finalMissingSymbols);
-                        Map<String, OHLCQuote> freshQuotes = provider.getOHLC(finalMissingSymbols, TimeFrame.DAY);
-                        if (freshQuotes != null) {
-                            for (String sym : finalMissingSymbols) {
-                                OHLCQuote freshQuote = freshQuotes.get(sym);
-                                if (freshQuote != null && freshQuote.getPreviousClose() > 0.0) {
-                                    result.get(sym).setPreviousClose(freshQuote.getPreviousClose());
-                                    if (result.get(sym).getLastPrice() == 0.0 && freshQuote.getLastPrice() > 0.0) {
-                                        result.get(sym).setLastPrice(freshQuote.getLastPrice());
-                                    }
+                if (cacheBackfillExecutor != null) {
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            com.marketdata.common.MarketDataProvider provider = com.am.marketdata.common.util.ApplicationContextProvider.getBean("upstox", com.marketdata.common.MarketDataProvider.class);
+                            if (provider != null) {
+                                log.info("overlayLatestPrices", "Self-healing (async): Triggering historical fallback sync for " + finalMissingSymbols.size() + " symbols: " + finalMissingSymbols);
+                                Map<String, OHLCQuote> freshQuotes = provider.getOHLC(finalMissingSymbols, TimeFrame.DAY);
+                                if (freshQuotes != null && !freshQuotes.isEmpty()) {
+                                    // Cache backfill the fresh quotes so subsequent reads have previousClose populated
+                                    cacheOHLCData(freshQuotes, TimeFrame.DAY);
                                 }
                             }
+                        } catch (Exception selfHealEx) {
+                            log.warn("overlayLatestPrices", "Failed async self-healing previousClose fallback: " + selfHealEx.getMessage());
                         }
-                    }
-                } catch (Exception selfHealEx) {
-                    log.warn("overlayLatestPrices", "Failed self-healing previousClose fallback: " + selfHealEx.getMessage());
+                    }, cacheBackfillExecutor);
+                } else {
+                    log.debug("overlayLatestPrices", "cacheBackfillExecutor null; skipping blocking self-healing fallback for " + finalMissingSymbols.size() + " symbols");
                 }
             }
         }

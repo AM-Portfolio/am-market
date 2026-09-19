@@ -21,6 +21,7 @@ public interface FundamentalDataRepository extends MongoRepository<FundamentalDa
      */
     Optional<FundamentalData> findFirstByIsin(String isin);
     Optional<FundamentalData> findByIsin(String isin);
+    List<FundamentalData> findByIsinIn(java.util.Collection<String> isins);
 
     /**
      * Find complete fundamental profile by trading symbol (first match if duplicates exist).
