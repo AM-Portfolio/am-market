@@ -120,5 +120,15 @@ test_search_edge_cases.py
 **/MarketDataCacheServiceTest.java
 **/SmartStockServiceTest.java
 
+# Keep market-info contract tests under version control.
+!market-data-api/src/test/
+!market-data-api/src/test/java/
+!market-data-api/src/test/java/com/
+!market-data-api/src/test/java/com/am/
+!market-data-api/src/test/java/com/am/marketdata/
+!market-data-api/src/test/java/com/am/marketdata/api/
+!market-data-api/src/test/java/com/am/marketdata/api/MarketInfoSymbolMapTest.java
+!market-data-api/src/test/java/com/am/marketdata/api/MarketInfoDtoParseTest.java
+
 
 
