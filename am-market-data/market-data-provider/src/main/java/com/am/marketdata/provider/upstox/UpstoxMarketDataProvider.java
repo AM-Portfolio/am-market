@@ -316,12 +316,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         return;
                     }
 
-            log.info("backfillPreviousClose",
-                    "Triggering background async backfill for {} remaining symbols without blocking HTTP response",
-                    remainingSymbols.size());
 
-            java.util.concurrent.CompletableFuture.runAsync(() -> {
-                try {
                     java.time.LocalDate today = java.time.LocalDate.now();
                     String toDate = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
                     String fromDate = today.minusDays(5).format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
