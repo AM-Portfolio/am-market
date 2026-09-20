@@ -191,6 +191,15 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
     }
 
     /**
+     * Historical data queries local MongoDB/InfluxDB in < 20ms.
+     * Disable the <= 5 keyset bypass so local DB candles are always checked first.
+     */
+    @Override
+    protected boolean shouldBypassDatabase(Set<String> remainingKeys, boolean hasGlobalIndex) {
+        return false;
+    }
+
+    /**
      * Retrieve historical data from database
      *
      * @param remainingSymbols Set of symbols that still need to be retrieved (will
@@ -335,9 +344,21 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     callCount++;
                 }
 
-                // Provider now returns the common HistoricalData model directly
-                HistoricalData historicalData = provider.getHistoricalData(symbol,
-                        fromDate, toDate, interval, continuous, additionalParams);
+                // Bounded 1.5-second execution budget per symbol fetch from provider.
+                // Prevents slow external broker API roundtrips from blocking HTTP request threads for > 1.5s.
+                java.util.concurrent.CompletableFuture<HistoricalData> fetchFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                        provider.getHistoricalData(symbol, fromDate, toDate, interval, continuous, additionalParams)
+                ).orTimeout(1500, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+                HistoricalData historicalData = null;
+                try {
+                    historicalData = fetchFuture.get();
+                } catch (java.util.concurrent.ExecutionException ee) {
+                    log.error("[PROVIDER] Error fetching historical data for symbol {}: {}", symbol, ee.getCause() != null ? ee.getCause().getMessage() : ee.getMessage());
+                } catch (Exception te) {
+                    log.warn("[PROVIDER_TIMEOUT] Provider fetch exceeded 1.5s budget for symbol: {}. Falling back to background async backfill.", symbol);
+                    triggerSingleFlightBackfill(symbol, dateFormat.format(fromDate), dateFormat.format(toDate));
+                }
 
                 if (historicalData != null && historicalData.getDataPoints() != null
                         && !historicalData.getDataPoints().isEmpty()) {

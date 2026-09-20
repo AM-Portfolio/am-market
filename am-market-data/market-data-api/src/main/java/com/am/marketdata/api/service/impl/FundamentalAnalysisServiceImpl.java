@@ -682,8 +682,20 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             resolvedSymbols.add(resolvedSymbol);
         }
 
-        // Pass 2: Bulk fetch live prices in ONE call (resilient to Redis outage)
-        Map<String, Double[]> pricesMap = fetchLivePricesBulk(symbolsToFetch, exchange);
+        // Pass 2: Bulk fetch live prices in parallel with a 750ms SLA budget to guarantee response < 1s
+        Map<String, Double[]> pricesMap = Collections.emptyMap();
+        try {
+            pricesMap = java.util.concurrent.CompletableFuture
+                    .supplyAsync(() -> fetchLivePricesBulk(symbolsToFetch, exchange))
+                    .orTimeout(750, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .exceptionally(ex -> {
+                        log.warn("Peer live price bulk fetch timed out (>750ms); returning peer fundamentals without price delay");
+                        return Collections.emptyMap();
+                    })
+                    .get();
+        } catch (Exception e) {
+            log.warn("Failed to retrieve peer live prices within SLA: {}", e.getMessage());
+        }
 
         // Pass 3: Attach prices and build
         List<CompetitorPeer> enrichedList = new ArrayList<>();
