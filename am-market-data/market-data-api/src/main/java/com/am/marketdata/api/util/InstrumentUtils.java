@@ -71,10 +71,11 @@ public class InstrumentUtils {
         log.info("[EXCHANGE_DIAG] resolveSymbols normalized: upperRawSymbols={}", upperRawSymbols);
 
         Set<String> candidateSymbols = new HashSet<>();
+        Map<String, StockIndicesMarketData> indexDocsBySymbol = new HashMap<>();
 
         if (!fetchIndexStocks) {
-            // fetchIndexStocks=false means the caller already knows these are regular stock symbols or prefixed exchange symbols.
-            // No MongoDB index lookup needed — just add them all directly.
+            // fetchIndexStocks=false means the caller already knows these are index symbols or specific symbols.
+            // No MongoDB index expansion needed — just add them all directly as candidates.
             log.debug("fetchIndexStocks=false, returning normalized symbols: {}", upperRawSymbols);
             candidateSymbols.addAll(upperRawSymbols);
         } else {
@@ -86,7 +87,6 @@ public class InstrumentUtils {
                     searchSymbols.add(s.substring(s.indexOf(":") + 1));
                 }
             }
-            Map<String, StockIndicesMarketData> indexDocsBySymbol = new HashMap<>();
             try {
                 List<StockIndicesMarketData> indexDocs = stockIndicesMarketDataService.findByIndexSymbols(searchSymbols);
                 if (indexDocs != null) {
@@ -123,24 +123,19 @@ public class InstrumentUtils {
             }
         }
 
-        // ONE batch query to find which of our candidate symbols are index symbols.
-        // This is needed so we can skip Upstox instrument validation for index symbols
-        // (they don't exist in the instruments table, only in the stock-indices collection).
-        Set<String> foundIndexSymbols = Collections.emptySet();
-        try {
-            List<StockIndicesMarketData> indexDocs = stockIndicesMarketDataService.findByIndexSymbols(new HashSet<>(candidateSymbols));
-            if (indexDocs != null) {
-                foundIndexSymbols = indexDocs.stream()
-                        .filter(Objects::nonNull)
-                        .map(StockIndicesMarketData::getIndexSymbol)
-                        .filter(Objects::nonNull)
-                        .map(String::toUpperCase)
-                        .collect(Collectors.toSet());
+        // Reuse index symbols found during initial resolution or preserve requested index symbols when fetchIndexStocks=false.
+        Set<String> foundIndexSymbols = new HashSet<>();
+        if (!fetchIndexStocks) {
+            foundIndexSymbols.addAll(candidateSymbols);
+        } else {
+            for (String cand : candidateSymbols) {
+                String upper = cand.toUpperCase();
+                String base = cand.contains(":") ? cand.substring(cand.indexOf(":") + 1).toUpperCase() : upper;
+                if (indexDocsBySymbol.containsKey(upper) || indexDocsBySymbol.containsKey(base) || upper.startsWith("GLOBAL_") || upper.startsWith("NSE_")) {
+                    foundIndexSymbols.add(upper);
+                }
             }
-        } catch (Exception e) {
-            log.warn("Failed to batch query stock indices from MongoDB", e);
         }
-
         final Set<String> matchingIndices = foundIndexSymbols;
 
         // Validate the non-index candidates against the Upstox instruments table in ONE batch query.

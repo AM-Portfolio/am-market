@@ -85,19 +85,32 @@ public class MarketCalendarSyncService {
     }
 
     public void invalidateCache(String exchange) {
-        String prefix = normalizeExchange(exchange) + ":";
+        String ex = normalizeExchange(exchange);
+        String prefix = ex + ":";
         yearCache.keySet().removeIf(k -> k.startsWith(prefix));
+        metaCache.remove(ex);
     }
+
+    private final Map<String, MarketCalendarSyncMetaDocument> metaCache = new ConcurrentHashMap<>();
 
     public boolean hasYearData(String exchange, int year) {
         String ex = normalizeExchange(exchange);
+        if (yearCache.containsKey(cacheKey(ex, year))) {
+            return true;
+        }
         LocalDate start = LocalDate.of(year, 1, 1);
         LocalDate end = LocalDate.of(year, 12, 31);
-        return calendarRepository.countByExchangeAndDateBetween(ex, start, end) > 0;
+        boolean exists = calendarRepository.countByExchangeAndDateBetween(ex, start, end) > 0;
+        if (exists) {
+            // Load and cache year data to prevent subsequent count queries
+            loadYear(ex, year);
+        }
+        return exists;
     }
 
     public MarketCalendarSyncMetaDocument getMeta(String exchange) {
-        return syncMetaRepository.findById(normalizeExchange(exchange)).orElse(null);
+        String ex = normalizeExchange(exchange);
+        return metaCache.computeIfAbsent(ex, k -> syncMetaRepository.findById(k).orElse(null));
     }
 
     private void saveMeta(

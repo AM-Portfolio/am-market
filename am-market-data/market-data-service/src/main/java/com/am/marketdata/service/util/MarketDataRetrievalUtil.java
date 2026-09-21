@@ -50,6 +50,10 @@ public class MarketDataRetrievalUtil {
             List<String> tradingSymbols,
             Set<String> remainingSymbols, TimeFrame timeFrame) {
 
+        if (tradingSymbols == null || tradingSymbols.isEmpty() || remainingSymbols == null || remainingSymbols.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
         log.info("[DATA_SOURCE] Attempting to fetch OHLC data from cache for {} symbols",
                 remainingSymbols.size());
 

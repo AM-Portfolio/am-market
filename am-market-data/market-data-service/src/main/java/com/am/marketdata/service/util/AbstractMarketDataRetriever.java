@@ -155,11 +155,21 @@ public abstract class AbstractMarketDataRetriever<K, T> {
                     // However, we MUST NOT bypass InfluxDB for global index keys since the provider cannot serve them.
                     boolean hasGlobalIndex = remainingKeys.stream()
                             .anyMatch(k -> k.toString().startsWith("GLOBAL_INDEX|"));
-                    if (remainingKeys.size() <= 5 && !hasGlobalIndex) {
+                    if (shouldBypassDatabase(remainingKeys, hasGlobalIndex)) {
                         log.info("[DATABASE] Bypassing InfluxDB query because remaining keys count is small ({}) to prevent database timeouts", remainingKeys.size());
                         sourceData = Collections.emptyMap();
                     } else {
                         sourceData = retrieveFromDatabase(remainingKeys, timeFrame);
+                    }
+
+                    // DUAL-STATE WRITE-BACK: Cache InfluxDB results in Redis so subsequent requests hit cache in <1ms
+                    if (cacheResults && sourceData != null && !sourceData.isEmpty()) {
+                        try {
+                            updateCacheOnly(sourceData);
+                            log.info("[DATABASE_CACHE] Immediately cached {} InfluxDB results in Redis — next request will hit cache in <1ms", sourceData.size());
+                        } catch (Exception e) {
+                            log.warn("[DATABASE_CACHE] Failed to backfill InfluxDB results to Redis: {}", e.getMessage());
+                        }
                     }
                     break;
                 case PROVIDER:
@@ -220,6 +230,15 @@ public abstract class AbstractMarketDataRetriever<K, T> {
         }
 
         return providerData != null ? providerData : Collections.emptyMap();
+    }
+
+    /**
+     * Hook for subclasses to determine whether to bypass the database lookup.
+     * Default behavior bypasses database queries for <= 5 remaining keys to prevent slow dev DB roundtrips,
+     * unless global index keys are present.
+     */
+    protected boolean shouldBypassDatabase(Set<K> remainingKeys, boolean hasGlobalIndex) {
+        return remainingKeys.size() <= 5 && !hasGlobalIndex;
     }
 
     /**

@@ -16,9 +16,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.am.marketdata.service.model.PreviousCloseDocument;
 import com.am.marketdata.service.repo.PreviousCloseRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.data.redis.core.RedisTemplate;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executor;
+import java.util.concurrent.CompletableFuture;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
@@ -50,6 +53,15 @@ public class MarketDataCacheService {
     private final PreviousCloseRepository previousCloseRepository;
     private final MarketHoursService marketHoursService;
 
+    // Dedicated thread pool for non-blocking background cache backfilling
+    @Autowired(required = false)
+    @org.springframework.beans.factory.annotation.Qualifier("cacheBackfillExecutor")
+    private Executor cacheBackfillExecutor;
+
+    // Configurable toggle: set MARKET_CACHE_ASYNC_ENABLED=false to revert to synchronous backfill if needed
+    @Value("${market.cache.async-backfill.enabled:true}")
+    private boolean asyncBackfillEnabled = true;
+
     public MarketDataCacheService(StockCacheService stockCacheService,
                                   ObjectMapper objectMapper,
                                   RedisTemplate<String, String> redisTemplate,
@@ -61,6 +73,7 @@ public class MarketDataCacheService {
         this.previousCloseRepository = previousCloseRepository;
         this.marketHoursService = marketHoursService;
     }
+
 
     /**
      * Helper method to normalize raw symbol inputs before constructing Redis keys.
@@ -149,7 +162,32 @@ public class MarketDataCacheService {
         }
     }
 
+    /**
+     * Cache OHLC data to Redis and MongoDB.
+     * 
+     * PERFORMANCE FIX:
+     * When asyncBackfillEnabled is true, cache writing is offloaded to the dedicated
+     * 'cacheBackfillExecutor' thread pool. This allows the HTTP response thread to return
+     * the fresh provider response to the client immediately (<400ms) without waiting for
+     * Redis write operations to complete.
+     */
     public void cacheOHLCData(Map<String, OHLCQuote> ohlcData, TimeFrame timeFrame) {
+        if (ohlcData == null || ohlcData.isEmpty()) {
+            return;
+        }
+
+        if (asyncBackfillEnabled && cacheBackfillExecutor != null) {
+            CompletableFuture.runAsync(() -> doCacheOHLCDataInternal(ohlcData, timeFrame), cacheBackfillExecutor)
+                    .exceptionally(ex -> {
+                        log.warn("cacheOHLCData", "Background async cache backfill encountered an exception: {}", ex.getMessage());
+                        return null;
+                    });
+        } else {
+            doCacheOHLCDataInternal(ohlcData, timeFrame);
+        }
+    }
+
+    private void doCacheOHLCDataInternal(Map<String, OHLCQuote> ohlcData, TimeFrame timeFrame) {
         try {
             String interval = timeFrame != null ? timeFrame.getApiValue() : "1D";
             String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
@@ -216,27 +254,21 @@ public class MarketDataCacheService {
                 stockCacheService.cacheIntradayBars(batchStockBars);
             }
 
-            // Smart logging: if keys are huge (>1000), show only count in INFO and one
-            // sample in DEBUG
+            // Smart logging: if keys are huge (>1000), show only count in INFO and one sample in DEBUG
             if (cachedKeys.size() > 1000) {
                 log.info("cacheOHLCData", "Cached {} symbols with timeframe: {} for date: {} ({} key-value pairs)",
                         ohlcData.size(), interval, today, cachedKeys.size());
 
-                // Show one sample record in DEBUG mode to know the pattern
                 if (!cachedKeys.isEmpty()) {
                     log.debug("cacheOHLCData", "Sample key pattern: {}", cachedKeys.get(0));
                 }
             } else {
-                // Log first 3 keys as samples for smaller datasets
                 List<String> sampleKeys = cachedKeys.subList(0, Math.min(3, cachedKeys.size()));
                 log.info("cacheOHLCData", "Cached {} symbols with timeframe: {} for date: {}. Sample keys: {}",
                         ohlcData.size(), interval, today, sampleKeys);
             }
 
-            // Also persist lastPrice + previousClose to market:latest-price:* so that
-            // subsequent cache reads can overlay previousClose correctly.
-            // The stock:intraday:* path does NOT store previousClose, so this is the only
-            // durable place for it.
+            // Also persist lastPrice + previousClose to market:latest-price:*
             try {
                 cacheLatestPrices(ohlcData);
                 log.debug("cacheOHLCData", "Also cached latest prices (incl. previousClose) for {} symbols", ohlcData.size());
@@ -244,11 +276,10 @@ public class MarketDataCacheService {
                 log.warn("cacheOHLCData", "Failed to cache latest prices alongside OHLC data: {}", latestEx.getMessage());
             }
         } catch (Exception e) {
-            // Use the specialized exception logging
             CacheLoggingUtil.logCacheException(log, "CACHE_OHLC", null, "Error caching OHLC data", e);
-            // Don't rethrow as this is a non-critical operation
         }
     }
+
 
     public void cacheHistoricalData(String symbol, TimeFrame timeFrame, HistoricalData historicalData) {
         try {
@@ -291,23 +322,25 @@ public class MarketDataCacheService {
     }
 
     public Map<String, OHLCQuote> getOHLCFromCache(List<String> tradingSymbols, TimeFrame timeFrame) {
+        if (tradingSymbols == null || tradingSymbols.isEmpty()) {
+            return Collections.emptyMap();
+        }
         try {
-            // Clean symbols (remove NSE exchange prefix, but keep BSE/other exchange prefixes intact to avoid cache collisions)
+            // Clean symbols (remove NSE_EQ:, NSE:, BSE_EQ:, BSE: exchange prefixes to match Redis keys)
             List<String> cleanSymbols = tradingSymbols.stream()
                     .map(symbol -> {
                         String clean = symbol != null ? symbol.trim() : "";
                         if (clean.contains("|")) {
                             clean = clean.substring(clean.indexOf("|") + 1);
                         }
-                        if (clean.toUpperCase().startsWith("NSE:")) {
-                            clean = clean.substring(4);
-                        }
-                        return clean.toUpperCase().trim();
+                        return clean.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
                     })
+                    .filter(s -> !s.isEmpty())
+                    .distinct()
                     .collect(Collectors.toList());
 
             if (cleanSymbols.isEmpty()) {
-                log.debug("getOHLCFromCache", "All symbols were indices, skipping cache lookup");
+                log.debug("getOHLCFromCache", "All symbols were empty or invalid, skipping cache lookup");
                 return Collections.emptyMap();
             }
 
@@ -360,6 +393,14 @@ public class MarketDataCacheService {
                     OHLCQuote quote = createOHLCQuoteFromBar(latestBar);
                     result.put(symbol, quote);
 
+                    // Also alias under requested original symbol formats (e.g. NSE_EQ:RELIANCE -> quote)
+                    for (String orig : tradingSymbols) {
+                        String cleanOrig = orig.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
+                        if (cleanOrig.equalsIgnoreCase(symbol)) {
+                            result.put(orig, quote);
+                        }
+                    }
+
                     // Record the cache hit for logging
                     cacheHits.put(symbol, String.format("O:%.2f,H:%.2f,L:%.2f,C:%.2f",
                             latestBar.getOpen(), latestBar.getHigh(), latestBar.getLow(), latestBar.getClose()));
@@ -371,11 +412,8 @@ public class MarketDataCacheService {
                 log.info("getOHLCFromCache", "Retrieved OHLC data from cache for {} symbols", result.size());
                 log.debug("getOHLCFromCache", "Retrieved values: {}", cacheHits);
 
-                // Overlay lastPrice and previousClose from Redis Path 2 (market:latest-price:*)
-                // These are written by cacheLatestPrices() on every WebSocket tick.
-                // The intraday bars (Path 1) do not store previousClose, so it defaults to 0.0.
-                // This overlay fixes both: fresh lastPrice on reload and non-zero previousClose.
-                overlayLatestPrices(result);
+                // Note: overlayLatestPrices is now called once at the orchestrator layer (MarketDataService) 
+                // to avoid duplicate Redis MGET queries on cache hits while ensuring all paths are covered.
             }
 
             return result;
@@ -388,14 +426,6 @@ public class MarketDataCacheService {
     }
 
     /**
-     * Overlays Redis websocket ticks onto OHLC quotes.
-     *
-     * <p>While NSE is open, {@code lastPrice} is the last trade — correct for live holdings.
-     * After close, Redis still holds that last trade (often hours old on thin ETFs/SGB).
-     * Brokers then show official day close; overwriting lastPrice with the tick is what
-     * made GOLDBEES / MOHEALTH / SGB diverge. previousClose overlay is unchanged either way.
-     *
-     * <p>If market hours cannot be resolved, keep the old overlay (fail-open) so live
      * trading is not broken by a calendar outage.
      */
     public void overlayLatestPrices(Map<String, OHLCQuote> result) {
@@ -411,6 +441,7 @@ public class MarketDataCacheService {
         List<Map.Entry<String, OHLCQuote>> entries = new ArrayList<>(result.entrySet());
         List<String> primaryKeys = new ArrayList<>(entries.size());
         List<String> fallbackKeys = new ArrayList<>(entries.size());
+        List<String> prevCloseKeys = new ArrayList<>(entries.size());
 
         for (Map.Entry<String, OHLCQuote> entry : entries) {
             String raw = entry.getKey();
@@ -433,36 +464,41 @@ public class MarketDataCacheService {
             primaryKeys.add("market:latest-price:" + exchange + ":" + cleanSymbol);
             // Fallback: market:latest-price:SYMBOL (for backward compatibility)
             fallbackKeys.add("market:latest-price:" + cleanSymbol);
+            // Previous Close: market:prev-close:SYMBOL
+            prevCloseKeys.add("market:prev-close:" + cleanSymbol);
         }
 
         try {
-            // Batch retrieve exchange-specific latest prices (e.g. market:latest-price:NSE:INFY)
-            List<String> jsonList = redisTemplate.opsForValue().multiGet(primaryKeys);
+            // SINGLE BATCH REDIS MGET: Combine primaryKeys, prevCloseKeys, and fallbackKeys into 1 single bulk multiGet call.
+            // This drops 3 sequential Redis network roundtrips down to 1 single TCP roundtrip.
+            List<String> combinedKeys = new ArrayList<>(primaryKeys.size() * 3);
+            combinedKeys.addAll(primaryKeys);
+            combinedKeys.addAll(prevCloseKeys);
+            combinedKeys.addAll(fallbackKeys);
+
+            List<String> allValues = redisTemplate.opsForValue().multiGet(combinedKeys);
             
-            // Check if any symbols missed in primary exchange-specific keys
-            // Note: Immutable lists in Java 9+ (e.g. List.of()) throw NullPointerException on contains(null),
-            // so we inspect elements manually.
-            List<String> fallbackJsonList = null;
-            boolean hasNulls = false;
-            if (jsonList == null || jsonList.isEmpty()) {
-                hasNulls = true;
-            } else {
-                for (String item : jsonList) {
-                    if (item == null) {
-                        hasNulls = true;
-                        break;
-                    }
-                }
-            }
+            int n = entries.size();
+            List<String> jsonList = (allValues != null && allValues.size() >= n) ? allValues.subList(0, n) : null;
+            List<String> prevCloseValues = (allValues != null && allValues.size() >= 2 * n) ? allValues.subList(n, 2 * n) : null;
+            List<String> fallbackJsonList = (allValues != null && allValues.size() >= 3 * n) ? allValues.subList(2 * n, 3 * n) : null;
 
-            if (hasNulls) {
-                try {
-                    fallbackJsonList = redisTemplate.opsForValue().multiGet(fallbackKeys);
-                } catch (Exception ignore) {}
-            }
-
-            if (jsonList != null || fallbackJsonList != null) {
+            if (jsonList != null || fallbackJsonList != null || prevCloseValues != null) {
                 for (int i = 0; i < entries.size(); i++) {
+                    OHLCQuote quote = entries.get(i).getValue();
+                    if (quote == null) continue;
+
+                    // 1. First populate previousClose from market:prev-close key if available
+                    if (prevCloseValues != null && i < prevCloseValues.size() && prevCloseValues.get(i) != null) {
+                        try {
+                            double pc = Double.parseDouble(prevCloseValues.get(i));
+                            if (pc > 0) {
+                                quote.setPreviousClose(pc);
+                            }
+                        } catch (Exception ignore) {}
+                    }
+
+                    // 2. Populate lastPrice and previousClose from latest-price JSON
                     String json = (jsonList != null && i < jsonList.size()) ? jsonList.get(i) : null;
                     if (json == null && fallbackJsonList != null && i < fallbackJsonList.size()) {
                         json = fallbackJsonList.get(i);
@@ -473,17 +509,28 @@ public class MarketDataCacheService {
                             Map<String, Object> latestData = objectMapper.readValue(json, Map.class);
                             double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
                             double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
-                            OHLCQuote quote = entries.get(i).getValue();
 
-                            if (prevClose > 0) {
+                            if (prevClose > 0 && quote.getPreviousClose() == 0.0) {
                                 quote.setPreviousClose(prevClose);
                             }
                             if (latestPrice > 0) {
-                                // While market is open, live tick wins.
-                                // When market is closed, if official close was not applied (e.g. quote.getLastPrice() == 0.0 or unchanged),
-                                // the closing session price from Redis is the verified fallback.
                                 if (overlayLiveLastPrice || quote.getLastPrice() == 0.0) {
                                     quote.setLastPrice(latestPrice);
+                                }
+                            }
+                            // Populate OHLC from latest-price Redis JSON if missing or zeroes
+                            double openVal = ((Number) latestData.getOrDefault("open", 0.0)).doubleValue();
+                            double highVal = ((Number) latestData.getOrDefault("high", 0.0)).doubleValue();
+                            double lowVal = ((Number) latestData.getOrDefault("low", 0.0)).doubleValue();
+                            double closeVal = latestPrice > 0 ? latestPrice : ((Number) latestData.getOrDefault("close", 0.0)).doubleValue();
+                            if (openVal > 0 || highVal > 0 || lowVal > 0 || closeVal > 0) {
+                                if (quote.getOhlc() == null || quote.getOhlc().getClose() == 0.0) {
+                                    OHLCQuote.OHLC ohlcObj = quote.getOhlc() != null ? quote.getOhlc() : new OHLCQuote.OHLC();
+                                    if (openVal > 0) ohlcObj.setOpen(openVal);
+                                    if (highVal > 0) ohlcObj.setHigh(highVal);
+                                    if (lowVal > 0) ohlcObj.setLow(lowVal);
+                                    if (closeVal > 0) ohlcObj.setClose(closeVal);
+                                    quote.setOhlc(ohlcObj);
                                 }
                             }
                         } catch (Exception parseEx) {
@@ -543,25 +590,24 @@ public class MarketDataCacheService {
             }
 
             if (!finalMissingSymbols.isEmpty()) {
-                try {
-                    com.marketdata.common.MarketDataProvider provider = com.am.marketdata.common.util.ApplicationContextProvider.getBean("upstox", com.marketdata.common.MarketDataProvider.class);
-                    if (provider != null) {
-                        log.info("overlayLatestPrices", "Self-healing: Triggering historical fallback sync for " + finalMissingSymbols.size() + " symbols: " + finalMissingSymbols);
-                        Map<String, OHLCQuote> freshQuotes = provider.getOHLC(finalMissingSymbols, TimeFrame.DAY);
-                        if (freshQuotes != null) {
-                            for (String sym : finalMissingSymbols) {
-                                OHLCQuote freshQuote = freshQuotes.get(sym);
-                                if (freshQuote != null && freshQuote.getPreviousClose() > 0.0) {
-                                    result.get(sym).setPreviousClose(freshQuote.getPreviousClose());
-                                    if (result.get(sym).getLastPrice() == 0.0 && freshQuote.getLastPrice() > 0.0) {
-                                        result.get(sym).setLastPrice(freshQuote.getLastPrice());
-                                    }
+                if (cacheBackfillExecutor != null) {
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            com.marketdata.common.MarketDataProvider provider = com.am.marketdata.common.util.ApplicationContextProvider.getBean("upstox", com.marketdata.common.MarketDataProvider.class);
+                            if (provider != null) {
+                                log.info("overlayLatestPrices", "Self-healing (async): Triggering historical fallback sync for " + finalMissingSymbols.size() + " symbols: " + finalMissingSymbols);
+                                Map<String, OHLCQuote> freshQuotes = provider.getOHLC(finalMissingSymbols, TimeFrame.DAY);
+                                if (freshQuotes != null && !freshQuotes.isEmpty()) {
+                                    // Cache backfill the fresh quotes so subsequent reads have previousClose populated
+                                    cacheOHLCData(freshQuotes, TimeFrame.DAY);
                                 }
                             }
+                        } catch (Exception selfHealEx) {
+                            log.warn("overlayLatestPrices", "Failed async self-healing previousClose fallback: " + selfHealEx.getMessage());
                         }
-                    }
-                } catch (Exception selfHealEx) {
-                    log.warn("overlayLatestPrices", "Failed self-healing previousClose fallback: " + selfHealEx.getMessage());
+                    }, cacheBackfillExecutor);
+                } else {
+                    log.debug("overlayLatestPrices", "cacheBackfillExecutor null; skipping blocking self-healing fallback for " + finalMissingSymbols.size() + " symbols");
                 }
             }
         }

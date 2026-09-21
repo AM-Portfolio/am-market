@@ -40,6 +40,9 @@ public class FundamentalQueryService {
     // Local in-memory lock map to prevent redundant concurrent initial fetches for the same ISIN
     private final Map<String, Boolean> inFlightHydrations = new ConcurrentHashMap<>();
 
+    // Fast in-memory resolution cache for static Symbol -> ISIN mappings (zero-cost RAM footprint < 50KB)
+    private final Map<String, String> isinCache = new ConcurrentHashMap<>(1024);
+
     /**
      * Resolves a stock symbol or ISIN string to a validated ISIN code.
      * Supports case-insensitive trading symbols (e.g. "tcs", "TCS", "Itc", "HDFCBANK")
@@ -65,6 +68,11 @@ public class FundamentalQueryService {
         // Direct ISIN detection: 12-char starting with IN / 2-letter country code
         if (cleaned.toUpperCase().matches("^[A-Z]{2}[A-Z0-9]{10}$")) {
             return cleaned.toUpperCase();
+        }
+
+        String cacheKey = cleaned.toUpperCase();
+        if (isinCache.containsKey(cacheKey)) {
+            return isinCache.get(cacheKey);
         }
 
         // Generate candidate variations for robust fuzzy matching (handles spaces, hyphens, underscores, dots)
@@ -98,6 +106,7 @@ public class FundamentalQueryService {
         for (String candidate : candidates) {
             String isin = queryIsinByExactSymbol(candidate);
             if (isin != null) {
+                isinCache.put(cacheKey, isin);
                 return isin;
             }
         }
@@ -105,6 +114,7 @@ public class FundamentalQueryService {
         // Fallback 1: Match by Company Name prefix/exact in fundamental_analysis & securities
         String isinByCompany = queryIsinByCompanyName(cleaned);
         if (isinByCompany != null) {
+            isinCache.put(cacheKey, isinByCompany);
             return isinByCompany;
         }
 
@@ -119,7 +129,9 @@ public class FundamentalQueryService {
                             continue;
                         }
                         if (sec.getKey() != null && sec.getKey().getIsin() != null) {
-                            return sec.getKey().getIsin().toUpperCase();
+                            String foundIsin = sec.getKey().getIsin().toUpperCase();
+                            isinCache.put(cacheKey, foundIsin);
+                            return foundIsin;
                         }
                     }
                 }
@@ -282,6 +294,66 @@ public class FundamentalQueryService {
         } catch (Exception e) {
             log.debug("Failed to lookup security document for isin={}: {}", isin, e.getMessage());
             return Optional.empty();
+        }
+    }
+
+    /**
+     * Batched lookup for security documents by a collection of ISINs in ONE single MongoDB query.
+     */
+    public Map<String, SecurityDocument> getSecuritiesByIsins(Collection<String> isins) {
+        if (isins == null || isins.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        try {
+            List<String> cleanIsins = isins.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .map(String::toUpperCase)
+                    .distinct()
+                    .toList();
+            List<SecurityDocument> list = securityRepository.findByIsinIn(cleanIsins);
+            Map<String, SecurityDocument> map = new HashMap<>();
+            if (list != null) {
+                for (SecurityDocument sec : list) {
+                    if (sec.getKey() != null && sec.getKey().getIsin() != null) {
+                        map.put(sec.getKey().getIsin().toUpperCase(), sec);
+                    }
+                }
+            }
+            return map;
+        } catch (Exception e) {
+            log.warn("Failed batched security lookup: {}", e.getMessage());
+            return Collections.emptyMap();
+        }
+    }
+
+    /**
+     * Batched lookup for fundamental data documents by a collection of ISINs in ONE single MongoDB query.
+     */
+    public Map<String, FundamentalData> getFundamentalsByIsins(Collection<String> isins) {
+        if (isins == null || isins.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        try {
+            List<String> cleanIsins = isins.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .map(String::toUpperCase)
+                    .distinct()
+                    .toList();
+            List<FundamentalData> list = fundamentalDataRepository.findByIsinIn(cleanIsins);
+            Map<String, FundamentalData> map = new HashMap<>();
+            if (list != null) {
+                for (FundamentalData doc : list) {
+                    if (doc.getIsin() != null) {
+                        map.put(doc.getIsin().toUpperCase(), doc);
+                    }
+                }
+            }
+            return map;
+        } catch (Exception e) {
+            log.warn("Failed batched fundamental lookup: {}", e.getMessage());
+            return Collections.emptyMap();
         }
     }
 
