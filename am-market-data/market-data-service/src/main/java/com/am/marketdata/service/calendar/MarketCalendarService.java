@@ -73,7 +73,33 @@ public class MarketCalendarService {
                 buildMeta(ex, day.isEmpty() && !syncService.hasYearData(ex, date.getYear())));
     }
 
+    // In-memory cache for market timings to reduce DB/Redis load (30s TTL)
+    private final ConcurrentHashMap<String, CachedTiming> timingsCache = new ConcurrentHashMap<>();
+    
+    private static class CachedTiming {
+        final SessionTiming timing;
+        final long expiryTime;
+        CachedTiming(SessionTiming timing, long expiryTime) {
+            this.timing = timing;
+            this.expiryTime = expiryTime;
+        }
+    }
+
     public SessionTiming getTimings(String exchange, LocalDate date) {
+        String cacheKey = exchange + ":" + date.toString();
+        long now = System.currentTimeMillis();
+        
+        CachedTiming cached = timingsCache.get(cacheKey);
+        if (cached != null && now < cached.expiryTime) {
+            return cached.timing;
+        }
+
+        SessionTiming timing = fetchTimingsInternal(exchange, date);
+        timingsCache.put(cacheKey, new CachedTiming(timing, now + 30_000L)); // 30s TTL
+        return timing;
+    }
+
+    private SessionTiming fetchTimingsInternal(String exchange, LocalDate date) {
         String ex = MarketCalendarSyncService.normalizeExchange(exchange);
         ensureYearLoaded(ex, date.getYear());
         DayOfWeek dow = date.getDayOfWeek();

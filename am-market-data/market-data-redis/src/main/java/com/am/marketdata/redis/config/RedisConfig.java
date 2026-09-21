@@ -94,8 +94,8 @@ public class RedisConfig {
     @Bean
     public RedisTemplate<String, Object> redisTemplate(
             @Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper,
-            GrowthBookService growthBookService) {
-        RedisTemplate<String, Object> template = new FeatureFlaggedRedisTemplate<>(growthBookService);
+            java.util.Optional<GrowthBookService> growthBookServiceOpt) {
+        RedisTemplate<String, Object> template = new FeatureFlaggedRedisTemplate<>(growthBookServiceOpt.orElse(null));
         template.setConnectionFactory(redisConnectionFactory());
         template.setKeySerializer(new StringRedisSerializer());
 
@@ -112,8 +112,8 @@ public class RedisConfig {
 
     @Bean
     @Primary
-    public StringRedisTemplate stringRedisTemplate(GrowthBookService growthBookService) {
-        FeatureFlaggedStringRedisTemplate template = new FeatureFlaggedStringRedisTemplate(growthBookService);
+    public StringRedisTemplate stringRedisTemplate(java.util.Optional<GrowthBookService> growthBookServiceOpt) {
+        FeatureFlaggedStringRedisTemplate template = new FeatureFlaggedStringRedisTemplate(growthBookServiceOpt.orElse(null));
         template.setConnectionFactory(redisConnectionFactory());
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(new StringRedisSerializer());

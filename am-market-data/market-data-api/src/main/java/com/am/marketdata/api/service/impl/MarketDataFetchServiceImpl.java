@@ -99,6 +99,25 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             if (ohlcData != null) {
                 ohlcData = new HashMap<>(ohlcData);
                 instrumentUtils.aliasQuotesUnderOriginalIsins(tradingSymbols, ohlcData);
+
+                // KEY DUP FIX: Ensure the final map contains ONLY the exact symbol keys requested by the caller.
+                // If caller requested "NSE:INFY", return key "NSE:INFY" and filter out the unrequested base key "INFY".
+                // This prevents returning 10 entries for 5 requested symbols.
+                Map<String, OHLCQuote> sanitizedQuotes = new HashMap<>();
+                for (String requestedSym : tradingSymbols) {
+                    if (ohlcData.containsKey(requestedSym)) {
+                        sanitizedQuotes.put(requestedSym, ohlcData.get(requestedSym));
+                    } else {
+                        // Fallback lookup: match clean symbol if requested symbol had exchange prefix or vice versa
+                        String cleanReq = requestedSym.contains(":") ? requestedSym.substring(requestedSym.indexOf(":") + 1).trim() : requestedSym;
+                        if (ohlcData.containsKey(cleanReq)) {
+                            sanitizedQuotes.put(requestedSym, ohlcData.get(cleanReq));
+                        }
+                    }
+                }
+                if (!sanitizedQuotes.isEmpty()) {
+                    ohlcData = sanitizedQuotes;
+                }
             } else {
                 ohlcData = new HashMap<>();
             }
@@ -403,6 +422,12 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         Date fromDate;
         Date toDate;
         try {
+            if (request.getFrom() == null || request.getFrom().trim().isEmpty()) {
+                return HistoricalDataResponseV1.builder()
+                        .error("Missing required parameter: from")
+                        .message("The 'from' date parameter (YYYY-MM-DD) is required.")
+                        .build();
+            }
             SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
             fromDate = dateFormat.parse(request.getFrom());
 
@@ -535,6 +560,24 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         if (ohlcData != null) {
             ohlcData = new HashMap<>(ohlcData);
             instrumentUtils.aliasQuotesUnderOriginalIsins(requested, ohlcData);
+
+            // EXCHANGE-AWARE KEY SANITIZATION: Ensure the final map contains ONLY the exact symbol keys requested by the caller.
+            // Preserves NSE vs BSE distinctions (e.g., NSE_EQ:RELIANCE vs BSE_EQ:RELIANCE) without collisions or unrequested bare keys.
+            Map<String, OHLCQuote> sanitizedOHLC = new HashMap<>();
+            for (String requestedSym : requested) {
+                if (ohlcData.containsKey(requestedSym)) {
+                    sanitizedOHLC.put(requestedSym, ohlcData.get(requestedSym));
+                } else {
+                    String cleanReq = requestedSym.contains(":") ? requestedSym.substring(requestedSym.indexOf(":") + 1).trim() : requestedSym;
+                    if (ohlcData.containsKey(cleanReq)) {
+                        sanitizedOHLC.put(requestedSym, ohlcData.get(cleanReq));
+                    }
+                }
+            }
+            if (!sanitizedOHLC.isEmpty()) {
+                ohlcData = sanitizedOHLC;
+            }
+
             log.info("Fetched OHLC data for keys: {}", ohlcData.keySet());
             return ohlcData;
         } else {
