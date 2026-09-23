@@ -5,10 +5,14 @@ on:
     branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - "am-news/**"
+      - "!am-news/helm/ci-image.yaml"
+      - ".github/workflows/market-news.yml"
   pull_request:
     branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - "am-news/**"
+      - "!am-news/helm/ci-image.yaml"
+      - ".github/workflows/market-news.yml"
   workflow_dispatch:
 
 jobs:
