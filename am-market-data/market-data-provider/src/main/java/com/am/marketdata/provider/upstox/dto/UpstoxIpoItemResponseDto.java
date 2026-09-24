@@ -50,7 +50,11 @@ public class UpstoxIpoItemResponseDto {
     private String biddingEndDate;
 
     @JsonProperty("total_subscription")
-    private String totalSubscription;
+    private Object totalSubscription;
+
+    public String getTotalSubscription() {
+        return totalSubscription != null ? String.valueOf(totalSubscription) : null;
+    }
 
     @JsonProperty("investors")
     private List<UpstoxInvestorCategoryDto> investors;

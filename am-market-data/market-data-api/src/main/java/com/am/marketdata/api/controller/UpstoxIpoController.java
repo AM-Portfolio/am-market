@@ -29,11 +29,11 @@ import java.util.Map;
  * Strictly a thin routing controller: contains zero business/mapping logic and delegates execution to {@link UpstoxIpoService}.
  */
 @RestController
-@RequestMapping("/v1/ipo/upstox")
+@RequestMapping("/v1/market-data/ipo")
 @RequiredArgsConstructor
 @Tag(
-        name = "Upstox IPO",
-        description = "Upstox Developer v2 API endpoints for fetching IPO summaries, 100% granular details, and admin sync status."
+        name = "IPO Market Data",
+        description = "API endpoints for fetching IPO summaries, granular details, and admin sync operations."
 )
 public class UpstoxIpoController {
 

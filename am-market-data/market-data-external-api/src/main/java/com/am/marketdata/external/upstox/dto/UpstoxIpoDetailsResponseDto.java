@@ -89,7 +89,11 @@ public class UpstoxIpoDetailsResponseDto {
     private UpstoxRegistrarInfoDto registrarInfo;
 
     @JsonProperty("total_subscription")
-    private String totalSubscription;
+    private Object totalSubscription;
+
+    public String getTotalSubscription() {
+        return totalSubscription != null ? String.valueOf(totalSubscription) : null;
+    }
 
     @JsonProperty("investors")
     private List<UpstoxInvestorCategoryDto> investors;

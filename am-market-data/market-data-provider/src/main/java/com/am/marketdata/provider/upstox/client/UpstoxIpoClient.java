@@ -151,6 +151,8 @@ public class UpstoxIpoClient {
     private HttpEntity<Void> createHttpEntity() {
         HttpHeaders headers = new HttpHeaders();
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
+        headers.set("User-Agent", "PostmanRuntime/7.39.0");
+        headers.set("Accept-Encoding", "identity");
         String token = getAccessToken();
         if (token != null && !token.trim().isEmpty()) {
             headers.set("Authorization", "Bearer " + token.trim());

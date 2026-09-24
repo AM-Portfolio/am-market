@@ -167,15 +167,28 @@ public class UpstoxIpoService {
 
         for (String st : statusesToSync) {
             // 1 Single REST call per status returns ALL active IPOs!
-            List<AsraxIpoSummaryDto> summaries = ipoDataProvider.getIpos(st, null, 1, 50);
+            List<AsraxIpoSummaryDto> summaries = ipoDataProvider.getIpos(st, null, 1, 30);
             log.info("Single listing query returned {} IPO summaries for status='{}'", summaries.size(), st);
 
             for (AsraxIpoSummaryDto summary : summaries) {
                 try {
                     Optional<UpstoxIpoDocument> existingDoc = mongoRepository.findById(summary.getId());
 
-                    if (existingDoc.isPresent()) {
-                        // Smart Update: Document exists! Update dynamic fields from summary payload without firing extra detail REST call.
+                    semaphore.acquire();
+                    Optional<AsraxIpoDetailsDto> detailsOpt = ipoDataProvider.getIpoDetails(summary.getId());
+                    if (detailsOpt.isPresent()) {
+                        AsraxIpoDetailsDto details = detailsOpt.get();
+                        saveDocToMongo(details);
+                        cacheService.cacheDetails(details.getId(), details);
+                        if (existingDoc.isPresent()) {
+                            updatedIposCount++;
+                        } else {
+                            newIposCount++;
+                        }
+                        totalSynced++;
+                        log.info("Full detail sync: Updated MongoDB & Redis for IPO id='{}'", details.getId());
+                    } else if (existingDoc.isPresent()) {
+                        // Fallback if detail call fails: update dynamic fields from summary
                         UpstoxIpoDocument doc = existingDoc.get();
                         doc.setStatus(summary.getStatus());
                         doc.setTotalSubscription(summary.getTotalSubscription());
@@ -188,21 +201,9 @@ public class UpstoxIpoService {
                         cacheService.cacheDetails(doc.getId(), updatedDetails);
                         updatedIposCount++;
                         totalSynced++;
-                        log.debug("Smart Delta Update: Updated dynamic fields for existing IPO id='{}' (0 detail REST calls used)", summary.getId());
-                    } else {
-                        // New IPO: Fetch full details ONCE via REST call
-                        semaphore.acquire();
-                        Optional<AsraxIpoDetailsDto> detailsOpt = ipoDataProvider.getIpoDetails(summary.getId());
-                        if (detailsOpt.isPresent()) {
-                            AsraxIpoDetailsDto details = detailsOpt.get();
-                            saveDocToMongo(details);
-                            cacheService.cacheDetails(details.getId(), details);
-                            newIposCount++;
-                            totalSynced++;
-                            log.info("New IPO Discovered: Fetched full details for id='{}' and saved to MongoDB & Redis", details.getId());
-                        }
-                        Thread.sleep(100L); // 100ms micro-pause for rate limit safety
+                        log.debug("Summary fallback update for existing IPO id='{}'", summary.getId());
                     }
+                    Thread.sleep(100L); // 100ms micro-pause for rate limit safety
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
