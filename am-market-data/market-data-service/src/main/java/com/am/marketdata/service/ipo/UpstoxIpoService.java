@@ -1,5 +1,6 @@
 package com.am.marketdata.service.ipo;
 
+import com.am.marketdata.common.model.ipo.AsraxIpoCountsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoDetailsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoSummaryDto;
 import com.am.marketdata.common.provider.IpoDataProvider;
@@ -14,12 +15,16 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
+
 
 /**
  * Service orchestrating Upstox IPO operations, Redis cache lookups, MongoDB persistence, and provider API sync.
@@ -217,8 +222,70 @@ public class UpstoxIpoService {
 
         log.info("Smart Delta Upstox IPO Sync Completed: Total {} IPOs processed (New: {}, Updated: {}). Single query efficiency achieved!",
                 totalSynced, newIposCount, updatedIposCount);
+
+        // Auto-recalculate and cache summary counts right after sync completes
+        try {
+            recalculateAndCacheCounts();
+        } catch (Exception e) {
+            log.warn("Failed to recalculate IPO counts post-sync: {}", e.getMessage());
+        }
+
         return totalSynced;
     }
+
+    /**
+     * Gets summary counts of IPOs categorized by lifecycle status.
+     * Hierarchy: 1) Redis Cache -> 2) MongoDB Fallback / Recalculation.
+     */
+    public AsraxIpoCountsDto getIpoCounts() {
+        // 1. Try Redis Cache
+        Optional<AsraxIpoCountsDto> cached = cacheService.getCachedCounts();
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        // 2. Fallback to recalculating from MongoDB
+        return recalculateAndCacheCounts();
+    }
+
+    /**
+     * Recalculates IPO counts directly from MongoDB upstox_ipos collection,
+     * updates Redis cache, and returns the populated DTO.
+     */
+    public AsraxIpoCountsDto recalculateAndCacheCounts() {
+        try {
+            String todayStr = LocalDate.now(ZoneId.of("Asia/Kolkata")).format(DateTimeFormatter.ISO_LOCAL_DATE);
+
+            long openCount = mongoRepository.countByStatus("open");
+            long upcomingCount = mongoRepository.countByStatus("upcoming");
+            long closedCount = mongoRepository.countByStatus("closed");
+            long listedCount = mongoRepository.countByStatus("listed");
+            long closingTodayCount = mongoRepository.countByStatusAndBiddingEndDate("open", todayStr);
+            long totalCount = mongoRepository.count();
+
+            AsraxIpoCountsDto counts = AsraxIpoCountsDto.builder()
+                    .open(openCount)
+                    .upcoming(upcomingCount)
+                    .closed(closedCount)
+                    .closingToday(closingTodayCount)
+                    .listed(listedCount)
+                    .total(totalCount)
+                    .lastSyncedAt(Instant.now().toString())
+                    .build();
+
+            log.info("Recalculated IPO counts from MongoDB: open={}, upcoming={}, closed={}, closingToday={}, listed={}, total={}",
+                    openCount, upcomingCount, closedCount, closingTodayCount, listedCount, totalCount);
+
+            cacheService.cacheCounts(counts);
+            return counts;
+        } catch (Exception e) {
+            log.error("Error recalculating IPO counts: {}", e.getMessage(), e);
+            return AsraxIpoCountsDto.builder()
+                    .lastSyncedAt(Instant.now().toString())
+                    .build();
+        }
+    }
+
 
     private void syncSummariesToMongo(List<AsraxIpoSummaryDto> summaries) {
         for (AsraxIpoSummaryDto s : summaries) {

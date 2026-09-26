@@ -1,5 +1,6 @@
 package com.am.marketdata.service.redis;
 
+import com.am.marketdata.common.model.ipo.AsraxIpoCountsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoDetailsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoSummaryDto;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -29,6 +30,41 @@ public class UpstoxIpoCacheService {
 
     private static final String CACHE_PREFIX_LIST = "ipo:upstox:list:";
     private static final String CACHE_PREFIX_DETAIL = "ipo:upstox:detail:";
+    private static final String CACHE_KEY_COUNTS = "ipo:upstox:counts";
+
+    /**
+     * Attempts to read cached IPO summary counts from Redis.
+     */
+    public Optional<AsraxIpoCountsDto> getCachedCounts() {
+        try {
+            String json = stringRedisTemplate.opsForValue().get(CACHE_KEY_COUNTS);
+            if (json != null && !json.trim().isEmpty()) {
+                AsraxIpoCountsDto dto = objectMapper.readValue(json, AsraxIpoCountsDto.class);
+                log.debug("Redis HIT for key: {}", CACHE_KEY_COUNTS);
+                return Optional.of(dto);
+            }
+        } catch (Throwable e) {
+            log.warn("Redis read exception for counts key '{}': {}. Falling back to DB.", CACHE_KEY_COUNTS, e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Stores IPO summary counts into Redis cache with 24h TTL.
+     */
+    public void cacheCounts(AsraxIpoCountsDto counts) {
+        if (counts == null) {
+            return;
+        }
+        try {
+            String json = objectMapper.writeValueAsString(counts);
+            stringRedisTemplate.opsForValue().set(CACHE_KEY_COUNTS, json, Duration.ofHours(24));
+            log.debug("Redis SET key: {} with TTL: 24h", CACHE_KEY_COUNTS);
+        } catch (Throwable e) {
+            log.warn("Redis write exception for counts key '{}': {}", CACHE_KEY_COUNTS, e.getMessage());
+        }
+    }
+
 
     /**
      * Attempts to read cached IPO summary listing from Redis.

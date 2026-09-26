@@ -28,4 +28,15 @@ public interface UpstoxIpoMongoRepository extends MongoRepository<UpstoxIpoDocum
      * Finds all documents by status.
      */
     List<UpstoxIpoDocument> findByStatus(String status);
+
+    /**
+     * Counts documents by status.
+     */
+    long countByStatus(String status);
+
+    /**
+     * Counts documents by status and bidding end date.
+     */
+    long countByStatusAndBiddingEndDate(String status, String biddingEndDate);
 }
+

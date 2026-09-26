@@ -1,5 +1,6 @@
 package com.am.marketdata.api.controller;
 
+import com.am.marketdata.common.model.ipo.AsraxIpoCountsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoDetailsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoSummaryDto;
 import com.am.marketdata.service.ipo.UpstoxIpoService;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+
 
 /**
  * REST Controller for Upstox IPO market data endpoints.
@@ -130,4 +132,31 @@ public class UpstoxIpoController {
                 "targetStatus", status
         ));
     }
+
+    /**
+     * Endpoint 4: GET /v1/market-data/ipo/counts
+
+     * Purpose: Retrieves summary counts of IPOs categorized by status (open, upcoming, closed, closingToday, listed, total).
+     */
+    @GetMapping(value = "/counts", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+            summary = "Get Upstox IPO Summary Counts",
+            description = "Retrieves summary counts of IPOs categorized by lifecycle status (open, upcoming, closed, closingToday, listed, total). "
+                    + "Served from Redis cache (< 1ms latency) and pre-computed during nightly sync and admin sync."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "IPO summary counts retrieved successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = AsraxIpoCountsDto.class)
+                    )
+            )
+    })
+    public ResponseEntity<AsraxIpoCountsDto> getIpoCounts() {
+        AsraxIpoCountsDto counts = upstoxIpoService.getIpoCounts();
+        return ResponseEntity.ok(counts);
+    }
 }
+
