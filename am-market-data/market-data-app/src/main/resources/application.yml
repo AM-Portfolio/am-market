@@ -232,7 +232,6 @@ market:
     max-stocks-per-list: ${MARKET_WATCHLIST_MAX_STOCKS_PER_LIST:50}
 
 
-
 scheduler:
   timezone: ${SCHEDULER_TIMEZONE:Asia/Kolkata}
   # ── Symbol universe (previous-close / streamer) ───────────────────────────
