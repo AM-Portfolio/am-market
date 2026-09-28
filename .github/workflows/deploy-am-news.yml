@@ -1,4 +1,4 @@
-name: Manual Deploy (Market Data)
+name: Manual Deploy (Market News)
 
 on:
   workflow_dispatch:
@@ -44,7 +44,7 @@ jobs:
           TAG_IN: ${{ inputs.image_tag }}
         run: |
           set -euo pipefail
-          SVC=am-market-data
+          SVC=am-news
           TAG="$TAG_IN"
           if [[ -z "$TAG" ]]; then
             RAW=$(gh api "repos/AM-Portfolio/am-gitops/contents/preprod/image-tags/${SVC}.yaml" -H "Accept: application/vnd.github.raw")
@@ -63,7 +63,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_PAT || secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
           ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-          INPUT_SERVICE_NAME: am-market-data
+          INPUT_SERVICE_NAME: am-news
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
           INPUT_IMAGE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
@@ -78,7 +78,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_PAT || secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
           ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-          INPUT_SERVICE_NAME: am-market-data
+          INPUT_SERVICE_NAME: am-news
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
           INPUT_IMAGE_TAG: ${{ steps.tag.outputs.tag }}
         run: |

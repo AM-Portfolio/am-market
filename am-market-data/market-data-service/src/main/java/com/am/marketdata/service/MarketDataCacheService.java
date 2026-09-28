@@ -175,7 +175,6 @@ public class MarketDataCacheService {
         if (ohlcData == null || ohlcData.isEmpty()) {
             return;
         }
-
         if (asyncBackfillEnabled && cacheBackfillExecutor != null) {
             CompletableFuture.runAsync(() -> doCacheOHLCDataInternal(ohlcData, timeFrame), cacheBackfillExecutor)
                     .exceptionally(ex -> {
@@ -482,7 +481,6 @@ public class MarketDataCacheService {
             List<String> jsonList = (allValues != null && allValues.size() >= n) ? allValues.subList(0, n) : null;
             List<String> prevCloseValues = (allValues != null && allValues.size() >= 2 * n) ? allValues.subList(n, 2 * n) : null;
             List<String> fallbackJsonList = (allValues != null && allValues.size() >= 3 * n) ? allValues.subList(2 * n, 3 * n) : null;
-
             if (jsonList != null || fallbackJsonList != null || prevCloseValues != null) {
                 for (int i = 0; i < entries.size(); i++) {
                     OHLCQuote quote = entries.get(i).getValue();

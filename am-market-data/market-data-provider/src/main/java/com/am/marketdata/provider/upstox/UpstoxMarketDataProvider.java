@@ -316,6 +316,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         return;
                     }
 
+
                     java.time.LocalDate today = java.time.LocalDate.now();
                     String toDate = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
                     String fromDate = today.minusDays(5).format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
@@ -323,7 +324,6 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                     for (int batchIdx = 0; batchIdx < remainingSymbols.size(); batchIdx += BATCH_SIZE) {
                         int endIdx = Math.min(batchIdx + BATCH_SIZE, remainingSymbols.size());
                         List<String> batchSymbols = remainingSymbols.subList(batchIdx, endIdx);
-
                         int callCount = 0;
                         for (String symbol : batchSymbols) {
                             try {
