@@ -21,14 +21,10 @@ jobs:
       contents: write
       packages: write
       id-token: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish-contabo.yml@main
     with:
       language: "java"
       working_directory: "am-market-data"
       image_name: "am-market-data"
       build_context: ".."
-      preprod_namespace: "am-apps-preprod"
-      prod_namespace: "am-apps-prod"
-      dev_namespace: "am-apps-dev"
-      contabo_approve: true
     secrets: inherit
