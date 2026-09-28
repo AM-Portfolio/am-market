@@ -1,13 +1,13 @@
 # AM News living plan
 
-v0 is news, not a spread across Portfolio / Market / Trade. One job: ingest news, serve it quickly on the home dashboard.
+v0 backend remains: ingest news, serve Redis/Mongo snapshots. **UI placement (2026):** shared package `am_news_ui` embeds News on Dashboard, Market (Equity Insider, Watch List, Market Analysis, Paper), Portfolio (Overview, Holdings, Baskets), and Trade (Holdings, Trades, Unified, Journal). Canonical UI inventory: am-modern-ui `docs/news-module/PLAN.md`. No standalone News nav.
 
-Phase 0 (branches) and Phase 1 (MCP) are recorded in [CONTEXT.md](./CONTEXT.md). This hub is the first execute slice. Development (FastAPI, UI, Helm, prod feed) starts only after review in chat.
+Phase 0 (branches) and Phase 1 (MCP) are recorded in [CONTEXT.md](./CONTEXT.md).
 
 Two feeds, never mixed:
 
-- **Current affairs** — last 10 articles from the NIFTY 50 universe, same for everyone (`news:affairs:v1`)
-- **Your holdings** — only the user’s symbols, recent first, no extras (`news:holdings:v1:{sha1}`)
+- **Current affairs** — last 10 articles from the NIFTY 50 universe, same for everyone (`news:affairs:v1`) — **Dashboard only**
+- **Your holdings / symbol insight** — `POST /v1/insight` with symbols from the host page (portfolio book, open Insider symbol, basket, etc.)
 
 Read path never calls Upstox or am-market-data. Resolver and vendor HTTP exist only on the ingest worker.
 
