@@ -2,22 +2,6 @@ name: Market Data Publish
 
 on:
   workflow_dispatch:
-    inputs:
-      deploy_preprod_helm:
-        description: "Helm roll to Kind preprod (image_name-preprod). Feature branches always; on main needs force or gitops off."
-        required: false
-        type: boolean
-        default: true
-      gitops_write_preprod:
-        description: "On main: auto-commit image tag to am-gitops (Argo). Preferred for main."
-        required: false
-        type: boolean
-        default: true
-      force_preprod_helm:
-        description: "Helm on main even when gitops is on / Argo Auto-Sync (may fight selfHeal)."
-        required: false
-        type: boolean
-        default: false
   push:
     branches: ["main", "develop", "dev", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
@@ -46,9 +30,5 @@ jobs:
       preprod_namespace: "am-apps-preprod"
       prod_namespace: "am-apps-prod"
       dev_namespace: "am-apps-dev"
-      deploy_dev: true
-      deploy_prod: true
-      deploy_preprod: ${{ github.event_name != 'workflow_dispatch' && true || inputs.deploy_preprod_helm }}
-      gitops_write_preprod: ${{ github.event_name != 'workflow_dispatch' && true || inputs.gitops_write_preprod }}
-      force_preprod_helm: ${{ github.event_name == 'workflow_dispatch' && inputs.force_preprod_helm || false }}
+      contabo_approve: true
     secrets: inherit
