@@ -5,11 +5,13 @@ on:
     branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - "am-news/**"
+      - "am-common-investment-data/**"
       - ".github/workflows/market-news.yml"
   pull_request:
     branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - "am-news/**"
+      - "am-common-investment-data/**"
       - ".github/workflows/market-news.yml"
   workflow_dispatch:
 

@@ -5,11 +5,13 @@ on:
     branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - "am-parser/**"
+      - "am-common-investment-data/**"
       - ".github/workflows/market-parser.yml"
   pull_request:
     branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
       - "am-parser/**"
+      - "am-common-investment-data/**"
       - ".github/workflows/market-parser.yml"
   workflow_dispatch:
 
