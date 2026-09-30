@@ -3,6 +3,8 @@ vault:
     mongodb:
       mappings:
         MONGO_URI: "url"
+        MONGO_DB: "AM_NEWS_MONGO_DATABASE"
+        MONGODB_DATABASE: "AM_NEWS_MONGO_DATABASE"
     redis:
       mappings:
         REDIS_HOSTNAME: "host"

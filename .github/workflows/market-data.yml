@@ -1,7 +1,7 @@
+# Slim Contabo graph: Build once; Auto sync preprod on main only; Contabo Approve matrix.
 name: Market Data Publish
 
 on:
-  workflow_dispatch:
   push:
     branches: ["main", "develop", "dev", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
@@ -13,14 +13,15 @@ on:
     paths:
       - "am-market-data/**"
       - "am-common-investment-data/**"
+      - ".github/workflows/market-data.yml"
+  workflow_dispatch:
 
 jobs:
   publish:
-    name: Build, Publish and Deploy to Dev
+    name: Publish Market Data
     permissions:
       contents: write
       packages: write
-      id-token: write
     uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish-contabo.yml@main
     with:
       language: "java"

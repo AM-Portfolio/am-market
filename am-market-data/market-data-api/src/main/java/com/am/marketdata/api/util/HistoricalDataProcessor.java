@@ -55,11 +55,11 @@ public class HistoricalDataProcessor {
         } else if (dataObj instanceof Map) {
             Map<String, Object> dataMap = (Map<String, Object>) dataObj;
 
-            if (dataMap.containsKey("tradingSymbol")) {
+            if (dataMap.containsKey("tradingSymbol") && dataMap.get("tradingSymbol") != null) {
                 tradingSymbol = dataMap.get("tradingSymbol").toString();
             }
 
-            if (dataMap.containsKey("interval")) {
+            if (dataMap.containsKey("interval") && dataMap.get("interval") != null) {
                 interval = dataMap.get("interval").toString();
             }
 

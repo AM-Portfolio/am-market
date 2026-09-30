@@ -1,3 +1,4 @@
+# Slim Contabo graph: Build once; Auto sync preprod on main only; Contabo Approve matrix.
 name: Market Parser Publish
 
 on:
@@ -19,7 +20,7 @@ jobs:
   publish:
     name: Publish Parser
     permissions:
-      contents: read
+      contents: write
       packages: write
     uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish-contabo.yml@main
     with:

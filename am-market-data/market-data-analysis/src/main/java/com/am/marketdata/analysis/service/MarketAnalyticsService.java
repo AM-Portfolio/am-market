@@ -148,12 +148,29 @@ public class MarketAnalyticsService {
 
                 response.getData().forEach((s, symbolData) -> {
                     if (symbolData != null && symbolData.getDataPoints() != null) {
+                        // UTC wall-clock payloads (hour < 9) need +5:30 before IST session filter.
+                        boolean isUtcPayload = false;
+                        if (!symbolData.getDataPoints().isEmpty()
+                                && symbolData.getDataPoints().get(0) != null
+                                && symbolData.getDataPoints().get(0).getTime() != null) {
+                            int firstHour = symbolData.getDataPoints().get(0).getTime().toLocalTime().getHour();
+                            if (firstHour < 9) {
+                                isUtcPayload = true;
+                            }
+                        }
+                        final boolean utc = isUtcPayload;
                         List<com.am.common.investment.model.historical.OHLCVTPoint> filteredPoints = symbolData
                                 .getDataPoints().stream()
                                 .filter(p -> {
                                     try {
-                                        // Performance Optimization: Use pre-cached kolkataZone instance instead of calling ZoneId.of() inside stream loop
-                                        long timestamp = p.getTime().atZone(kolkataZone)
+                                        if (p.getTime() == null) {
+                                            return true;
+                                        }
+                                        java.time.LocalDateTime local = p.getTime();
+                                        if (utc) {
+                                            local = local.plusHours(5).plusMinutes(30);
+                                        }
+                                        long timestamp = local.atZone(kolkataZone)
                                                 .toInstant()
                                                 .toEpochMilli();
                                         return timestamp >= minTime;

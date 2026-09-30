@@ -4,14 +4,19 @@ vault:
       mappings:
         MONGODB_URL: "url"
         SPRING_DATA_MONGODB_URI: "url"
+        MONGODB_DATABASE: "AM_MARKET_DATA_MONGO_DATABASE"
+        MONGODB_DATABASE_NAME: "AM_MARKET_DATA_MONGO_DATABASE"
+        SPRING_DATA_MONGODB_DATABASE: "AM_MARKET_DATA_MONGO_DATABASE"
     redis:
       mappings:
         REDIS_HOSTNAME: "host"
         REDIS_PASSWORD_INTERNAL: "password"
         REDIS_PORT: "port"
+        REDIS_USERNAME: "username"
         SPRING_DATA_REDIS_HOST: "host"
         SPRING_DATA_REDIS_PASSWORD: "password"
         SPRING_DATA_REDIS_PORT: "port"
+        SPRING_DATA_REDIS_USERNAME: "username"
     influxdb:
       template: |
         export INFLUXDB_URL_INTERNAL="http://{{ .Data.data.host }}:{{ .Data.data.port }}"

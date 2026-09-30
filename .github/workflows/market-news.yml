@@ -1,3 +1,4 @@
+# Slim Contabo graph: Build once; Auto sync preprod on main only; Contabo Approve matrix.
 name: Market News Publish
 
 on:
