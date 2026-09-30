@@ -10,6 +10,8 @@ vault:
     mongodb:
       mappings:
         MONGO_URI: "url"
+        MONGODB_DATABASE: "AM_PARSER_MONGO_DATABASE"
+        MONGO_DB: "AM_PARSER_MONGO_DATABASE"
     together:
       mappings:
         TOGETHER_API_KEY: "TOGETHER_API_KEY"
