@@ -1,3 +1,4 @@
+# Workflow trigger comment: news pipeline update
 name: Market News Publish
 
 on:
