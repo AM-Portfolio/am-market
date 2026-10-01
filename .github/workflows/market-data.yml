@@ -27,4 +27,5 @@ jobs:
       working_directory: "am-market-data"
       image_name: "am-market-data"
       build_context: ".."
+      pipelines_ref: "fix/argo-validate-false-put"
     secrets: inherit

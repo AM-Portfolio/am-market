@@ -26,4 +26,5 @@ jobs:
       language: "python"
       working_directory: "am-news"
       image_name: "am-news"
+      pipelines_ref: "fix/argo-validate-false-put"
     secrets: inherit
