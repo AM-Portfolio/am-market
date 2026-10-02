@@ -163,7 +163,9 @@ public class MarketAnalyticsService {
                                 })
                                 .collect(Collectors.toList());
 
-                        symbolData.setDataPoints(filteredPoints);
+                        if (!filteredPoints.isEmpty()) {
+                            symbolData.setDataPoints(filteredPoints);
+                        }
                     }
                 });
             }

@@ -115,8 +115,15 @@ public class UpstoxInstrumentService implements InstrumentDataProvider {
                     org.springframework.data.mongodb.core.query.Criteria.where("exchange").in(criteria.getExchanges()));
         }
         if (criteria.getInstrumentTypes() != null && !criteria.getInstrumentTypes().isEmpty()) {
+            List<String> types = new ArrayList<>(criteria.getInstrumentTypes());
+            // Upstox stores equity instruments with instrument_type = "EQ".
+            // To ensure full backward compatibility with callers passing "EQUITY",
+            // automatically alias "EQUITY" to include "EQ" in the Mongo criteria search.
+            if (types.contains("EQUITY") && !types.contains("EQ")) {
+                types.add("EQ");
+            }
             criteriaList.add(org.springframework.data.mongodb.core.query.Criteria.where("instrument_type")
-                    .in(criteria.getInstrumentTypes()));
+                    .in(types));
         }
         if (criteria.getSegments() != null && !criteria.getSegments().isEmpty()) {
             criteriaList.add(
