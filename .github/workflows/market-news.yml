@@ -27,5 +27,6 @@ jobs:
       language: "python"
       working_directory: "am-news"
       image_name: "am-news"
-      pipelines_ref: "fix/argo-validate-false-put"
+      # Pin-then-sync scripts live on am-pipelines main (matches uses: @main).
+      pipelines_ref: "main"
     secrets: inherit
