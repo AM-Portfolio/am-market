@@ -21,11 +21,10 @@ jobs:
       contents: write
       packages: write
       id-token: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish-contabo.yml@main
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish-contabo.yml@develop
     with:
       language: "java"
       working_directory: "am-market-data"
       image_name: "am-market-data"
       build_context: ".."
-      pipelines_ref: "fix/argo-validate-false-put"
     secrets: inherit

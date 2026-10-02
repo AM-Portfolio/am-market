@@ -11,7 +11,7 @@ global:
     serviceAccountName: "am-backend-sa"
 
 image:
-  repository: am-parser
+  repository: am-market/am-parser
   pullPolicy: Always
 
 # Service-owned Ingress (same model as am-identity / am-market-data).
