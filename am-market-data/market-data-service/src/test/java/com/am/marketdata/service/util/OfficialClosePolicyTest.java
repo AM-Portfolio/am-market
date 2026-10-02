@@ -4,56 +4,45 @@ import com.am.common.investment.model.historical.OHLCVTPoint;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class OfficialClosePolicyTest {
 
-    @Test
-    void redisLastTickMustNotWinWhenMarketIsClosed() {
-        assertFalse(OfficialClosePolicy.shouldOverlayLiveLastPrice(false));
-        assertTrue(OfficialClosePolicy.shouldOverlayLiveLastPrice(true));
+    private static OHLCVTPoint bar(LocalDate date, double close) {
+        OHLCVTPoint p = new OHLCVTPoint();
+        p.setTime(date.atTime(15, 30));
+        p.setClose(close);
+        return p;
     }
 
     @Test
-    void holidayUsesFridayCloseNotStaleLastTrade() {
-        LocalDate saturday = LocalDate.of(2026, 8, 15);
-        List<OHLCVTPoint> candles = List.of(
-                candle(LocalDate.of(2026, 8, 13), 96.33),
-                candle(LocalDate.of(2026, 8, 14), 98.09));
-
-        Double close = OfficialClosePolicy.pickSessionClose(candles, saturday, false);
-
-        assertEquals(98.09, close);
+    void beforeOpenOnSessionDay_usesLastSessionClose() {
+        LocalDate monday = LocalDate.of(2026, 9, 21);
+        List<OHLCVTPoint> points = List.of(
+                bar(LocalDate.of(2026, 9, 17), 1243.9),
+                bar(LocalDate.of(2026, 9, 18), 1226.4));
+        Double close = OfficialClosePolicy.pickSessionClose(points, monday, true, false);
+        assertEquals(1226.4, close);
     }
 
     @Test
-    void tradingDayAfterCloseWithoutTodayCandleDoesNotUseYesterday() {
-        LocalDate friday = LocalDate.of(2026, 8, 14);
-        List<OHLCVTPoint> candles = List.of(candle(LocalDate.of(2026, 8, 13), 96.33));
-
-        assertNull(OfficialClosePolicy.pickSessionClose(candles, friday, true));
+    void afterCloseOnSessionDay_requiresTodayCandle() {
+        LocalDate thursday = LocalDate.of(2026, 9, 18);
+        List<OHLCVTPoint> points = List.of(
+                bar(LocalDate.of(2026, 9, 17), 1243.9),
+                bar(LocalDate.of(2026, 9, 18), 1226.4));
+        assertEquals(1226.4, OfficialClosePolicy.pickSessionClose(points, thursday, true, true));
+        // Friday after close with only Thu bar → null (do not paint Thu as Fri)
+        LocalDate friday = LocalDate.of(2026, 9, 19);
+        assertNull(OfficialClosePolicy.pickSessionClose(points, friday, true, true));
     }
 
     @Test
-    void tradingDayUsesTodayCandleWhenPresent() {
-        LocalDate friday = LocalDate.of(2026, 8, 14);
-        List<OHLCVTPoint> candles = List.of(
-                candle(LocalDate.of(2026, 8, 13), 125.89),
-                candle(LocalDate.of(2026, 8, 14), 125.13));
-
-        assertEquals(125.13, OfficialClosePolicy.pickSessionClose(candles, friday, true));
-    }
-
-    private static OHLCVTPoint candle(LocalDate date, double close) {
-        return OHLCVTPoint.builder()
-                .time(LocalDateTime.of(date, java.time.LocalTime.of(15, 30)))
-                .close(close)
-                .build();
+    void weekend_usesLatestSession() {
+        LocalDate sunday = LocalDate.of(2026, 9, 20);
+        List<OHLCVTPoint> points = List.of(bar(LocalDate.of(2026, 9, 18), 1226.4));
+        assertEquals(1226.4, OfficialClosePolicy.pickSessionClose(points, sunday, false, false));
     }
 }

@@ -152,7 +152,8 @@ public class MarketDataCacheService {
     public void cacheOHLCData(Map<String, OHLCQuote> ohlcData, TimeFrame timeFrame) {
         try {
             String interval = timeFrame != null ? timeFrame.getApiValue() : "1D";
-            String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            // NSE calendar date — UTC midnight would poison Mon IST pre-open into Sun keys.
+            String today = LocalDate.now(ZoneId.of("Asia/Kolkata")).format(DateTimeFormatter.ISO_LOCAL_DATE);
 
             log.info("[INTERVAL_TRACE]", String.format(
                     "MarketDataCacheService.cacheOHLCData: Caching %d symbols with timeFrame: %s (enum: %s, apiValue: %s) for date: %s",
@@ -183,16 +184,24 @@ public class MarketDataCacheService {
                     log.warn("cacheOHLCData", "Skipping symbol {} due to missing OHLC data", symbol);
                     continue;
                 }
+                // Never persist failed Upstox/provider zeros — they poison getQuotes until TTL.
+                double usableLast = quote.getLastPrice() > 0
+                        ? quote.getLastPrice()
+                        : (quote.getOhlc().getClose() > 0 ? quote.getOhlc().getClose() : quote.getPreviousClose());
+                if (usableLast <= 0) {
+                    log.warn("cacheOHLCData", "Skipping symbol {} — no usable last/close/previousClose", symbol);
+                    continue;
+                }
 
                 // Create OHLCV from OHLCQuote
                 OHLCV ohlcv = StockCacheService.createPricePoint(
-                        LocalDateTime.now(),
-                        quote.getOhlc().getOpen(),
-                        quote.getOhlc().getHigh(),
-                        quote.getOhlc().getLow(),
-                        quote.getOhlc().getClose(),
+                        LocalDateTime.now(ZoneId.of("Asia/Kolkata")),
+                        quote.getOhlc().getOpen() > 0 ? quote.getOhlc().getOpen() : usableLast,
+                        quote.getOhlc().getHigh() > 0 ? quote.getOhlc().getHigh() : usableLast,
+                        quote.getOhlc().getLow() > 0 ? quote.getOhlc().getLow() : usableLast,
+                        quote.getOhlc().getClose() > 0 ? quote.getOhlc().getClose() : usableLast,
                         0L,
-                        quote.getLastPrice());
+                        usableLast);
 
                 List<OHLCV> bars = new ArrayList<>();
                 bars.add(ohlcv);
@@ -311,8 +320,8 @@ public class MarketDataCacheService {
                 return Collections.emptyMap();
             }
 
-            // Get today's date in the same format used for caching
-            String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            // Get today's date in the same format used for caching (IST)
+            String today = LocalDate.now(ZoneId.of("Asia/Kolkata")).format(DateTimeFormatter.ISO_LOCAL_DATE);
 
             // Log the cache retrieval operation
             List<String> expectedKeys = new ArrayList<>();
@@ -376,6 +385,7 @@ public class MarketDataCacheService {
                 // The intraday bars (Path 1) do not store previousClose, so it defaults to 0.0.
                 // This overlay fixes both: fresh lastPrice on reload and non-zero previousClose.
                 overlayLatestPrices(result);
+                com.am.marketdata.service.MarketDataService.healZeroLastPriceFromClose(result);
             }
 
             return result;
@@ -932,9 +942,10 @@ public class MarketDataCacheService {
         ohlc.setLow(bar.getLow());
         ohlc.setClose(bar.getClose());
 
-        // Set the OHLC and last price in the quote
+        // Set the OHLC and last price in the quote (prefer close when lastPrice is missing/zero)
         quote.setOhlc(ohlc);
-        quote.setLastPrice(bar.getLastPrice()); // Set last price to close price
+        double last = (bar.getLastPrice() != null && bar.getLastPrice() > 0) ? bar.getLastPrice() : bar.getClose();
+        quote.setLastPrice(last > 0 ? last : 0.0);
 
         // Log at debug level
         log.debug("createOHLCQuoteFromBar",

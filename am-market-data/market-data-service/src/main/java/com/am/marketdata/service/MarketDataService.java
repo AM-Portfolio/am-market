@@ -245,14 +245,19 @@ public class MarketDataService {
         }
 
         java.time.ZoneId ist = java.time.ZoneId.of("Asia/Kolkata");
-        java.time.LocalDate today = java.time.LocalDate.now(ist);
+        java.time.ZonedDateTime nowIst = java.time.ZonedDateTime.now(ist);
+        java.time.LocalDate today = nowIst.toLocalDate();
         boolean sessionDay = true;
         try {
             sessionDay = marketHoursService.isCashSessionDay();
         } catch (Exception e) {
             log.warn("Could not resolve session day; requiring today's candle: {}", e.getMessage());
         }
-        Date fromDate = Date.from(today.minusDays(7).atStartOfDay(ist).toInstant());
+        // Before cash open on a session day there is no today candle yet — use last session.
+        // After close, still prefer today's candle when published; otherwise fall back.
+        boolean expectTodayCandle = sessionDay
+                && !nowIst.toLocalTime().isBefore(java.time.LocalTime.of(15, 30));
+        Date fromDate = Date.from(today.minusDays(14).atStartOfDay(ist).toInstant());
         Date toDate = Date.from(today.plusDays(1).atStartOfDay(ist).toInstant());
 
         try {
@@ -267,39 +272,84 @@ public class MarketDataService {
                     false,
                     false);
 
-            if (history == null || history.isEmpty()) {
-                log.debug("No daily candles available for official-close overlay");
-                return;
-            }
-
             int updated = 0;
-            for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
-                HistoricalData data = history.get(entry.getKey());
-                if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
-                    continue;
+            if (history != null && !history.isEmpty()) {
+                for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
+                    HistoricalData data = history.get(entry.getKey());
+                    if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
+                        continue;
+                    }
+                    Double officialClose = OfficialClosePolicy.pickSessionClose(
+                            data.getDataPoints(), today, sessionDay, expectTodayCandle);
+                    if (officialClose == null) {
+                        continue;
+                    }
+                    OHLCQuote quote = entry.getValue();
+                    if (quote == null) {
+                        continue;
+                    }
+                    quote.setLastPrice(officialClose);
+                    if (quote.getOhlc() != null) {
+                        quote.getOhlc().setClose(officialClose);
+                    }
+                    updated++;
                 }
-                Double officialClose = OfficialClosePolicy.pickSessionClose(
-                        data.getDataPoints(), today, sessionDay);
-                if (officialClose == null) {
-                    continue;
-                }
-                OHLCQuote quote = entry.getValue();
-                if (quote == null) {
-                    continue;
-                }
-                quote.setLastPrice(officialClose);
-                if (quote.getOhlc() != null) {
-                    quote.getOhlc().setClose(officialClose);
-                }
-                updated++;
+            } else {
+                log.debug("No daily candles available for official-close overlay");
             }
-            if (updated > 0) {
-                log.info("Applied official daily close after hours for {}/{} symbols (calendarDate={}, sessionDay={})",
-                        updated, quotes.size(), today, sessionDay);
+            // Always heal lastPrice=0 when previousClose (or OHLC close) is known.
+            int healed = healZeroLastPriceFromClose(quotes);
+            if (updated > 0 || healed > 0) {
+                log.info("Applied official daily close after hours for {}/{} symbols "
+                                + "(calendarDate={}, sessionDay={}, expectToday={}, healedZero={})",
+                        updated, quotes.size(), today, sessionDay, expectTodayCandle, healed);
             }
         } catch (Exception e) {
-            log.warn("Official daily close overlay failed; leaving lastPrice as-is: {}", e.getMessage());
+            log.warn("Official daily close overlay failed; healing zero lastPrice only: {}", e.getMessage());
+            healZeroLastPriceFromClose(quotes);
         }
+    }
+
+    /** When provider/cache leave lastPrice at 0, prefer OHLC close then previousClose. */
+    static int healZeroLastPriceFromClose(Map<String, OHLCQuote> quotes) {
+        if (quotes == null || quotes.isEmpty()) {
+            return 0;
+        }
+        int healed = 0;
+        for (OHLCQuote quote : quotes.values()) {
+            if (quote == null) {
+                continue;
+            }
+            if (quote.getLastPrice() > 0) {
+                continue;
+            }
+            double fallback = 0;
+            if (quote.getOhlc() != null && quote.getOhlc().getClose() > 0) {
+                fallback = quote.getOhlc().getClose();
+            } else if (quote.getPreviousClose() > 0) {
+                fallback = quote.getPreviousClose();
+            }
+            if (fallback <= 0) {
+                continue;
+            }
+            quote.setLastPrice(fallback);
+            if (quote.getOhlc() != null) {
+                if (quote.getOhlc().getClose() <= 0) {
+                    quote.getOhlc().setClose(fallback);
+                }
+                if (quote.getOhlc().getOpen() <= 0) {
+                    quote.getOhlc().setOpen(fallback);
+                }
+                if (quote.getOhlc().getHigh() <= 0) {
+                    quote.getOhlc().setHigh(fallback);
+                }
+                if (quote.getOhlc().getLow() <= 0) {
+                    quote.getOhlc().setLow(fallback);
+                }
+            }
+            healed++;
+        }
+        return healed;
     }
 
     public HistoricalData getHistoricalData(String symbol, Date fromDate, Date toDate, TimeFrame interval,

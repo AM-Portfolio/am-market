@@ -25,6 +25,17 @@ public final class OfficialClosePolicy {
      * @return last session close, or null if we must not guess
      */
     public static Double pickSessionClose(List<OHLCVTPoint> points, LocalDate today, boolean sessionDay) {
+        return pickSessionClose(points, today, sessionDay, true);
+    }
+
+    /**
+     * @param expectTodayCandle when true on a session day, only accept today's candle
+     *                          (after-hours until today's bar exists). When false
+     *                          (weekend/holiday, or weekday before open / no today bar yet),
+     *                          use the latest session close in the window.
+     */
+    public static Double pickSessionClose(
+            List<OHLCVTPoint> points, LocalDate today, boolean sessionDay, boolean expectTodayCandle) {
         if (points == null || points.isEmpty() || today == null) {
             return null;
         }
@@ -46,7 +57,7 @@ public final class OfficialClosePolicy {
         if (officialClose == null || sessionDate == null) {
             return null;
         }
-        if (!sessionDate.equals(today) && sessionDay) {
+        if (!sessionDate.equals(today) && sessionDay && expectTodayCandle) {
             return null;
         }
         return officialClose;
