@@ -1,7 +1,7 @@
-# Workflow trigger comment: news pipeline update
 name: Market News Publish
 
 on:
+  workflow_dispatch:
   push:
     branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
@@ -14,11 +14,38 @@ on:
       - "am-news/**"
       - "am-common-investment-data/**"
       - ".github/workflows/market-news.yml"
-  workflow_dispatch:
 
 jobs:
+  # Defense in depth: on.paths alone let news run on a market-data-only push.
+  changes:
+    name: Path filter
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      service: ${{ steps.filter.outputs.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            service:
+              - 'am-news/**'
+              - 'am-common-investment-data/**'
+              - '.github/workflows/market-news.yml'
+
   publish:
     name: Publish News
+    needs: changes
+    if: |
+      always() &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (needs.changes.result == 'success' && needs.changes.outputs.service == 'true')
+      )
     permissions:
       contents: write
       packages: write
