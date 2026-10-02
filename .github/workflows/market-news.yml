@@ -21,9 +21,10 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish-contabo.yml@develop
+    uses: AM-Portfolio/am-pipelines/.github/workflows/central-build-publish-contabo.yml@main
     with:
       language: "python"
       working_directory: "am-news"
       image_name: "am-news"
+      pipelines_ref: "main"
     secrets: inherit
