@@ -1,4 +1,3 @@
-# Workflow trigger comment: market-data pipeline update
 name: Market Data Publish
 
 on:

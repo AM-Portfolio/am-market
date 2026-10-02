@@ -1,4 +1,3 @@
-# Workflow trigger comment: parser pipeline update
 name: Market Parser Publish
 
 on:
