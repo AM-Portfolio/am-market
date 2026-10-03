@@ -206,8 +206,17 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         String instrumentKey = entry.getKey();
                         OHLCResponse.OHLCData data = entry.getValue();
 
+                        // Upstox API responses sometimes return keys with ':' instead of '|' 
+                        String normalizedKey = instrumentKey.replace(":", "|");
+
                         // Map back to symbol if possible, otherwise use key
-                        String symbol = context.getSymbol(instrumentKey);
+                        String symbol = context.getSymbol(normalizedKey);
+                        if (symbol == null) {
+                            symbol = context.getSymbol(instrumentKey);
+                        }
+                        if (symbol == null) {
+                            symbol = instrumentKey;
+                        }
 
                         OHLCQuote quote = new OHLCQuote();
                         // Use getters as fields might be mapped differently or computed
@@ -480,8 +489,17 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         String instrumentKey = entry.getKey();
                         MarketQuoteSymbolLtpV3 data = entry.getValue();
 
+                        // Upstox API responses sometimes return keys with ':' instead of '|' 
+                        String normalizedKey = instrumentKey.replace(":", "|");
+
                         // Map back to symbol using the context map
-                        String symbol = context.getSymbol(instrumentKey);
+                        String symbol = context.getSymbol(normalizedKey);
+                        if (symbol == null) {
+                            symbol = context.getSymbol(instrumentKey);
+                        }
+                        if (symbol == null) {
+                            symbol = instrumentKey;
+                        }
 
                         LTPQuote quote = new LTPQuote();
                         quote.lastPrice = data.getLastPrice();
@@ -496,7 +514,17 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             String instrumentKey = entry.getKey();
                             com.am.marketdata.provider.upstox.model.common.StockQuote data = entry.getValue();
 
-                             String symbol = context.getSymbol(instrumentKey);
+                            // Upstox API responses sometimes return keys with ':' instead of '|' 
+                            String normalizedKey = instrumentKey.replace(":", "|");
+
+                            // Map back to symbol using the context map
+                            String symbol = context.getSymbol(normalizedKey);
+                            if (symbol == null) {
+                                symbol = context.getSymbol(instrumentKey);
+                            }
+                            if (symbol == null) {
+                                symbol = instrumentKey;
+                            }
 
                             LTPQuote quote = new LTPQuote();
                             quote.lastPrice = data.getLastPrice() != null ? data.getLastPrice() : 0.0;

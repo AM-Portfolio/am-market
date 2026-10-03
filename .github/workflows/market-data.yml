@@ -13,10 +13,39 @@ on:
     paths:
       - "am-market-data/**"
       - "am-common-investment-data/**"
+      - ".github/workflows/market-data.yml"
 
 jobs:
+  # Defense in depth: on.paths alone let news/parser run on a market-data-only push.
+  changes:
+    name: Path filter
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      service: ${{ steps.filter.outputs.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            service:
+              - 'am-market-data/**'
+              - 'am-common-investment-data/**'
+              - '.github/workflows/market-data.yml'
+
   publish:
-    name: Build, Publish and Deploy to Dev
+    name: Publish Market Data
+    needs: changes
+    if: |
+      always() &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (needs.changes.result == 'success' && needs.changes.outputs.service == 'true')
+      )
     permissions:
       contents: write
       packages: write
@@ -27,4 +56,6 @@ jobs:
       working_directory: "am-market-data"
       image_name: "am-market-data"
       build_context: ".."
+      # Pin-then-sync scripts live on am-pipelines main (matches uses: @main).
+      pipelines_ref: "main"
     secrets: inherit

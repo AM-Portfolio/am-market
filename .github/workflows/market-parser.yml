@@ -1,6 +1,7 @@
 name: Market Parser Publish
 
 on:
+  workflow_dispatch:
   push:
     branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
     paths:
@@ -13,11 +14,38 @@ on:
       - "am-parser/**"
       - "am-common-investment-data/**"
       - ".github/workflows/market-parser.yml"
-  workflow_dispatch:
 
 jobs:
+  # Defense in depth: on.paths alone let parser run on a market-data-only push.
+  changes:
+    name: Path filter
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      service: ${{ steps.filter.outputs.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            service:
+              - 'am-parser/**'
+              - 'am-common-investment-data/**'
+              - '.github/workflows/market-parser.yml'
+
   publish:
     name: Publish Parser
+    needs: changes
+    if: |
+      always() &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (needs.changes.result == 'success' && needs.changes.outputs.service == 'true')
+      )
     permissions:
       contents: read
       packages: write
@@ -26,4 +54,6 @@ jobs:
       language: "python"
       working_directory: "am-parser"
       image_name: "am-parser"
+      # Pin-then-sync scripts live on am-pipelines main (matches uses: @main).
+      pipelines_ref: "main"
     secrets: inherit
