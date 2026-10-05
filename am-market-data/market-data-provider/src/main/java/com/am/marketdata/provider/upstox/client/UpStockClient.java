@@ -167,14 +167,6 @@ public class UpStockClient {
     }
 
     private String getAccessToken() {
-        try {
-            String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
-            if (cachedToken != null && !cachedToken.isEmpty()) {
-                return cachedToken;
-            }
-        } catch (Exception e) {
-            log.warn("Failed to get access token from Redis: {}", e.getMessage());
-        }
         return upstoxConfig.getAccessToken();
     }
 

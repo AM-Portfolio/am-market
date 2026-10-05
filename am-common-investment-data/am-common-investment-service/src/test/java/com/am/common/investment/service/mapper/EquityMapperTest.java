@@ -31,7 +31,7 @@ class EquityMapperTest {
         measurement.setHigh(155.0);
         measurement.setLow(149.0);
         measurement.setClose(152.0);
-        measurement.setVolume(1000000L);
+        measurement.setVolume(1000000.0);
         measurement.setExchange("NASDAQ");
         measurement.setCurrency("USD");
 
@@ -82,7 +82,7 @@ class EquityMapperTest {
         assertThat(measurement.getHigh()).isEqualTo(2850.0);
         assertThat(measurement.getLow()).isEqualTo(2780.0);
         assertThat(measurement.getClose()).isEqualTo(2820.0);
-        assertThat(measurement.getVolume()).isEqualTo(500000L);
+        assertThat(measurement.getVolume()).isEqualTo(500000.0);
         assertThat(measurement.getExchange()).isEqualTo("NASDAQ");
         assertThat(measurement.getCurrency()).isEqualTo("USD");
     }

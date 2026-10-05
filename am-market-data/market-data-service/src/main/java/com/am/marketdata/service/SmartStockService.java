@@ -141,7 +141,20 @@ public class SmartStockService {
 
         // 1. Try Cache & Database (No Provider)
         Map<String, OHLCQuote> rawQuotes = marketDataService.getOHLC(symbols, TimeFrame.DAY, false, null);
-        Map<String, OHLCQuote> quotes = rawQuotes != null ? new HashMap<>(rawQuotes) : new HashMap<>();
+        Map<String, OHLCQuote> quotes = new HashMap<>();
+
+        if (rawQuotes != null) {
+            for (Map.Entry<String, OHLCQuote> entry : rawQuotes.entrySet()) {
+                OHLCQuote q = entry.getValue();
+                if (q != null && q.getLastPrice() > 0.0) {
+                    boolean hasOhlc = q.getOhlc() != null && q.getOhlc().getOpen() > 0.0;
+                    boolean hasDiffPrevClose = q.getPreviousClose() > 0.0 && Math.abs(q.getLastPrice() - q.getPreviousClose()) > 0.0001;
+                    if (hasOhlc || hasDiffPrevClose) {
+                        quotes.put(entry.getKey(), q);
+                    }
+                }
+            }
+        }
 
         Set<String> missingSymbols = new HashSet<>(symbols);
         missingSymbols.removeAll(quotes.keySet());
@@ -181,9 +194,18 @@ public class SmartStockService {
 
             if (historyMap != null) {
                 for (String symbol : missingSymbols) {
-                    if (historyMap.containsKey(symbol)) {
-                        var history = historyMap.get(symbol);
-                        if (history.getDataPoints() != null && !history.getDataPoints().isEmpty()) {
+                    var history = historyMap.get(symbol);
+                    if (history == null) {
+                        String clean = symbol.contains(":") ? symbol.substring(symbol.indexOf(":") + 1) : symbol;
+                        history = historyMap.get(clean);
+                        if (history == null) {
+                            history = historyMap.get("NSE_EQ:" + clean);
+                        }
+                        if (history == null) {
+                            history = historyMap.get("NSE:" + clean);
+                        }
+                    }
+                    if (history != null && history.getDataPoints() != null && !history.getDataPoints().isEmpty()) {
                             // Sort to get latest
                             var points = history.getDataPoints();
                             // Assuming points are sorted, get last
@@ -231,7 +253,6 @@ public class SmartStockService {
                             log.debug("getSmartQuotes", "Synthesized quote for {} from history. lastPrice={}, prevClose={}",
                                     symbol, lastClose, prevClose);
                         }
-                    }
                 }
             }
         } catch (Exception e) {

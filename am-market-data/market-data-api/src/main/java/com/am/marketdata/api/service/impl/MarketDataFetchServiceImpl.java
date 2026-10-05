@@ -258,13 +258,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                     Set<String> resolved = instrumentUtils.resolveSymbols(List.of(originalSymbol), fetchIndexStocks);
                     for (String sym : resolved) {
                         resolvedToOriginal.put(sym, originalSymbol);
-                        if (sym.startsWith("GLOBAL_INDEX|") || sym.startsWith("NSE_INDEX|") || !sym.contains("|")) {
-                            // If a symbol doesn't have exchange prefix, check if it looks like index
+                        if (sym.startsWith("GLOBAL_INDEX|") || sym.startsWith("NSE_INDEX|") || sym.startsWith("BSE_INDEX|")) {
                             indexSymbols.add(sym);
-                        } else if (sym.startsWith("NSE_EQ:")) {
-                            stockSymbols.add(sym);
                         } else {
-                            // Default fallback
                             stockSymbols.add(sym);
                         }
                     }

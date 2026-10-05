@@ -17,6 +17,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.am.marketdata.analysis.dto.StockMoverDTO;
+import com.am.marketdata.analysis.dto.SectorPerformanceDTO;
 import java.util.List;
 import java.util.Map;
 
@@ -192,7 +194,7 @@ public class AnalysisController {
      */
     @GetMapping(value = "/sectors", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get Sector Performance", description = "Aggregates market performance by sector (Industry) from the specified index")
-    public ResponseEntity<List<Map<String, Object>>> getSectorPerformance(
+    public ResponseEntity<List<SectorPerformanceDTO>> getSectorPerformance(
             @RequestParam(required = false) String indexSymbol,
             @RequestParam(required = false) String timeFrame,
             @RequestParam(defaultValue = "false") boolean expandIndices) {
@@ -208,7 +210,7 @@ public class AnalysisController {
      */
     @GetMapping(value = "/index-performance", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get Index Performance", description = "Retrieves performance of all constituent stocks in the specified index for a given timeframe")
-    public ResponseEntity<List<Map<String, Object>>> getIndexPerformance(
+    public ResponseEntity<List<StockMoverDTO>> getIndexPerformance(
             @RequestParam(required = false) String indexSymbol,
             @RequestParam(required = false) String timeFrame) {
 

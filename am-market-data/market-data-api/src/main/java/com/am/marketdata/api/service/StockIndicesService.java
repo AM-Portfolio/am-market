@@ -399,10 +399,20 @@ public class StockIndicesService {
                 }
 
                 // Get existing MongoDB record or instantiate a new one
+                String cleanSymbol = symbol != null && symbol.contains(":") ? symbol.substring(symbol.indexOf(":") + 1) : symbol;
                 StockIndicesMarketData data = docMap.get(symbol);
+                if (data == null && cleanSymbol != null) {
+                    data = docMap.get(cleanSymbol);
+                }
+                if (data == null && cleanSymbol != null) {
+                    List<StockIndicesMarketData> existing = stockIndicesMarketDataService.findByIndexSymbols(java.util.Collections.singleton(cleanSymbol));
+                    if (!existing.isEmpty()) {
+                        data = existing.get(0);
+                    }
+                }
                 if (data == null) {
                     data = new StockIndicesMarketData();
-                    data.setIndexSymbol(symbol);
+                    data.setIndexSymbol(cleanSymbol);
                 }
 
                 IndexMetadata meta = data.getMetadata();
@@ -479,7 +489,14 @@ public class StockIndicesService {
     public StockIndicesMarketData getLatestIndexData(String indexSymbol, boolean forceRefresh) {
         String methodName = "getLatestIndexData";
         try {
-            List<StockIndicesMarketData> data = getLatestIndicesData(List.of(indexSymbol), forceRefresh);
+            List<String> symbolsToSearch = new ArrayList<>();
+            if (indexSymbol != null) {
+                symbolsToSearch.add(indexSymbol);
+                if (indexSymbol.contains(":")) {
+                    symbolsToSearch.add(indexSymbol.substring(indexSymbol.indexOf(":") + 1));
+                }
+            }
+            List<StockIndicesMarketData> data = getLatestIndicesData(symbolsToSearch, forceRefresh);
             return data.isEmpty() ? null : data.get(0);
         } catch (Exception e) {
             log.error(methodName, "Error while fetching stock index data for symbol: " + indexSymbol, e);
