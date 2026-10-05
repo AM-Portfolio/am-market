@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import com.am.marketdata.analysis.dto.StockMoverDTO;
+import com.am.marketdata.analysis.dto.SectorPerformanceDTO;
 
 @Service
 @RequiredArgsConstructor
@@ -190,7 +192,7 @@ public class MarketAnalyticsService {
      * @param expandIndices Whether to expand index symbols to constituent stocks
      * @return List of enriched stock data sorted by percentage change
      */
-    public List<Map<String, Object>> getMovers(int limit, String type, String indexSymbol,
+    public List<StockMoverDTO> getMovers(int limit, String type, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
         // Use provided index or default
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
@@ -216,13 +218,13 @@ public class MarketAnalyticsService {
     /**
      * Get Top Gainers AND Losers (Unified)
      */
-    public Map<String, List<Map<String, Object>>> getMoversUnified(int limit, String indexSymbol,
+    public Map<String, List<StockMoverDTO>> getMoversUnified(int limit, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
 
-        List<Map<String, Object>> gainers = getMovers(limit, "gainers", indexSymbol, timeFrame, expandIndices);
-        List<Map<String, Object>> losers = getMovers(limit, "losers", indexSymbol, timeFrame, expandIndices);
+        List<StockMoverDTO> gainers = getMovers(limit, "gainers", indexSymbol, timeFrame, expandIndices);
+        List<StockMoverDTO> losers = getMovers(limit, "losers", indexSymbol, timeFrame, expandIndices);
 
-        Map<String, List<Map<String, Object>>> result = new HashMap<>();
+        Map<String, List<StockMoverDTO>> result = new HashMap<>();
         result.put("gainers", gainers);
         result.put("losers", losers);
         return result;
@@ -262,7 +264,7 @@ public class MarketAnalyticsService {
      * @param expandIndices Whether to expand index symbols to constituent stocks
      * @return List of sector performance data
      */
-    public List<Map<String, Object>> getSectorPerformance(String indexSymbol,
+    public List<SectorPerformanceDTO> getSectorPerformance(String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
         // Use provided index or default
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
@@ -299,22 +301,21 @@ public class MarketAnalyticsService {
                 esd -> symbolToSector.getOrDefault(esd.getSymbol(), "Unknown"));
 
         // Calculate sector performance
-        List<Map<String, Object>> sectorPerformance = new ArrayList<>();
+        List<SectorPerformanceDTO> sectorPerformance = new ArrayList<>();
 
         bySector.forEach((sector, stocks) -> {
             double avgChange = stockDataEnricher.calculateAveragePercentChange(stocks);
 
-            Map<String, Object> sectorData = new HashMap<>();
-            sectorData.put("sector", sector);
-            sectorData.put("change", avgChange);
-            sectorData.put("stockCount", stocks.size());
-            sectorData.put("status", avgChange >= 0 ? "Positive" : "Negative");
-
-            sectorPerformance.add(sectorData);
+            sectorPerformance.add(SectorPerformanceDTO.builder()
+                    .sector(sector)
+                    .change(avgChange)
+                    .stockCount(stocks.size())
+                    .status(avgChange >= 0 ? "Positive" : "Negative")
+                    .build());
         });
 
         // Sort by Performance Descending and limit to top 15
-        sectorPerformance.sort((a, b) -> Double.compare((Double) b.get("change"), (Double) a.get("change")));
+        sectorPerformance.sort((a, b) -> Double.compare(b.getChange(), a.getChange()));
 
         return sectorPerformance.stream().limit(15).collect(Collectors.toList());
     }
@@ -323,7 +324,7 @@ public class MarketAnalyticsService {
      * Get Index Performance (All Constituents)
      * Returns performance data for all stocks in the index for the given timeframe.
      */
-    public List<Map<String, Object>> getIndexPerformance(String indexSymbol,
+    public List<StockMoverDTO> getIndexPerformance(String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame) {
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
 
@@ -344,14 +345,14 @@ public class MarketAnalyticsService {
     /**
      * Convert EnrichedStockData to Map for API response
      */
-    private Map<String, Object> enrichedDataToMap(EnrichedStockData data) {
-        Map<String, Object> map = new HashMap<>();
-        map.put("symbol", data.getSymbol());
-        map.put("lastPrice", data.getLastPrice());
-        map.put("change", data.getChange());
-        map.put("pChange", data.getPercentChange());
-        map.put("percentChange", data.getPercentChange());
-        map.put("previousClose", data.getPreviousClose());
-        return map;
+    private StockMoverDTO enrichedDataToMap(EnrichedStockData data) {
+        return StockMoverDTO.builder()
+                .symbol(data.getSymbol())
+                .lastPrice(data.getLastPrice())
+                .change(data.getChange())
+                .pChange(data.getPercentChange())
+                .percentChange(data.getPercentChange())
+                .previousClose(data.getPreviousClose())
+                .build();
     }
 }

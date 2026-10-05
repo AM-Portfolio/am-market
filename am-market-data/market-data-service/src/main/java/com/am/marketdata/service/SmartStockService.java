@@ -145,8 +145,13 @@ public class SmartStockService {
 
         if (rawQuotes != null) {
             for (Map.Entry<String, OHLCQuote> entry : rawQuotes.entrySet()) {
-                if (entry.getValue() != null && entry.getValue().getLastPrice() > 0.0) {
-                    quotes.put(entry.getKey(), entry.getValue());
+                OHLCQuote q = entry.getValue();
+                if (q != null && q.getLastPrice() > 0.0) {
+                    boolean hasOhlc = q.getOhlc() != null && q.getOhlc().getOpen() > 0.0;
+                    boolean hasDiffPrevClose = q.getPreviousClose() > 0.0 && Math.abs(q.getLastPrice() - q.getPreviousClose()) > 0.0001;
+                    if (hasOhlc || hasDiffPrevClose) {
+                        quotes.put(entry.getKey(), q);
+                    }
                 }
             }
         }
