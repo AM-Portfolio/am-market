@@ -412,8 +412,8 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         }
 
         try {
-            // Clean symbol (remove NSE: prefix if present)
-            String cleanSymbol = symbol.replace("NSE:", "");
+            // Clean symbol (remove exchange prefixes like NSE_EQ|, NSE_INDEX|, NSE: if present)
+            String cleanSymbol = symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE:|BSE:)", "").trim();
 
             // Parse dates - handle potential format variations
             LocalDate from;

@@ -112,10 +112,10 @@ spring:
 
   # InfluxDB Configuration
   influx:
-    url: ${INFLUXDB_URL_INTERNAL}
-    token: ${INFLUXDB_TOKEN_INTERNAL}
-    org: ${INFLUXDB_ORG_INTERNAL}
-    bucket: ${INFLUXDB_BUCKET_INTERNAL}
+    url: ${INFLUXDB_URL_INTERNAL:http://localhost:8086}
+    token: ${INFLUXDB_TOKEN_INTERNAL:R9LT2CZpDZXxTkNDpdmfhgUCEnP1qGnV}
+    org: ${INFLUXDB_ORG_INTERNAL:am-portfolio}
+    bucket: ${INFLUXDB_BUCKET_INTERNAL:market-data}
 
   # Management and Metrics Configuration
 
