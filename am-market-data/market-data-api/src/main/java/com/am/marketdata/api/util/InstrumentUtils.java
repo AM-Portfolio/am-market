@@ -158,12 +158,22 @@ public class InstrumentUtils {
 
                 if (!symbolCandidates.isEmpty()) {
                     List<UpstoxInstrument> validInstruments = upstoxInstrumentRepository.findByTradingSymbolIn(symbolCandidates);
+                    // Null-guard: treat null return same as empty list (e.g. mock/isolated profile)
                     if (validInstruments != null) {
                         validInstruments.forEach(inst -> {
                             if (inst.getTradingSymbol() != null) {
                                 validTradingSymbols.add(inst.getTradingSymbol().toUpperCase());
                             }
                         });
+                    }
+                    // Fail-open: if instruments DB returned nothing (empty collection or unreachable),
+                    // pass all non-ISIN symbol candidates through to prevent silent data suppression.
+                    if (validTradingSymbols.isEmpty() && isinCandidates.isEmpty()) {
+                        log.warn("[INSTRUMENT_UTILS] upstoxInstrumentRepository returned no results for {} symbols — " +
+                                "passing candidates through (fail-open) to avoid empty API response", symbolCandidates.size());
+                        validTradingSymbols.addAll(symbolCandidates.stream()
+                                .map(String::toUpperCase)
+                                .collect(Collectors.toSet()));
                     }
                 }
 
@@ -194,7 +204,11 @@ public class InstrumentUtils {
                 resolvedSymbols.add(sym.contains(":") ? sym.substring(0, sym.indexOf(":") + 1) + ticker : ticker);
             } else if (validTradingSymbols.contains(sym) || validTradingSymbols.contains(upper)
                     || validTradingSymbols.contains(baseSymbol) || validTradingSymbols.contains(upperBase)) {
-                resolvedSymbols.add(sym);
+                if (!sym.contains(":")) {
+                    resolvedSymbols.add("NSE_EQ:" + sym.toUpperCase());
+                } else {
+                    resolvedSymbols.add(sym);
+                }
             } else {
                 unresolvedSymbols.add(sym);
             }

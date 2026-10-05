@@ -243,7 +243,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             ));
             List<String> filteredSymbols = tradingSymbols.stream()
                     .filter(symbol -> {
-                        String clean = symbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
+                        String clean = symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "").trim().toUpperCase();
                         return !knownIndices.contains(clean) && 
                                !clean.startsWith("NIFTY ") && 
                                !clean.contains("VIX") && 
@@ -274,7 +274,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
                     // Remove found symbols
                     cachedData.keySet().forEach(key -> {
-                        String symbol = key.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "");
+                        String symbol = key.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "");
                         remainingSymbols.remove(symbol);
                     });
 
@@ -295,7 +295,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
                 // Clean symbols (remove NSE: prefix if present)
                 List<String> cleanSymbols = remainingSymbols.stream()
-                        .map(symbol -> symbol.replace("NSE:", ""))
+                        .map(symbol -> symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", ""))
                         .collect(Collectors.toList());
 
                 /*
@@ -412,8 +412,8 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         }
 
         try {
-            // Clean symbol (remove exchange prefixes like NSE_EQ|, NSE_INDEX|, NSE: if present)
-            String cleanSymbol = symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE:|BSE:)", "").trim();
+            // Clean symbol (remove exchange prefixes like NSE_EQ|, NSE_INDEX|, NSE:, NSE_EQ: if present)
+            String cleanSymbol = symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "").trim();
 
             // Parse dates - handle potential format variations
             LocalDate from;

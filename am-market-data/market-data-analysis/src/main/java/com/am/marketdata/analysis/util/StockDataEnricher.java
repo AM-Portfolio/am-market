@@ -163,22 +163,28 @@ public class StockDataEnricher {
         // Fetch prices for all symbols (with optional time frame and expansion control)
         Map<String, OHLCQuote> priceData = fetchLivePrices(symbols, timeFrame, expandIndices);
 
-        // Normalize price data keys to remove exchange prefix (NSE_EQ:, NSE:, etc.)
+        // Normalize price data keys to include both prefixed and base symbol variants (e.g., NSE_EQ:RELIANCE & RELIANCE)
         Map<String, OHLCQuote> normalizedPriceData = new HashMap<>();
         for (Map.Entry<String, OHLCQuote> entry : priceData.entrySet()) {
             String key = entry.getKey();
-            // Remove exchange prefix if present (e.g., NSE_EQ:RELIANCE -> RELIANCE)
-            String normalizedKey = key.contains(":") ? key.substring(key.indexOf(":") + 1) : key;
-            normalizedPriceData.put(normalizedKey, entry.getValue());
+            normalizedPriceData.put(key, entry.getValue());
+            if (key.contains(":")) {
+                normalizedPriceData.put(key.substring(key.indexOf(":") + 1), entry.getValue());
+            }
         }
 
-        log.info("enrichWithPrices", "Normalized price data keys: " + normalizedPriceData.keySet());
+        log.info("enrichWithPrices", "Normalized price data keys count: " + normalizedPriceData.size());
 
         // Enrich each StockData with price information
         List<EnrichedStockData> enrichedList = stockDataList.stream()
                 .filter(sd -> sd != null && sd.getSymbol() != null)
                 .map(sd -> {
-                    OHLCQuote quote = normalizedPriceData.get(sd.getSymbol());
+                    String sym = sd.getSymbol();
+                    String cleanSym = sym.contains(":") ? sym.substring(sym.indexOf(":") + 1) : sym;
+                    OHLCQuote quote = normalizedPriceData.get(sym);
+                    if (quote == null) {
+                        quote = normalizedPriceData.get(cleanSym);
+                    }
                     if (quote == null) {
                         log.warn("enrichWithPrices", "No price data found for symbol: " + sd.getSymbol());
                     }

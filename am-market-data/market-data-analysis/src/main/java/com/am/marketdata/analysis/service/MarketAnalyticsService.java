@@ -219,39 +219,12 @@ public class MarketAnalyticsService {
     public Map<String, List<Map<String, Object>>> getMoversUnified(int limit, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
 
-        String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
-
-        // 1. Fetch data ONCE
-        List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices);
-
-        if (enrichedData.isEmpty()) {
-            return Map.of("gainers", Collections.emptyList(), "losers", Collections.emptyList());
-        }
-
-        // 2. Sort for Gainers (Descending)
-        List<EnrichedStockData> allSorted = stockDataEnricher.sortByPercentChange(enrichedData, true);
-
-        // 3. Extract Top Gainers (Strictly Positive)
-        List<Map<String, Object>> gainers = allSorted.stream()
-                .filter(d -> d.getPercentChange() > 0)
-                .limit(limit)
-                .map(this::enrichedDataToMap)
-                .collect(Collectors.toList());
-
-        // 4. Extract Top Losers (Reverse of the descending list is ascending)
-        // Or re-sort ascending
-        List<EnrichedStockData> allSortedAsc = stockDataEnricher.sortByPercentChange(enrichedData, false);
-
-        List<Map<String, Object>> losers = allSortedAsc.stream()
-                .filter(d -> d.getPercentChange() < 0)
-                .limit(limit)
-                .map(this::enrichedDataToMap)
-                .collect(Collectors.toList());
+        List<Map<String, Object>> gainers = getMovers(limit, "gainers", indexSymbol, timeFrame, expandIndices);
+        List<Map<String, Object>> losers = getMovers(limit, "losers", indexSymbol, timeFrame, expandIndices);
 
         Map<String, List<Map<String, Object>>> result = new HashMap<>();
         result.put("gainers", gainers);
         result.put("losers", losers);
-
         return result;
     }
 
@@ -377,6 +350,7 @@ public class MarketAnalyticsService {
         map.put("lastPrice", data.getLastPrice());
         map.put("change", data.getChange());
         map.put("pChange", data.getPercentChange());
+        map.put("percentChange", data.getPercentChange());
         map.put("previousClose", data.getPreviousClose());
         return map;
     }
