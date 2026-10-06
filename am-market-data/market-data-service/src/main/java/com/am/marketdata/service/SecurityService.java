@@ -344,12 +344,15 @@ public class SecurityService {
                 Map<String, List<SecurityDocument>> bulkDocMap = bulkFetchDocumentsForQueries(uncachedQueries);
 
                 for (String query : uncachedQueries) {
-                    List<SecurityDocument> matches = bulkDocMap.getOrDefault(query.toLowerCase(), List.of());
+                    List<SecurityDocument> matches = new ArrayList<>(
+                            bulkDocMap.getOrDefault(query.toLowerCase(), List.of()));
 
-                    // Fallback to individual resolution (Text Index / NIFTY 500) if no exact bulk match was found
-                    if (matches.isEmpty()) {
-                        matches = resolveDocumentsForQuery(query);
-                    }
+                    // Always merge text/company resolution so broker aliases (IDEA) can
+                    // surface the live ticker (VODAFONEIDEA) even when a stale exact row exists.
+                    LinkedHashMap<String, SecurityDocument> merged = new LinkedHashMap<>();
+                    addValidDocuments(merged, matches);
+                    addValidDocuments(merged, resolveDocumentsForQuery(query));
+                    matches = capCandidates(merged.values().stream().collect(Collectors.toList()));
 
                     List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches =
                             convertToSecurityMatches(query, matches, request.getMinMatchScore());
@@ -675,12 +678,20 @@ public class SecurityService {
     private double calculateMatchScore(String query, SecurityDocument doc) {
         String queryNormalized = cleanString(query);
 
-        // Exact matches
-        if (doc.getKey() != null && doc.getKey().getSymbol() != null) {
-            if (queryNormalized.equals(cleanString(doc.getKey().getSymbol()))) {
-                return 1.0;
-            }
-        }
+                // Exact symbol match — demote empty shells (null mcap) so aliases like
+                // IDEA lose to VODAFONEIDEA (symbol-contains / company-name, with mcap).
+                if (doc.getKey() != null && doc.getKey().getSymbol() != null) {
+                    if (queryNormalized.equals(cleanString(doc.getKey().getSymbol()))) {
+                        Long mcap = doc.getMetadata() != null ? doc.getMetadata().getMarketCapValue() : null;
+                        return (mcap != null && mcap > 0) ? 1.0 : 0.85;
+                    }
+                    String symNorm = cleanString(doc.getKey().getSymbol());
+                    if (!queryNormalized.isEmpty() && symNorm.contains(queryNormalized)
+                            && symNorm.length() > queryNormalized.length()
+                            && queryNormalized.length() >= 3) {
+                        return 0.95;
+                    }
+                }
 
         if (doc.getKey() != null && doc.getKey().getIsin() != null) {
             if (queryNormalized.equals(cleanString(doc.getKey().getIsin()))) {
