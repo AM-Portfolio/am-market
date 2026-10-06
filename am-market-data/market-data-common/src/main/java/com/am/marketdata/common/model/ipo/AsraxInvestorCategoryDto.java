@@ -15,13 +15,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class AsraxInvestorCategoryDto {
 
-    /**
-     * Short category code (e.g., "IND", "HNI", "EMP", "QIB").
-     */
     private String category;
-
-    /**
-     * Description or title of the category provided by market data provider.
-     */
     private String description;
+    private String subscription;
 }

@@ -31,7 +31,7 @@ public class UpstoxIpoDtoMapper {
             return null;
         }
 
-        return AsraxIpoSummaryDto.builder()
+        AsraxIpoSummaryDto dto = AsraxIpoSummaryDto.builder()
                 .id(src.getId())
                 .symbol(src.getSymbol())
                 .companyName(src.getName())
@@ -44,9 +44,11 @@ public class UpstoxIpoDtoMapper {
                 .maximumPrice(src.getMaximumPrice())
                 .biddingStartDate(src.getBiddingStartDate())
                 .biddingEndDate(src.getBiddingEndDate())
-                .totalSubscription(src.getTotalSubscription())
                 .eligibleInvestors(mapInvestors(src.getInvestors()))
                 .build();
+        
+        dto.setTotalSubscription(calculateTotalSubscription(src.getTotalSubscription(), dto.getEligibleInvestors()));
+        return dto;
     }
 
     /**
@@ -57,7 +59,7 @@ public class UpstoxIpoDtoMapper {
             return null;
         }
 
-        return AsraxIpoDetailsDto.builder()
+        AsraxIpoDetailsDto dto = AsraxIpoDetailsDto.builder()
                 .id(src.getId())
                 .symbol(src.getSymbol())
                 .companyName(src.getName())
@@ -83,9 +85,11 @@ public class UpstoxIpoDtoMapper {
                 .drhpUrl(src.getDrhpUrl())
                 .timeline(mapTimeline(src.getTimeline()))
                 .registrarInfo(mapRegistrar(src.getRegistrarInfo()))
-                .totalSubscription(src.getTotalSubscription())
                 .eligibleInvestors(mapInvestors(src.getInvestors()))
                 .build();
+        
+        dto.setTotalSubscription(calculateTotalSubscription(src.getTotalSubscription(), dto.getEligibleInvestors()));
+        return dto;
     }
 
     public AsraxIpoTimelineDto mapTimeline(UpstoxTimelineDto src) {
@@ -126,7 +130,31 @@ public class UpstoxIpoDtoMapper {
                 .map(item -> AsraxInvestorCategoryDto.builder()
                         .category(item.getCategory())
                         .description(item.getDescription())
+                        .subscription(item.getSubscription())
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    private String calculateTotalSubscription(String originalTotal, List<AsraxInvestorCategoryDto> investors) {
+        if (investors == null || investors.isEmpty()) {
+            return originalTotal;
+        }
+        double sum = 0.0;
+        boolean hasValidSub = false;
+        for (AsraxInvestorCategoryDto inv : investors) {
+            if (inv.getSubscription() != null) {
+                try {
+                    String subStr = inv.getSubscription().replaceAll("[^0-9.]", "");
+                    if (!subStr.isEmpty()) {
+                        sum += Double.parseDouble(subStr);
+                        hasValidSub = true;
+                    }
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        if (hasValidSub && sum > 0) {
+            return String.format("%.2f", sum);
+        }
+        return originalTotal;
     }
 }

@@ -220,9 +220,21 @@ public class MarketAnalyticsService {
      */
     public Map<String, List<StockMoverDTO>> getMoversUnified(int limit, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
+        String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
+        List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices);
 
-        List<StockMoverDTO> gainers = getMovers(limit, "gainers", indexSymbol, timeFrame, expandIndices);
-        List<StockMoverDTO> losers = getMovers(limit, "losers", indexSymbol, timeFrame, expandIndices);
+        List<StockMoverDTO> gainers = stockDataEnricher
+                .sortByPercentChange(new ArrayList<>(enrichedData), true)
+                .stream()
+                .limit(limit)
+                .map(this::enrichedDataToMap)
+                .collect(Collectors.toList());
+        List<StockMoverDTO> losers = stockDataEnricher
+                .sortByPercentChange(new ArrayList<>(enrichedData), false)
+                .stream()
+                .limit(limit)
+                .map(this::enrichedDataToMap)
+                .collect(Collectors.toList());
 
         Map<String, List<StockMoverDTO>> result = new HashMap<>();
         result.put("gainers", gainers);
