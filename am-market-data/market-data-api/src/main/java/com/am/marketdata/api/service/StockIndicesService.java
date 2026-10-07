@@ -148,7 +148,7 @@ public class StockIndicesService {
                 java.time.LocalDateTime now = java.time.LocalDateTime.now();
                 long nowMs = System.currentTimeMillis();
 
-                // Fetch base prices for the requested timeframe
+                // Non-daily returns use a historical base close.
                 Map<String, Double> basePrices = new java.util.HashMap<>();
                 if (!isDailyTimeframe) {
                     java.time.ZoneId exchangeZone = java.time.ZoneId.of("Asia/Kolkata");
@@ -170,6 +170,7 @@ public class StockIndicesService {
                             for (Map.Entry<String, com.am.common.investment.model.historical.HistoricalData> entry : histResp.getData().entrySet()) {
                                 java.util.List<com.am.common.investment.model.historical.OHLCVTPoint> points = entry.getValue().getDataPoints();
                                 if (points != null && !points.isEmpty()) {
+                                    // Cache order is not guaranteed. Pick the oldest valid close.
                                     com.am.common.investment.model.historical.OHLCVTPoint earliest = null;
                                     for (com.am.common.investment.model.historical.OHLCVTPoint point : points) {
                                         if (point == null || point.getClose() <= 0.0) {
@@ -211,6 +212,7 @@ public class StockIndicesService {
                         // 1. Check the real-time priceQuote received from the WebSocket/API.
                         // 2. If the quote doesn't have it (is 0.0), query the Redis cache where the Upstox-based PreviousCloseScheduler stores daily pre-fetched closes.
                         // 3. If still empty, fall back to the historical/existing previousClose saved in MongoDB index metadata.
+                        // Keep the daily close separate from a timeframe base price.
                         double dailyPreviousClose = priceQuote.getPreviousClose();
 
                         if (dailyPreviousClose == 0.0) {
@@ -244,6 +246,7 @@ public class StockIndicesService {
                         if (open != 0.0) meta.setOpen(open);
                         if (high != 0.0) meta.setHigh(high);
                         if (low != 0.0) meta.setLow(low);
+                        // Never store a 1W/1M/etc. base as the daily close.
                         if (dailyPreviousClose != 0.0) meta.setPreviousClose(dailyPreviousClose);
                         meta.setChange(change);
                         meta.setPercChange(changePercent);
@@ -251,6 +254,7 @@ public class StockIndicesService {
 
                         // 1. Check local JVM memory cooldown to prevent race conditions (bypass if forceRefresh is true)
                         long lastSaveTime = lastMongoSaveTimeMap.getOrDefault(symbol, 0L);
+                        // Historical timeframe requests must not update MongoDB.
                         boolean shouldSave = isDailyTimeframe && (forceRefresh || (nowMs - lastSaveTime) >= MONGO_SAVE_COOLDOWN_MS);
 
                         if (shouldSave && !forceRefresh) {

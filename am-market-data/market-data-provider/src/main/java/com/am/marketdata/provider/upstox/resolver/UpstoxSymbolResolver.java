@@ -228,6 +228,7 @@ public class UpstoxSymbolResolver implements SymbolResolver {
     }
 
     private String normalizeTradingSymbol(String symbol) {
+        // Accept old Redis values such as NSE:NSE:IDEA.
         String cleaned = symbol == null ? "" : symbol.trim().toUpperCase();
         while (cleaned.contains(":")) {
             int delimiter = cleaned.indexOf(':');

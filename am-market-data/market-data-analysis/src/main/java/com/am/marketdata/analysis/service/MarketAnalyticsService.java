@@ -221,6 +221,7 @@ public class MarketAnalyticsService {
     public Map<String, List<StockMoverDTO>> getMoversUnified(int limit, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
+        // Use one price snapshot for both lists.
         List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices);
 
         List<StockMoverDTO> gainers = stockDataEnricher
