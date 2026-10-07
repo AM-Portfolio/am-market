@@ -16,11 +16,4 @@ public class UpstoxInvestorCategoryDto {
 
     @JsonProperty("description")
     private String description;
-
-    @JsonProperty("subscription")
-    private Object subscription;
-
-    public String getSubscription() {
-        return subscription != null ? String.valueOf(subscription) : null;
-    }
 }

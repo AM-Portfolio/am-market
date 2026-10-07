@@ -203,18 +203,10 @@ public class MarketIndexController {
             )
             @RequestBody List<String> indexSymbols,
             @Parameter(description = "Force refresh from source instead of using cache", example = "false")
-            @RequestParam(value = "forceRefresh", required = false, defaultValue = "false") boolean forceRefresh,
-            @Parameter(description = "Timeframe for performance calculation", example = "1D")
-            @RequestParam(value = "timeframe", required = false, defaultValue = "1D") String timeframe) {
+            @RequestParam(value = "forceRefresh", required = false, defaultValue = "false") boolean forceRefresh) {
 
         String methodName = "getLatestIndicesData";
-        String normalizedTimeframe = timeframe == null ? "1D" : timeframe.trim().toUpperCase(java.util.Locale.ROOT);
-        if (!java.util.Set.of("1D", "1W", "1M", "3M", "6M", "1Y", "5Y").contains(normalizedTimeframe)) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "error", "Invalid timeframe",
-                    "message", "Supported timeframes are 1D, 1W, 1M, 3M, 6M, 1Y, and 5Y"));
-        }
-        log.info(methodName, String.format("Batch request for %d symbols, forceRefresh=%b, timeframe=%s", indexSymbols.size(), forceRefresh, timeframe));
+        log.info(methodName, String.format("Batch request for %d symbols, forceRefresh=%b", indexSymbols.size(), forceRefresh));
 
         // -------------------------------------------------------------------------
         // STEP 1: BUILD KNOWN SYMBOL SETS FOR VALIDATION AND ROUTING
@@ -271,7 +263,7 @@ public class MarketIndexController {
         CompletableFuture<List<StockIndicesMarketData>> indianFuture = indianList.isEmpty()
                 ? CompletableFuture.completedFuture(List.of())
                 : CompletableFuture.supplyAsync(() ->
-                        stockIndicesService.getLatestIndicesData(indianList, finalForceRefresh, normalizedTimeframe));
+                        stockIndicesService.getLatestIndicesData(indianList, finalForceRefresh));
 
         CompletableFuture<List<StockIndicesMarketData>> globalFuture = globalList.isEmpty()
                 ? CompletableFuture.completedFuture(List.of())
