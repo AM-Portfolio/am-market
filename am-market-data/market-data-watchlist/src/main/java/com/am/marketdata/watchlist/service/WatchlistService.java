@@ -31,7 +31,7 @@ public class WatchlistService {
     public static final String DEFAULT_WATCHLIST_NAME = "My Watch List";
     public static final int DEFAULT_MAX_WATCHLISTS_PER_USER = 5;
     public static final int DEFAULT_MAX_STOCKS_PER_WATCHLIST = 50;
-    // Only known exchange labels may be removed from a ticker.
+    // Strip only exchange labels we understand. Unknown colon values stay invalid.
     private static final Set<String> QUALIFIED_EXCHANGES = Set.of(
             "NSE", "BSE", "NSE_EQ", "BSE_EQ", "NSE_FO", "BSE_FO", "MCX");
 
@@ -326,7 +326,10 @@ public class WatchlistService {
     // --- Private Helper Methods ---
 
     private CanonicalSymbol canonicalizeSymbol(String symbol, String requestedExchange) {
-        // Store one ticker and one exchange for every input format.
+        /*
+         * Search may send IDEA, NSE:IDEA, or NSE:NSE:IDEA. Store only IDEA plus
+         * NSE so duplicate prefixes are never saved or published to Redis.
+         */
         String remaining = symbol == null ? "" : symbol.trim().toUpperCase(Locale.ROOT);
         if (remaining.isBlank()) {
             throw new IllegalArgumentException("Symbol cannot be blank");
@@ -337,7 +340,7 @@ public class WatchlistService {
                 : requestedExchange.trim().toUpperCase(Locale.ROOT);
         String prefixedExchange = null;
 
-        // Remove repeated labels such as NSE:NSE:IDEA.
+        // Repeated known labels are safe to remove: NSE:NSE:IDEA becomes IDEA.
         while (remaining.contains(":")) {
             int delimiter = remaining.indexOf(':');
             String prefix = remaining.substring(0, delimiter);

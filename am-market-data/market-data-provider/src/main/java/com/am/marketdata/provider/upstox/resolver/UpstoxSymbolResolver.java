@@ -228,7 +228,10 @@ public class UpstoxSymbolResolver implements SymbolResolver {
     }
 
     private String normalizeTradingSymbol(String symbol) {
-        // Accept old Redis values such as NSE:NSE:IDEA.
+        /*
+         * Old watchlists may still publish NSE:NSE:IDEA. Upstox stores IDEA as
+         * the trading symbol, so remove repeated known exchange labels first.
+         */
         String cleaned = symbol == null ? "" : symbol.trim().toUpperCase();
         while (cleaned.contains(":")) {
             int delimiter = cleaned.indexOf(':');

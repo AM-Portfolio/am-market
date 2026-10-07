@@ -148,7 +148,10 @@ public class StockIndicesService {
                 java.time.LocalDateTime now = java.time.LocalDateTime.now();
                 long nowMs = System.currentTimeMillis();
 
-                // Non-daily returns use a historical base close.
+                /*
+                 * A 1W/1M/etc. return compares today's price with the close near
+                 * the start of that period. The UI receives the finished result.
+                 */
                 Map<String, Double> basePrices = new java.util.HashMap<>();
                 if (!isDailyTimeframe) {
                     java.time.ZoneId exchangeZone = java.time.ZoneId.of("Asia/Kolkata");
@@ -160,7 +163,8 @@ public class StockIndicesService {
                     else if ("5Y".equals(normalizedTimeframe)) startDate = startDate.minusYears(5);
                     else if ("1W".equals(normalizedTimeframe)) startDate = startDate.minusWeeks(1);
 
-                    java.time.LocalDate endDate = startDate.plusDays(7); // Window to account for holidays
+                    // A small window finds the first trading day after a holiday.
+                    java.time.LocalDate endDate = startDate.plusDays(7);
                     java.util.Date fromD = java.util.Date.from(startDate.atStartOfDay(exchangeZone).toInstant());
                     java.util.Date toD = java.util.Date.from(endDate.atStartOfDay(exchangeZone).toInstant());
                     try {
@@ -170,7 +174,7 @@ public class StockIndicesService {
                             for (Map.Entry<String, com.am.common.investment.model.historical.HistoricalData> entry : histResp.getData().entrySet()) {
                                 java.util.List<com.am.common.investment.model.historical.OHLCVTPoint> points = entry.getValue().getDataPoints();
                                 if (points != null && !points.isEmpty()) {
-                                    // Cache order is not guaranteed. Pick the oldest valid close.
+                                    // Cache order can vary, so use the earliest valid close as the base.
                                     com.am.common.investment.model.historical.OHLCVTPoint earliest = null;
                                     for (com.am.common.investment.model.historical.OHLCVTPoint point : points) {
                                         if (point == null || point.getClose() <= 0.0) {
@@ -212,7 +216,10 @@ public class StockIndicesService {
                         // 1. Check the real-time priceQuote received from the WebSocket/API.
                         // 2. If the quote doesn't have it (is 0.0), query the Redis cache where the Upstox-based PreviousCloseScheduler stores daily pre-fetched closes.
                         // 3. If still empty, fall back to the historical/existing previousClose saved in MongoDB index metadata.
-                        // Keep the daily close separate from a timeframe base price.
+                        /*
+                         * previousClose is only yesterday's close. In the old code a 1M base
+                         * could replace it in MongoDB, breaking later daily change values.
+                         */
                         double dailyPreviousClose = priceQuote.getPreviousClose();
 
                         if (dailyPreviousClose == 0.0) {
@@ -246,7 +253,7 @@ public class StockIndicesService {
                         if (open != 0.0) meta.setOpen(open);
                         if (high != 0.0) meta.setHigh(high);
                         if (low != 0.0) meta.setLow(low);
-                        // Never store a 1W/1M/etc. base as the daily close.
+                        // Save only the daily close. Timeframe bases exist for this response only.
                         if (dailyPreviousClose != 0.0) meta.setPreviousClose(dailyPreviousClose);
                         meta.setChange(change);
                         meta.setPercChange(changePercent);
@@ -254,7 +261,7 @@ public class StockIndicesService {
 
                         // 1. Check local JVM memory cooldown to prevent race conditions (bypass if forceRefresh is true)
                         long lastSaveTime = lastMongoSaveTimeMap.getOrDefault(symbol, 0L);
-                        // Historical timeframe requests must not update MongoDB.
+                        // A historical request calculates a view; it must not change daily stored data.
                         boolean shouldSave = isDailyTimeframe && (forceRefresh || (nowMs - lastSaveTime) >= MONGO_SAVE_COOLDOWN_MS);
 
                         if (shouldSave && !forceRefresh) {
