@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -21,6 +22,9 @@ import java.util.stream.Collectors;
  */
 @Component
 public class UpstoxSymbolResolver implements SymbolResolver {
+
+    private static final Set<String> EXCHANGE_PREFIXES = Set.of(
+            "NSE", "BSE", "NSE_EQ", "BSE_EQ", "NSE_FO", "BSE_FO", "MCX");
 
     private final AppLogger log = AppLogger.getLogger();
 
@@ -137,7 +141,7 @@ public class UpstoxSymbolResolver implements SymbolResolver {
 
         // 1. Fast Path: Check in-memory resolution cache first (0 ms)
         for (String s : symbols) {
-            String cacheKey = s != null ? s.trim().toUpperCase() : "";
+            String cacheKey = normalizeTradingSymbol(s);
             com.am.marketdata.common.model.UpstoxInstrument cached = resolutionCache.get(cacheKey);
             if (cached != null) {
                 results.add(cached);
@@ -156,12 +160,11 @@ public class UpstoxSymbolResolver implements SymbolResolver {
         List<String> isinSymbols = new ArrayList<>();
 
         for (String s : uncachedSymbols) {
-            String cleaned = s;
+            String cleaned = s == null ? "" : s.trim().toUpperCase();
             if (cleaned.contains("|")) {
                 cleaned = cleaned.substring(cleaned.indexOf("|") + 1);
-            } else if (cleaned.contains(":")) {
-                String[] parts = cleaned.split(":", 2);
-                cleaned = parts[1].trim().toUpperCase();
+            } else {
+                cleaned = normalizeTradingSymbol(cleaned);
             }
 
             if (cleaned.matches("^[A-Z]{2}[A-Z0-9]{10}$")) {
@@ -222,6 +225,23 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             }
             resolutionCache.put(key, inst);
         }
+    }
+
+    private String normalizeTradingSymbol(String symbol) {
+        /*
+         * Old watchlists may still publish NSE:NSE:IDEA. Upstox stores IDEA as
+         * the trading symbol, so remove repeated known exchange labels first.
+         */
+        String cleaned = symbol == null ? "" : symbol.trim().toUpperCase();
+        while (cleaned.contains(":")) {
+            int delimiter = cleaned.indexOf(':');
+            String prefix = cleaned.substring(0, delimiter);
+            if (!EXCHANGE_PREFIXES.contains(prefix)) {
+                break;
+            }
+            cleaned = cleaned.substring(delimiter + 1).trim();
+        }
+        return cleaned;
     }
 
     @Override

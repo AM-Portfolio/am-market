@@ -43,11 +43,21 @@ public class StockIndicesService {
     private boolean cacheEnabled;
 
     public List<StockIndicesMarketData> getLatestIndicesData(List<String> indexSymbols) {
-        return getLatestIndicesData(indexSymbols, false);
+        return getLatestIndicesData(indexSymbols, false, "1D");
     }
 
     public List<StockIndicesMarketData> getLatestIndicesData(List<String> indexSymbols, boolean forceRefresh) {
+        return getLatestIndicesData(indexSymbols, forceRefresh, "1D");
+    }
+
+    public List<StockIndicesMarketData> getLatestIndicesData(List<String> indexSymbols, boolean forceRefresh, String timeframeStr) {
         String methodName = "getLatestIndicesData";
+        String normalizedTimeframe = timeframeStr == null ? "1D" : timeframeStr.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!java.util.Set.of("1D", "1W", "1M", "3M", "6M", "1Y", "5Y").contains(normalizedTimeframe)) {
+            log.warn(methodName, "Unsupported timeframe requested: " + timeframeStr);
+            return new ArrayList<>();
+        }
+        boolean isDailyTimeframe = "1D".equals(normalizedTimeframe);
         try {
             List<StockIndicesMarketData> finalResults = new ArrayList<>();
             List<String> symbolsToProcess = new ArrayList<>();
@@ -138,6 +148,55 @@ public class StockIndicesService {
                 java.time.LocalDateTime now = java.time.LocalDateTime.now();
                 long nowMs = System.currentTimeMillis();
 
+                /*
+                 * A 1W/1M/etc. return compares today's price with the close near
+                 * the start of that period. The UI receives the finished result.
+                 */
+                Map<String, Double> basePrices = new java.util.HashMap<>();
+                if (!isDailyTimeframe) {
+                    java.time.ZoneId exchangeZone = java.time.ZoneId.of("Asia/Kolkata");
+                    java.time.LocalDate startDate = java.time.LocalDate.now(exchangeZone);
+                    if ("1M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(1);
+                    else if ("3M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(3);
+                    else if ("6M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(6);
+                    else if ("1Y".equals(normalizedTimeframe)) startDate = startDate.minusYears(1);
+                    else if ("5Y".equals(normalizedTimeframe)) startDate = startDate.minusYears(5);
+                    else if ("1W".equals(normalizedTimeframe)) startDate = startDate.minusWeeks(1);
+
+                    // A small window finds the first trading day after a holiday.
+                    java.time.LocalDate endDate = startDate.plusDays(7);
+                    java.util.Date fromD = java.util.Date.from(startDate.atStartOfDay(exchangeZone).toInstant());
+                    java.util.Date toD = java.util.Date.from(endDate.atStartOfDay(exchangeZone).toInstant());
+                    try {
+                        com.am.marketdata.api.model.HistoricalDataResponseV1 histResp = marketDataCacheService.getHistoricalDataMultipleSymbols(
+                                requestedSymbols, fromD, toD, com.am.marketdata.common.model.TimeFrame.DAY, "INDEX", new java.util.HashMap<>(), false, false);
+                        if (histResp != null && histResp.getData() != null) {
+                            for (Map.Entry<String, com.am.common.investment.model.historical.HistoricalData> entry : histResp.getData().entrySet()) {
+                                java.util.List<com.am.common.investment.model.historical.OHLCVTPoint> points = entry.getValue().getDataPoints();
+                                if (points != null && !points.isEmpty()) {
+                                    // Cache order can vary, so use the earliest valid close as the base.
+                                    com.am.common.investment.model.historical.OHLCVTPoint earliest = null;
+                                    for (com.am.common.investment.model.historical.OHLCVTPoint point : points) {
+                                        if (point == null || point.getClose() <= 0.0) {
+                                            continue;
+                                        }
+                                        if (earliest == null || (point.getTime() != null &&
+                                                (earliest.getTime() == null || point.getTime().isBefore(earliest.getTime())))) {
+                                            earliest = point;
+                                        }
+                                    }
+                                    if (earliest != null) {
+                                        basePrices.put(entry.getKey(), earliest.getClose());
+                                        log.debug(methodName, "Timeframe " + normalizedTimeframe + " base price for " + entry.getKey() + " is " + earliest.getClose());
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception ex) {
+                        log.error(methodName, "Error fetching timeframe base prices", ex);
+                    }
+                }
+
                 for (StockIndicesMarketData data : finalResults) {
                     String symbol = data.getIndexSymbol();
                     OHLCQuote priceQuote = latestPrices.get(symbol);
@@ -157,18 +216,26 @@ public class StockIndicesService {
                         // 1. Check the real-time priceQuote received from the WebSocket/API.
                         // 2. If the quote doesn't have it (is 0.0), query the Redis cache where the Upstox-based PreviousCloseScheduler stores daily pre-fetched closes.
                         // 3. If still empty, fall back to the historical/existing previousClose saved in MongoDB index metadata.
-                        double previousClose = priceQuote.getPreviousClose();
-                        if (previousClose == 0.0) {
-                            Double cachedPrevClose = redisCacheService.getPreviousClose(symbol);
-                            if (cachedPrevClose != null && cachedPrevClose != 0.0) {
-                                previousClose = cachedPrevClose;
-                            }
+                        /*
+                         * previousClose is only yesterday's close. In the old code a 1M base
+                         * could replace it in MongoDB, breaking later daily change values.
+                         */
+                        double dailyPreviousClose = priceQuote.getPreviousClose();
+
+                        if (dailyPreviousClose == 0.0) {
+                                Double cachedPrevClose = redisCacheService.getPreviousClose(symbol);
+                                if (cachedPrevClose != null && cachedPrevClose != 0.0) {
+                                    dailyPreviousClose = cachedPrevClose;
+                                }
                         }
-                        if (previousClose == 0.0 && meta.getPreviousClose() != null) {
-                            previousClose = meta.getPreviousClose();
+                        if (dailyPreviousClose == 0.0 && meta.getPreviousClose() != null) {
+                            dailyPreviousClose = meta.getPreviousClose();
                         }
+                        double previousClose = isDailyTimeframe
+                                ? dailyPreviousClose
+                                : basePrices.getOrDefault(symbol, 0.0);
                         // Validate previousClose against lastPrice to prevent wildly inaccurate percent changes if data is corrupted:
-                        if (previousClose != 0.0 && lastPrice != 0.0) {
+                        if (isDailyTimeframe && previousClose != 0.0 && lastPrice != 0.0) {
                             double deviation = Math.abs(previousClose - lastPrice) / lastPrice;
                             if (deviation > 0.10) {
                                 // More than 10% apart — this previousClose is stale/corrupted. Fall back to open or last price to correct it.
@@ -186,14 +253,16 @@ public class StockIndicesService {
                         if (open != 0.0) meta.setOpen(open);
                         if (high != 0.0) meta.setHigh(high);
                         if (low != 0.0) meta.setLow(low);
-                        if (previousClose != 0.0) meta.setPreviousClose(previousClose);
+                        // Save only the daily close. Timeframe bases exist for this response only.
+                        if (dailyPreviousClose != 0.0) meta.setPreviousClose(dailyPreviousClose);
                         meta.setChange(change);
                         meta.setPercChange(changePercent);
                         meta.setTimeVal(String.valueOf(nowMs));
 
                         // 1. Check local JVM memory cooldown to prevent race conditions (bypass if forceRefresh is true)
                         long lastSaveTime = lastMongoSaveTimeMap.getOrDefault(symbol, 0L);
-                        boolean shouldSave = forceRefresh || (nowMs - lastSaveTime) >= MONGO_SAVE_COOLDOWN_MS;
+                        // A historical request calculates a view; it must not change daily stored data.
+                        boolean shouldSave = isDailyTimeframe && (forceRefresh || (nowMs - lastSaveTime) >= MONGO_SAVE_COOLDOWN_MS);
 
                         if (shouldSave && !forceRefresh) {
                             // 2. Check document's actual database timestamp for timezone-safe validation
