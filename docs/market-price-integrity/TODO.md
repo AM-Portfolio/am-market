@@ -1,0 +1,27 @@
+# Market price integrity TODO
+
+- [x] Confirm production symptoms using read-only API/log inspection.
+- [x] Map direct and indirect Modern UI consumers.
+- [x] Identify the separate chart, card, and movers calculation paths and duplicate timeframe loading.
+- [x] Redesign the plan around one authoritative Market Data performance result and one Market UI cache.
+- [ ] User reviews and approves this plan.
+- [ ] Create `fix/market-price-integrity` from current remote main without disturbing existing worktrees.
+- [ ] Discovery gate: capture current endpoint contracts, cache schemas/keys, membership owner, provider limits, Influx mapping, and baseline request/latency/error metrics.
+- [ ] Record the approved `1M` definition and exact broker fixture: as-of time, start session/value, end session/value, and expected percentage.
+- [ ] Add backend unit/regression tests that reproduce the failures.
+- [ ] Implement idempotent symbol qualification and true Upstox instrument resolution.
+- [ ] Implement dated previous-close semantics and cache validation.
+- [ ] Repair one-snapshot Top Movers calculation and partial-result handling.
+- [ ] Correct Influx Vault mapping in the proper secret store; commit only the mapping name.
+- [ ] Repair and validate NIFTY 50 constituent ingestion.
+- [ ] Remove authorization-bearing request logging.
+- [ ] Add the canonical additive timeframe-performance contract, shared by charts and index cards.
+- [ ] Replace overlapping Market UI history loads, duplicate caches, and stale response races.
+- [ ] Add old/new cache and currently deployed client compatibility tests.
+- [ ] Add exchange-calendar, close-boundary, rapid timeframe-change, corporate-action, new-listing, mixed-segment, rate-limit, token-expiry, and global-index tests.
+- [ ] Add feature flags for strict close validation and resolver rollout.
+- [ ] Run focused backend and Flutter checks.
+- [ ] Deploy to preprod after approval and execute the Postman MCP test plan.
+- [ ] Verify the Market UI cards, chart, and movers against the same fixture. Inspect non-Market consumers read-only and document separate issues.
+- [ ] Ask for explicit production deployment approval with command, impact, risk, and rollback.
+- [ ] Produce `REPORT.md` only after tests are verified.
