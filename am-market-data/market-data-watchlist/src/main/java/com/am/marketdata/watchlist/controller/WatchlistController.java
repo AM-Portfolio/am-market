@@ -137,7 +137,7 @@ public class WatchlistController {
             @RequestHeader(value = "X-User-Id", required = false, defaultValue = "demo-user") String userId,
             @PathVariable String watchlistId,
             @Valid @RequestBody AddToWatchlistRequest request) {
-        String exchange = (request.getExchange() != null && !request.getExchange().isBlank()) ? request.getExchange() : "NSE";
+        String exchange = request.getExchange();
         try (FlowSpan span = flowLogger.start("watchlists.add_item", "userId", userId, "watchlistId", watchlistId, "symbol", request.getSymbol(), "exchange", exchange)) {
             try {
                 WatchlistItemDto item = watchlistService.addStockToWatchlist(userId, watchlistId, request.getSymbol(), exchange);
@@ -160,7 +160,7 @@ public class WatchlistController {
             @RequestHeader(value = "X-User-Id", required = false, defaultValue = "demo-user") String userId,
             @PathVariable String watchlistId,
             @PathVariable String symbol,
-            @RequestParam(value = "exchange", required = false, defaultValue = "NSE") String exchange) {
+            @RequestParam(value = "exchange", required = false) String exchange) {
         try (FlowSpan span = flowLogger.start("watchlists.remove_item", "userId", userId, "watchlistId", watchlistId, "symbol", symbol, "exchange", exchange)) {
             try {
                 watchlistService.removeStockFromWatchlist(userId, watchlistId, symbol, exchange);
@@ -183,7 +183,7 @@ public class WatchlistController {
     public ResponseEntity<List<WatchlistCheckStatusDto>> checkSymbolAcrossWatchlists(
             @RequestHeader(value = "X-User-Id", required = false, defaultValue = "demo-user") String userId,
             @PathVariable String symbol,
-            @RequestParam(value = "exchange", required = false, defaultValue = "NSE") String exchange) {
+            @RequestParam(value = "exchange", required = false) String exchange) {
         try (FlowSpan span = flowLogger.start("watchlists.check_symbol", "userId", userId, "symbol", symbol, "exchange", exchange)) {
             try {
                 List<WatchlistCheckStatusDto> statuses = watchlistService.checkSymbolAcrossWatchlists(userId, symbol, exchange);

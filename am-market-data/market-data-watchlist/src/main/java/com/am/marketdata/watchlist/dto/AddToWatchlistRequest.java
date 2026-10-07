@@ -11,7 +11,7 @@ public class AddToWatchlistRequest {
 
     /**
      * Target exchange for the stock (e.g., "NSE", "BSE", "NSE_FO").
-     * Defaults to "NSE" when not explicitly supplied.
+     * When omitted, the service uses an exchange prefix in {@code symbol}, or NSE.
      */
-    private String exchange = "NSE";
+    private String exchange;
 }

@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -30,6 +31,8 @@ public class WatchlistService {
     public static final String DEFAULT_WATCHLIST_NAME = "My Watch List";
     public static final int DEFAULT_MAX_WATCHLISTS_PER_USER = 5;
     public static final int DEFAULT_MAX_STOCKS_PER_WATCHLIST = 50;
+    private static final Set<String> QUALIFIED_EXCHANGES = Set.of(
+            "NSE", "BSE", "NSE_EQ", "BSE_EQ", "NSE_FO", "BSE_FO", "MCX");
 
     private final WatchlistRepository watchlistRepository;
     private final WatchlistItemRepository watchlistItemRepository;
@@ -195,8 +198,9 @@ public class WatchlistService {
      * Enforces strict capacity limit of maximum stocks per watchlist.
      */
     public WatchlistItemDto addStockToWatchlist(String userId, String watchlistId, String symbol, String exchange) {
-        String cleanSymbol = symbol != null ? symbol.trim().toUpperCase(Locale.ROOT) : "";
-        String cleanExchange = (exchange != null && !exchange.isBlank()) ? exchange.trim().toUpperCase(Locale.ROOT) : "NSE";
+        CanonicalSymbol canonical = canonicalizeSymbol(symbol, exchange);
+        String cleanSymbol = canonical.symbol();
+        String cleanExchange = canonical.exchange();
         log.info("Adding symbol {}:{} to watchlist {} for user {}", cleanExchange, cleanSymbol, watchlistId, userId);
 
         // Ownership verification
@@ -235,15 +239,16 @@ public class WatchlistService {
      * Backward-compatible overload defaulting exchange to NSE.
      */
     public WatchlistItemDto addStockToWatchlist(String userId, String watchlistId, String symbol) {
-        return addStockToWatchlist(userId, watchlistId, symbol, "NSE");
+        return addStockToWatchlist(userId, watchlistId, symbol, null);
     }
 
     /**
      * Removes a stock symbol on a specific exchange from a watchlist.
      */
     public void removeStockFromWatchlist(String userId, String watchlistId, String symbol, String exchange) {
-        String cleanSymbol = symbol != null ? symbol.trim().toUpperCase(Locale.ROOT) : "";
-        String cleanExchange = (exchange != null && !exchange.isBlank()) ? exchange.trim().toUpperCase(Locale.ROOT) : "NSE";
+        CanonicalSymbol canonical = canonicalizeSymbol(symbol, exchange);
+        String cleanSymbol = canonical.symbol();
+        String cleanExchange = canonical.exchange();
         log.info("Removing symbol {}:{} from watchlist {} for user {}", cleanExchange, cleanSymbol, watchlistId, userId);
 
         watchlistRepository.findByUserIdAndId(userId, watchlistId)
@@ -256,7 +261,7 @@ public class WatchlistService {
      * Backward-compatible overload removing by symbol.
      */
     public void removeStockFromWatchlist(String userId, String watchlistId, String symbol) {
-        removeStockFromWatchlist(userId, watchlistId, symbol, "NSE");
+        removeStockFromWatchlist(userId, watchlistId, symbol, null);
     }
 
     /**
@@ -264,8 +269,9 @@ public class WatchlistService {
      * Crucial for powering the UI "Add to Watchlist" popup modal.
      */
     public List<WatchlistCheckStatusDto> checkSymbolAcrossWatchlists(String userId, String symbol, String exchange) {
-        String cleanSymbol = symbol != null ? symbol.trim().toUpperCase(Locale.ROOT) : "";
-        String cleanExchange = (exchange != null && !exchange.isBlank()) ? exchange.trim().toUpperCase(Locale.ROOT) : "NSE";
+        CanonicalSymbol canonical = canonicalizeSymbol(symbol, exchange);
+        String cleanSymbol = canonical.symbol();
+        String cleanExchange = canonical.exchange();
         log.info("Checking symbol {}:{} containment across watchlists for user {}", cleanExchange, cleanSymbol, userId);
 
         List<WatchlistDto> watchlists = getUserWatchlists(userId);
@@ -289,7 +295,7 @@ public class WatchlistService {
      * Backward-compatible overload checking across watchlists defaulting to NSE.
      */
     public List<WatchlistCheckStatusDto> checkSymbolAcrossWatchlists(String userId, String symbol) {
-        return checkSymbolAcrossWatchlists(userId, symbol, "NSE");
+        return checkSymbolAcrossWatchlists(userId, symbol, null);
     }
 
     // --- Legacy Single-Watchlist Compatibility Helpers ---
@@ -301,20 +307,59 @@ public class WatchlistService {
 
     public WatchlistItemDto addToWatchlist(String userId, String symbol) {
         Watchlist defaultList = getOrCreateDefaultWatchlist(userId);
-        return addStockToWatchlist(userId, defaultList.getId(), symbol, "NSE");
+        return addStockToWatchlist(userId, defaultList.getId(), symbol, null);
     }
 
     public void removeFromWatchlist(String userId, String symbol) {
         Watchlist defaultList = getOrCreateDefaultWatchlist(userId);
-        removeStockFromWatchlist(userId, defaultList.getId(), symbol, "NSE");
+        removeStockFromWatchlist(userId, defaultList.getId(), symbol, null);
     }
 
     public boolean isInWatchlist(String userId, String symbol) {
         Watchlist defaultList = getOrCreateDefaultWatchlist(userId);
-        return watchlistItemRepository.existsByWatchlistIdAndSymbol(defaultList.getId(), symbol.toUpperCase());
+        CanonicalSymbol canonical = canonicalizeSymbol(symbol, null);
+        return watchlistItemRepository.existsByWatchlistIdAndSymbolAndExchange(
+                defaultList.getId(), canonical.symbol(), canonical.exchange());
     }
 
     // --- Private Helper Methods ---
+
+    private CanonicalSymbol canonicalizeSymbol(String symbol, String requestedExchange) {
+        String remaining = symbol == null ? "" : symbol.trim().toUpperCase(Locale.ROOT);
+        if (remaining.isBlank()) {
+            throw new IllegalArgumentException("Symbol cannot be blank");
+        }
+
+        String suppliedExchange = requestedExchange == null || requestedExchange.isBlank()
+                ? null
+                : requestedExchange.trim().toUpperCase(Locale.ROOT);
+        String prefixedExchange = null;
+
+        while (remaining.contains(":")) {
+            int delimiter = remaining.indexOf(':');
+            String prefix = remaining.substring(0, delimiter);
+            if (!QUALIFIED_EXCHANGES.contains(prefix)) {
+                break;
+            }
+            if (prefixedExchange != null && !prefixedExchange.equals(prefix)) {
+                throw new IllegalArgumentException("Symbol contains conflicting exchange prefixes");
+            }
+            prefixedExchange = prefix;
+            remaining = remaining.substring(delimiter + 1).trim();
+        }
+
+        if (remaining.isBlank() || remaining.contains(":")) {
+            throw new IllegalArgumentException("Symbol must be a valid exchange-qualified ticker");
+        }
+        if (suppliedExchange != null && prefixedExchange != null && !suppliedExchange.equals(prefixedExchange)) {
+            throw new IllegalArgumentException("Exchange conflicts with the exchange prefix in symbol");
+        }
+
+        return new CanonicalSymbol(remaining, suppliedExchange != null ? suppliedExchange
+                : prefixedExchange != null ? prefixedExchange : "NSE");
+    }
+
+    private record CanonicalSymbol(String symbol, String exchange) {}
 
     private WatchlistDto toWatchlistDto(Watchlist watchlist, int itemCount) {
         return WatchlistDto.builder()
