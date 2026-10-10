@@ -147,6 +147,26 @@ public class MarketDataAdminController {
         return ResponseEntity.ok("Triggered Stock Indices Retry");
     }
 
+    @PostMapping("/scheduler/indices/constituents/force-process")
+    @Operation(summary = "Force process stock indices constituents", description = "Triggers stock indices constituent scraping from NSE (bypassing trading hours)")
+    public ResponseEntity<String> forceTriggerStockIndicesProcessing(
+            @RequestParam(required = false) String symbol) {
+        log.info("Manual trigger: Force Stock Indices Constituents Processing (Symbol: {})", symbol);
+        new Thread(() -> {
+            try {
+                if (symbol != null && !symbol.isBlank()) {
+                    marketDataProcessingService.fetchAndProcessStockIndices(symbol.trim().toUpperCase()).join();
+                } else {
+                    marketDataProcessingService.fetchAndProcessStockIndicesOnly();
+                }
+            } catch (Exception e) {
+                log.error("Failed to run manually triggered force stock indices processing", e);
+            }
+        }, "manual-force-stock-indices-thread").start();
+        return ResponseEntity.ok("Force triggered stock indices constituents processing in background for: "
+                + (symbol != null ? symbol : "ALL"));
+    }
+
     @PostMapping("/scheduler/cookie/refresh")
     @Operation(summary = "Trigger Selenium cookie refresh (writer)", description = "Scrapes NSE cookies and stores them in Redis for all pods. Works even when scheduler.cookie.enabled=false.")
     public ResponseEntity<NseCookiesStatusResponse> triggerCookieRefresh() {

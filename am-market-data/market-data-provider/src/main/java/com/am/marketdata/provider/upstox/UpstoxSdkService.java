@@ -107,7 +107,7 @@ public class UpstoxSdkService {
     }
 
     /** Strip accidental JSON suffixes from env vars (e.g. {@code ...","extended_token":"...}). */
-    static String sanitizeAccessToken(String accessToken) {
+    public static String sanitizeAccessToken(String accessToken) {
         if (accessToken == null) {
             return null;
         }
@@ -145,29 +145,39 @@ public class UpstoxSdkService {
             return new GetMarketQuoteLastTradedPriceResponseV3();
         }
 
-        // Initialize ApiClient
+        // Initialize ApiClient with short timeouts
         ApiClient apiClient = new ApiClient();
+        apiClient.setConnectTimeout(5000);
+        apiClient.setReadTimeout(5000);
+        apiClient.setWriteTimeout(5000);
 
         // Configure OAuth2 access token
         // Use the auth name "OAUTH2" as per standard generated SDKs
         OAuth oAuth = (OAuth) apiClient.getAuthentication("OAUTH2");
         if (oAuth != null) {
-            oAuth.setAccessToken(this.accessToken);
+            oAuth.setAccessToken(token);
         } else {
-            // Fallback if getAuthentication returns null or name differs (though OAUTH2 is
-            // standard)
-            // Some SDK versions might allow setAccessToken directly on client
-            apiClient.setAccessToken(this.accessToken);
+            apiClient.setAccessToken(token);
         }
 
         MarketQuoteV3Api marketQuoteV3Api = new MarketQuoteV3Api(apiClient);
 
-        // Normalize keys replacing colon with pipe
-        List<String> normalizedKeys = new java.util.ArrayList<>();
+        // Normalize keys replacing colon with pipe and filter strictly to valid pipe keys
+        List<String> validKeys = new java.util.ArrayList<>();
         for (String key : instrumentKeys) {
-            normalizedKeys.add(key != null ? key.replace(":", "|") : null);
+            if (key != null) {
+                String normalized = key.replace(":", "|");
+                if (normalized.contains("|")) {
+                    validKeys.add(normalized);
+                } else {
+                    log.warn("getLtp: Skipping invalid instrument key without pipe: {}", key);
+                }
+            }
         }
-        String symbolList = String.join(",", normalizedKeys);
+        if (validKeys.isEmpty()) {
+            return new GetMarketQuoteLastTradedPriceResponseV3();
+        }
+        String symbolList = String.join(",", validKeys);
 
         log.debug("Calling MarketQuoteV3Api.getLtp with symbols: {}", symbolList);
         return marketQuoteV3Api.getLtp(symbolList);
@@ -193,25 +203,38 @@ public class UpstoxSdkService {
             return new com.am.marketdata.provider.upstox.model.OHLCResponse();
         }
 
-        // Initialize ApiClient
+        // Initialize ApiClient with short timeouts
         ApiClient apiClient = new ApiClient();
+        apiClient.setConnectTimeout(5000);
+        apiClient.setReadTimeout(5000);
+        apiClient.setWriteTimeout(5000);
 
         // Configure OAuth2 access token
         OAuth oAuth = (OAuth) apiClient.getAuthentication("OAUTH2");
         if (oAuth != null) {
-            oAuth.setAccessToken(this.accessToken);
+            oAuth.setAccessToken(token);
         } else {
-            apiClient.setAccessToken(this.accessToken);
+            apiClient.setAccessToken(token);
         }
 
         MarketQuoteV3Api marketQuoteV3Api = new MarketQuoteV3Api(apiClient);
 
-        // Normalize keys replacing colon with pipe
-        List<String> normalizedKeys = new java.util.ArrayList<>();
+        // Normalize keys replacing colon with pipe and filter strictly to valid pipe keys
+        List<String> validOhlcKeys = new java.util.ArrayList<>();
         for (String key : instrumentKeys) {
-            normalizedKeys.add(key != null ? key.replace(":", "|") : null);
+            if (key != null) {
+                String normalized = key.replace(":", "|");
+                if (normalized.contains("|")) {
+                    validOhlcKeys.add(normalized);
+                } else {
+                    log.warn("getOhlc: Skipping invalid instrument key without pipe: {}", key);
+                }
+            }
         }
-        String symbolList = String.join(",", normalizedKeys);
+        if (validOhlcKeys.isEmpty()) {
+            return new com.am.marketdata.provider.upstox.model.OHLCResponse();
+        }
+        String symbolList = String.join(",", validOhlcKeys);
 
         log.debug("Calling MarketQuoteV3Api.getOHLC with symbols: {} and interval: {}", symbolList, interval);
         log.debug("Access Token (masked): {}...",
