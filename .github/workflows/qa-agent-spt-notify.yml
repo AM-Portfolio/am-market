@@ -1,0 +1,44 @@
+# Commit→SPT push starter — OFF by default.
+#
+# Preferred after Contabo deploy: market-data.yml → enable_commit_spt →
+#   am-pipelines thin glue → am-qa-agents spt-after-deploy.yml (per env domain).
+# Preferred without deploy: GitHub webhook → POST /qa/webhooks/github
+#
+# Set repo variable SPT_USE_GHA_START=true only for manual/emergency Temporal start on push.
+
+name: QA Agent SPT Notify
+
+on:
+  push:
+    branches: ["main", "develop", "dev", "test/**", "feature/**", "hotfix/**", "fix/**"]
+    paths:
+      - "am-market-data/**"
+      - ".github/workflows/qa-agent-spt-notify.yml"
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Override branch for matrix
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: qa-agent-spt-notify-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  start-temporal:
+    name: Start CommitSpt (Temporal / qa-agent pod)
+    # Default off — Contabo post-deploy + webhook own the happy path.
+    if: ${{ vars.SPT_USE_GHA_START == 'true' }}
+    uses: AM-Portfolio/am-qa-agents/.github/workflows/spt-on-commit.yml@main
+    with:
+      service: am-market-data
+      git_ref: ${{ github.event.inputs.git_ref || github.ref_name }}
+      git_sha: ${{ github.sha }}
+      committer_email: ${{ github.event.head_commit.author.email || github.event.pusher.email || '' }}
+      committer_name: ${{ github.event.head_commit.author.name || github.actor || '' }}
+      environment: dev
+      qa_base_url: https://am-dev.asrax.in/qa
+      repo: ${{ github.repository }}
+    secrets: inherit

@@ -58,4 +58,6 @@ jobs:
       build_context: ".."
       # Pin-then-sync scripts live on am-pipelines main (matches uses: @main).
       pipelines_ref: "main"
+      # Post-deploy SPT via am-qa-agents spt-after-deploy.yml (per Contabo env + auto-sync).
+      enable_commit_spt: true
     secrets: inherit

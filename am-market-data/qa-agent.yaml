@@ -2,5 +2,7 @@ apiVersion: am.qa/v1
 kind: ReleaseReadiness
 service: am-market-data
 enabled: true
-branches: [main, master]
+# Commit->SPT matrix is driven by GHA (qa-agent-spt-notify.yml); branches here
+# document release-readiness / future Temporal triggers.
+branches: [main, master, develop, dev, feature/**, fix/**, hotfix/**, test/**]
 environment: dev
