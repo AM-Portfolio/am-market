@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import com.am.marketdata.analysis.dto.StockMoverDTO;
 import com.am.marketdata.analysis.dto.SectorPerformanceDTO;
+import com.am.marketdata.service.model.security.SecurityDocument;
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +35,9 @@ public class MarketAnalyticsService {
      * Get Historical Charts (Batch or Single)
      */
     public com.am.marketdata.api.model.HistoricalDataResponseV1 getHistoricalCharts(
-            String symbols, String range, boolean isIndexSymbol) {
+            String symbols, String range, Boolean requestedIndexSymbol) {
+
+        boolean isIndexSymbol = resolveChartSymbolType(symbols, requestedIndexSymbol);
 
         String interval = "1D";
         java.time.LocalDateTime to = java.time.LocalDateTime.now();
@@ -182,6 +185,84 @@ public class MarketAnalyticsService {
     }
 
     /**
+     * Chooses the chart retrieval path only when an older client omitted the flag.
+     *
+     * <p>The legacy endpoint defaulted every request to an index. A request for a
+     * normal share such as TCS could therefore take the index path and return no
+     * candles in one environment while appearing to work in another. Explicit
+     * client values still win, so existing index callers keep their current
+     * behaviour.</p>
+     */
+    private boolean resolveChartSymbolType(String symbols, Boolean requestedIndexSymbol) {
+        if (requestedIndexSymbol != null) {
+            return requestedIndexSymbol;
+        }
+
+        Set<String> requestedSymbols = splitChartSymbols(symbols).stream()
+                .map(this::removeExchangePrefix)
+                .filter(symbol -> !symbol.isBlank())
+                .collect(Collectors.toSet());
+        if (requestedSymbols.isEmpty()) {
+            // Preserve the legacy default for invalid input. The normal request
+            // validation below returns the existing empty/error response shape.
+            return true;
+        }
+
+        try {
+            Set<String> securitySymbols = securityService.findBySymbols(new ArrayList<>(requestedSymbols)).stream()
+                    .map(SecurityDocument::getKey)
+                    .filter(Objects::nonNull)
+                    .map(SecurityDocument.SecurityKey::getSymbol)
+                    .filter(Objects::nonNull)
+                    .map(symbol -> symbol.trim().toUpperCase(Locale.ROOT))
+                    .collect(Collectors.toSet());
+
+            if (securitySymbols.containsAll(requestedSymbols)) {
+                log.info("resolveChartSymbolType",
+                        "Auto-resolved equity chart request for " + requestedSymbols.size() + " symbol(s)");
+                return false;
+            }
+
+            boolean allIndices = requestedSymbols.stream()
+                    .allMatch(stockIndicesService::hasStoredIndexSymbol);
+            if (allIndices) {
+                log.info("resolveChartSymbolType",
+                        "Auto-resolved index chart request for " + requestedSymbols.size() + " symbol(s)");
+                return true;
+            }
+
+            // A batch cannot safely mix index and equity semantics behind one
+            // boolean. Keep the historical default until a caller sends the flag.
+            log.warn("resolveChartSymbolType",
+                    "Could not auto-resolve one chart type for " + requestedSymbols.size()
+                            + " symbol(s); using legacy index path");
+        } catch (Exception e) {
+            // Resolution is an improvement for legacy callers, not a reason to
+            // turn a previously accepted request into an HTTP failure.
+            log.warn("resolveChartSymbolType",
+                    "Chart type lookup failed; using legacy index path: " + e.getMessage());
+        }
+
+        return true;
+    }
+
+    private String removeExchangePrefix(String symbol) {
+        String normalized = symbol == null ? "" : symbol.trim().toUpperCase(Locale.ROOT);
+        int separator = normalized.lastIndexOf(':');
+        return separator >= 0 ? normalized.substring(separator + 1).trim() : normalized;
+    }
+
+    private Set<String> splitChartSymbols(String symbols) {
+        if (symbols == null || symbols.isBlank()) {
+            return Collections.emptySet();
+        }
+        return Arrays.stream(symbols.split(","))
+                .map(String::trim)
+                .filter(symbol -> !symbol.isEmpty())
+                .collect(Collectors.toSet());
+    }
+
+    /**
      * Get Top Gainers or Losers
      * 
      * @param limit         Number of records
@@ -198,7 +279,7 @@ public class MarketAnalyticsService {
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
 
         // Fetch enriched data
-        List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices);
+        List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices, true);
 
         if (enrichedData.isEmpty()) {
             return Collections.emptyList();
@@ -206,7 +287,11 @@ public class MarketAnalyticsService {
 
         // Sort by percentage change
         boolean descending = "gainers".equalsIgnoreCase(type);
-        List<EnrichedStockData> sortedData = stockDataEnricher.sortByPercentChange(enrichedData, descending);
+        List<EnrichedStockData> filteredData = enrichedData.stream()
+                .filter(data -> data.getChange() != null && Double.isFinite(data.getChange())
+                        && (descending ? data.getChange() > 0.0 : data.getChange() < 0.0))
+                .collect(Collectors.toList());
+        List<EnrichedStockData> sortedData = stockDataEnricher.sortByPercentChange(filteredData, descending);
 
         // Convert to response format and limit results
         return sortedData.stream()
@@ -225,16 +310,25 @@ public class MarketAnalyticsService {
          * Read prices once, then sort the same snapshot in both directions.
          * This avoids two slow provider calls and mismatched gainers/losers.
          */
-        List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices);
+        List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices, true);
+
+        // Flat stocks are not movers. Keeping zero-change rows in both sorted lists
+        // made the same unchanged stocks appear as both gainers and losers.
+        List<EnrichedStockData> gainersData = enrichedData.stream()
+                .filter(data -> data.getChange() != null && Double.isFinite(data.getChange()) && data.getChange() > 0.0)
+                .collect(Collectors.toList());
+        List<EnrichedStockData> losersData = enrichedData.stream()
+                .filter(data -> data.getChange() != null && Double.isFinite(data.getChange()) && data.getChange() < 0.0)
+                .collect(Collectors.toList());
 
         List<StockMoverDTO> gainers = stockDataEnricher
-                .sortByPercentChange(new ArrayList<>(enrichedData), true)
+                .sortByPercentChange(gainersData, true)
                 .stream()
                 .limit(limit)
                 .map(this::enrichedDataToMap)
                 .collect(Collectors.toList());
         List<StockMoverDTO> losers = stockDataEnricher
-                .sortByPercentChange(new ArrayList<>(enrichedData), false)
+                .sortByPercentChange(losersData, false)
                 .stream()
                 .limit(limit)
                 .map(this::enrichedDataToMap)
@@ -248,6 +342,11 @@ public class MarketAnalyticsService {
 
     private List<EnrichedStockData> fetchEnrichedData(String targetIndex,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
+        return fetchEnrichedData(targetIndex, timeFrame, expandIndices, false);
+    }
+
+    private List<EnrichedStockData> fetchEnrichedData(String targetIndex,
+            com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices, boolean requireFullCoverage) {
         // Fetch index constituent data
         StockIndicesMarketData indexData = stockIndicesService.getLatestIndexData(targetIndex);
 
@@ -262,12 +361,34 @@ public class MarketAnalyticsService {
                 timeFrame != null ? timeFrame : com.am.marketdata.common.model.TimeFrame.DAY,
                 expandIndices);
 
+        if (requireFullCoverage) {
+            long expectedMembers = indexData.getData().stream()
+                    .filter(Objects::nonNull)
+                    .map(StockData::getSymbol)
+                    .filter(symbol -> symbol != null && !symbol.isBlank())
+                    .map(String::trim)
+                    .distinct()
+                    .count();
+            int minimumMembers = minimumVerifiedMemberCount(targetIndex);
+            if (expectedMembers == 0 || expectedMembers < minimumMembers || enrichedData.size() != expectedMembers) {
+                log.warn("getMovers",
+                        "Incomplete quote coverage for index {}: validPrices={}, members={}, minimumMembers={}; returning no ranking",
+                        targetIndex, enrichedData.size(), expectedMembers, minimumMembers);
+                return Collections.emptyList();
+            }
+        }
+
         if (enrichedData.isEmpty()) {
             log.warn("getMovers", "No price data available for index: " + targetIndex);
             return Collections.emptyList();
         }
 
         return enrichedData;
+    }
+
+    /** Mirrors the scraper's existing minimums so a truncated Mongo roster is not treated as complete. */
+    private int minimumVerifiedMemberCount(String indexName) {
+        return com.am.marketdata.common.util.IndexMembershipUtils.minimumMembershipSize(indexName);
     }
 
     /**

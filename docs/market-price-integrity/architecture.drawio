@@ -1,5 +1,372 @@
-<mxfile host="app.diagrams.net" version="24.7.17">
-  <diagram id="containers" name="Containers"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="t" value="Market price integrity — Containers" style="rounded=1;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontSize=18;" vertex="1" parent="1"><mxGeometry x="20" y="20" width="900" height="50" as="geometry"/></mxCell><mxCell id="ui" value="Modern UI&#xa;Watchlist / Movers" style="rounded=1;fillColor=#1168BD;strokeColor=#0B4F8A;fontColor=#FFFFFF;" vertex="1" parent="1"><mxGeometry x="40" y="140" width="180" height="80" as="geometry"/></mxCell><mxCell id="svc" value="am-market-data&#xa;canonical identity + price semantics" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1"><mxGeometry x="330" y="140" width="230" height="80" as="geometry"/></mxCell><mxCell id="store" value="Redis / Mongo / Influx&#xa;dated market snapshots" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="1"><mxGeometry x="690" y="110" width="190" height="90" as="geometry"/></mxCell><mxCell id="up" value="Upstox&#xa;instrument-key API" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;dashed=1;" vertex="1" parent="1"><mxGeometry x="690" y="240" width="190" height="80" as="geometry"/></mxCell><mxCell id="e1" value="GET /live-ltp, /analysis/movers" edge="1" parent="1" source="ui" target="svc" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"/><mxCell id="e2" value="read/write dated snapshot" edge="1" parent="1" source="svc" target="store" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"/><mxCell id="e3" value="quote/history by instrument_key" edge="1" parent="1" source="svc" target="up" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"/><mxCell id="l" value="Legend: blue=AM component · green=store · gray dashed=external · red=failure" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;" vertex="1" parent="1"><mxGeometry x="20" y="380" width="900" height="35" as="geometry"/></mxCell></root></mxGraphModel></diagram>
-  <diagram id="sequence" name="Sequence"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="t" value="Market price integrity — Sequence" style="rounded=1;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontSize=18;" vertex="1" parent="1"><mxGeometry x="20" y="20" width="900" height="50" as="geometry"/></mxCell><mxCell id="a" value="UI" style="rounded=1;fillColor=#08427B;fontColor=#FFFFFF;" vertex="1" parent="1"><mxGeometry x="50" y="100" width="120" height="45" as="geometry"/></mxCell><mxCell id="b" value="Market service" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1"><mxGeometry x="350" y="100" width="150" height="45" as="geometry"/></mxCell><mxCell id="c" value="Provider / stores" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;dashed=1;" vertex="1" parent="1"><mxGeometry x="700" y="100" width="160" height="45" as="geometry"/></mxCell><mxCell id="e1" value="1. request symbols" edge="1" parent="1" source="a" target="b" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"/><mxCell id="e2" value="2. resolve key + fetch snapshot" edge="1" parent="1" source="b" target="c" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"/><mxCell id="e3" value="3. dated price / explicit failure" edge="1" parent="1" source="c" target="b" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"/><mxCell id="e4" value="4. normalized response" edge="1" parent="1" source="b" target="a" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"/><mxCell id="l" value="Legend: green=happy path · red dashed=reject/timeout · secrets never cross to UI" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;" vertex="1" parent="1"><mxGeometry x="20" y="380" width="900" height="35" as="geometry"/></mxCell></root></mxGraphModel></diagram>
-  <diagram id="failures" name="Failures"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="t" value="Market price integrity — Failures" style="rounded=1;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontSize=18;" vertex="1" parent="1"><mxGeometry x="20" y="20" width="900" height="50" as="geometry"/></mxCell><mxCell id="f1" value="Invalid instrument key → reject cache success → partial/unavailable response" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1"><mxGeometry x="60" y="110" width="800" height="60" as="geometry"/></mxCell><mxCell id="f2" value="Influx 401/timeout → provider fallback + metric → data or clear unavailable state" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1"><mxGeometry x="60" y="200" width="800" height="60" as="geometry"/></mxCell><mxCell id="f3" value="Missing prior session → do not copy LTP → UI shows previous close unavailable" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1"><mxGeometry x="60" y="290" width="800" height="60" as="geometry"/></mxCell><mxCell id="l" value="Legend: each row is trigger → system action → user-visible outcome" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;" vertex="1" parent="1"><mxGeometry x="20" y="390" width="900" height="35" as="geometry"/></mxCell></root></mxGraphModel></diagram>
+<mxfile host="app.diagrams.net" agent="am-architecture-drawio">
+  <diagram id="context" name="Context">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="t" value="Market Price Integrity — Context" style="rounded=0;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontStyle=1;align=left;spacingLeft=12;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="30" y="20" width="1140" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="p" value="Purpose: explain how Market UI receives trustworthy index quotes and Top Movers." style="text;html=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="35" y="72" width="900" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="user" value="Market user&#xA;views index / movers" style="rounded=1;fillColor=#08427B;strokeColor=#08427B;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="50" y="210" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ui" value="AM Market UI&#xA;Top Movers widget" style="rounded=1;fillColor=#1168BD;strokeColor=#0B4F8A;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="300" y="210" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="backend" value="AM Market Data&#xA;membership + quote enrichment + ranking" style="rounded=1;fillColor=#1168BD;strokeColor=#0B4F8A;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="610" y="210" width="250" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="stores" value="Redis quotes / refresh leases&#xA;Mongo index members / closes&#xA;Influx history" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="930" y="160" width="220" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="vendor" value="Upstox&#xA;resolved instrument keys&#xA;batched live LTP" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="650" y="390" width="210" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="nse" value="Existing NSE scraper&#xA;configured index rosters" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="390" width="210" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="select index" edge="1" parent="1" source="user" target="ui" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="GET /v1/analysis/movers" edge="1" parent="1" source="ui" target="backend" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="member lookup / quote cache" edge="1" parent="1" source="backend" target="stores" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="one bounded LTP batch on miss" edge="1" parent="1" source="backend" target="vendor" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="validated roster refresh" edge="1" parent="1" source="nse" target="stores" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#D79B00;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l" value="Legend: blue = AM component · green cylinder = store · gray dashed = external source · green edge = request/data · amber dashed = scheduled refresh" style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="30" y="700" width="1140" height="36" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="businessflow" name="BusinessFlow">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="t" value="Market Price Integrity — BusinessFlow" style="rounded=0;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontStyle=1;align=left;spacingLeft=12;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="30" y="20" width="1140" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="p" value="Purpose: show the user-visible result for complete, missing, and invalid Top Movers data." style="text;html=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="35" y="72" width="1000" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="lane1" value="USER" style="swimlane;horizontal=0;startSize=32;fillColor=#08427B;swimlaneFillColor=#F5F5F5;strokeColor=#666666;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="30" y="120" width="250" height="530" as="geometry" />
+        </mxCell>
+        <mxCell id="lane2" value="UI" style="swimlane;horizontal=0;startSize=32;fillColor=#1168BD;swimlaneFillColor=#FFFFFF;strokeColor=#666666;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="280" y="120" width="250" height="530" as="geometry" />
+        </mxCell>
+        <mxCell id="lane3" value="SERVICE" style="swimlane;horizontal=0;startSize=32;fillColor=#438DD5;swimlaneFillColor=#FFFFFF;strokeColor=#666666;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="530" y="120" width="380" height="530" as="geometry" />
+        </mxCell>
+        <mxCell id="lane4" value="DATA / PROVIDER" style="swimlane;horizontal=0;startSize=32;fillColor=#F5F5F5;swimlaneFillColor=#FFFFFF;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="910" y="120" width="260" height="530" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" value="1. Choose index&#xA;open Movers" style="rounded=1;fillColor=#08427B;strokeColor=#08427B;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="70" y="205" width="160" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" value="2. Request movers&#xA;existing endpoint" style="rounded=1;fillColor=#1168BD;strokeColor=#0B4F8A;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="325" y="205" width="160" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" value="3. Load validated&#xA;index membership" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="640" y="205" width="170" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" value="4. Read one shared&#xA;quote snapshot" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="640" y="325" width="170" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" value="5. Cache miss?&#xA;lease + batch LTP" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="640" y="445" width="170" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="a6" value="6a. Full valid coverage&#xA;return ranked arrays" style="rounded=1;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="640" y="555" width="170" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="a7" value="6b. Incomplete data&#xA;existing arrays empty; log cause" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="810" y="555" width="90" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="a8" value="Redis / Mongo&#xA;membership + quotes" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="955" y="205" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a9" value="Upstox batch&#xA;resolved keys" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="955" y="445" width="170" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="open" edge="1" parent="1" source="a1" target="a2" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="GET /v1/analysis/movers" edge="1" parent="1" source="a2" target="a3" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="membership + cache reads" edge="1" parent="1" source="a3" target="a8" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="dedup members" edge="1" parent="1" source="a3" target="a4" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="missing symbols only" edge="1" parent="1" source="a4" target="a5" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#D79B00;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="one bounded request" edge="1" parent="1" source="a5" target="a9" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="validated prices" edge="1" parent="1" source="a9" target="a8" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="valid LTP + base for every member" edge="1" parent="1" source="a4" target="a6" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="still missing / stale / ambiguous" edge="1" parent="1" source="a5" target="a7" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#B85450;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l" value="Legend: blue = AM components · green = complete success/store · gray dashed = external provider · amber dashed = recovery · red dashed = reject/incomplete" style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="30" y="700" width="1140" height="36" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="containers" name="Containers">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="t" value="Market Price Integrity — Containers" style="rounded=0;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontStyle=1;align=left;spacingLeft=12;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="30" y="20" width="1140" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="p" value="Purpose: show existing runtime components and the shared cache/provider path; no new service is introduced." style="text;html=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="35" y="72" width="1050" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="ui" value="AM Market UI&#xA;Top Movers" style="rounded=1;fillColor=#1168BD;strokeColor=#0B4F8A;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="40" y="270" width="170" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="analytics" value="MarketAnalyticsService&#xA;getMoversUnified&#xA;one shared snapshot" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="275" y="250" width="210" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="enrich" value="StockDataEnricher +&#xA;SmartStockService&#xA;validate quote + base" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="550" y="250" width="210" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="redis" value="Redis&#xA;current quotes + prior-session base&#xA;never overwrite current with base" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="865" y="150" width="250" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="mongo" value="MongoDB&#xA;index membership + security identity" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="865" y="275" width="250" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="influx" value="InfluxDB&#xA;date-bounded historical batches&#xA;100 identities per chunk" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="865" y="395" width="250" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="stream" value="SymbolOrchestratorService + StreamerManager&#xA;configured NSE members -&gt; Redis ticks" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="275" y="440" width="275" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="resolver" value="UpstoxSymbolResolver +&#xA;UpstoxMarketDataProvider.getLTP&#xA;batched resolved instruments" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="585" y="440" width="250" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="nse" value="NSEIndicesConfig + existing scraper&#xA;validate/repair roster" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="440" width="200" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="GET /v1/analysis/movers" edge="1" parent="1" source="ui" target="analytics" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="enrich once; sort both sides" edge="1" parent="1" source="analytics" target="enrich" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="read cache + session base" edge="1" parent="1" source="enrich" target="redis" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="session base: bounded date-range batches; no serial reads" edge="1" parent="1" source="enrich" target="influx" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="identity / member lookup" edge="1" parent="1" source="enrich" target="mongo" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="streamed prices" edge="1" parent="1" source="stream" target="redis" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#D79B00;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="one bounded LTP batch on miss" edge="1" parent="1" source="enrich" target="resolver" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="validated roster updates" edge="1" parent="1" source="nse" target="mongo" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#D79B00;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="validated batch cache write" edge="1" parent="1" source="resolver" target="redis" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l" value="Legend: blue = AM components · green = stores · gray dashed = external/data source · solid green = read/request · amber dashed = stream or scheduled update" style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="30" y="700" width="1140" height="36" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="sequence" name="Sequence">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="t" value="Market Price Integrity — Sequence" style="rounded=0;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontStyle=1;align=left;spacingLeft=12;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="30" y="20" width="1140" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="p" value="Purpose: request path is cache-first; provider recovery is batched, shared, and bounded." style="text;html=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="35" y="72" width="1000" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="ui" value="Market UI" style="rounded=1;fillColor=#08427B;strokeColor=#08427B;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="40" y="130" width="145" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="analytics" value="Analysis API /&#xA;MarketAnalyticsService" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="255" y="130" width="190" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="quote" value="StockDataEnricher /&#xA;SmartStockService" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="515" y="130" width="190" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="redis" value="Redis / Mongo /&#xA;Influx cache/history" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="780" y="130" width="180" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="up" value="Resolver / Upstox&#xA;batched LTP" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="130" width="160" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="life1" value="" style="shape=line;dashed=1;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="112" y="185" width="0" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="life2" value="" style="shape=line;dashed=1;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="350" y="185" width="0" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="life3" value="" style="shape=line;dashed=1;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="610" y="185" width="0" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="life4" value="" style="shape=line;dashed=1;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="870" y="195" width="0" height="430" as="geometry" />
+        </mxCell>
+        <mxCell id="life5" value="" style="shape=line;dashed=1;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="195" width="0" height="430" as="geometry" />
+        </mxCell>
+        <mxCell id="s1" value="1. GET /v1/analysis/movers?type=all" edge="1" parent="1" source="ui" target="analytics" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;exitY=1;entryY=0;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="2. Load index roster; enrich once" edge="1" parent="1" source="analytics" target="quote" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="3. Cache + session-correct base; bounded Influx batch on miss" edge="1" parent="1" source="quote" target="redis" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="4. Missing members: acquire owner lease" edge="1" parent="1" source="quote" target="redis" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#D79B00;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" value="5. One batch; instrument keys" edge="1" parent="1" source="quote" target="up" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s6" value="6. Validate, timestamp, cache newer values only" edge="1" parent="1" source="up" target="redis" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s7" value="7a. Full coverage: rank both sides from same snapshot" edge="1" parent="1" source="quote" target="analytics" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s8" value="7b. Incomplete: empty arrays + coverage log" edge="1" parent="1" source="quote" target="analytics" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#B85450;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s9" value="8. Existing JSON contract" edge="1" parent="1" source="analytics" target="ui" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l" value="Legend: numbered arrows = synchronous call order · dashed amber = shared recovery lease · dashed red = rejected/incomplete path" style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="30" y="700" width="1140" height="36" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="failures" name="Failures">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="t" value="Market Price Integrity — Failures" style="rounded=0;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontStyle=1;align=left;spacingLeft=12;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="30" y="20" width="1140" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="p" value="Purpose: show trigger, system response, and user-visible result for ranking failures." style="text;html=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="35" y="72" width="1000" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="a" value="Cache zero / stale tick&#xA;or out-of-order update" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="45" y="140" width="235" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="b" value="Reject invalid/older value;&#xA;retain prior validated cache" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="465" y="140" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="c" value="Fresh quote retained; otherwise&#xA;index ranking is empty" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="900" y="140" width="250" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="d" value="Unresolved / ambiguous&#xA;instrument identity" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="45" y="255" width="235" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="e" value="Batch resolver checks exchange + ISIN;&#xA;no per-symbol retry storm" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="465" y="255" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="f" value="Required coverage missing;&#xA;existing arrays empty + log" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="900" y="255" width="250" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="g" value="Provider timeout / partial batch" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="45" y="370" width="235" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="h" value="Bounded retry cooldown;&#xA;valid responses cached" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="465" y="370" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="i" value="Incomplete index omitted from&#xA;rankings; other indexes continue" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="900" y="370" width="250" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="j" value="Missing/incomplete membership&#xA;or SENSEX BSE roster unavailable" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="45" y="485" width="235" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="k" value="Keep last-good NSE roster;&#xA;do not infer BSE members" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="465" y="485" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="m" value="No complete ranking until&#xA;validated membership exists" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="900" y="485" width="250" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="n" value="History has no correct&#xA;session base for a member" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="45" y="600" width="235" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="o" value="Date-bounded 100-symbol chunks;&#xA;async verified-session repair" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="465" y="600" width="270" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="q" value="No false 0.00%; affected&#xA;index returns empty arrays" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="900" y="600" width="250" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="trigger" edge="1" parent="1" source="a" target="b" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="outcome" edge="1" parent="1" source="b" target="c" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="trigger" edge="1" parent="1" source="d" target="e" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="outcome" edge="1" parent="1" source="e" target="f" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="trigger" edge="1" parent="1" source="g" target="h" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="outcome" edge="1" parent="1" source="h" target="i" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="trigger" edge="1" parent="1" source="j" target="k" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="outcome" edge="1" parent="1" source="k" target="m" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="trigger" edge="1" parent="1" source="n" target="o" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="outcome" edge="1" parent="1" source="o" target="q" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;html=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l" value="Legend: each row is trigger → system action → user outcome · red fill/edge = failure path · blue = AM response" style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="30" y="700" width="1140" height="36" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
 </mxfile>

@@ -232,52 +232,32 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
                     }
                 }
                 
-                // Also carry forward anything else that was returned but didn't match the mapping loop
-                for (Map.Entry<String, OHLCQuote> entry : providerData.entrySet()) {
-                    if (!mappedData.containsKey(entry.getKey())) {
-                        mappedData.put(entry.getKey(), entry.getValue());
-                    }
+                // A missing provider row is a miss, not a successful zero-price quote.
+                // Returning placeholders makes downstream callers cache and display fake data.
+                mappedData.entrySet().removeIf(entry -> !hasUsableLastPrice(entry.getValue()));
+                int missingCount = symbols.size() - mappedData.size();
+                if (missingCount > 0) {
+                    log.warn("[PROVIDER_MAP] Provider quote batch has {} valid prices for {} requested symbols; {} remain unavailable",
+                            mappedData.size(), symbols.size(), missingCount);
                 }
-                
-                // OPTIMIZATION: Cache placeholders for any requested symbols that the provider failed to return.
-                // This prevents subsequent requests from repeatedly hitting the slow provider for invalid/empty symbols.
-                for (String reqSymbol : symbols) {
-                    if (!mappedData.containsKey(reqSymbol)) {
-                        log.warn("[PROVIDER_MAP] Provider returned no data for symbol {}. Caching empty placeholder to prevent repeat calls.", reqSymbol);
-                        mappedData.put(reqSymbol, OHLCQuote.builder()
-                                .lastPrice(0.0)
-                                .previousClose(0.0)
-                                .ohlc(OHLCQuote.OHLC.builder()
-                                        .open(0.0)
-                                        .high(0.0)
-                                        .low(0.0)
-                                        .close(0.0)
-                                        .build())
-                                .build());
-                    }
-                }
-                
                 return mappedData;
             } else {
                 log.info("[PROVIDER] {} No OHLC data returned from provider for timeFrame {}",
                         provider.getProviderName(), tfValue);
                 
-                // If the provider returned absolutely nothing, cache placeholders for all requested symbols
-                Map<String, OHLCQuote> placeholders = new HashMap<>();
-                for (String reqSymbol : symbols) {
-                    placeholders.put(reqSymbol, OHLCQuote.builder()
-                            .lastPrice(0.0)
-                            .previousClose(0.0)
-                            .ohlc(OHLCQuote.OHLC.builder().open(0.0).high(0.0).low(0.0).close(0.0).build())
-                            .build());
-                }
-                return placeholders;
+                // Empty provider results stay empty so the retriever can report a miss
+                // and later requests can retry after the provider/cache recovers.
+                return Collections.emptyMap();
             }
         } catch (Exception e) {
             log.error(provider.getProviderName() + " Error fetching OHLC data for timeFrame {}: {}",
                     tfValue, e.getMessage(), e);
             return Collections.emptyMap();
         }
+    }
+
+    private boolean hasUsableLastPrice(OHLCQuote quote) {
+        return quote != null && Double.isFinite(quote.getLastPrice()) && quote.getLastPrice() > 0.0;
     }
 
     /**

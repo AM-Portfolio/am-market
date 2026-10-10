@@ -4,16 +4,66 @@
 - [x] Map direct and indirect Modern UI consumers.
 - [x] Identify the separate chart, card, and movers calculation paths and duplicate timeframe loading.
 - [x] Redesign the plan around one authoritative Market Data performance result and one Market UI cache.
-- [ ] User reviews and approves this plan.
-- [ ] Create `fix/market-price-integrity` from current remote main without disturbing existing worktrees.
+- [x] User reviews and approves this plan.
+- [x] Create `fix/market-price-integrity` from current remote main without disturbing existing worktrees.
 - [ ] Discovery gate: capture current endpoint contracts, cache schemas/keys, membership owner, provider limits, Influx mapping, and baseline request/latency/error metrics.
-- [ ] Record the approved `1M` definition and exact broker fixture: as-of time, start session/value, end session/value, and expected percentage.
-- [ ] Add backend unit/regression tests that reproduce the failures.
+- [x] Record the approved `1M` definition and exact broker fixture: as-of time, start session/value, end session/value, and expected percentage.
+- [x] Add focused backend regression tests for stale quote rejection, timeframe base selection, unchanged quotes, and zero/missing provider rows.
 - [ ] Implement idempotent symbol qualification and true Upstox instrument resolution.
 - [ ] Implement dated previous-close semantics and cache validation.
-- [ ] Repair one-snapshot Top Movers calculation and partial-result handling.
+- [x] Verify `getMoversUnified` enriches once and sorts the same snapshot for gainers and losers; preserve this path.
+- [x] Verify the Top Movers request can enter provider history fallback through the 9-argument overload, the existing batch LTP size is configured as 500, and current per-symbol coalescing is JVM-local.
+- [x] Make Top Movers history reads cache/database-only; recover current-price misses through the batched LTP path under an owner-token Redis lease.
+- [ ] Capture the preprod baseline discovery report for one 50-member index: canonical identity, requested session range, row count, newest row date, and rejection reason. Do not log secrets, prices, or raw Flux.
+- [ ] Add a date-bounded multi-symbol Influx historical query in the existing common persistence/service modules; do not reuse latest-only `findByTradingSymbolIn` as a previous-close source.
+- [ ] Replace `HistoricalDataRetriever`'s per-symbol database loop with the bounded historical batch path: 100 identities per chunk and at most two concurrent chunks.
+- [ ] Correct previous-close snapshot semantics to record quote session and base session separately; accept a verified unchanged (`0.00%`) stock.
+- [ ] Use verified roster membership, rather than index-name minimums, for all-index Movers coverage, including NIFTY BANK and NIFTY IT.
+- [ ] Seed streamer instrument-key-to-canonical-ticker mappings at subscribe time and reject ISIN-only cache keys for ticker lookups.
+- [ ] Add tests for 50-member no-N+1 retrieval, NIFTY 500 chunking, non-numeric sector rosters, identity mismatch, session/calendar boundaries, unchanged quotes, and partial chunk failure.
+- [ ] Preprod proof: trace a complete-index Movers request and verify bounded historical chunk count, non-zero valid bases, unchanged public JSON, and no request-time historical Upstox calls.
+- [x] Remove the after-hours `previousClose` OHLC overlay and preserve a positive current quote. Verified same-session snapshot support remains part of the baseline lifecycle work.
+- [x] Make chart `isIndexSymbol` optional and resolve omitted symbols server-side from the active security/index registries; retain the existing response shape.
+- [x] Add OHLC regression tests for prior-close preservation and chart tests for omitted stock/index type. Same-session snapshot and unresolved-symbol coverage remain part of the baseline lifecycle work.
+- [ ] Trace the production TCS 1D chart request read-only and compare deployed version, resolved identity, cache/database/provider attempts, and returned point count with local before declaring the chart issue fixed.
+- [x] Require both a positive current price and valid comparison base; accept equal current/base prices as unchanged and exclude missing-base rows instead of ranking them at 0.0%.
+- [x] Remove `OHLCDataRetriever` zero placeholders from successful results and verify they cannot be persisted as valid quotes.
+- [x] Build streamer membership from configured broad/sector NSE indexes using one batch membership lookup; retain existing defaults, ETFs, and active-symbol behavior.
+- [x] Treat empty, duplicate, or undersized index documents as scraper-repair candidates; exclude them until a validated replacement is saved.
+- [ ] Verify sector membership shrink with a second scrape; report coverage because the NSE response model exposes no source total count.
+- [ ] Add cross-pod quote-refresh coalescing with owner-token Redis leases, bounded wait/timeout, cooldown, and fail-closed behavior when Redis coordination is unavailable.
+- [ ] Track quote receipt time/source and upstream event time when supplied; prevent older ticks from overwriting newer cache values without changing public quote DTOs.
+- [x] Keep SENSEX out of complete Movers coverage until a validated BSE constituent source is available.
+- [x] Return existing empty `gainers`/`losers` arrays for an index when validated membership/quote/base coverage is incomplete; log structured counts without changing the response contract.
 - [ ] Correct Influx Vault mapping in the proper secret store; commit only the mapping name.
+- [ ] Replace unsupported CSI template usage with supported Vault/CSI value mappings for Influx URL, organisation, bucket, and token; never store values in repository files.
+- [ ] Remove empty-token fallback behaviour and make missing/blank Influx configuration fail startup with a safe diagnostic.
+- [ ] Verify the running preprod pod receives non-empty configuration without printing secret values, then run a read-only historical-price probe.
+- [ ] Inspect live-ingestion worker health: active provider, resolved/subscribed key count, latest tick age, and zero-price write/rejection counts.
+- [ ] Reject unresolved, zero, invalid, and stale LTPs before Redis latest-price cache writes.
+- [ ] Add quote availability/freshness metadata while preserving existing quote fields and client compatibility.
+- [x] Update Paper Trading quote state: terminal unavailable/retry UI and block zero-price order calculations/submissions.
+- [ ] Add regression tests for live LTP, stale/zero cache value, disconnected subscription, after-hours close, and blocked zero-price order.
 - [ ] Repair and validate NIFTY 50 constituent ingestion.
+- [ ] Add reusable membership validation for null, duplicate, parent-index, and incomplete `data` arrays.
+- [ ] Route invalid index documents through the existing constituent scraper; retain the last valid `data` array when scrape validation fails.
+- [ ] Limit the Upstox EOD index refresh to metadata updates; it must not create/overwrite constituent lists.
+- [ ] Add member-count fixtures for NIFTY 50, NIFTY 100, NIFTY 200, and normalized NIFTY 500.
+- [ ] Change Heatmap and Movers to report unavailable price/history data instead of successful `0.00%` placeholders.
+- [ ] Reject degenerate all-zero heatmap cache writes for every constituent index.
+- [ ] Preprod proof: membership recovery, metadata preservation, invalid Upstox key rejection, Influx failure handling, and partial Heatmap/Movers response.
+- [ ] Request explicit production approval before the one-time existing-scraper repair refresh.
+- [ ] Add membership version/hash and normalized added/removed-member audit logging.
+- [ ] Add atomic field-level membership/metadata updates with conflict retry.
+- [ ] Add one coalesced asynchronous repair per invalid index; no user-request scraper wait.
+- [ ] Version or invalidate per-index Heatmap and Movers cache after successful membership repair.
+- [ ] Add an additive detailed availability response; preserve existing simple Heatmap contract.
+- [ ] Add market-session/trade-date freshness checks for cached prices.
+- [ ] Add recovery tests for partial lists, wrong-but-count-correct lists, concurrent price/membership writes, cache invalidation, and interrupted repair resume.
+- [ ] Add an existing-service index catalogue with exchange/source path, versioned count policy, parent-row identity, and Heatmap/Mover eligibility.
+- [ ] Add and validate SENSEX through its BSE membership path; return unavailable until valid membership exists.
+- [ ] Add sector-index count-policy fixtures, including rebalanced NIFTY BANK and NIFTY IT.
+- [ ] Rotate the database credential exposed outside Vault and confirm no secret is committed or logged.
 - [ ] Remove authorization-bearing request logging.
 - [ ] Add the canonical additive timeframe-performance contract, shared by charts and index cards.
 - [ ] Replace overlapping Market UI history loads, duplicate caches, and stale response races.

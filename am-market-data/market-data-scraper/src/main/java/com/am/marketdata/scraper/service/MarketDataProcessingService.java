@@ -34,7 +34,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -380,6 +383,32 @@ public class MarketDataProcessingService {
     private boolean validateStockIndicesData(NSEStockInsidicesData response) {
         if (response == null || response.getData() == null || response.getData().isEmpty()) {
             log.warn("Received empty stock indices response");
+            return false;
+        }
+
+        // Validate minimum constituent counts to prevent storing truncated scrapes
+        String indexName = response.getName() != null ? response.getName().trim().toUpperCase() : "";
+        int count = response.getData().size();
+
+        // A scrape with enough rows can still be truncated or malformed if it
+        // contains blanks or duplicate tickers. Reject it before it replaces the
+        // saved roster used by Heatmap and Top Movers.
+        Set<String> uniqueSymbols = new HashSet<>();
+        for (NSEStockInsidicesData.StockData stock : response.getData()) {
+            if (stock == null || stock.getSymbol() == null || stock.getSymbol().isBlank()) {
+                log.warn("Stock indices response for {} contains a blank member. Rejecting.", indexName);
+                return false;
+            }
+            String symbol = stock.getSymbol().trim().toUpperCase(Locale.ROOT);
+            if (!uniqueSymbols.add(symbol)) {
+                log.warn("Stock indices response for {} contains duplicate member {}. Rejecting.", indexName, symbol);
+                return false;
+            }
+        }
+        int minimumMembers = com.am.marketdata.common.util.IndexMembershipUtils.minimumMembershipSize(indexName);
+        if (count < minimumMembers) {
+            log.warn("Stock indices response for {} has insufficient constituents ({} < {}). Rejecting.",
+                    indexName, count, minimumMembers);
             return false;
         }
 

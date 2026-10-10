@@ -106,31 +106,45 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 Map<String, OHLCQuote> sanitizedQuotes = new HashMap<>();
                 for (String requestedSym : tradingSymbols) {
                     if (ohlcData.containsKey(requestedSym)) {
-                        sanitizedQuotes.put(requestedSym, ohlcData.get(requestedSym));
+                        OHLCQuote quote = ohlcData.get(requestedSym);
+                        if (quote != null && quote.getLastPrice() > 0.0) {
+                            sanitizedQuotes.put(requestedSym, quote);
+                        } else {
+                            log.warn("Skipping unusable quote symbol={} lastPrice={}", requestedSym,
+                                    quote != null ? quote.getLastPrice() : null);
+                        }
                     } else {
                         // Fallback lookup: match clean symbol if requested symbol had exchange prefix or vice versa
                         String cleanReq = requestedSym.contains(":") ? requestedSym.substring(requestedSym.indexOf(":") + 1).trim() : requestedSym;
                         if (ohlcData.containsKey(cleanReq)) {
-                            sanitizedQuotes.put(requestedSym, ohlcData.get(cleanReq));
+                            OHLCQuote quote = ohlcData.get(cleanReq);
+                            if (quote != null && quote.getLastPrice() > 0.0) {
+                                sanitizedQuotes.put(requestedSym, quote);
+                            } else {
+                                log.warn("Skipping unusable quote symbol={} lastPrice={}", requestedSym,
+                                        quote != null ? quote.getLastPrice() : null);
+                            }
                         }
                     }
                 }
-                if (!sanitizedQuotes.isEmpty()) {
-                    ohlcData = sanitizedQuotes;
-                }
+                ohlcData = sanitizedQuotes;
             } else {
                 ohlcData = new HashMap<>();
             }
 
+            final Map<String, OHLCQuote> returnedQuotes = ohlcData;
             Map<String, Object> response = new HashMap<>();
-            response.put("quotes", ohlcData);
-            response.put("count", ohlcData.size());
+            response.put("quotes", returnedQuotes);
+            response.put("count", returnedQuotes.size());
             response.put("cached", !forceRefresh);
             response.put("timestamp", System.currentTimeMillis());
             response.put("timeFrame", timeFrame.getApiValue());
             response.put("source", forceRefresh ? "provider" : "cache");
+            response.put("unavailableSymbols", tradingSymbols.stream()
+                    .filter(symbol -> !returnedQuotes.containsKey(symbol))
+                    .toList());
 
-            flowLogger.complete(span, "resultCount", ohlcData.size());
+            flowLogger.complete(span, "resultCount", returnedQuotes.size());
             return response;
         }
     }
@@ -181,7 +195,11 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 }
 
                 Double currentPrice = priceData.getLastPrice();
-                if (currentPrice == null) {
+                if (currentPrice == null || currentPrice <= 0.0) {
+                    // Never serialize a failed quote as a valid zero LTP. The caller can
+                    // retry with forceRefresh and then render an unavailable state.
+                    log.warn("Skipping unusable live LTP symbol={} exchange={} lastPrice={}",
+                            symbol, priceData.getExchange(), currentPrice);
                     continue;
                 }
 
