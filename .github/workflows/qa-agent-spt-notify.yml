@@ -1,10 +1,12 @@
-# Commit→SPT push starter — OFF by default.
+# Manual / emergency Commit→SPT starter — same Temporal start as Contabo post-deploy.
 #
-# Preferred after Contabo deploy: market-data.yml → enable_commit_spt →
-#   am-pipelines thin glue → am-qa-agents spt-after-deploy.yml (per env domain).
-# Preferred without deploy: GitHub webhook → POST /qa/webhooks/github
+# Contabo path (default after deploy):
+#   market-data.yml → enable_commit_spt → am-pipelines glue → spt-after-deploy.yml
 #
-# Set repo variable SPT_USE_GHA_START=true only for manual/emergency Temporal start on push.
+# This workflow: test that same reusable without waiting on Contabo.
+#   Actions → QA Agent SPT Notify → Run workflow (env = dev|preprod|prod)
+#
+# Push auto-start stays OFF unless repo var SPT_USE_GHA_START=true (avoids double SPT).
 
 name: QA Agent SPT Notify
 
@@ -16,29 +18,45 @@ on:
       - ".github/workflows/qa-agent-spt-notify.yml"
   workflow_dispatch:
     inputs:
+      environment:
+        description: "QA env / domain (same map as Contabo spt-after-deploy)"
+        required: true
+        type: choice
+        options: [dev, preprod, prod]
+        default: "dev"
       git_ref:
-        description: Override branch for matrix
+        description: "Branch for CommitSpt matrix (empty = current ref)"
+        required: false
+        type: string
+        default: ""
+      git_sha:
+        description: "Commit SHA (empty = github.sha)"
         required: false
         type: string
         default: ""
 
 concurrency:
-  group: qa-agent-spt-notify-${{ github.repository }}-${{ github.ref }}
+  group: qa-agent-spt-notify-${{ github.repository }}-${{ github.ref }}-${{ github.event.inputs.environment || 'dev' }}
   cancel-in-progress: false
 
 jobs:
   start-temporal:
-    name: Start CommitSpt (Temporal / qa-agent pod)
-    # Default off — Contabo post-deploy + webhook own the happy path.
-    if: ${{ vars.SPT_USE_GHA_START == 'true' }}
-    uses: AM-Portfolio/am-qa-agents/.github/workflows/spt-on-commit.yml@main
+    name: SPT after deploy (${{ github.event.inputs.environment || 'dev' }})
+    # Manual dispatch always on; push only if SPT_USE_GHA_START=true
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.SPT_USE_GHA_START == 'true' }}
+    uses: AM-Portfolio/am-qa-agents/.github/workflows/spt-after-deploy.yml@main
     with:
       service: am-market-data
+      environment: ${{ github.event.inputs.environment || 'dev' }}
       git_ref: ${{ github.event.inputs.git_ref || github.ref_name }}
-      git_sha: ${{ github.sha }}
-      committer_email: ${{ github.event.head_commit.author.email || github.event.pusher.email || '' }}
+      git_sha: ${{ github.event.inputs.git_sha || github.sha }}
+      committer_email: ${{ github.event.head_commit.author.email || github.event.pusher.email || github.actor || '' }}
       committer_name: ${{ github.event.head_commit.author.name || github.actor || '' }}
-      environment: dev
-      qa_base_url: https://am-dev.asrax.in/qa
       repo: ${{ github.repository }}
-    secrets: inherit
+      github_run_id: ${{ github.run_id }}
+      github_run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      github_workflow: ${{ github.workflow }}
+      github_event_name: ${{ github.event_name }}
+      commit_message: ${{ github.event.head_commit.message || '' }}
+    secrets:
+      QA_AGENT_GATEWAY_TOKEN: ${{ secrets.QA_AGENT_GATEWAY_TOKEN || secrets.SPT_CI_API_KEY }}
