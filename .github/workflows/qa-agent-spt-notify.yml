@@ -1,12 +1,10 @@
-# Commit→SPT for am-market-data — NO GitHub Actions runner executes SPT.
+# Commit→SPT push starter — OFF by default.
 #
-# Preferred: GitHub webhook on dig qa-agent
-#   POST /qa/webhooks/github (push) → CommitSptWorkflow on Temporal
-#   Worker pod runs k6 + email/Cliq.
+# Preferred after Contabo deploy: market-data.yml → enable_commit_spt →
+#   am-pipelines thin glue → am-qa-agents spt-after-deploy.yml (per env domain).
+# Preferred without deploy: GitHub webhook → POST /qa/webhooks/github
 #
-# Optional fallback (fire-and-forget Temporal start only):
-#   uses am-qa-agents spt-on-commit.yml which POSTs /v2/workflows/commit-spt
-#   then exits. Still needs a runner for the POST; prefer webhook.
+# Set repo variable SPT_USE_GHA_START=true only for manual/emergency Temporal start on push.
 
 name: QA Agent SPT Notify
 
@@ -31,9 +29,9 @@ concurrency:
 jobs:
   start-temporal:
     name: Start CommitSpt (Temporal / qa-agent pod)
-    # Fire-and-forget only. Disable if GitHub→qa-agent webhook is configured.
-    if: ${{ vars.SPT_USE_GHA_START != 'false' }}
-    uses: AM-Portfolio/am-qa-agents/.github/workflows/spt-on-commit.yml@feature/design-with-skills
+    # Default off — Contabo post-deploy + webhook own the happy path.
+    if: ${{ vars.SPT_USE_GHA_START == 'true' }}
+    uses: AM-Portfolio/am-qa-agents/.github/workflows/spt-on-commit.yml@main
     with:
       service: am-market-data
       git_ref: ${{ github.event.inputs.git_ref || github.ref_name }}
