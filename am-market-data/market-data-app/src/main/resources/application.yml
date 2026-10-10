@@ -9,11 +9,12 @@ MONGODB_DATABASE_NAME: ${MONGODB_DATABASE:market_data}
 MONGODB_USERNAME_INTERNAL: ${MONGODB_USERNAME:admin}
 MONGODB_PASSWORD_INTERNAL: ${MONGODB_PASSWORD:}
 
-# InfluxDB Configuration
+# InfluxDB configuration is injected by Vault. Keep every value empty when it
+# is absent so InfluxConfigurationValidator can stop an unsafe startup.
 INFLUXDB_TOKEN_INTERNAL: ${INFLUXDB_TOKEN:}
-INFLUXDB_ORG_INTERNAL: ${INFLUXDB_ORG:am-portfolio}
-INFLUXDB_BUCKET_INTERNAL: ${INFLUXDB_BUCKET:market-data}
-INFLUXDB_URL_INTERNAL: http://${INFRA_HOST}:8086
+INFLUXDB_ORG_INTERNAL: ${INFLUXDB_ORG:}
+INFLUXDB_BUCKET_INTERNAL: ${INFLUXDB_BUCKET:}
+INFLUXDB_URL_INTERNAL: ${INFLUXDB_URL:http://${INFLUXDB_HOST:}:${INFLUXDB_PORT:}}
 
 # Redis Configuration
 REDIS_HOSTNAME: ${INFRA_HOST}
@@ -108,10 +109,10 @@ spring:
 
   # InfluxDB Configuration
   influx:
-    url: ${INFLUXDB_URL_INTERNAL:http://localhost:8086}
-    token: ${INFLUXDB_TOKEN_INTERNAL:R9LT2CZpDZXxTkNDpdmfhgUCEnP1qGnV}
-    org: ${INFLUXDB_ORG_INTERNAL:am-portfolio}
-    bucket: ${INFLUXDB_BUCKET_INTERNAL:market-data}
+    url: ${INFLUXDB_URL_INTERNAL}
+    token: ${INFLUXDB_TOKEN_INTERNAL}
+    org: ${INFLUXDB_ORG_INTERNAL}
+    bucket: ${INFLUXDB_BUCKET_INTERNAL}
 
   # Management and Metrics Configuration
 

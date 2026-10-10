@@ -1,10 +1,12 @@
 import os
 import subprocess
+from pathlib import Path
 
-env_file = r'c:\Users\ASUS\Desktop\AM-PORTFOLIO\am-market\am-market-data\.env'
+ROOT = Path(__file__).resolve().parent
+env_file = ROOT / ".env"
 env = os.environ.copy()
 
-if os.path.exists(env_file):
+if env_file.exists():
     with open(env_file, 'r') as f:
         for line in f:
             line = line.strip()
@@ -12,5 +14,8 @@ if os.path.exists(env_file):
                 k, v = line.split('=', 1)
                 env[k.strip()] = v.strip()
 
-cwd = r'c:\Users\ASUS\Desktop\AM-PORTFOLIO\am-market\am-market-data\market-data-app'
-subprocess.run(['mvn.cmd', 'spring-boot:run'], cwd=cwd, env=env)
+if 'REDIS_FORCE_ENABLED' not in env:
+    env['REDIS_FORCE_ENABLED'] = 'true'
+
+cwd = str(ROOT)
+subprocess.run(['mvn.cmd', '-o', '-pl', 'market-data-app', 'spring-boot:run'], cwd=cwd, env=env)

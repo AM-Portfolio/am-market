@@ -15,7 +15,6 @@ import com.am.marketdata.service.util.DataRetrievalStrategyUtil;
 import com.am.marketdata.service.util.HistoricalDataRetriever;
 import com.am.marketdata.service.util.MarketDataRetrievalUtil;
 import com.am.marketdata.service.util.OHLCDataRetriever;
-import com.am.marketdata.service.util.OfficialClosePolicy;
 import com.marketdata.common.MarketDataProvider;
 import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import com.zerodhatech.models.LTPQuote;
@@ -38,7 +37,6 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -94,17 +92,6 @@ public class MarketDataService {
         this.flowLogger = flowLogger;
         this.marketHoursService = marketHoursService.orElse(null);
         this.cacheService = cacheService;
-    }
-
-    private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh) {
-        return OHLCDataRetriever.builder()
-                .persistenceService(persistenceService)
-                .providerFactory(providerFactory)
-                .retrievalOrder(DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh))
-                .cacheResults(true)
-                .targetProviderName(providerName)
-                .producer(producer)
-                .build();
     }
 
     private String resolveProviderName(String providerName) {
@@ -190,6 +177,16 @@ public class MarketDataService {
 
     public Map<String, OHLCQuote> getOHLC(List<String> tradingSymbols, TimeFrame timeFrame, boolean forceRefresh,
             String providerName) {
+        return getOHLC(tradingSymbols, timeFrame, forceRefresh, providerName, true);
+    }
+
+    /**
+     * Read OHLC data with an optional provider fallback. Internal analytics can
+     * use cache/database-only reads when a historical miss must not create a
+     * slow provider request for every constituent.
+     */
+    public Map<String, OHLCQuote> getOHLC(List<String> tradingSymbols, TimeFrame timeFrame, boolean forceRefresh,
+            String providerName, boolean allowProviderFallback) {
         if (tradingSymbols == null || tradingSymbols.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -201,7 +198,7 @@ public class MarketDataService {
             try {
                 providerName = resolveProviderName(providerName);
 
-                OHLCDataRetriever retriever = createOHLCDataRetriever(providerName, forceRefresh);
+                OHLCDataRetriever retriever = createOHLCDataRetriever(providerName, forceRefresh, allowProviderFallback);
                 Map<String, OHLCQuote> result = retriever.retrieveData(tradingSymbols, timeFrame, forceRefresh);
 
                 if (result != null && !result.isEmpty()) {
@@ -223,17 +220,33 @@ public class MarketDataService {
         }
     }
 
+    private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh,
+            boolean allowProviderFallback) {
+        List<DataSourceType> retrievalOrder = allowProviderFallback
+                ? DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh)
+                : Arrays.asList(DataSourceType.CACHE, DataSourceType.DATABASE);
+        return OHLCDataRetriever.builder()
+                .persistenceService(persistenceService)
+                .providerFactory(providerFactory)
+                .retrievalOrder(retrievalOrder)
+                .cacheResults(true)
+                .targetProviderName(providerName)
+                .producer(producer)
+                .build();
+    }
+
     /**
-     * After NSE close, Upstox live OHLC {@code lastPrice} is last trade, not official close.
-     * Liquid names look fine (last trade ≈ close). Thin ETFs/SGB do not.
+     * Preserves a valid provider quote after the market closes.
      *
-     * <p>Reuse {@link #getHistoricalDataBatch} daily candles (same source as previous-close
-     * backfill). Prefer today's candle. On weekend/holiday there is no today candle — use
-     * the latest session close in the window (last trading day). On a trading day after
-     * 15:30, if today's candle is not published yet, leave lastPrice unchanged so we do
-     * not paint yesterday as today.
+     * <p>{@code previousClose} belongs to the prior session and is only the
+     * baseline for calculating today's change. It must never replace today's
+     * {@code lastPrice} or OHLC close. Doing that made every after-hours quote
+     * look unchanged and displayed yesterday's price as today's close.</p>
      *
-     * <p>No-op while the market is open, and if hours cannot be resolved (fail-open).
+     * <p>A future verified session-close snapshot may be applied by the
+     * ingestion path once it carries the same trade date and identity. This
+     * request path deliberately keeps the positive quote it already has rather
+     * than issuing background history calls or guessing a close.</p>
      */
     private void applyOfficialDailyCloseWhenMarketClosed(Map<String, OHLCQuote> quotes) {
         if (quotes == null || quotes.isEmpty()) {
@@ -247,121 +260,20 @@ public class MarketDataService {
                 return;
             }
         } catch (Exception e) {
-            log.warn("Could not resolve market hours; skipping official-close overlay: {}", e.getMessage());
+            // Keep the provider quote when calendar data is unavailable. It
+            // is safer than replacing it with a prior-session value.
+            log.warn("Could not resolve market hours; preserving provider OHLC quote: {}", e.getMessage());
             return;
         }
 
-        // LATENCY OPTIMIZATION: Redis Fast-Path
-        // -----------------------------------------------------------------------------------------
-        // WHAT PROBLEM IT SOLVES:
-        // Previously, this method unconditionally called getHistoricalDataBatch() for ALL symbols when the
-        // market was closed. That triggered 5-50 sequential InfluxDB HTTP queries, causing a 2-second delay.
-        //
-        // HOW IT WORKS:
-        // Check if Redis already provided a valid previousClose (> 0.0) during overlayLatestPrices().
-        // If yes, update lastPrice and close price directly in 0ms without touching InfluxDB.
-        // We only fetch historical candles for symbols that are genuinely missing from Redis.
-        List<String> missingSymbols = new ArrayList<>();
-        int updatedCount = 0;
+        long preservedQuotes = quotes.values().stream()
+                .filter(quote -> quote != null && quote.getLastPrice() > 0.0)
+                .count();
+        long missingQuotes = quotes.size() - preservedQuotes;
 
-        for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
-            OHLCQuote quote = entry.getValue();
-            if (quote != null) {
-                if (quote.getPreviousClose() > 0.0) {
-                    // Fast path: Use Redis-cached previousClose as the official close
-                    quote.setLastPrice(quote.getPreviousClose());
-                    if (quote.getOhlc() != null) {
-                        quote.getOhlc().setClose(quote.getPreviousClose());
-                    }
-                    updatedCount++;
-                } else {
-                    // Missing from Redis: Needs InfluxDB fallback lookup
-                    missingSymbols.add(entry.getKey());
-                }
-            }
-        }
-
-        if (missingSymbols.isEmpty()) {
-            log.info("Applied official daily close via Redis fast-path for {}/{} symbols in 0ms",
-                    updatedCount, quotes.size());
-            return;
-        }
-
-        log.info("Redis missed official close for {}/{} symbols. Triggering non-blocking background DB backfill...",
-                missingSymbols.size(), quotes.size());
-
-        java.time.ZoneId ist = java.time.ZoneId.of("Asia/Kolkata");
-        java.time.LocalDate today = java.time.LocalDate.now(ist);
-        boolean sessionDay = true;
-        try {
-            sessionDay = marketHoursService.isCashSessionDay();
-        } catch (Exception e) {
-            log.warn("Could not resolve session day; requiring today's candle: {}", e.getMessage());
-        }
-        final boolean isSessionDay = sessionDay;
-        Date fromDate = Date.from(today.minusDays(7).atStartOfDay(ist).toInstant());
-        Date toDate = Date.from(today.plusDays(1).atStartOfDay(ist).toInstant());
-
-        // LATENCY OPTIMIZATION: Execute DB lookup in background so HTTP response is returned immediately
-        CompletableFuture.runAsync(() -> {
-            try {
-                Map<String, HistoricalData> history = getHistoricalDataBatch(
-                        missingSymbols,
-                        fromDate,
-                        toDate,
-                        TimeFrame.DAY,
-                        false,
-                        null,
-                        null,
-                        false,
-                        false,
-                        false /* allowProviderFallback = false */);
-
-                int updated = 0;
-                List<String> stillMissingSymbols = new ArrayList<>();
-
-                if (history != null && !history.isEmpty()) {
-                    for (String symbol : missingSymbols) {
-                        HistoricalData data = history.get(symbol);
-                        if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
-                            stillMissingSymbols.add(symbol);
-                            continue;
-                        }
-                        Double officialClose = OfficialClosePolicy.pickSessionClose(
-                                data.getDataPoints(), today, isSessionDay);
-                        if (officialClose == null) {
-                            stillMissingSymbols.add(symbol);
-                            continue;
-                        }
-                        OHLCQuote quote = quotes.get(symbol);
-                        if (quote != null) {
-                            quote.setLastPrice(officialClose);
-                            if (quote.getOhlc() != null) {
-                                quote.getOhlc().setClose(officialClose);
-                            }
-                            quote.setPreviousClose(officialClose);
-                            updated++;
-                        }
-                    }
-                } else {
-                    stillMissingSymbols.addAll(missingSymbols);
-                }
-
-                if (updated > 0) {
-                    log.info("Applied official daily close via background DB fallback for {}/{} missing symbols",
-                            updated, missingSymbols.size());
-                }
-
-                if (!stillMissingSymbols.isEmpty()) {
-                    log.info("Non-blocking hybrid strategy: {} symbols missing from local DB. Triggering async background seed.", stillMissingSymbols.size());
-                    final String pName = defaultProvider;
-                    getHistoricalDataBatch(stillMissingSymbols, fromDate, toDate, TimeFrame.DAY, false, null, pName, false, true, true);
-                    log.info("Async background seed completed for {} missing symbols", stillMissingSymbols.size());
-                }
-            } catch (Exception e) {
-                log.warn("Official daily close background overlay failed: {}", e.getMessage());
-            }
-        });
+        log.info("Closed-market OHLC kept {} current quote(s); {} quote(s) still need ingestion recovery. "
+                        + "Previous close remains a comparison base.",
+                preservedQuotes, missingQuotes);
     }
 
     public HistoricalData getHistoricalData(String symbol, Date fromDate, Date toDate, TimeFrame interval,
@@ -661,9 +573,11 @@ public class MarketDataService {
 
         log.info("Fetching live prices for {} instruments", tradingSymbols.size());
 
-        // Convert instrument IDs to string array for provider API
         String[] symbols = tradingSymbols.stream()
-                .map(id -> "NSE:" + id.toString())
+                .map(id -> {
+                    String str = id.toString();
+                    return (str.startsWith("NSE:") || str.startsWith("BSE:") || str.contains("|")) ? str : "NSE:" + str;
+                })
                 .toArray(String[]::new);
 
         // Get OHLC data from provider with retry mechanism
@@ -717,7 +631,8 @@ public class MarketDataService {
             }
 
             if (cachedData != null && !cachedData.isEmpty()) {
-                log.info("[CACHE] Found {} live prices in cache", cachedData.size());
+                log.info("[CACHE] Found {} candidate live prices in cache", cachedData.size());
+                Map<String, OHLCQuote> validCachedData = new HashMap<>();
 
                 // Map OHLC cache → EquityPrice (lastPrice + ohlcv). Day change for
                 // live-ltp uses ohlcv.close as previousClose baseline — do not call
@@ -725,15 +640,17 @@ public class MarketDataService {
                 for (Map.Entry<String, OHLCQuote> entry : cachedData.entrySet()) {
                     String key = entry.getKey();
                     OHLCQuote quote = entry.getValue();
-                    if (quote == null) {
+                    if (quote == null || quote.getLastPrice() <= 0.0) {
+                        // A zero cache entry is an ingestion/cache failure, not a quote.
+                        // Keep this symbol pending so the provider fallback can recover it.
+                        log.warn("[CACHE] Rejecting unusable latest-price cache entry symbol={} lastPrice={}",
+                                key, quote != null ? quote.getLastPrice() : null);
                         continue;
                     }
                     String[] exchangeAndSymbol = resolveExchangeAndSymbol(key, tradingSymbols);
                     String exchange = exchangeAndSymbol[0];
                     String symbol = exchangeAndSymbol[1];
-                    Double last = quote.getLastPrice() > 0
-                            ? quote.getLastPrice()
-                            : (quote.getOhlc() != null ? quote.getOhlc().getClose() : null);
+                    Double last = quote.getLastPrice();
                     EquityPrice price = new EquityPrice();
                     price.setSymbol(symbol);
                     price.setExchange(exchange);
@@ -751,12 +668,16 @@ public class MarketDataService {
                                 .build());
                     }
                     result.add(price);
+                    validCachedData.put(key, quote);
                 }
 
                 // FO/BSE-safe remaining removal (never substring-replace "NSE:" — corrupts NSE_FO:)
-                removeCachedHitsFromRemaining(remainingSymbols, cachedData.keySet());
+                // Only a positive LTP satisfies this request. Removing a zero cache entry
+                // here previously prevented the provider recovery attempt.
+                removeCachedHitsFromRemaining(remainingSymbols, validCachedData.keySet());
 
-                log.info("[CACHE] {} symbols remaining after cache lookup", remainingSymbols.size());
+                log.info("[CACHE] {} valid prices; {} symbols require provider recovery",
+                        validCachedData.size(), remainingSymbols.size());
             } else {
                 log.info("[CACHE] No live prices found in cache");
             }
@@ -1035,4 +956,3 @@ public class MarketDataService {
         }
     }
 }
-

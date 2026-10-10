@@ -5,7 +5,6 @@ import com.am.common.investment.persistence.document.global.GlobalIndexConfigRep
 import com.am.marketdata.common.model.UpstoxInstrument;
 import com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository;
 import com.am.marketdata.service.client.ParserApiClient;
-import com.am.common.investment.model.stockindice.StockData;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +12,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
+import java.io.InputStream;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -104,18 +104,23 @@ public class SymbolOrchestratorService {
 
     public List<String> getIndexSymbols(Set<String> indicesToCheck) {
         Set<String> constituents = new HashSet<>();
-
-        for (String index : indicesToCheck) {
-            try {
-                var indexData = stockIndicesMarketDataService.findByIndexSymbol(index);
-                if (indexData != null && indexData.getData() != null) {
-                    constituents.addAll(indexData.getData().stream()
-                            .map(StockData::getSymbol)
-                            .collect(Collectors.toList()));
-                }
-            } catch (Exception e) {
-                log.error("Failed to fetch constituents for index: {}", index, e);
+        if (indicesToCheck == null || indicesToCheck.isEmpty()) {
+            return List.of();
+        }
+        try {
+            // Load every requested roster with one Mongo query instead of one query per index.
+            var indexData = stockIndicesMarketDataService.findByIndexSymbols(indicesToCheck);
+            if (indexData != null) {
+                indexData.stream()
+                        .filter(doc -> doc != null && doc.getData() != null)
+                        .flatMap(doc -> doc.getData().stream())
+                        .filter(stock -> stock != null && stock.getSymbol() != null && !stock.getSymbol().isBlank())
+                        .map(stock -> stock.getSymbol().trim().toUpperCase(Locale.ROOT))
+                        .forEach(constituents::add);
             }
+        } catch (Exception e) {
+            log.error("Failed to fetch configured index constituents in one batch (indexCount={})",
+                    indicesToCheck.size(), e);
         }
         return constituents.stream().toList();
     }
@@ -189,7 +194,7 @@ public class SymbolOrchestratorService {
         if (defaultSymbols != null && !defaultSymbols.isEmpty()) {
             combinedSymbols.addAll(List.of(defaultSymbols.split(",")));
         }
-        combinedSymbols.addAll(getNifty500Symbols());
+        combinedSymbols.addAll(getIndexSymbols(getConfiguredNseIndexNames()));
         combinedSymbols.addAll(getEtfSymbols());
         cachedSymbols = combinedSymbols.stream()
                 .filter(s -> s != null && !s.trim().isEmpty())
@@ -198,6 +203,39 @@ public class SymbolOrchestratorService {
                 .collect(Collectors.toList());
         cacheLoadedAt = Instant.now();
         return cachedSymbols;
+    }
+
+    /** Reads broad and sector index names from the scraper's shared registry. */
+    private Set<String> getConfiguredNseIndexNames() {
+        try (InputStream input = new org.springframework.core.io.ClassPathResource("nseindices.yml").getInputStream()) {
+            Object loaded = new org.yaml.snakeyaml.Yaml().load(input);
+            if (!(loaded instanceof Map<?, ?> root) || !(root.get("nse") instanceof Map<?, ?> nse)) {
+                log.warn("NSE index registry has an unexpected format; using NIFTY 500 membership only");
+                return Set.of("NIFTY 500");
+            }
+
+            Set<String> names = new HashSet<>();
+            for (String group : List.of("broad-market-indices", "sector-indices")) {
+                Object configured = nse.get(group);
+                if (configured instanceof List<?> values) {
+                    values.stream()
+                            .filter(String.class::isInstance)
+                            .map(String.class::cast)
+                            .map(String::trim)
+                            .filter(name -> !name.isBlank())
+                            .forEach(names::add);
+                }
+            }
+            if (!names.isEmpty()) {
+                log.info("Loaded {} configured NSE index names for member streaming", names.size());
+                return names;
+            }
+        } catch (Exception e) {
+            log.warn("Could not read NSE index registry: {}", e.getMessage());
+        }
+        // Keep the pre-existing base universe available if config loading fails.
+        log.warn("Using NIFTY 500 membership as the fallback stream universe");
+        return Set.of("NIFTY 500");
     }
 
     /**

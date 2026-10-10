@@ -209,10 +209,19 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         // Upstox API responses sometimes return keys with ':' instead of '|' 
                         String normalizedKey = instrumentKey.replace(":", "|");
 
-                        // Map back to symbol if possible, otherwise use key
-                        String symbol = context.getSymbol(normalizedKey);
+                        // Map back to symbol using token, full key, or stripped key
+                        String symbol = null;
+                        if (data.getInstrument_token() != null) {
+                            symbol = context.getSymbol(data.getInstrument_token());
+                        }
                         if (symbol == null) {
                             symbol = context.getSymbol(instrumentKey);
+                        }
+                        if (symbol == null) {
+                            symbol = context.getSymbol(normalizedKey);
+                        }
+                        if (symbol == null && instrumentKey.contains(":")) {
+                            symbol = context.getSymbol(instrumentKey.substring(instrumentKey.indexOf(":") + 1));
                         }
                         if (symbol == null) {
                             symbol = instrumentKey;
@@ -240,6 +249,9 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             log.debug("getOHLC", "No Previous Close found in mapped data for " + symbol);
                         }
 
+                        // InstrumentContext already maps the provider response back to the
+                        // caller's requested symbol. Keep one map entry per requested quote;
+                        // adding aliases here makes downstream list counts double.
                         result.put(symbol, quote);
                     }
                 }
@@ -492,19 +504,30 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         // Upstox API responses sometimes return keys with ':' instead of '|' 
                         String normalizedKey = instrumentKey.replace(":", "|");
 
-                        // Map back to symbol using the context map
-                        String symbol = context.getSymbol(normalizedKey);
+                        // Map back to symbol using instrument token, normalized key, full key, or stripped key
+                        String symbol = null;
+                        if (data.getInstrumentToken() != null) {
+                            symbol = context.getSymbol(data.getInstrumentToken());
+                        }
                         if (symbol == null) {
                             symbol = context.getSymbol(instrumentKey);
+                        }
+                        if (symbol == null) {
+                            symbol = context.getSymbol(normalizedKey);
+                        }
+                        if (symbol == null && instrumentKey.contains(":")) {
+                            symbol = context.getSymbol(instrumentKey.substring(instrumentKey.indexOf(":") + 1));
                         }
                         if (symbol == null) {
                             symbol = instrumentKey;
                         }
 
                         LTPQuote quote = new LTPQuote();
-                        quote.lastPrice = data.getLastPrice();
+                        quote.lastPrice = data.getLastPrice() != null ? data.getLastPrice() : 0.0;
                         quote.instrumentToken = 0;
 
+                        // Preserve the requested key only so one instrument cannot appear
+                        // twice when a consumer converts map values into a list.
                         result.put(symbol, quote);
                     }
                 } else {
@@ -517,10 +540,19 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             // Upstox API responses sometimes return keys with ':' instead of '|' 
                             String normalizedKey = instrumentKey.replace(":", "|");
 
-                            // Map back to symbol using the context map
-                            String symbol = context.getSymbol(normalizedKey);
+                            // Map back to symbol using token, normalized key, full key, or stripped key
+                            String symbol = null;
+                            if (data.getInstrument_token() != null) {
+                                symbol = context.getSymbol(data.getInstrument_token());
+                            }
                             if (symbol == null) {
                                 symbol = context.getSymbol(instrumentKey);
+                            }
+                            if (symbol == null) {
+                                symbol = context.getSymbol(normalizedKey);
+                            }
+                            if (symbol == null && instrumentKey.contains(":")) {
+                                symbol = context.getSymbol(instrumentKey.substring(instrumentKey.indexOf(":") + 1));
                             }
                             if (symbol == null) {
                                 symbol = instrumentKey;
@@ -530,6 +562,8 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             quote.lastPrice = data.getLastPrice() != null ? data.getLastPrice() : 0.0;
                             quote.instrumentToken = 0;
 
+                            // Preserve the requested key only so one instrument cannot appear
+                            // twice when a consumer converts map values into a list.
                             result.put(symbol, quote);
                         }
                     }
@@ -595,13 +629,16 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             // Resolve instrument key first as SDK works with keys
             List<String> symbolsList = Collections.singletonList(symbol);
             com.am.marketdata.provider.common.InstrumentContext context = symbolResolver.resolveContext(symbolsList);
-            String instrumentKey = null;
-            if (!context.instrumentKeys.isEmpty()) {
-                instrumentKey = context.instrumentKeys.get(0);
-            } else {
-                log.warn("getHistoricalData", "Could not resolve instrument key for historical data symbol: " + symbol
-                        + ". Using symbol as key fallback.");
-                instrumentKey = symbol;
+            String instrumentKey = context.instrumentKeys.stream()
+                    .filter(key -> key != null && !key.isBlank())
+                    .findFirst()
+                    .orElse(null);
+            if (instrumentKey == null) {
+                // Upstox rejects bare tickers such as RELIANCE. Treat an unresolved
+                // identity as a recoverable no-data result instead of issuing UDAPI1021.
+                log.warn("getHistoricalData", "Historical data skipped because no Upstox instrument key resolved for symbol: "
+                        + symbol);
+                return new HistoricalData();
             }
 
             // The Upstox SDK handles path parameter encoding internally.

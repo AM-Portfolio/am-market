@@ -130,5 +130,38 @@ test_search_edge_cases.py
 !market-data-api/src/test/java/com/am/marketdata/api/MarketInfoSymbolMapTest.java
 !market-data-api/src/test/java/com/am/marketdata/api/MarketInfoDtoParseTest.java
 
+# Keep regression tests for market quote recovery and previous-close validation.
+!market-data-provider/src/test/
+!market-data-provider/src/test/java/
+!market-data-provider/src/test/java/com/
+!market-data-provider/src/test/java/com/am/
+!market-data-provider/src/test/java/com/am/marketdata/
+!market-data-provider/src/test/java/com/am/marketdata/provider/
+!market-data-provider/src/test/java/com/am/marketdata/provider/upstox/
+!market-data-provider/src/test/java/com/am/marketdata/provider/upstox/UpstoxMarketDataProviderTest.java
+!market-data-service/src/test/
+!market-data-service/src/test/java/
+!market-data-service/src/test/java/com/
+!market-data-service/src/test/java/com/am/
+!market-data-service/src/test/java/com/am/marketdata/
+!market-data-service/src/test/java/com/am/marketdata/service/
+!market-data-service/src/test/java/com/am/marketdata/service/SmartStockPreviousCloseSnapshotTest.java
+!market-data-analysis/src/test/
+!market-data-analysis/src/test/java/
+!market-data-analysis/src/test/java/com/
+!market-data-analysis/src/test/java/com/am/
+!market-data-analysis/src/test/java/com/am/marketdata/
+!market-data-analysis/src/test/java/com/am/marketdata/analysis/
+!market-data-analysis/src/test/java/com/am/marketdata/analysis/service/
+!market-data-analysis/src/test/java/com/am/marketdata/analysis/service/MarketAnalyticsServiceMoversTest.java
+!market-data-common/src/test/
+!market-data-common/src/test/java/
+!market-data-common/src/test/java/com/
+!market-data-common/src/test/java/com/am/
+!market-data-common/src/test/java/com/am/marketdata/
+!market-data-common/src/test/java/com/am/marketdata/common/
+!market-data-common/src/test/java/com/am/marketdata/common/util/
+!market-data-common/src/test/java/com/am/marketdata/common/util/IndexMembershipUtilsTest.java
+
 
 

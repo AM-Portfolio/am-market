@@ -26,17 +26,17 @@ public class UpStockClient {
     // Market Data APIs
     public MarketQuoteResponse getMarketQuotes(List<String> symbols) {
         String url = BASE_URL + "/market-quote/quotes";
-        return executeGet(url, MarketQuoteResponse.class, "symbol", formatSymbols(symbols));
+        return executeGet(url, MarketQuoteResponse.class, "instrument_key", formatSymbols(symbols));
     }
 
     public MarketQuoteResponse getFullMarketQuotes(List<String> symbols) {
         String url = BASE_URL + "/market-quote/full";
-        return executeGet(url, MarketQuoteResponse.class, "symbol", formatSymbols(symbols));
+        return executeGet(url, MarketQuoteResponse.class, "instrument_key", formatSymbols(symbols));
     }
 
     public OHLCResponse getOHLCData(List<String> symbols, String interval) {
         String url = BASE_URL + "/market-quote/ohlc";
-        return executeGet(url, OHLCResponse.class, "symbol", formatSymbols(symbols), "interval", interval);
+        return executeGet(url, OHLCResponse.class, "instrument_key", formatSymbols(symbols), "interval", interval);
     }
 
     // Historical Data APIs
@@ -167,7 +167,17 @@ public class UpStockClient {
     }
 
     private String getAccessToken() {
-        return upstoxConfig.getAccessToken();
+        if (redisTemplate != null) {
+            try {
+                String token = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
+                if (token != null && !token.isEmpty()) {
+                    return com.am.marketdata.provider.upstox.UpstoxSdkService.sanitizeAccessToken(token);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to get token from Redis: {}", e.getMessage());
+            }
+        }
+        return com.am.marketdata.provider.upstox.UpstoxSdkService.sanitizeAccessToken(upstoxConfig.getAccessToken());
     }
 
     private <T> T executeGet(String url, Class<T> responseType, String... queryParams) {
@@ -196,8 +206,13 @@ public class UpStockClient {
     }
 
     private String formatSymbols(List<String> symbols) {
+        if (symbols == null || symbols.isEmpty()) {
+            return "";
+        }
         String formattedSymbols = symbols.stream()
+                .filter(java.util.Objects::nonNull)
                 .map(symbol -> symbol.replace(":", "|"))
+                .filter(symbol -> symbol.contains("|"))
                 .collect(Collectors.joining(","));
         log.info("Formatted symbols: {}", formattedSymbols);
         return formattedSymbols;

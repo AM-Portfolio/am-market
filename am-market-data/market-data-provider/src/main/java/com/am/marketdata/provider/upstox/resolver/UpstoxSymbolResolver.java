@@ -68,40 +68,54 @@ public class UpstoxSymbolResolver implements SymbolResolver {
         }
 
         // 3. Lookup remaining symbols with exchange awareness
-        List<com.am.marketdata.common.model.UpstoxInstrument> dbInstruments = resolveInstruments(symbolsForDb);
+        Map<String, com.am.marketdata.common.model.UpstoxInstrument> dbInstrumentMap = resolveInstrumentsMap(symbolsForDb);
 
         // 4. Combine both sources
         List<String> instrumentKeys = new ArrayList<>();
         Map<String, String> keyToSymbolMap = new HashMap<>();
 
         // Add DB Instruments
-        if (dbInstruments != null) {
-            instrumentKeys.addAll(dbInstruments.stream()
-                    .map(com.am.marketdata.common.model.UpstoxInstrument::getInstrumentKey)
-                    .collect(Collectors.toList()));
+        if (dbInstrumentMap != null) {
+            for (Map.Entry<String, com.am.marketdata.common.model.UpstoxInstrument> entry : dbInstrumentMap.entrySet()) {
+                String requestedSymbol = entry.getKey();
+                com.am.marketdata.common.model.UpstoxInstrument inst = entry.getValue();
+                if (inst == null) continue;
 
-            // Build reverse lookup from instrument key to trading symbol or original input
-            for (com.am.marketdata.common.model.UpstoxInstrument inst : dbInstruments) {
-                String tradingSymbol = inst.getTradingSymbol();
-                String exchange = inst.getExchange();
                 String instrumentKey = inst.getInstrumentKey();
-
-                // Check if any requested symbol matches this instrument's exchange and trading symbol
-                String matchedSymbol = null;
-                for (String req : symbols) {
-                    if (req.equalsIgnoreCase(tradingSymbol)
-                            || req.equalsIgnoreCase(exchange + ":" + tradingSymbol)
-                            || req.equalsIgnoreCase(inst.getSegment() + ":" + tradingSymbol)
-                            || req.equalsIgnoreCase(instrumentKey)) {
-                        matchedSymbol = req;
-                        break;
-                    }
+                if (instrumentKey == null || !instrumentKey.contains("|")) {
+                    log.warn("UpstoxSymbolResolver",
+                            "Skipping invalid instrument key for symbol " + requestedSymbol + ": " + instrumentKey);
+                    continue;
                 }
 
-                if (matchedSymbol != null) {
-                    keyToSymbolMap.put(instrumentKey, matchedSymbol);
-                } else {
-                    keyToSymbolMap.put(instrumentKey, tradingSymbol);
+                if (!instrumentKeys.contains(instrumentKey)) {
+                    instrumentKeys.add(instrumentKey);
+                }
+
+                String tradingSymbol = inst.getTradingSymbol();
+                String exchange = inst.getExchange();
+                String segment = inst.getSegment();
+
+                // 1. Map exact instrument key (e.g. NSE_EQ|INE002A01018)
+                keyToSymbolMap.put(instrumentKey, requestedSymbol);
+                // 2. Map colon version of instrument key (e.g. NSE_EQ:INE002A01018)
+                keyToSymbolMap.put(instrumentKey.replace("|", ":"), requestedSymbol);
+
+                // 3. Map Upstox response key format segment:tradingSymbol (e.g. NSE_EQ:RELIANCE)
+                if (segment != null && tradingSymbol != null) {
+                    keyToSymbolMap.put(segment + ":" + tradingSymbol, requestedSymbol);
+                    keyToSymbolMap.put(segment + "|" + tradingSymbol, requestedSymbol);
+                }
+
+                // 4. Map exchange:tradingSymbol (e.g. NSE:RELIANCE)
+                if (exchange != null && tradingSymbol != null) {
+                    keyToSymbolMap.put(exchange + ":" + tradingSymbol, requestedSymbol);
+                    keyToSymbolMap.put(exchange + "|" + tradingSymbol, requestedSymbol);
+                }
+
+                // 5. Map bare trading symbol (e.g. RELIANCE)
+                if (tradingSymbol != null) {
+                    keyToSymbolMap.put(tradingSymbol, requestedSymbol);
                 }
             }
         }
@@ -112,9 +126,10 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                 String symbol = entry.getKey();
                 String key = entry.getValue();
 
-                if (!instrumentKeys.contains(key)) {
+                if (key != null && key.contains("|") && !instrumentKeys.contains(key)) {
                     instrumentKeys.add(key);
                     keyToSymbolMap.put(key, symbol);
+                    keyToSymbolMap.put(key.replace("|", ":"), symbol);
                 }
             }
         }
@@ -130,21 +145,25 @@ public class UpstoxSymbolResolver implements SymbolResolver {
 
     /**
      * Resolve instruments from database with in-memory caching and single-query batching.
+     * Maps each requested symbol to its single best matching UpstoxInstrument.
      */
-    private List<com.am.marketdata.common.model.UpstoxInstrument> resolveInstruments(List<String> symbols) {
+    private Map<String, com.am.marketdata.common.model.UpstoxInstrument> resolveInstrumentsMap(List<String> symbols) {
         if (symbols == null || symbols.isEmpty()) {
-            return new ArrayList<>();
+            return new HashMap<>();
         }
 
-        List<com.am.marketdata.common.model.UpstoxInstrument> results = new ArrayList<>();
+        Map<String, com.am.marketdata.common.model.UpstoxInstrument> results = new HashMap<>();
         List<String> uncachedSymbols = new ArrayList<>();
 
         // 1. Fast Path: Check in-memory resolution cache first (0 ms)
         for (String s : symbols) {
-            String cacheKey = normalizeTradingSymbol(s);
-            com.am.marketdata.common.model.UpstoxInstrument cached = resolutionCache.get(cacheKey);
-            if (cached != null) {
-                results.add(cached);
+            String clean = normalizeTradingSymbol(s);
+            com.am.marketdata.common.model.UpstoxInstrument cached = resolutionCache.get(s);
+            if (cached == null) {
+                cached = resolutionCache.get(clean);
+            }
+            if (cached != null && cached.getInstrumentKey() != null && cached.getInstrumentKey().contains("|")) {
+                results.put(s, cached);
             } else {
                 uncachedSymbols.add(s);
             }
@@ -174,6 +193,8 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             }
         }
 
+        List<com.am.marketdata.common.model.UpstoxInstrument> candidateInstruments = new ArrayList<>();
+
         // 3. Single Batched Query by ISIN
         if (!isinSymbols.isEmpty()) {
             log.info("UpstoxSymbolResolver", "Querying DB by ISIN for " + isinSymbols.size() + " symbols in 1 query");
@@ -185,15 +206,14 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             if (found != null) {
                 for (Object item : found) {
                     com.am.marketdata.common.model.UpstoxInstrument inst = (com.am.marketdata.common.model.UpstoxInstrument) item;
-                    results.add(inst);
-                    if (inst.getIsin() != null) {
-                        cacheInstrument(inst.getIsin().trim().toUpperCase(), inst);
+                    if (inst != null && inst.getInstrumentKey() != null && inst.getInstrumentKey().contains("|")) {
+                        candidateInstruments.add(inst);
                     }
                 }
             }
         }
 
-        // 4. Single Batched Query by Trading Symbols (across all exchanges in 1 DB call instead of N calls)
+        // 4. Single Batched Query by Trading Symbols
         if (!allTradingSymbols.isEmpty()) {
             log.info("UpstoxSymbolResolver", "Querying DB for " + allTradingSymbols.size() + " trading symbols in 1 batched query");
             com.am.marketdata.common.dto.InstrumentSearchCriteria criteria =
@@ -204,14 +224,69 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             if (found != null) {
                 for (Object item : found) {
                     com.am.marketdata.common.model.UpstoxInstrument inst = (com.am.marketdata.common.model.UpstoxInstrument) item;
-                    results.add(inst);
-                    if (inst.getTradingSymbol() != null) {
-                        cacheInstrument(inst.getTradingSymbol().trim().toUpperCase(), inst);
-                        if (inst.getExchange() != null) {
-                            cacheInstrument(inst.getExchange().trim().toUpperCase() + ":" + inst.getTradingSymbol().trim().toUpperCase(), inst);
-                        }
+                    if (inst != null && inst.getInstrumentKey() != null && inst.getInstrumentKey().contains("|")) {
+                        candidateInstruments.add(inst);
                     }
                 }
+            }
+        }
+
+        // 5. Match each uncached symbol to its best candidate instrument
+        for (String reqSymbol : uncachedSymbols) {
+            String reqExchange = "NSE";
+            String cleanSymbol = reqSymbol;
+            if (reqSymbol.contains(":")) {
+                String[] parts = reqSymbol.split(":", 2);
+                reqExchange = parts[0].trim().toUpperCase();
+                cleanSymbol = parts[1].trim();
+            }
+            cleanSymbol = normalizeTradingSymbol(cleanSymbol);
+
+            com.am.marketdata.common.model.UpstoxInstrument bestInst = null;
+            int bestScore = -1;
+
+            for (com.am.marketdata.common.model.UpstoxInstrument candidate : candidateInstruments) {
+                String candSymbol = candidate.getTradingSymbol();
+                String candIsin = candidate.getIsin();
+                boolean symbolMatches = (candSymbol != null && candSymbol.equalsIgnoreCase(cleanSymbol))
+                        || (candIsin != null && candIsin.equalsIgnoreCase(cleanSymbol));
+
+                if (!symbolMatches) {
+                    continue;
+                }
+
+                int score = 0;
+                String candEx = candidate.getExchange() != null ? candidate.getExchange().toUpperCase() : "";
+                String candSeg = candidate.getSegment() != null ? candidate.getSegment().toUpperCase() : "";
+
+                if (candEx.equalsIgnoreCase(reqExchange) && candSeg.equalsIgnoreCase(reqExchange + "_EQ")) {
+                    score = 4;
+                } else if (candEx.equalsIgnoreCase(reqExchange)) {
+                    score = 3;
+                } else if (candSeg.equalsIgnoreCase("NSE_EQ")) {
+                    score = 2;
+                } else {
+                    score = 1;
+                }
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestInst = candidate;
+                }
+            }
+
+            if (bestInst != null) {
+                results.put(reqSymbol, bestInst);
+                cacheInstrument(reqSymbol, bestInst);
+                cacheInstrument(cleanSymbol, bestInst);
+                if (bestInst.getTradingSymbol() != null) {
+                    cacheInstrument(bestInst.getTradingSymbol().toUpperCase(), bestInst);
+                }
+                if (bestInst.getIsin() != null) {
+                    cacheInstrument(bestInst.getIsin().toUpperCase(), bestInst);
+                }
+            } else {
+                log.warn("UpstoxSymbolResolver", "Could not resolve valid Upstox instrument with pipe key for: " + reqSymbol);
             }
         }
 

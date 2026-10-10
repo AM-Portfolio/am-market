@@ -13,15 +13,13 @@ vault:
         SPRING_DATA_REDIS_PASSWORD: "password"
         SPRING_DATA_REDIS_PORT: "port"
     influxdb:
-      template: |
-        export INFLUXDB_URL_INTERNAL="http://{{ .Data.data.host }}:{{ .Data.data.port }}"
-        export INFLUXDB_TOKEN_INTERNAL="{{ .Data.data.token }}"
-        export INFLUXDB_ORG_INTERNAL="{{ .Data.data.org }}"
-        export INFLUXDB_BUCKET_INTERNAL="{{ .Data.data.bucket }}"
-        export SPRING_INFLUX_URL="http://{{ .Data.data.host }}:{{ .Data.data.port }}"
-        export SPRING_INFLUX_TOKEN="{{ .Data.data.token }}"
-        export SPRING_INFLUX_ORG="{{ .Data.data.org }}"
-        export SPRING_INFLUX_BUCKET="{{ .Data.data.bucket }}"
+      # The CSI driver injects individual mappings. It does not execute shell templates.
+      mappings:
+        INFLUXDB_HOST: "host"
+        INFLUXDB_PORT: "port"
+        INFLUXDB_TOKEN: "token"
+        INFLUXDB_ORG: "org"
+        INFLUXDB_BUCKET: "bucket"
     jwt:
       mappings:
         JWT_SECRET: "JWT_SECRET_KEY"

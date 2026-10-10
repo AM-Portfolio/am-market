@@ -26,6 +26,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class StockIndicesService {
 
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> membershipRepairCooldown = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long MEMBERSHIP_REPAIR_COOLDOWN_MS = 15 * 60 * 1000;
     private final java.util.concurrent.ConcurrentHashMap<String, Long> lastMongoSaveTimeMap = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<OHLCQuote>> activeSymbolFetches = new java.util.concurrent.ConcurrentHashMap<>();
     private static final long MONGO_SAVE_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -41,6 +43,39 @@ public class StockIndicesService {
 
     @Value("${market.data.cache.enabled:true}")
     private boolean cacheEnabled;
+
+    /**
+     * Checks only the stored index registry. This method must not refresh prices,
+     * scrape NSE, or create a document because chart type detection runs on the
+     * interactive request path.
+     */
+    public boolean hasStoredIndexSymbol(String indexSymbol) {
+        if (indexSymbol == null || indexSymbol.isBlank()) {
+            return false;
+        }
+
+        String normalized = indexSymbol.trim().toUpperCase(java.util.Locale.ROOT);
+        int separator = normalized.lastIndexOf(':');
+        if (separator >= 0) {
+            normalized = normalized.substring(separator + 1).trim();
+        }
+        final String lookupSymbol = normalized;
+
+        try {
+            List<StockIndicesMarketData> matches = stockIndicesMarketDataService
+                    .findByIndexSymbols(java.util.Collections.singleton(lookupSymbol));
+            return matches != null && matches.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .map(StockIndicesMarketData::getIndexSymbol)
+                    .filter(java.util.Objects::nonNull)
+                    .anyMatch(found -> lookupSymbol.equalsIgnoreCase(found.trim()));
+        } catch (Exception e) {
+            // Leave the caller on the legacy route if this read is unavailable.
+            // A lookup issue must never trigger a scrape during a chart request.
+            log.warn("hasStoredIndexSymbol", "Index registry lookup failed for " + lookupSymbol + ": " + e.getMessage());
+            return false;
+        }
+    }
 
     public List<StockIndicesMarketData> getLatestIndicesData(List<String> indexSymbols) {
         return getLatestIndicesData(indexSymbols, false, "1D");
@@ -64,6 +99,11 @@ public class StockIndicesService {
 
             // 1. Load from MongoDB Database
             checkDatabase(indexSymbols, forceRefresh, finalResults, symbolsToProcess, methodName);
+
+            // Repair rosters through the existing NSE scraper path. The current
+            // request will not use a known-incomplete roster while Kafka persists
+            // the validated replacement for later requests.
+            scheduleMembershipRepairs(symbolsToProcess, methodName);
 
             // 2. Scrape only if MongoDB document is completely missing (constituent document repair)
             if (!symbolsToProcess.isEmpty()) {
@@ -333,12 +373,12 @@ public class StockIndicesService {
                     }
                 }
                 
-                // If it is STILL stale, Redis is empty and DB is outdated.
-                // Clear the prices to gracefully show "N/A" on the UI instead of wrong values.
+                // Legacy DTOs cannot represent quote quality. Do not turn stale data into
+                // a convincing 0.00% move; the typed quote endpoint will expose NO_DATA.
+                // Keeping stored values untouched also prevents false zeros being persisted.
                 if (isStale && data.getMetadata() != null) {
-                    data.getMetadata().setLast(0.0);
-                    data.getMetadata().setChange(0.0);
-                    data.getMetadata().setPercChange(0.0);
+                    log.warn(methodName, "Stale index metadata detected for " + data.getIndexSymbol()
+                            + "; preserving values until quote quality is exposed");
                 }
             }
 
@@ -379,6 +419,11 @@ public class StockIndicesService {
 
                 docs.forEach(doc -> {
                     if (doc != null && doc.getIndexSymbol() != null) {
+                        if (!hasUsableMembership(doc)) {
+                            log.warn(methodName, "Index " + doc.getIndexSymbol()
+                                    + " has an empty, duplicate, or undersized member list; excluding it and scheduling roster repair");
+                            return;
+                        }
                         boolean isStale = false;
                         if (doc.getAudit() != null && doc.getAudit().getUpdatedAt() != null) {
                             java.time.LocalDateTime updatedAt = doc.getAudit().getUpdatedAt();
@@ -432,6 +477,59 @@ public class StockIndicesService {
         }
     }
 
+    private boolean hasUsableMembership(StockIndicesMarketData indexData) {
+        if (indexData == null || indexData.getData() == null || indexData.getData().isEmpty()) {
+            return false;
+        }
+        Set<String> symbols = new HashSet<>();
+        for (var stock : indexData.getData()) {
+            if (stock == null || stock.getSymbol() == null || stock.getSymbol().isBlank()
+                    || !symbols.add(stock.getSymbol().trim().toUpperCase(java.util.Locale.ROOT))) {
+                return false;
+            }
+        }
+        int minimum = minimumMembershipSize(indexData.getIndexSymbol());
+        return symbols.size() >= minimum;
+    }
+
+    private int minimumMembershipSize(String indexName) {
+        return com.am.marketdata.common.util.IndexMembershipUtils.minimumMembershipSize(indexName);
+    }
+
+    private void scheduleMembershipRepairs(List<String> symbolsToProcess, String methodName) {
+        if (symbolsToProcess == null || symbolsToProcess.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (String index : new HashSet<>(symbolsToProcess)) {
+            String normalized = index == null ? "" : index.trim().toUpperCase(java.util.Locale.ROOT);
+            // This repair source is NSE-specific. Do not pretend it can repair BSE/SENSEX.
+            if (normalized.isBlank() || !(normalized.startsWith("NIFTY") || normalized.equals("INDIA VIX"))) {
+                log.warn(methodName, "No configured NSE roster repair path for index " + normalized);
+                continue;
+            }
+            Long lastAttempt = membershipRepairCooldown.putIfAbsent(normalized, now);
+            if (lastAttempt != null && now - lastAttempt < MEMBERSHIP_REPAIR_COOLDOWN_MS) {
+                continue;
+            }
+            membershipRepairCooldown.put(normalized, now);
+            log.info(methodName, "Starting bounded background NSE roster repair for " + normalized);
+            try {
+                marketDataProcessingService.fetchAndProcessStockIndices(index)
+                        .whenComplete((success, error) -> {
+                            if (error != null || !Boolean.TRUE.equals(success)) {
+                                log.warn(methodName, "NSE roster repair did not complete for " + normalized,
+                                        error);
+                            } else {
+                                log.info(methodName, "NSE roster repair completed for " + normalized);
+                            }
+                        });
+            } catch (Exception e) {
+                log.warn(methodName, "Could not start NSE roster repair for " + normalized, e);
+            }
+        }
+    }
+
     /**
      * Fetch EOD index values directly from Upstox API instead of the NSE website scraper.
      * This avoids reliance on fragile cookie sessions and browser-scraping endpoints.
@@ -467,7 +565,8 @@ public class StockIndicesService {
                     continue;
                 }
 
-                // Get existing MongoDB record or instantiate a new one
+                // A quote refresh owns metadata only. It must never create a document
+                // without validated constituents, because that poisons Heatmap and Movers.
                 String cleanSymbol = symbol != null && symbol.contains(":") ? symbol.substring(symbol.indexOf(":") + 1) : symbol;
                 StockIndicesMarketData data = docMap.get(symbol);
                 if (data == null && cleanSymbol != null) {
@@ -480,8 +579,14 @@ public class StockIndicesService {
                     }
                 }
                 if (data == null) {
-                    data = new StockIndicesMarketData();
-                    data.setIndexSymbol(cleanSymbol);
+                    log.warn(methodName, "Skipping metadata refresh for " + cleanSymbol
+                            + " because no validated constituent document exists");
+                    continue;
+                }
+                if (!hasUsableMembership(data)) {
+                    log.warn(methodName, "Skipping metadata update for " + cleanSymbol
+                            + " because its member roster is not validated");
+                    continue;
                 }
 
                 IndexMetadata meta = data.getMetadata();
