@@ -1,10 +1,12 @@
-# After am-market-data publish: call reusable Commit->SPT on dig.
-# Path-filtered; push only (not PR). SPT is report-only on feature/*;
-# main/develop fail the job on unexpected API fails.
+# Commit→SPT for am-market-data — NO GitHub Actions runner executes SPT.
 #
-# Required secrets (org/repo inherit):
-#   SPT_CI_API_KEY (or QA_AGENT_GATEWAY_TOKEN)
-#   ZOHO_CLIQ_SPT_WEBHOOK_URL (+ optional SMTP SPT_SMTP_*)
+# Preferred: GitHub webhook on dig qa-agent
+#   POST /qa/webhooks/github (push) → CommitSptWorkflow on Temporal
+#   Worker pod runs k6 + email/Cliq.
+#
+# Optional fallback (fire-and-forget Temporal start only):
+#   uses am-qa-agents spt-on-commit.yml which POSTs /v2/workflows/commit-spt
+#   then exits. Still needs a runner for the POST; prefer webhook.
 
 name: QA Agent SPT Notify
 
@@ -17,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       git_ref:
-        description: Override branch for matrix (default = current ref)
+        description: Override branch for matrix
         required: false
         type: string
         default: ""
@@ -27,9 +29,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  spt:
-    name: SPT on commit (am-market-data)
-    # Pin to branch that carries spt-on-commit until merged to am-qa-agents main.
+  start-temporal:
+    name: Start CommitSpt (Temporal / qa-agent pod)
+    # Fire-and-forget only. Disable if GitHub→qa-agent webhook is configured.
+    if: ${{ vars.SPT_USE_GHA_START != 'false' }}
     uses: AM-Portfolio/am-qa-agents/.github/workflows/spt-on-commit.yml@feature/design-with-skills
     with:
       service: am-market-data
@@ -39,5 +42,5 @@ jobs:
       committer_name: ${{ github.event.head_commit.author.name || github.actor || '' }}
       environment: dev
       qa_base_url: https://am-dev.asrax.in/qa
-      portal_base_url: https://ai-dev.asrax.in
+      repo: ${{ github.repository }}
     secrets: inherit
