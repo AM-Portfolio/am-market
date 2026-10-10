@@ -1,0 +1,43 @@
+# After am-market-data publish: call reusable Commit->SPT on dig.
+# Path-filtered; push only (not PR). SPT is report-only on feature/*;
+# main/develop fail the job on unexpected API fails.
+#
+# Required secrets (org/repo inherit):
+#   SPT_CI_API_KEY (or QA_AGENT_GATEWAY_TOKEN)
+#   ZOHO_CLIQ_SPT_WEBHOOK_URL (+ optional SMTP SPT_SMTP_*)
+
+name: QA Agent SPT Notify
+
+on:
+  push:
+    branches: ["main", "develop", "dev", "test/**", "feature/**", "hotfix/**", "fix/**"]
+    paths:
+      - "am-market-data/**"
+      - ".github/workflows/qa-agent-spt-notify.yml"
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Override branch for matrix (default = current ref)
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: qa-agent-spt-notify-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  spt:
+    name: SPT on commit (am-market-data)
+    # Pin to branch that carries spt-on-commit until merged to am-qa-agents main.
+    uses: AM-Portfolio/am-qa-agents/.github/workflows/spt-on-commit.yml@feature/design-with-skills
+    with:
+      service: am-market-data
+      git_ref: ${{ github.event.inputs.git_ref || github.ref_name }}
+      git_sha: ${{ github.sha }}
+      committer_email: ${{ github.event.head_commit.author.email || github.event.pusher.email || '' }}
+      committer_name: ${{ github.event.head_commit.author.name || github.actor || '' }}
+      environment: dev
+      qa_base_url: https://am-dev.asrax.in/qa
+      portal_base_url: https://ai-dev.asrax.in
+    secrets: inherit
