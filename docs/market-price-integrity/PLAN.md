@@ -1007,3 +1007,198 @@ that is not a safe contract to rely upon.
 
 This addendum is part of the price-integrity work and introduces no UI response-schema change. A UI caller may
 later send the explicit symbol-type flag as defence in depth, but it is not required for the backend correction.
+# Movers and heatmap cache reliability - API-safe implementation plan
+
+## Purpose and evidence
+
+This plan fixes two related failures without changing the public Market UI contract:
+
+1. **Top Movers can return empty arrays after a cold cache.** The request sees no intraday bars, tries one provider recovery, and writes recovered LTPs to `market:latest-price:*`. On the next request, the current lookup can still start only with `stock:intraday:*`; it can miss the recovered latest-price value and repeat the failure path.
+2. **Large-index Heatmaps can time out or show false values.** A cold request may fall through to one historical provider request per constituent. That took about 22 seconds for NIFTY 50 and cannot finish for NIFTY 500 before the 30-second ingress deadline. The current all-zero protection only recognizes literal `INDICES`, so a named index can cache a bad all-zero map. A zero end-close can also be calculated as a false `-100%`.
+
+The evidence supports part of the dev/local report and corrects two parts:
+
+- `market:latest-price:*` already has a seven-day TTL. The 26-hour TTL applies to `market:prev-close:*`; extending both to seven days would preserve a wrong session baseline. Baselines must be selected by the market calendar and trade date.
+- Cache-aside recovery belongs in `SmartStockService`, where cache, provider recovery, lease control, and persistence meet. `StockDataEnricher` must remain a consumer of its typed quote result.
+- The Postman **Market Data API** collection confirms the canonical routes are `GET /v1/analysis/movers` and `GET /v1/analysis/heatmap`. The existing `/v1/market-analytics/movers` SDK alias is documentation drift unless an actual caller is found.
+
+## Result after implementation
+
+- Every supported index uses its stored, validated roster. NIFTY BANK, NIFTY IT, NIFTY 50, and NIFTY 500 use the same logic; no index name implies a member count.
+- Movers returns a ranking only when every roster member has a valid current price and the correct comparison baseline. A cold cache causes one coalesced recovery attempt, not a provider call per stock or per browser request.
+- Heatmap reads complete, valid persisted data quickly. A broad index never performs hundreds of historical provider calls in the user request. Missing or invalid data is omitted from the legacy map and never represented as a fabricated `0.00%` or `-100%`; repair happens through the existing background path.
+- Existing Modern UI callers keep using their current URLs, query parameters, JSON keys, and result shapes. There is no mandatory UI release in this change.
+
+## Scope and boundaries
+
+| In scope | Explicit boundary |
+|---|---|
+| Movers current-price cache order, normalization, recovery, freshness, and coverage | No new market-data service or database |
+| Heatmap validation, cache quality, bounded request path, and existing-scheduler repair | No synchronous 500-symbol provider fallback |
+| Named backend DTOs/OpenAPI documentation and Postman regression requests | No change to legacy JSON shapes |
+| Existing market calendar for session and prior-session selection | No hardcoded weekday or index-size rule |
+| Structured, bounded diagnostics | Never log credentials, authorization headers, provider tokens, or raw request bodies |
+
+Target is **preprod** first. Production investigation remains read-only. Deployment, cache seeding, membership repair, restart, or configuration change requires separate explicit approval.
+
+## API and DTO contract
+
+### Keep these public contracts exactly stable
+
+| Endpoint | Existing successful response | Compatibility rule |
+|---|---|---|
+| `GET /v1/analysis/movers?type=gainers` | JSON array of mover objects | Preserve array shape and field names. |
+| `GET /v1/analysis/movers?type=losers` | JSON array of mover objects | Preserve array shape and field names. |
+| `GET /v1/analysis/movers?type=all` | `{"gainers":[...],"losers":[...]}` | Preserve keys, arrays, sorting, and empty-array behaviour. |
+| `GET /v1/analysis/heatmap` | `{ "SYMBOL": percentage }` | Preserve legacy map for current callers; valid entries only. |
+
+Implementation will replace internal raw `Object`/Map responses with named types where a stable object exists:
+
+- `TopMoversResponse` with `gainers` and `losers`, used for `type=all`.
+- Existing/named `StockMover` DTO remains the element contract.
+- `HeatmapAvailabilityResponse` is an **additive**, documented endpoint or internal DTO for the later UI quality-state rollout. It is not a replacement for the legacy heatmap map in this release.
+
+OpenAPI documents the Movers result as a `oneOf` list or `TopMoversResponse`, selected by `type`, without changing its wire format. The stale SDK alias is either removed from generated documentation or retained as an explicit deprecated alias only if caller inventory proves it is used; it will not silently diverge.
+
+## Implementation stages
+
+### 0. Baseline and observability gate
+
+1. Capture a preprod trace for NIFTY 50 Movers and Heatmap plus one large index. Record the full span tree: controller, roster lookup, current-quote cache, previous-close lookup, database batch, provider batch, cache write, and response.
+2. Record cache-key source and age counts for `stock:intraday:*`, `market:latest-price:*`, and `market:prev-close:*`. Inspect only metadata and counts; do not print cache contents, tokens, or credentials.
+3. Verify exact roster identity, size, duplicate count, and missing members for each requested index. The roster itself, not a number inferred from the display name, defines complete coverage.
+4. Add bounded structured logs with correlation ID, index, timeframe, roster count, cache/database/provider hit counts, rejected count/reason, quote trade date, base trade date, source, and total duration. Failure logs may include a bounded sample of canonical tickers; never log tokens, ISINs, or raw provider payloads.
+
+**Decision gate:** use measured preprod spans to set the request budget and background chunk limit. The observed 22-second NIFTY 50 and 30-second ingress cutoff are baseline evidence, not guessed service-level objectives.
+
+### 1. Make Movers recover and reuse current prices
+
+Files: `SmartStockService.java`, `MarketDataCacheService.java`, focused existing tests. `StockDataEnricher.java` receives only diagnostics or typed-result adaptations; it must not acquire leases or call providers.
+
+1. Normalize every requester symbol to a single canonical ticker/exchange identity before cache lookup.
+2. Read positive, session-valid `market:latest-price:*` entries first. Merge valid intraday/database OHLC data over those values only when the incoming record is newer and identity-compatible.
+3. For only the remaining symbols, use the existing owner-token Redis lease and one bounded batch LTP request. Reject unresolved, unrequested, non-positive, stale, or identity-mismatched rows.
+4. Persist accepted recovery results to the canonical latest-price keys already supported by `MarketDataCacheService`. On later requests, read those keys before any provider path.
+5. Derive the prior-close/base session from the market calendar. Friday's official baseline may serve the next valid session; a stale baseline from an older trade date cannot be reused simply because its Redis TTL remains valid.
+6. Keep complete-roster ranking: if any required current price or baseline is invalid, return the existing empty gainers/losers response for that index. Do not publish a partial ranking.
+
+This preserves one provider call for a cold roster, prevents cross-pod stampedes, and makes recovery durable across normal intraday-bar eviction.
+
+### 2. Make Heatmaps correct and bounded for every index
+
+Files: `AnalysisService.java`, `AnalysisRedisCache.java`, existing market-analysis scheduler/repair path, focused tests.
+
+1. Recognize every request whose symbol resolves to a validated constituent index. Generalize the degenerate-map guard beyond literal `INDICES`.
+2. Treat a missing, non-finite, or non-positive start **or end** close as unavailable. Do not calculate it, cache it, or transform it into `0.00%` or `-100%`.
+3. In an interactive Heatmap request, read Redis and Influx only. Do not issue per-member historical provider calls after a cache/database miss.
+4. When coverage is incomplete, return only validated entries through the unchanged legacy map, avoid caching the incomplete/degenerate result, emit a coverage log, and enqueue the existing repair/sync path once per index/timeframe.
+5. The existing repair path resolves instruments before provider use, processes bounded chunks (initial ceiling: 50 symbols; at most two concurrent chunks), deduplicates concurrent repair requests, and saves only validated points. It must use the current index roster, so the same design handles NIFTY 500, NIFTY BANK, NIFTY IT, and future indexes.
+6. Cache a completed Heatmap only when all roster members have valid points for its selected sessions. Invalidate or version it when the validated roster changes.
+
+Before release, verify how the current UI renders omitted map keys. If it converts omission into `0.00%`, ship the small necessary UI change with the additive `HeatmapAvailabilityResponse`; do not claim data integrity while the UI still manufactures a value.
+
+### 3. API specification and Postman coverage
+
+Files: controller/OpenAPI annotations or spec sources, named DTO package, `postman/Market-Data-API.postman_collection.json` and the live **Market Data API** Postman collection.
+
+1. Document `TopMoversResponse` and the list response for separate `type` values. Add saved examples for populated, cold-recovery, and incomplete-coverage responses.
+2. Add requests for NIFTY 50, NIFTY 500, NIFTY BANK, and NIFTY IT Movers/Heatmaps. Use environment `baseUrl`; do not embed credentials.
+3. Add Postman assertions for status, JSON shape, unchanged mover field names, no duplicate symbols across gainers/losers, no non-finite heatmap percentages, and no false zero for an unavailable fixture.
+4. Update the live collection only after the source collection/spec review confirms the generated request matches the deployed route.
+
+### 4. Verification and rollout
+
+1. Unit tests cover canonical cache identity, positive latest-price reuse, stale session rejection, provider batch recovery, lease contention, provider-invalid rows, and preservation of the current Movers JSON.
+2. Integration tests use Redis/Influx fixtures for full, partial, and cold rosters. Verify a second request uses Redis and makes no provider call.
+3. Heatmap tests cover NIFTY 50, NIFTY 500, non-numeric sector rosters, zero/missing end-close, all-zero maps, stale membership cache, and one failed repair chunk.
+4. In preprod, run the Postman collection and inspect full traces. A broad-index request must show no per-member historical provider loop. A completed Heatmap needs full valid coverage; an incomplete one must not be cached.
+5. Compare the Modern UI's existing client parsing against both populated and incomplete legacy responses. No UI change is released unless its test proves omitted values render as unavailable rather than `0.00%`.
+
+## Acceptance matrix
+
+| ID | Scenario | Required result |
+|---|---|---|
+| MR-01 | Redis has only valid `market:latest-price` rows | Movers ranks without provider call. |
+| MR-02 | Cold NIFTY 50 cache | At most one coalesced batch recovery; second request is cache-only. |
+| MR-03 | Lease held by another pod | Bounded wait/re-read; no stampede and no partial ranking. |
+| MR-04 | One recovered ticker is zero, stale, unresolved, or wrong identity | It is rejected with reason; Movers returns existing empty arrays. |
+| MR-05 | Friday close, weekend, holiday, next session | Market calendar selects the valid trade-date baseline. |
+| HM-01 | Cold NIFTY 500 interactive request | No serial historical provider loop and no ingress timeout caused by the backend. |
+| HM-02 | End close is zero/missing | Entry is unavailable, never `-100%`, `0.00%`, or cached. |
+| HM-03 | Named index result is all zero/invalid | Result is not cached for NIFTY 50, NIFTY 500, NIFTY BANK, or NIFTY IT. |
+| HM-04 | Background repair completes | Next request uses complete persisted data and cache. |
+| API-01 | Existing Movers clients | Routes, parameters, status, keys, field casing, lists, and empty-array response remain unchanged. |
+| API-02 | Existing Heatmap clients | Legacy map shape remains unchanged; UI test proves missing values are not displayed as valid zero. |
+
+## Adversarial review
+
+First review score: **8.7/10.** Gaps were: incorrectly extending a seven-day latest-price TTL, placing recovery in the wrong layer, relying on index names/counts, and letting the unchanged UI potentially render omitted data as `0.00%`.
+
+The revisions above close those gaps with trade-date validation, `SmartStockService` ownership, roster-driven coverage, an explicit UI-rendering verification gate, strict response compatibility, bounded background repair, and DTO/OpenAPI work.
+
+Final plan score: **9.6/10.** The remaining risk is external-provider availability during repair. It is contained by cache-first reads, coalesced bounded batches, retained valid data, no fabricated values, and traceable retry diagnostics. No runtime code changes are included in this planning update.
+
+## Latency engineering requirements
+
+This section is mandatory for the implementation. It applies the API latency optimization workflow to Movers and Heatmaps.
+
+### Full-span audit before and after the change
+
+For each preprod request, export the entire Tempo trace and classify every span into these seven groups:
+
+| Span group | Required decision |
+|---|---|
+| HTTP/controller | Keep one root span for route, status, payload size, and end-to-end latency. |
+| Security/middleware | Keep; quantify authentication, rate-limit, and filter-chain cost. |
+| Service/orchestration | Keep one meaningful span per business boundary; remove tracing only from trivial inner helpers. |
+| Database | Use bounded Mongo in-query and Influx batches; record per-chunk count, duration, success, and failure. |
+| Cache | Use chunked Redis multi-get; a cache hit performs no synchronous write. |
+| Config/metadata | Cache stable calendar/provider/feature-flag lookups briefly in process after measured proof they are a bottleneck. |
+| External provider | Keep one span per bounded batch; prohibit one provider span per Heatmap member in an HTTP request. |
+
+The trace report must include span name, count, total duration, percent of request time, average duration, relevance, and keep/consolidate/eliminate decision. Any repeated inner-loop span with count above five needs an explicit justification or batching change.
+
+### Cache, database, and provider rules
+
+1. Redis is an accelerator, never the only source of truth. Every Redis read/write failure is caught, logged safely as a cache miss, and falls through to the primary database path.
+2. Redis key reads use micro-chunks of at most 500 keys. Mongo membership/identity in-reads use 100-250 items. Influx multi-symbol reads use no more than 50 symbols per chunk and at most two concurrent chunks.
+3. A cache hit returns with zero synchronous cache writes. Recovery writes happen only after a miss and only for validated data.
+4. Redis outage may slow a request but cannot turn valid database data into an empty response. If the database has insufficient valid data for a complete Movers ranking, preserve the existing empty-rank response rather than fabricate a ranking.
+5. The HTTP request may use a single bounded current-price batch for Movers recovery. A broad-index Heatmap request must not call the historical provider synchronously; its missing data is repaired asynchronously.
+6. Single-flight leases and bounded wait/re-read protect Redis, Influx, and the provider from a cache stampede. If coordination is unavailable, fail closed for recovery rather than start concurrent provider batches.
+
+### Performance proof and release gate
+
+Warm and cold cases are both required. A warm run cannot be used as evidence that the design is fast.
+
+| Case | Required proof |
+|---|---|
+| Movers warm | Complete ranking from cache/database with no provider span and no read-path Redis write. |
+| Movers cold | One owner performs one bounded batch; followers wait briefly and reread; the next request has no provider span. |
+| Heatmap warm | One bounded cache/database path, no provider span, complete validated map. |
+| Heatmap cold, NIFTY 500 | No serial provider loop and no request path that exceeds the ingress timeout because of member-by-member history calls. |
+| Redis unavailable | Database fallback returns all valid data and records a safe warning; no cache exception escapes the endpoint. |
+| Partial database chunk failure | Other chunks are retained internally, the incomplete Heatmap is not cached, and Movers does not emit a partial ranking. |
+
+The exact latency budget is set from the complete preprod trace histogram, not guessed from localhost. The release is blocked if any one broad-index request contains a per-member provider loop, unbounded concurrent database work, a stale/invalid value, or a changed public response shape.
+
+## Addendum: resolve cold Movers prices from roster identity
+
+### Current failure
+
+Movers already makes one batched current-price recovery request after cache/database misses. It passes only bare tickers into the provider resolver. When the Upstox instrument collection has no matching ticker row, Upstox receives no usable instrument key and that member cannot be priced. A few symbols work because their provider-master mappings exist; other members are rejected or omitted.
+
+### Approved fix
+
+Keep the current cache/database-first flow and existing batched OHLC request. Carry each index member's existing ticker, ISIN, and exchange into that batch. Before using an ISIN, verify the ticker/ISIN pair against AM's existing securities collection in bounded batches. The resolver uses a provider-master mapping when its ISIN matches the verified identity. If the mapping is absent or conflicts, it forms the provider key from the verified exchange and ISIN, such as `NSE_EQ|<ISIN>`. If the AM registry is unavailable, the pair is ambiguous, or it disagrees with the index roster, disable ISIN fallback and keep ticker-only resolution. Map successful quotes back to the requested ticker and cache only positive results through the existing quote-cache path.
+
+This is data-driven: no ticker or ISIN list is added to code. When a roster lacks a valid ISIN, retain ticker-only lookup, log that resolution limitation, and do not send a raw ticker to an Upstox operation that requires an instrument key. This change affects the internal provider path only; public routes, parameters, response DTOs, and Movers JSON remain unchanged.
+
+### Required proof
+
+- Missing provider-master row with valid roster ISIN resolves to a provider-compatible key and maps the quote back to the ticker.
+- Conflicting provider-master ISIN is rejected in favor of the current roster identity.
+- AM securities-registry mismatch, missing ISIN, or unavailable validation blocks ISIN-key construction.
+- One identity-aware batch handles every missing member, subject to the existing Upstox limit; unresolved or invalid prices are excluded and logged.
+- Warm Movers requests reuse the existing verified cache; no repeated provider request occurs for already recovered quotes.
+- Verify in preprod against NIFTY 50 and sector/broad indexes, with no production cache warming during local checks.

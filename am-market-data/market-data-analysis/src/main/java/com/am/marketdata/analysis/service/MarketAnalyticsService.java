@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Collectors;
 import com.am.marketdata.analysis.dto.StockMoverDTO;
+import com.am.marketdata.analysis.dto.TopMoversResponse;
 import com.am.marketdata.analysis.dto.SectorPerformanceDTO;
 import com.am.marketdata.service.model.security.SecurityDocument;
 
@@ -303,7 +304,7 @@ public class MarketAnalyticsService {
     /**
      * Get Top Gainers AND Losers (Unified)
      */
-    public Map<String, List<StockMoverDTO>> getMoversUnified(int limit, String indexSymbol,
+    public TopMoversResponse getMoversUnified(int limit, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
         /*
@@ -334,10 +335,10 @@ public class MarketAnalyticsService {
                 .map(this::enrichedDataToMap)
                 .collect(Collectors.toList());
 
-        Map<String, List<StockMoverDTO>> result = new HashMap<>();
-        result.put("gainers", gainers);
-        result.put("losers", losers);
-        return result;
+        return TopMoversResponse.builder()
+                .gainers(gainers)
+                .losers(losers)
+                .build();
     }
 
     private List<EnrichedStockData> fetchEnrichedData(String targetIndex,
@@ -370,7 +371,7 @@ public class MarketAnalyticsService {
                     .distinct()
                     .count();
             int minimumMembers = minimumVerifiedMemberCount(targetIndex);
-            if (expectedMembers == 0 || expectedMembers < minimumMembers || enrichedData.size() != expectedMembers) {
+            if (expectedMembers == 0 || expectedMembers < minimumMembers || enrichedData.size() < minimumMembers) {
                 log.warn("getMovers",
                         "Incomplete quote coverage for index {}: validPrices={}, members={}, minimumMembers={}; returning no ranking",
                         targetIndex, enrichedData.size(), expectedMembers, minimumMembers);

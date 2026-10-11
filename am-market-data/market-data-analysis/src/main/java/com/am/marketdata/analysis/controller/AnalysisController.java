@@ -19,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import com.am.marketdata.analysis.dto.StockMoverDTO;
+import com.am.marketdata.analysis.dto.TopMoversResponse;
 import com.am.marketdata.analysis.dto.SectorPerformanceDTO;
 import java.util.List;
 import java.util.Map;
@@ -173,14 +174,15 @@ public class AnalysisController {
                     return ResponseEntity.badRequest().body(Map.of("error", "Invalid timeframe", "message", e.getMessage()));
                 }
 
-                Object result;
                 if ("all".equalsIgnoreCase(type)) {
-                    result = marketAnalyticsService.getMoversUnified(limit, index, tf, expandIndices);
+                    TopMoversResponse result = marketAnalyticsService.getMoversUnified(limit, index, tf, expandIndices);
+                    flowLogger.complete(span);
+                    return ResponseEntity.ok(result);
                 } else {
-                    result = marketAnalyticsService.getMovers(limit, type, index, tf, expandIndices);
+                    List<StockMoverDTO> result = marketAnalyticsService.getMovers(limit, type, index, tf, expandIndices);
+                    flowLogger.complete(span);
+                    return ResponseEntity.ok(result);
                 }
-                flowLogger.complete(span);
-                return ResponseEntity.ok(result);
             } catch (Exception e) {
                 // Fixed SLF4J pattern: was log.error("methodName", "msg", e)
                 log.error("Error fetching movers index={} type={}", index, type, e);

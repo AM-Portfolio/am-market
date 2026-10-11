@@ -1,6 +1,7 @@
 package com.am.marketdata.provider.upstox.resolver;
 
 import com.am.marketdata.common.log.AppLogger;
+import com.am.marketdata.common.model.InstrumentIdentity;
 import com.am.marketdata.common.provider.InstrumentDataProvider;
 import com.am.marketdata.provider.common.InstrumentContext;
 import com.am.marketdata.provider.resolver.SymbolResolver;
@@ -138,6 +139,70 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                 String.format("Resolved %d symbols to %d instrument keys", symbols.size(), instrumentKeys.size()));
 
         return new InstrumentContext(instrumentKeys, keyToSymbolMap);
+    }
+
+    /**
+     * Resolve index members by ticker first, then use their validated ISIN when
+     * the provider instrument master is missing or has a conflicting mapping.
+     */
+    @Override
+    public InstrumentContext resolveContextForIdentities(List<InstrumentIdentity> instruments) {
+        if (instruments == null || instruments.isEmpty()) {
+            return resolveContext(List.of());
+        }
+
+        List<InstrumentIdentity> validIdentities = instruments.stream()
+                .filter(java.util.Objects::nonNull)
+                .filter(identity -> !identity.symbol().isBlank())
+                .toList();
+        InstrumentContext context = resolveContext(validIdentities.stream()
+                .map(identity -> identity.exchange() + ":" + identity.symbol())
+                .toList());
+
+        for (InstrumentIdentity identity : validIdentities) {
+            String isin = identity.isin();
+            if (!isin.matches("^[A-Z]{2}[A-Z0-9]{10}$")) {
+                log.warn("UpstoxSymbolResolver", "No valid ISIN for {}: using ticker resolution only",
+                        identity.symbol());
+                continue;
+            }
+
+            String segment = identity.exchange() + "_EQ";
+            String expectedKey = segment + "|" + isin;
+            List<String> matchingKeys = context.getInstrumentKeys().stream()
+                    .filter(key -> identity.symbol().equalsIgnoreCase(
+                            normalizeTradingSymbol(context.getSymbol(key))))
+                    .toList();
+            boolean mappedToExpectedIsin = matchingKeys.stream()
+                    .anyMatch(key -> key.contains("|")
+                            && key.substring(key.indexOf('|') + 1).equalsIgnoreCase(isin));
+
+            if (!mappedToExpectedIsin) {
+                // Index membership carries the current ticker-to-ISIN identity. Do
+                // not let a stale/missing provider-master row block a valid batch.
+                resolutionCache.remove(identity.symbol());
+                resolutionCache.remove(identity.exchange() + ":" + identity.symbol());
+                for (String key : matchingKeys) {
+                    context.getInstrumentKeys().remove(key);
+                    context.getKeyToSymbolMap().entrySet().removeIf(entry ->
+                            key.equals(entry.getKey()) || key.replace('|', ':').equals(entry.getKey()));
+                }
+                if (!context.getInstrumentKeys().contains(expectedKey)) {
+                    context.getInstrumentKeys().add(expectedKey);
+                }
+                log.info("UpstoxSymbolResolver",
+                        "Resolved {} from its index-member ISIN because the instrument-master mapping was missing or did not match",
+                        identity.symbol());
+            }
+
+            context.getKeyToSymbolMap().put(expectedKey, identity.symbol());
+            context.getKeyToSymbolMap().put(expectedKey.replace('|', ':'), identity.symbol());
+            context.getKeyToSymbolMap().put(segment + ":" + identity.symbol(), identity.symbol());
+            context.getKeyToSymbolMap().put(identity.exchange() + ":" + identity.symbol(), identity.symbol());
+            context.getKeyToSymbolMap().put(identity.symbol(), identity.symbol());
+        }
+
+        return context;
     }
 
     private static final int MAX_RESOLUTION_CACHE_SIZE = 5000;

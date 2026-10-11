@@ -75,3 +75,26 @@
 - [ ] Verify the Market UI cards, chart, and movers against the same fixture. Inspect non-Market consumers read-only and document separate issues.
 - [ ] Ask for explicit production deployment approval with command, impact, risk, and rollback.
 - [ ] Produce `REPORT.md` only after tests are verified.
+
+## Movers and heatmap cache reliability (API-safe follow-up)
+
+- [x] Carry index-member ticker/ISIN identity into the existing single batched Upstox LTP recovery; use a validated ISIN key only when the provider-master mapping is absent or conflicts, and keep ticker/API response identity unchanged.
+- [ ] Capture preprod traces for NIFTY 50 and one broad-index Movers/Heatmap request, including cache, database, provider, and response spans.
+- [x] Add `SmartStockService` latest-price-first lookup before provider recovery; full calendar trade-date validation remains tracked separately.
+- [ ] Prove one cold-roster recovery uses one bounded provider batch and the second request is Redis-only.
+- [ ] Keep full validated-roster coverage for Movers across every index; never use an index-name count or return a partial ranking.
+- [x] Generalize Heatmap degenerate-result protection to every validated constituent index.
+- [x] Reject missing, non-finite, and non-positive start/end Heatmap points; do not emit or cache false `0.00%` or `-100%`.
+- [x] Prevent interactive broad-index Heatmap requests from invoking per-member historical provider fallback; use the existing scheduler repair path.
+- [x] Add named `TopMoversResponse` DTO while preserving current list/object JSON shapes; OpenAPI response annotation remains pending.
+- [ ] Add/update Postman requests and assertions for canonical Movers and Heatmap routes, cold/warm data, large indexes, and contract compatibility.
+- [ ] Verify current UI rendering of omitted Heatmap symbols; add only the necessary availability-state UI support if omission currently appears as `0.00%`.
+- [ ] Run focused unit/integration tests, Postman regression, and preprod trace review before any production approval.
+
+## Latency-engineering release gate
+
+- [ ] Export and classify every Tempo span for warm/cold Movers and NIFTY 50/NIFTY 500 Heatmap requests across all seven required categories.
+- [ ] Add safe Redis-exception fallback to the primary database path; prove valid database data does not become an empty API response when Redis is unavailable.
+- [ ] Enforce Redis (<=500), Mongo (100-250), and Influx (<=50, max two concurrent) micro-chunks with partial-chunk handling.
+- [ ] Prove cache hits make zero synchronous Redis writes and broad-index Heatmap requests make zero synchronous historical-provider calls.
+- [ ] Record a preprod latency histogram and approve the measured release budget before production rollout.

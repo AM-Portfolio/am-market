@@ -534,7 +534,7 @@ public class AnalysisService {
         // without waiting for the long analysis TTL to expire.
         if (!bypassCache) {
             Map<String, Double> cached = analysisRedisCache.getIndexHeatmap(symbol, tfNorm);
-            if (cached != null && !isDegenerateIndicesHeatmap(symbol, tfNorm, cached)) {
+            if (cached != null && !isDegenerateIndicesHeatmap(tfNorm, cached)) {
                 return cached;
             }
             if (cached != null) {
@@ -545,6 +545,7 @@ public class AnalysisService {
 
         // 1. Get Constituents
         List<String> symbols = marketDataService.getIndexConstituents(symbol);
+        boolean isConstituentIndex = symbols != null && !symbols.isEmpty();
         if (symbols == null || symbols.isEmpty()) {
             // Fallback: if no constituents, maybe it's a single stock?
             // But the feature is "Index Heatmap".
@@ -604,7 +605,10 @@ public class AnalysisService {
                 null,
                 null,
                 isIndexBatch, // isIndex
-                bypassCache // forceRefresh
+                bypassCache, // forceRefresh
+                // HTTP requests pass false and stay cache/database-only. The existing
+                // scheduler passes true, so it remains the asynchronous repair path.
+                bypassCache
         );
 
         // 4. Calculate Returns
@@ -616,11 +620,13 @@ public class AnalysisService {
         for (String sym : symbols) {
             HistoricalData hd = batchData.get(sym);
             if (hd == null || hd.getDataPoints() == null || hd.getDataPoints().isEmpty()) {
-                heatmap.put(sym, 0.0);
+                log.warn("Skipping unavailable Heatmap point symbol={} timeframe={}", sym, tfNorm);
                 continue;
             }
 
-            List<OHLCVTPoint> points = hd.getDataPoints();
+            // Historical sources may expose immutable lists. Sort a local copy so
+            // calculating a Heatmap never mutates cached data or fails at runtime.
+            List<OHLCVTPoint> points = new ArrayList<>(hd.getDataPoints());
             points.sort(Comparator.comparing(OHLCVTPoint::getTime));
 
             // Find End Price (Latest)
@@ -641,11 +647,12 @@ public class AnalysisService {
                 startPrice = findClosestPrice(points, targetStartDate);
             }
 
-            if (endPrice != null && startPrice != null && startPrice != 0) {
+            if (isValidPrice(endPrice) && isValidPrice(startPrice)) {
                 double change = (endPrice - startPrice) / startPrice * 100.0;
                 heatmap.put(sym, round2(change));
             } else {
-                heatmap.put(sym, 0.0);
+                log.warn("Skipping invalid Heatmap price symbol={} timeframe={} start={} end={}",
+                        sym, tfNorm, startPrice, endPrice);
             }
         }
 
@@ -661,7 +668,8 @@ public class AnalysisService {
                         LinkedHashMap::new));
 
         // Never persist a broken INDICES 1D map (all/mostly zeros) — that is what stuck the UI.
-        if (isDegenerateIndicesHeatmap(symbol, tfNorm, sortedHeatmap)) {
+        boolean incompleteCoverage = isConstituentIndex && sortedHeatmap.size() != symbols.size();
+        if (incompleteCoverage || isDegenerateIndicesHeatmap(tfNorm, sortedHeatmap)) {
             log.warn("Skipping cache save for degenerate heatmap {} {} (zeros={}/{})",
                     symbol, tfNorm,
                     sortedHeatmap.values().stream().filter(v -> v != null && Math.abs(v) < 1e-9).count(),
@@ -674,15 +682,12 @@ public class AnalysisService {
     }
 
     /**
-     * INDICES 1D heatmap that is almost entirely 0.0 usually means incomplete history
-     * or a bad scrape day — not a real flat market across every index.
+     * A multi-member 1D Heatmap that is almost entirely zero usually means
+     * incomplete history or a bad scrape day, not a flat market.
      */
-    private boolean isDegenerateIndicesHeatmap(String symbol, String timeframe,
+    private boolean isDegenerateIndicesHeatmap(String timeframe,
             Map<String, Double> heatmap) {
         if (heatmap == null || heatmap.isEmpty()) {
-            return false;
-        }
-        if (!"INDICES".equalsIgnoreCase(symbol)) {
             return false;
         }
         if (timeframe == null || !"1D".equalsIgnoreCase(timeframe.trim())) {
@@ -693,6 +698,10 @@ public class AnalysisService {
                 .count();
         // >70% exact zeros with at least 5 symbols → treat as bad cache / bad compute
         return heatmap.size() >= 5 && zeroCount * 10 >= heatmap.size() * 7;
+    }
+
+    private boolean isValidPrice(Double price) {
+        return price != null && Double.isFinite(price) && price > 0.0;
     }
 
     private LocalDate CalculateTargetDate(LocalDate to, String tf) {

@@ -2,6 +2,7 @@ package com.am.marketdata.provider.upstox;
 
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
+import com.am.marketdata.common.model.InstrumentIdentity;
 import com.am.marketdata.provider.upstox.model.HistoricalDataResponse;
 import com.am.marketdata.provider.upstox.model.OHLCResponse;
 import com.marketdata.common.MarketDataProvider;
@@ -152,13 +153,27 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
     @Override
     public Map<String, OHLCQuote> getOHLC(List<String> symbols, TimeFrame timeFrame) {
-        try {
-            com.am.marketdata.provider.common.InstrumentContext context = symbolResolver.resolveContext(symbols);
+        if (symbols == null || symbols.isEmpty()) {
+            return new HashMap<>();
+        }
+        return fetchOhlc(symbolResolver.resolveContext(symbols), timeFrame);
+    }
 
+    @Override
+    public Map<String, OHLCQuote> getOHLCForIdentities(List<InstrumentIdentity> instruments, TimeFrame timeFrame) {
+        if (instruments == null || instruments.isEmpty()) {
+            return new HashMap<>();
+        }
+        return fetchOhlc(symbolResolver.resolveContextForIdentities(instruments), timeFrame);
+    }
+
+    private Map<String, OHLCQuote> fetchOhlc(
+            com.am.marketdata.provider.common.InstrumentContext context, TimeFrame timeFrame) {
+        try {
             log.info("getOHLC",
-                    String.format("Resolved %d instruments for symbols: %s", context.instrumentKeys.size(), symbols));
+                    String.format("Resolved %d instruments for batched OHLC lookup", context.instrumentKeys.size()));
             if (context.getInstrumentKeys().isEmpty()) {
-                log.warn("getOHLC", "No instrument keys resolved for symbols: " + symbols);
+                log.warn("getOHLC", "No valid provider instrument keys were resolved for the requested batch");
                 return new HashMap<>();
             }
 
@@ -467,11 +482,16 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
     @Override
     public Map<String, LTPQuote> getLTP(String[] symbols) {
-        try {
-            com.am.marketdata.provider.common.InstrumentContext context = symbolResolver
-                    .resolveContext(Arrays.asList(symbols));
+        if (symbols == null || symbols.length == 0) {
+            return new HashMap<>();
+        }
+        return fetchLtp(symbolResolver.resolveContext(Arrays.asList(symbols)));
+    }
 
+    private Map<String, LTPQuote> fetchLtp(com.am.marketdata.provider.common.InstrumentContext context) {
+        try {
             if (context.instrumentKeys.isEmpty()) {
+                log.warn("getLTP", "No valid Upstox instrument keys resolved for the requested symbols");
                 return new HashMap<>();
             }
 

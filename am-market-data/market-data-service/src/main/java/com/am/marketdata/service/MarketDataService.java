@@ -5,6 +5,7 @@ import com.am.common.investment.model.equity.Instrument;
 import com.am.common.investment.model.historical.HistoricalData;
 import com.am.common.investment.service.instrument.InstrumentService;
 import com.am.marketdata.common.model.OHLCQuote;
+import com.am.marketdata.common.model.InstrumentIdentity;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.mapper.InstrumentMapper;
 import com.am.marketdata.mapper.MarketDataGenericMapper;
@@ -31,8 +32,10 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -703,6 +706,55 @@ public class MarketDataService {
         } finally {
             timer.stop(meterRegistry.timer("market.data.request.time", "operation", "getLivePrices"));
         }
+    }
+
+    /**
+     * Fetch a provider quote batch when cache/database reads have already missed.
+     * The ticker is retained as the response identity while its ISIN helps the
+     * provider resolve the correct instrument without changing public endpoints.
+     */
+    public Map<String, OHLCQuote> getOHLCForIdentities(List<InstrumentIdentity> instruments,
+            String providerName) {
+        if (instruments == null || instruments.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String resolvedProviderName = resolveProviderName(providerName);
+        MarketDataProvider provider = providerFactory.getProvider(resolvedProviderName);
+        Map<String, OHLCQuote> providerQuotes = provider.getOHLCForIdentities(instruments, TimeFrame.DAY);
+        if (providerQuotes == null || providerQuotes.isEmpty()) {
+            log.warn("No provider OHLC quotes returned for {} resolved member identities", instruments.size());
+            return Collections.emptyMap();
+        }
+
+        Map<String, InstrumentIdentity> identitiesBySymbol = instruments.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(InstrumentIdentity::symbol, identity -> identity, (first, ignored) -> first));
+        Map<String, OHLCQuote> quotes = new LinkedHashMap<>();
+        providerQuotes.forEach((symbol, quote) -> {
+            String cleanSymbol = canonicalTradingSymbol(symbol);
+            InstrumentIdentity identity = identitiesBySymbol.get(cleanSymbol);
+            if (identity == null || quote == null || !Double.isFinite(quote.getLastPrice())
+                    || quote.getLastPrice() <= 0.0) {
+                log.warn("Skipping provider OHLC with invalid price or unrequested identity symbol={}", symbol);
+                return;
+            }
+            quotes.put(identity.symbol(), quote);
+        });
+        log.info("Identity-aware provider batch returned {}/{} valid quotes",
+                quotes.size(), instruments.size());
+        return quotes;
+    }
+
+    private String canonicalTradingSymbol(String value) {
+        String symbol = value == null ? "" : value.trim().toUpperCase(java.util.Locale.ROOT);
+        while (symbol.contains(":")) {
+            String prefix = symbol.substring(0, symbol.indexOf(':'));
+            if (!Set.of("NSE", "BSE", "NSE_EQ", "BSE_EQ").contains(prefix)) {
+                break;
+            }
+            symbol = symbol.substring(symbol.indexOf(':') + 1).trim();
+        }
+        return symbol;
     }
 
     /** Segment prefixes for equity, F&O, and other Indian venues (prefix-anchored only). */

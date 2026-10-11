@@ -2,9 +2,9 @@ package com.am.marketdata.service;
 
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
+import com.am.marketdata.common.model.InstrumentIdentity;
 import com.am.marketdata.service.MarketDataService;
 import com.am.marketdata.service.calendar.MarketCalendarService;
-import com.am.common.investment.model.equity.EquityPrice;
 
 import lombok.RequiredArgsConstructor;
 import com.am.marketdata.common.log.AppLogger;
@@ -24,9 +24,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Service to provide "Smart" stock data by combining Cache, Database, and
- * Historical data.
- * Adheres to the strict rule: NEVER call provider for read operations.
+ * Combines cache and database reads with a coalesced provider recovery for
+ * missing current quotes.
  */
 @Service
 @RequiredArgsConstructor
@@ -48,6 +47,9 @@ public class SmartStockService {
     private com.am.marketdata.service.repo.PreviousCloseRepository previousCloseRepository;
 
     @Autowired(required = false)
+    private com.am.marketdata.service.repo.SecurityRepository securityRepository;
+
+    @Autowired(required = false)
     private MarketCalendarService marketCalendarService;
 
     @Value("${market.data.movers.refresh-lock.ttl-seconds:30}")
@@ -65,6 +67,128 @@ public class SmartStockService {
     public Map<String, OHLCQuote> getSmartQuotes(List<String> symbols, TimeFrame timeFrame) {
         // 1. Get Base Quotes (Live/Latest)
         Map<String, OHLCQuote> currentQuotes = getSmartQuotes(symbols);
+
+        return applyTimeFrameBase(currentQuotes, symbols, timeFrame);
+    }
+
+    /**
+     * Movers can provide each member's ticker and ISIN from the index roster.
+     * Carry both through the same cache-first and single-batch recovery flow.
+     */
+    public Map<String, OHLCQuote> getSmartQuotesForIdentities(List<InstrumentIdentity> instruments,
+            TimeFrame timeFrame) {
+        if (instruments == null || instruments.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<String> symbols = instruments.stream()
+                .filter(Objects::nonNull)
+                .map(InstrumentIdentity::symbol)
+                .filter(symbol -> !symbol.isBlank())
+                .distinct()
+                .toList();
+        Map<String, OHLCQuote> quotes = getQuotesFromCacheAndDatabase(symbols);
+        Set<String> resolved = quotes.keySet().stream()
+                .map(this::canonicalTradingSymbol)
+                .collect(Collectors.toSet());
+        List<InstrumentIdentity> missingIdentities = instruments.stream()
+                .filter(Objects::nonNull)
+                .filter(identity -> !resolved.contains(canonicalTradingSymbol(identity.symbol())))
+                .toList();
+        if (!missingIdentities.isEmpty()) {
+            missingIdentities = validateMemberIdentities(missingIdentities);
+            log.info("getSmartQuotesForIdentities",
+                    "Recovering {} missing member prices with one ISIN-aware OHLC batch",
+                    missingIdentities.size());
+            recoverMissingCurrentQuotes(missingIdentities, quotes);
+        }
+        return applyTimeFrameBase(quotes, symbols, timeFrame);
+    }
+
+    /**
+     * Only trust a roster ISIN for provider-key construction when AM's security
+     * registry confirms the same ticker/ISIN pair. This prevents a stale roster
+     * value from assigning another instrument's quote to the requested ticker.
+     */
+    private List<InstrumentIdentity> validateMemberIdentities(List<InstrumentIdentity> identities) {
+        List<InstrumentIdentity> identitiesWithValidIsin = identities.stream()
+                .filter(identity -> identity.isin().matches("^[A-Z]{2}[A-Z0-9]{10}$"))
+                .toList();
+        if (identitiesWithValidIsin.isEmpty()) {
+            return identities;
+        }
+        if (securityRepository == null) {
+            log.warn("getSmartQuotesForIdentities",
+                    "Security registry is unavailable; disabling ISIN fallback for {} missing members",
+                    identitiesWithValidIsin.size());
+            return identities.stream()
+                    .map(identity -> identity.isin().matches("^[A-Z]{2}[A-Z0-9]{10}$")
+                            ? new InstrumentIdentity(identity.symbol(), "", identity.exchange()) : identity)
+                    .toList();
+        }
+
+        Map<String, List<com.am.marketdata.service.model.security.SecurityDocument>> documentsBySymbol = new HashMap<>();
+        List<String> symbols = identitiesWithValidIsin.stream().map(InstrumentIdentity::symbol).distinct().toList();
+        try {
+            // Keep Mongo $in lists bounded for broad indexes such as NIFTY 500.
+            for (int start = 0; start < symbols.size(); start += 200) {
+                List<String> chunk = symbols.subList(start, Math.min(start + 200, symbols.size()));
+                List<com.am.marketdata.service.model.security.SecurityDocument> found =
+                        securityRepository.findBySymbolIn(chunk);
+                if (found == null) {
+                    continue;
+                }
+                for (var document : found) {
+                    if (document == null || document.getKey() == null || document.getKey().getSymbol() == null) {
+                        continue;
+                    }
+                    documentsBySymbol.computeIfAbsent(canonicalTradingSymbol(document.getKey().getSymbol()),
+                            ignored -> new ArrayList<>()).add(document);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("getSmartQuotesForIdentities",
+                    "Could not verify member ticker/ISIN pairs; using ticker-only resolution for this recovery batch",
+                    e);
+            return identities.stream()
+                    .map(identity -> identity.isin().matches("^[A-Z]{2}[A-Z0-9]{10}$")
+                            ? new InstrumentIdentity(identity.symbol(), "", identity.exchange()) : identity)
+                    .toList();
+        }
+
+        List<InstrumentIdentity> validated = new ArrayList<>(identities.size());
+        for (InstrumentIdentity identity : identities) {
+            if (!identity.isin().matches("^[A-Z]{2}[A-Z0-9]{10}$")) {
+                validated.add(identity);
+                continue;
+            }
+            List<com.am.marketdata.service.model.security.SecurityDocument> matches =
+                    documentsBySymbol.getOrDefault(canonicalTradingSymbol(identity.symbol()), List.of());
+            Set<String> verifiedIsins = matches.stream()
+                    .filter(document -> document.getKey().getIsin() != null)
+                    .map(document -> document.getKey().getIsin().trim().toUpperCase(Locale.ROOT))
+                    .collect(Collectors.toSet());
+            boolean inactive = matches.stream().anyMatch(document -> {
+                var metadata = document.getMetadata();
+                String status = metadata == null ? null : metadata.getStatus();
+                return "DELISTED".equalsIgnoreCase(status) || "SUSPENDED".equalsIgnoreCase(status);
+            });
+            if (verifiedIsins.size() == 1 && verifiedIsins.contains(identity.isin()) && !inactive) {
+                validated.add(identity);
+            } else {
+                String reason = inactive ? "security is inactive"
+                        : verifiedIsins.isEmpty() ? "security ISIN is missing"
+                        : verifiedIsins.size() > 1 ? "security identity is ambiguous"
+                        : "roster and security registry ISIN do not match";
+                log.warn("getSmartQuotesForIdentities",
+                        "ISIN fallback disabled for {} because {}", identity.symbol(), reason);
+                validated.add(new InstrumentIdentity(identity.symbol(), "", identity.exchange()));
+            }
+        }
+        return validated;
+    }
+
+    private Map<String, OHLCQuote> applyTimeFrameBase(Map<String, OHLCQuote> currentQuotes,
+            List<String> symbols, TimeFrame timeFrame) {
 
         if (timeFrame == null || timeFrame == TimeFrame.DAY) {
             backfillPreviousCloseForDay(currentQuotes);
@@ -175,39 +299,15 @@ public class SmartStockService {
      * Get the latest quotes for a list of symbols.
      * Strategy:
      * 1. Try Cache/DB (forceRefresh=false).
-     * 2. For missing symbols, try fetching latest Historical Data from DB.
-     * 3. Construct a fallback quote using Historical Close as Previous Close.
+     * 2. For missing symbols, request a bounded current OHLC quote batch.
+     * 3. Use a verified previous close from that quote or local history.
      */
     public Map<String, OHLCQuote> getSmartQuotes(List<String> symbols) {
         if (symbols == null || symbols.isEmpty()) {
             return Collections.emptyMap();
         }
 
-        // 1. Try Cache & Database (No Provider)
-        // Check local cache/database first. Recover remaining current prices with
-        // the provider's batched LTP endpoint, never its per-symbol candle endpoint.
-        Map<String, OHLCQuote> rawQuotes = marketDataService.getOHLC(
-                symbols, TimeFrame.DAY, false, null, false);
-        Map<String, OHLCQuote> quotes = new HashMap<>();
-
-        if (rawQuotes != null) {
-            for (Map.Entry<String, OHLCQuote> entry : rawQuotes.entrySet()) {
-                OHLCQuote q = entry.getValue();
-                if (q != null && q.getLastPrice() > 0.0) {
-                    // Keep a valid LTP even when its comparison base is missing;
-                    // the bounded local history lookup below can repair the base.
-                    // The enricher will reject it if no trustworthy base is found.
-                    quotes.put(entry.getKey(), q);
-                }
-            }
-        }
-
-        /*
-         * Keep the original cache keys in the returned map because callers may rely
-         * on them (for example, NSE:RELIANCE). Only use a canonical identity for
-         * the internal missing-symbol check. A bare request must be satisfied by
-         * its exchange-qualified cache entry instead of needlessly querying history.
-         */
+        Map<String, OHLCQuote> quotes = getQuotesFromCacheAndDatabase(symbols);
         Set<String> resolvedSymbols = quotes.keySet().stream()
                 .map(this::canonicalTradingSymbol)
                 .filter(symbol -> !symbol.isBlank())
@@ -216,19 +316,97 @@ public class SmartStockService {
                 .filter(Objects::nonNull)
                 .filter(symbol -> !resolvedSymbols.contains(canonicalTradingSymbol(symbol)))
                 .collect(Collectors.toSet());
-
         if (missingSymbols.isEmpty()) {
             return quotes;
         }
 
-        log.info("getSmartQuotes", "Recovering {} missing current quotes with one batched LTP request",
+        log.info("getSmartQuotes", "Recovering {} missing current quotes with one batched OHLC request",
                 missingSymbols.size());
-        recoverMissingCurrentQuotes(missingSymbols, quotes);
+        List<InstrumentIdentity> tickerOnly = missingSymbols.stream()
+                .map(this::tickerOnlyIdentity)
+                .toList();
+        recoverMissingCurrentQuotes(tickerOnly, quotes);
+        return quotes;
+    }
+
+    private Map<String, OHLCQuote> getQuotesFromCacheAndDatabase(List<String> symbols) {
+        /*
+         * A successful LTP recovery is stored in market:latest-price:*. Read that
+         * cache first. Starting only from intraday bars made a recovered quote look
+         * missing after the intraday key expired, so Movers repeated provider work.
+         */
+        Map<String, OHLCQuote> quotes = new LinkedHashMap<>();
+        try {
+            Map<String, OHLCQuote> latestQuotes = marketDataCacheService.getLatestPrices(
+                    new LinkedHashSet<>(symbols));
+            addValidQuotes(quotes, latestQuotes);
+        } catch (Exception e) {
+            // Redis is an acceleration layer. Continue to the cache/database OHLC path.
+            log.warn("getSmartQuotes", "Latest-price cache unavailable; continuing with cache/database lookup", e);
+        }
+
+        // Read intraday/cache/database data without a provider fallback. These
+        // values may fill missing fields but must not replace a newer LTP cache entry.
+        Map<String, OHLCQuote> rawQuotes = marketDataService.getOHLC(
+                symbols, TimeFrame.DAY, false, null, false);
+        addMissingQuoteFields(quotes, rawQuotes);
 
         return quotes;
     }
 
-    private void recoverMissingCurrentQuotes(Set<String> missingSymbols, Map<String, OHLCQuote> quotes) {
+    private InstrumentIdentity tickerOnlyIdentity(String requestSymbol) {
+        String normalized = requestSymbol == null ? "" : requestSymbol.trim().toUpperCase(Locale.ROOT);
+        String exchange = normalized.startsWith("BSE:") || normalized.startsWith("BSE_EQ:") ? "BSE" : "NSE";
+        return new InstrumentIdentity(canonicalTradingSymbol(normalized), "", exchange);
+    }
+
+    private void addValidQuotes(Map<String, OHLCQuote> destination, Map<String, OHLCQuote> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, OHLCQuote> entry : candidates.entrySet()) {
+            OHLCQuote quote = entry.getValue();
+            if (quote == null || !Double.isFinite(quote.getLastPrice()) || quote.getLastPrice() <= 0.0) {
+                continue;
+            }
+            // Keep a valid LTP even when its comparison base is missing; the
+            // bounded local history lookup repairs the base before ranking.
+            destination.put(entry.getKey(), quote);
+        }
+    }
+
+    private void addMissingQuoteFields(Map<String, OHLCQuote> destination, Map<String, OHLCQuote> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, OHLCQuote> entry : candidates.entrySet()) {
+            OHLCQuote candidate = entry.getValue();
+            if (candidate == null || !Double.isFinite(candidate.getLastPrice()) || candidate.getLastPrice() <= 0.0) {
+                continue;
+            }
+            String matchingKey = destination.keySet().stream()
+                    .filter(key -> canonicalTradingSymbol(key).equals(canonicalTradingSymbol(entry.getKey())))
+                    .findFirst()
+                    .orElse(null);
+            if (matchingKey == null) {
+                destination.put(entry.getKey(), candidate);
+                continue;
+            }
+            OHLCQuote cached = destination.get(matchingKey);
+            if (cached.getPreviousClose() <= 0.0 && candidate.getPreviousClose() > 0.0) {
+                cached.setPreviousClose(candidate.getPreviousClose());
+            }
+            if (cached.getOhlc() == null && candidate.getOhlc() != null) {
+                cached.setOhlc(candidate.getOhlc());
+            }
+        }
+    }
+
+    private void recoverMissingCurrentQuotes(List<InstrumentIdentity> missingIdentities,
+            Map<String, OHLCQuote> quotes) {
+        Set<String> missingSymbols = missingIdentities.stream()
+                .map(InstrumentIdentity::symbol)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         if (stringRedisTemplate == null) {
             log.warn("getSmartQuotes", "Redis quote-recovery coordination is unavailable; skipping provider batch for {} symbols",
                     missingSymbols.size());
@@ -253,47 +431,31 @@ public class SmartStockService {
         }
 
         try {
-            List<EquityPrice> recoveredPrices = marketDataService.getLivePrices(
-                    new ArrayList<>(missingSymbols), null, true);
-            if (recoveredPrices == null || recoveredPrices.isEmpty()) {
-                log.warn("getSmartQuotes", "Batched LTP recovery returned no quotes for {} requested symbols",
+            Map<String, OHLCQuote> recoveredQuotes = marketDataService.getOHLCForIdentities(
+                    missingIdentities, null);
+            if (recoveredQuotes == null || recoveredQuotes.isEmpty()) {
+                log.warn("getSmartQuotes", "Batched OHLC recovery returned no quotes for {} requested symbols",
                         missingSymbols.size());
                 return;
             }
 
             int recoveredCount = 0;
-            for (EquityPrice price : recoveredPrices) {
-                if (price == null || price.getSymbol() == null || !Double.isFinite(price.getLastPrice())
-                        || price.getLastPrice() <= 0.0) {
+            for (Map.Entry<String, OHLCQuote> entry : recoveredQuotes.entrySet()) {
+                OHLCQuote quote = entry.getValue();
+                if (quote == null || entry.getKey() == null || !Double.isFinite(quote.getLastPrice())
+                        || quote.getLastPrice() <= 0.0) {
                     continue;
                 }
-                String returnedSymbol = canonicalTradingSymbol(price.getSymbol());
+                String returnedSymbol = canonicalTradingSymbol(entry.getKey());
                 String requestedSymbol = missingSymbols.stream()
                         .filter(symbol -> canonicalTradingSymbol(symbol).equals(returnedSymbol))
                         .findFirst()
                         .orElse(null);
                 if (requestedSymbol == null) {
-                    log.warn("getSmartQuotes", "Batched LTP returned an unrequested or ambiguous symbol; skipping it");
+                    log.warn("getSmartQuotes", "Batched OHLC returned an unrequested or ambiguous symbol; skipping it");
                     continue;
                 }
 
-                double previousClose = 0.0;
-                OHLCQuote.OHLC ohlc = null;
-                if (price.getOhlcv() != null) {
-                    previousClose = price.getOhlcv().getClose() != null
-                            ? price.getOhlcv().getClose() : 0.0;
-                    ohlc = OHLCQuote.OHLC.builder()
-                            .open(valueOrZero(price.getOhlcv().getOpen()))
-                            .high(valueOrZero(price.getOhlcv().getHigh()))
-                            .low(valueOrZero(price.getOhlcv().getLow()))
-                            .close(valueOrZero(price.getOhlcv().getClose()))
-                            .build();
-                }
-                OHLCQuote quote = OHLCQuote.builder()
-                        .lastPrice(price.getLastPrice())
-                        .previousClose(previousClose)
-                        .ohlc(ohlc)
-                        .build();
                 quotes.put(requestedSymbol, quote);
                 recoveredCount++;
 
@@ -303,10 +465,10 @@ public class SmartStockService {
                     marketDataCacheService.cacheLatestPrices(Map.of(requestedSymbol, quote));
                 }
             }
-            log.info("getSmartQuotes", "Batched LTP recovery returned valid prices for {}/{} symbols",
+            log.info("getSmartQuotes", "Batched OHLC recovery returned valid prices for {}/{} symbols",
                     recoveredCount, missingSymbols.size());
         } catch (Exception e) {
-            log.warn("getSmartQuotes", "Batched LTP recovery failed for {} symbols", missingSymbols.size(), e);
+            log.warn("getSmartQuotes", "Batched OHLC recovery failed for {} symbols", missingSymbols.size(), e);
         } finally {
             try {
                 stringRedisTemplate.execute(RELEASE_REFRESH_LOCK, List.of(lockKey), ownerToken);
@@ -322,8 +484,9 @@ public class SmartStockService {
         do {
             try {
                 Thread.sleep(Math.min(100, Math.max(1, deadline - System.currentTimeMillis())));
-                Map<String, OHLCQuote> cached = marketDataCacheService.getOHLCFromCache(
-                        new ArrayList<>(symbols), TimeFrame.DAY);
+                // Provider recovery writes market:latest-price, not intraday bars.
+                // Re-read the same cache that the owner pod populated.
+                Map<String, OHLCQuote> cached = marketDataCacheService.getLatestPrices(symbols);
                 if (cached != null) {
                     cached.forEach((symbol, quote) -> {
                         if (quote != null && Double.isFinite(quote.getLastPrice()) && quote.getLastPrice() > 0.0) {
@@ -361,10 +524,6 @@ public class SmartStockService {
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is unavailable", e);
         }
-    }
-
-    private double valueOrZero(Double value) {
-        return value != null && Double.isFinite(value) && value > 0.0 ? value : 0.0;
     }
 
     private com.am.common.investment.model.historical.HistoricalData findHistory(

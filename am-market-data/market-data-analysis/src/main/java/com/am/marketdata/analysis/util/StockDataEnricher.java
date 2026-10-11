@@ -139,11 +139,10 @@ public class StockDataEnricher {
             "NIFTY MIDSML HLTH", "NIFTY IT", "NIFTY FIN SERVICES", "NIFTY ENERGY", 
             "NIFTY PHARMACEUTICALS", "SENSEX", "NIFTY", "BANKNIFTY"
         ));
-        List<String> symbols = stockDataList.stream()
+        List<StockData> memberStocks = stockDataList.stream()
                 .filter(sd -> sd != null && sd.getSymbol() != null)
-                .map(StockData::getSymbol)
-                .filter(symbol -> {
-                    String clean = symbol.replace("NSE:", "").replace("NSE_EQ:", "").trim().toUpperCase();
+                .filter(stock -> {
+                    String clean = canonicalTradingSymbol(stock.getSymbol());
                     return !knownIndices.contains(clean) && 
                            !clean.startsWith("NIFTY ") && 
                            !clean.contains("VIX") && 
@@ -152,6 +151,9 @@ public class StockDataEnricher {
                            !clean.equals("MIDCPNIFTY");
                 }) // Exclude index symbols
                 .collect(Collectors.toList());
+        List<String> symbols = memberStocks.stream()
+                .map(StockData::getSymbol)
+                .collect(Collectors.toList());
 
         if (symbols.isEmpty()) {
             log.warn("enrichWithPrices", "No valid symbols found in stock data list");
@@ -159,7 +161,7 @@ public class StockDataEnricher {
         }
 
         // Fetch prices for all symbols (with optional time frame and expansion control)
-        Map<String, OHLCQuote> priceData = fetchLivePrices(symbols, timeFrame, expandIndices);
+        Map<String, OHLCQuote> priceData = fetchLivePrices(memberStocks, timeFrame, expandIndices);
 
         // Normalize price data keys to include both prefixed and base symbol variants (e.g., NSE_EQ:RELIANCE & RELIANCE)
         Map<String, OHLCQuote> normalizedPriceData = new HashMap<>();
@@ -211,29 +213,34 @@ public class StockDataEnricher {
      * @param expandIndices Whether to expand index symbols to constituent stocks
      * @return Map of symbol to OHLCQuote
      */
-    private Map<String, OHLCQuote> fetchLivePrices(List<String> symbols,
+    private Map<String, OHLCQuote> fetchLivePrices(List<StockData> memberStocks,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
         try {
-            String timeFrameStr = timeFrame != null ? timeFrame.getApiValue() : TimeFrame.DAY.getApiValue();
-
             /*
              * Movers receives known constituent stocks, not an index query. Keep their
              * identity as the bare trading ticker so it matches Redis/Influx history
              * keys (for example RELIANCE). Converting it to NSE_EQ:RELIANCE here made
              * the Movers path miss data that the Heatmap path could already read.
              */
-            List<String> canonicalSymbols = symbols.stream()
-                    .map(this::canonicalTradingSymbol)
-                    .filter(symbol -> !symbol.isBlank())
-                    .distinct()
+            List<com.am.marketdata.common.model.InstrumentIdentity> identities = memberStocks.stream()
+                    .filter(stock -> stock.getSymbol() != null && !stock.getSymbol().isBlank())
+                    .collect(Collectors.toMap(
+                            stock -> canonicalTradingSymbol(stock.getSymbol()),
+                            stock -> new com.am.marketdata.common.model.InstrumentIdentity(
+                                    canonicalTradingSymbol(stock.getSymbol()), stock.getIsin(),
+                                    exchangeForMember(stock)),
+                            (first, ignored) -> first,
+                            LinkedHashMap::new))
+                    .values().stream()
+                    .filter(identity -> !identity.symbol().isBlank())
                     .collect(Collectors.toList());
-            if (canonicalSymbols.isEmpty()) {
+            if (identities.isEmpty()) {
                 return Collections.emptyMap();
             }
 
-            // Use Smart Service to get quotes (Cache -> DB -> History Fallback)
-            Map<String, OHLCQuote> prices = smartStockService.getSmartQuotes(canonicalSymbols,
-                    timeFrame);
+            // Keep the index roster ISIN attached so a missing provider-master row
+            // can still be resolved without sending a raw ticker to Upstox.
+            Map<String, OHLCQuote> prices = smartStockService.getSmartQuotesForIdentities(identities, timeFrame);
 
             if (prices == null) {
                 prices = new HashMap<>();
@@ -256,6 +263,20 @@ public class StockDataEnricher {
             normalized = normalized.substring(normalized.indexOf(':') + 1).trim();
         }
         return normalized;
+    }
+
+    private String exchangeForMember(StockData stock) {
+        String source = stock.getIdentifier() == null || stock.getIdentifier().isBlank()
+                ? stock.getSymbol() : stock.getIdentifier();
+        String identity = source == null ? "" : source.trim().toUpperCase(Locale.ROOT);
+        if (identity.startsWith("BSE:") || identity.startsWith("BSE_EQ:") || identity.startsWith("BSE_EQ|")) {
+            return "BSE";
+        }
+        if (identity.startsWith("NSE:") || identity.startsWith("NSE_EQ:") || identity.startsWith("NSE_EQ|")) {
+            return "NSE";
+        }
+        // The existing constituent feed is NSE-based unless the row identifies BSE.
+        return "NSE";
     }
 
     /**

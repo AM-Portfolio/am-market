@@ -1247,19 +1247,42 @@ public class MarketDataCacheService {
 
         Map<String, OHLCQuote> result = new HashMap<>();
         try {
-            for (String symbol : symbols) {
-                String cleanSymbol = symbol;
-                if (cleanSymbol.contains("|")) {
-                    cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf("|") + 1);
+            List<String> requestedSymbols = new ArrayList<>(symbols);
+            // Use MGET in bounded chunks. A NIFTY 500 request must not make 500
+            // sequential Redis round trips or build an unbounded command payload.
+            for (int start = 0; start < requestedSymbols.size(); start += 500) {
+                List<String> chunk = requestedSymbols.subList(start, Math.min(start + 500, requestedSymbols.size()));
+                List<String> primaryKeys = new ArrayList<>(chunk.size());
+                List<String> fallbackKeys = new ArrayList<>(chunk.size());
+                for (String symbol : chunk) {
+                    String raw = symbol == null ? "" : symbol.trim().toUpperCase();
+                    String exchange = "NSE";
+                    if (raw.contains("|")) {
+                        String[] parts = raw.split("\\|", 2);
+                        exchange = parts[0];
+                        raw = parts[1];
+                    } else if (raw.contains(":")) {
+                        String[] parts = raw.split(":", 2);
+                        exchange = parts[0];
+                        raw = parts[1];
+                    }
+                    String cleanSymbol = raw.trim().toUpperCase();
+                    primaryKeys.add("market:latest-price:" + exchange.trim().toUpperCase() + ":" + cleanSymbol);
+                    fallbackKeys.add("market:latest-price:" + cleanSymbol);
                 }
-                if (cleanSymbol.contains(":")) {
-                    cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf(":") + 1);
-                }
-                cleanSymbol = cleanSymbol.toUpperCase().trim();
+                List<String> keys = new ArrayList<>(chunk.size() * 2);
+                keys.addAll(primaryKeys);
+                keys.addAll(fallbackKeys);
+                List<String> values = redisTemplate.opsForValue().multiGet(keys);
 
-                String key = "market:latest-price:" + cleanSymbol;
-                String json = redisTemplate.opsForValue().get(key);
-                if (json != null) {
+                for (int index = 0; index < chunk.size(); index++) {
+                    String symbol = chunk.get(index);
+                    String cleanSymbol = canonicalTicker(symbol);
+                    String json = values != null && index < values.size() ? values.get(index) : null;
+                    if (json == null && values != null && index + chunk.size() < values.size()) {
+                        json = values.get(index + chunk.size());
+                    }
+                    if (json != null) {
                     Map<String, Object> map = objectMapper.readValue(json, Map.class);
 
                     // Only ignore Redis prices as stale during active market hours.
@@ -1289,13 +1312,29 @@ public class MarketDataCacheService {
                     quote.setOhlc(ohlc);
                     quote.setPreviousClose(previousClose);
 
-                    result.put(symbol, quote);
+                    if (Double.isFinite(lastPrice) && lastPrice > 0.0) {
+                        result.put(symbol, quote);
+                    } else {
+                        log.warn("getLatestPrices", "Ignoring non-positive cached last price for {}", cleanSymbol);
+                    }
                 }
+            }
             }
         } catch (Exception e) {
             log.error("getLatestPrices", "Error fetching latest prices from Redis", e);
         }
         return result;
+    }
+
+    private String canonicalTicker(String symbol) {
+        String cleanSymbol = symbol == null ? "" : symbol.trim().toUpperCase();
+        if (cleanSymbol.contains("|")) {
+            cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf("|") + 1);
+        }
+        if (cleanSymbol.contains(":")) {
+            cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf(":") + 1);
+        }
+        return cleanSymbol.trim();
     }
 
     /**
