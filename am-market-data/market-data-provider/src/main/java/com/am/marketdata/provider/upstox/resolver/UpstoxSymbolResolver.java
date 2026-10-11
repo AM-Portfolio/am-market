@@ -271,8 +271,9 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             if (found != null) {
                 for (Object item : found) {
                     com.am.marketdata.common.model.UpstoxInstrument inst = (com.am.marketdata.common.model.UpstoxInstrument) item;
-                    if (inst != null && inst.getInstrumentKey() != null && inst.getInstrumentKey().contains("|")) {
-                        candidateInstruments.add(inst);
+                    com.am.marketdata.common.model.UpstoxInstrument normalized = normalizeInstrumentKey(inst);
+                    if (normalized != null) {
+                        candidateInstruments.add(normalized);
                     }
                 }
             }
@@ -289,8 +290,9 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             if (found != null) {
                 for (Object item : found) {
                     com.am.marketdata.common.model.UpstoxInstrument inst = (com.am.marketdata.common.model.UpstoxInstrument) item;
-                    if (inst != null && inst.getInstrumentKey() != null && inst.getInstrumentKey().contains("|")) {
-                        candidateInstruments.add(inst);
+                    com.am.marketdata.common.model.UpstoxInstrument normalized = normalizeInstrumentKey(inst);
+                    if (normalized != null) {
+                        candidateInstruments.add(normalized);
                     }
                 }
             }
@@ -304,6 +306,10 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                 String[] parts = reqSymbol.split(":", 2);
                 reqExchange = parts[0].trim().toUpperCase();
                 cleanSymbol = parts[1].trim();
+            }
+            // NSE_EQ:PWL → exchange NSE (not NSE_EQ) so scoring matches Mongo exchange=NSE.
+            if (reqExchange.endsWith("_EQ") || reqExchange.endsWith("_FO") || reqExchange.endsWith("_INDEX")) {
+                reqExchange = reqExchange.substring(0, reqExchange.indexOf('_'));
             }
             cleanSymbol = normalizeTradingSymbol(cleanSymbol);
 
@@ -367,6 +373,38 @@ public class UpstoxSymbolResolver implements SymbolResolver {
         }
     }
 
+    /**
+     * Upstox hist SDK requires {@code SEGMENT|ISIN} keys. Dig/local docs sometimes store
+     * bare tickers as instrument_key — rebuild from segment + ISIN when possible.
+     */
+    private static com.am.marketdata.common.model.UpstoxInstrument normalizeInstrumentKey(
+            com.am.marketdata.common.model.UpstoxInstrument inst) {
+        if (inst == null) {
+            return null;
+        }
+        String key = inst.getInstrumentKey();
+        if (key != null && key.contains("|")) {
+            return inst;
+        }
+        String isin = inst.getIsin();
+        if (isin == null || isin.isBlank()) {
+            return null;
+        }
+        String segment = inst.getSegment();
+        if (segment == null || segment.isBlank()) {
+            String ex = inst.getExchange() != null ? inst.getExchange().toUpperCase() : "NSE";
+            segment = ex.endsWith("_EQ") ? ex : ex + "_EQ";
+        }
+        inst.setInstrumentKey(segment + "|" + isin.trim().toUpperCase());
+        return inst;
+    }
+
+    /** Broker / portfolio aliases → Upstox NSE_EQ trading_symbol. */
+    private static final Map<String, String> TRADING_SYMBOL_ALIASES = Map.of(
+            "VODAFONEIDEA", "IDEA",
+            "VODAFONE-IDEA", "IDEA",
+            "VODAFONE_IDEA", "IDEA");
+
     private String normalizeTradingSymbol(String symbol) {
         /*
          * Old watchlists may still publish NSE:NSE:IDEA. Upstox stores IDEA as
@@ -381,7 +419,7 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             }
             cleaned = cleaned.substring(delimiter + 1).trim();
         }
-        return cleaned;
+        return TRADING_SYMBOL_ALIASES.getOrDefault(cleaned, cleaned);
     }
 
     @Override

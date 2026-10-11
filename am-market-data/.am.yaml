@@ -1,7 +1,9 @@
 # Local amctl identity — matches CI image_name
 name: am-market-data
 release: am-market-data
-image: ghcr.io/am-portfolio/am-market-data
+# CI pushes nested GHCR: ghcr.io/am-portfolio/am-market/am-market-data:<run-id>
+# Flat am-market-data only has local-* tags → ImagePullBackOff on Contabo dig.
+image: ghcr.io/am-portfolio/am-market/am-market-data
 runtime: java
 language: java
 dockerfile: Dockerfile

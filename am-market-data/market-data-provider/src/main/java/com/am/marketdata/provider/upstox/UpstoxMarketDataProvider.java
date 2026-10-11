@@ -650,14 +650,14 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             List<String> symbolsList = Collections.singletonList(symbol);
             com.am.marketdata.provider.common.InstrumentContext context = symbolResolver.resolveContext(symbolsList);
             String instrumentKey = context.instrumentKeys.stream()
-                    .filter(key -> key != null && !key.isBlank())
+                    .filter(key -> key != null && !key.isBlank() && key.contains("|"))
                     .findFirst()
                     .orElse(null);
             if (instrumentKey == null) {
-                // Upstox rejects bare tickers such as RELIANCE. Treat an unresolved
+                // Upstox rejects bare tickers such as RELIANCE / PWL. Treat an unresolved
                 // identity as a recoverable no-data result instead of issuing UDAPI1021.
                 log.warn("getHistoricalData", "Historical data skipped because no Upstox instrument key resolved for symbol: "
-                        + symbol);
+                        + symbol + " (keys=" + context.instrumentKeys + ")");
                 return new HistoricalData();
             }
 

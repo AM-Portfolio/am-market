@@ -11,7 +11,7 @@ global:
       enabled: false
 
 image:
-  repository: am-market-data
+  repository: am-market/am-market-data
   pullPolicy: Always
   tag: "24962128676"
 

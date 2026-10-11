@@ -200,6 +200,19 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
     }
 
     /**
+     * Intraday provider calls must stay short; daily session bars need room for
+     * instrument resolve + Upstox candle fetch (cold dig often exceeds 1.5s).
+     */
+    static long providerTimeoutMsForInterval(TimeFrame interval) {
+        if (interval == null) {
+            return 15_000L;
+        }
+        String val = interval.getApiValue() != null ? interval.getApiValue().toLowerCase() : "";
+        boolean intraday = val.contains("m") || val.contains("h");
+        return intraday ? 3_000L : 15_000L;
+    }
+
+    /**
      * Retrieve historical data from database
      *
      * @param remainingSymbols Set of symbols that still need to be retrieved (will
@@ -344,11 +357,12 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     callCount++;
                 }
 
-                // Bounded 1.5-second execution budget per symbol fetch from provider.
-                // Prevents slow external broker API roundtrips from blocking HTTP request threads for > 1.5s.
+                // Daily/weekly/monthly candles often need a cold Upstox round-trip + key resolve.
+                // Keep a short budget for intraday; allow a longer budget for session bars.
+                long providerBudgetMs = providerTimeoutMsForInterval(interval);
                 java.util.concurrent.CompletableFuture<HistoricalData> fetchFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
                         provider.getHistoricalData(symbol, fromDate, toDate, interval, continuous, additionalParams)
-                ).orTimeout(1500, java.util.concurrent.TimeUnit.MILLISECONDS);
+                ).orTimeout(providerBudgetMs, java.util.concurrent.TimeUnit.MILLISECONDS);
 
                 HistoricalData historicalData = null;
                 try {
@@ -356,7 +370,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                 } catch (java.util.concurrent.ExecutionException ee) {
                     log.error("[PROVIDER] Error fetching historical data for symbol {}: {}", symbol, ee.getCause() != null ? ee.getCause().getMessage() : ee.getMessage());
                 } catch (Exception te) {
-                    log.warn("[PROVIDER_TIMEOUT] Provider fetch exceeded 1.5s budget for symbol: {}. Falling back to background async backfill.", symbol);
+                    log.warn("[PROVIDER_TIMEOUT] Provider fetch exceeded {}ms budget for symbol: {}. Falling back to background async backfill.",
+                            providerBudgetMs, symbol);
                     triggerSingleFlightBackfill(symbol, dateFormat.format(fromDate), dateFormat.format(toDate));
                 }
 
