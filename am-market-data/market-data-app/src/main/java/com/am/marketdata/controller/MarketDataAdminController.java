@@ -20,6 +20,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Executor;
 
 @Slf4j
 @RestController
@@ -47,6 +51,9 @@ public class MarketDataAdminController {
     private final com.am.marketdata.service.ipo.IpoSyncService ipoSyncService;
     private final CookieManager cookieManager;
     private final com.am.marketdata.service.SymbolOrchestratorService symbolOrchestratorService;
+    @Autowired
+    @Qualifier("marketDataTaskExecutor")
+    private Executor marketDataTaskExecutor;
 
     private final com.am.marketdata.service.global.GlobalIndexHistoricalSyncService globalIndexSyncService;
 
@@ -85,8 +92,9 @@ public class MarketDataAdminController {
             @RequestParam(required = false) String symbol,
             @RequestParam(defaultValue = "false") boolean force) {
         log.info("Manual trigger: Global Index Sync (Symbol: {}, Force: {})", symbol, force);
-        new Thread(() -> globalIndexSyncService.syncHistoricalData(symbol, force), "manual-global-sync-thread").start();
-        return ResponseEntity.ok("Global Index Sync Triggered (Symbol: " + symbol + ", Force: " + force + ")");
+        return submitAdminTask("global historical sync",
+                () -> globalIndexSyncService.syncHistoricalData(symbol, force),
+                "Global Index Sync Triggered (Symbol: " + symbol + ", Force: " + force + ")");
     }
 
     @PostMapping("/sync/historical")
@@ -99,10 +107,10 @@ public class MarketDataAdminController {
                 "Manual trigger: Historical Sync (Symbol: {}, Duration: {}, Force Refresh: {}, Fetch Index Stocks: {})",
                 symbol, duration,
                 forceRefresh, fetchIndexStocks);
-        new Thread(() -> historicalSyncService.syncHistoricalData(symbol, duration, forceRefresh, fetchIndexStocks))
-                .start();
-        return ResponseEntity.ok("Historical Sync Triggered (Symbol: " + symbol + ", Duration: " + duration
-                + ", Force: " + forceRefresh + ")");
+        return submitAdminTask("historical sync",
+                () -> historicalSyncService.syncHistoricalData(symbol, duration, forceRefresh, fetchIndexStocks),
+                "Historical Sync Triggered (Symbol: " + symbol + ", Duration: " + duration
+                        + ", Force: " + forceRefresh + ")");
     }
 
     @PostMapping("/ingestion/start")
@@ -130,14 +138,13 @@ public class MarketDataAdminController {
     @PostMapping("/scheduler/indices/force-process")
     public ResponseEntity<String> forceTriggerIndicesProcessing() {
         log.info("Manual trigger: Force Indices Data Processing (bypassing trading hours)");
-        new Thread(() -> {
+        return submitAdminTask("force indices processing", () -> {
             try {
                 marketDataProcessingService.fetchAndProcessMarketData();
             } catch (Exception e) {
                 log.error("Failed to run manually triggered force indices processing", e);
             }
-        }, "manual-force-indices-thread").start();
-        return ResponseEntity.ok("Force triggered indices processing in background");
+        }, "Force triggered indices processing in background");
     }
 
     @PostMapping("/scheduler/indices/retry")
@@ -152,7 +159,7 @@ public class MarketDataAdminController {
     public ResponseEntity<String> forceTriggerStockIndicesProcessing(
             @RequestParam(required = false) String symbol) {
         log.info("Manual trigger: Force Stock Indices Constituents Processing (Symbol: {})", symbol);
-        new Thread(() -> {
+        return submitAdminTask("force constituent processing", () -> {
             try {
                 if (symbol != null && !symbol.isBlank()) {
                     marketDataProcessingService.fetchAndProcessStockIndices(symbol.trim().toUpperCase()).join();
@@ -162,8 +169,7 @@ public class MarketDataAdminController {
             } catch (Exception e) {
                 log.error("Failed to run manually triggered force stock indices processing", e);
             }
-        }, "manual-force-stock-indices-thread").start();
-        return ResponseEntity.ok("Force triggered stock indices constituents processing in background for: "
+        }, "Force triggered stock indices constituents processing in background for: "
                 + (symbol != null ? symbol : "ALL"));
     }
 
@@ -222,6 +228,17 @@ public class MarketDataAdminController {
                 .build();
     }
 
+    /** Keep admin work bounded and visible to Spring's shutdown lifecycle. */
+    private ResponseEntity<String> submitAdminTask(String taskName, Runnable task, String acceptedMessage) {
+        try {
+            marketDataTaskExecutor.execute(task);
+            return ResponseEntity.ok(acceptedMessage);
+        } catch (TaskRejectedException e) {
+            log.warn("Admin task {} was rejected because the managed task queue is full", taskName);
+            return ResponseEntity.status(503).body("Admin task queue is busy; retry " + taskName + " later");
+        }
+    }
+
     @PostMapping("/scheduler/streamer/start")
     public ResponseEntity<String> triggerStreamerStart() {
         log.info("Manual trigger: Streamer Start");
@@ -274,14 +291,13 @@ public class MarketDataAdminController {
     @PostMapping("/scheduler/prev-close/trigger")
     public ResponseEntity<String> triggerPreviousCloseFetch() {
         log.info("Manual trigger: Previous Close Fetch and Cache");
-        new Thread(() -> {
+        return submitAdminTask("previous-close refresh", () -> {
             try {
                 previousCloseScheduler.fetchAndCachePreviousClose();
             } catch (Exception e) {
                 log.error("Failed to run manually triggered previous close fetch", e);
             }
-        }, "manual-prev-close-trigger-thread").start();
-        return ResponseEntity.ok("Triggered previous close cache refresh in background");
+        }, "Triggered previous close cache refresh in background");
     }
 
     @PostMapping("/scheduler/symbols/refresh")
@@ -297,7 +313,7 @@ public class MarketDataAdminController {
     public ResponseEntity<String> syncMarketCalendar(
             @RequestParam(defaultValue = "NSE") String exchange) {
         log.info("Manual trigger: Market calendar sync exchange={}", exchange);
-        new Thread(() -> {
+        return submitAdminTask("market calendar sync", () -> {
             try {
                 marketCalendarSyncService.sync(
                         exchange,
@@ -305,8 +321,7 @@ public class MarketDataAdminController {
             } catch (Exception e) {
                 log.error("Failed market calendar sync for {}", exchange, e);
             }
-        }, "manual-market-calendar-sync").start();
-        return ResponseEntity.ok("Market calendar sync triggered for " + exchange);
+        }, "Market calendar sync triggered for " + exchange);
     }
 
     @PostMapping("/sync/ipo")

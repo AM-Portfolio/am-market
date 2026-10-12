@@ -478,18 +478,55 @@ public class StockIndicesService {
     }
 
     private boolean hasUsableMembership(StockIndicesMarketData indexData) {
-        if (indexData == null || indexData.getData() == null || indexData.getData().isEmpty()) {
+        if (indexData == null) {
             return false;
         }
-        Set<String> symbols = new HashSet<>();
+        // INDIA VIX is a standalone benchmark, not an index of member stocks.
+        // Its empty roster is valid and must not trigger an impossible NSE repair.
+        if (isStandaloneIndex(indexData.getIndexSymbol())) {
+            return indexData.getMetadata() != null;
+        }
+        if (indexData.getData() == null || indexData.getData().isEmpty()) {
+            return false;
+        }
+
+        Map<String, com.am.common.investment.model.stockindice.StockData> uniqueMembers = new java.util.LinkedHashMap<>();
         for (var stock : indexData.getData()) {
-            if (stock == null || stock.getSymbol() == null || stock.getSymbol().isBlank()
-                    || !symbols.add(stock.getSymbol().trim().toUpperCase(java.util.Locale.ROOT))) {
+            if (stock == null || stock.getSymbol() == null || stock.getSymbol().isBlank()) {
                 return false;
+            }
+            String symbol = stock.getSymbol().trim().toUpperCase(java.util.Locale.ROOT);
+            var previous = uniqueMembers.putIfAbsent(symbol, stock);
+            if (previous != null) {
+                String previousIsin = previous.getIsin() == null ? "" : previous.getIsin().trim();
+                String currentIsin = stock.getIsin() == null ? "" : stock.getIsin().trim();
+                if (!previousIsin.isEmpty() && !currentIsin.isEmpty()
+                        && !previousIsin.equalsIgnoreCase(currentIsin)) {
+                    log.warn("hasUsableMembership", "Index " + indexData.getIndexSymbol()
+                            + " has conflicting identities for duplicate member " + symbol);
+                    return false;
+                }
+                if (previousIsin.isEmpty() && !currentIsin.isEmpty()) {
+                    uniqueMembers.put(symbol, stock);
+                }
+                log.warn("hasUsableMembership", "Ignoring duplicate member " + symbol
+                        + " in index " + indexData.getIndexSymbol());
             }
         }
         int minimum = minimumMembershipSize(indexData.getIndexSymbol());
-        return symbols.size() >= minimum;
+        if (uniqueMembers.size() < minimum) {
+            return false;
+        }
+        if (uniqueMembers.size() != indexData.getData().size()) {
+            // Return a normalized roster so duplicate rows do not become duplicate
+            // price requests or repeated cells in the heatmap.
+            indexData.setData(new ArrayList<>(uniqueMembers.values()));
+        }
+        return true;
+    }
+
+    private boolean isStandaloneIndex(String indexSymbol) {
+        return indexSymbol != null && "INDIA VIX".equalsIgnoreCase(indexSymbol.trim());
     }
 
     private int minimumMembershipSize(String indexName) {
@@ -504,7 +541,7 @@ public class StockIndicesService {
         for (String index : new HashSet<>(symbolsToProcess)) {
             String normalized = index == null ? "" : index.trim().toUpperCase(java.util.Locale.ROOT);
             // This repair source is NSE-specific. Do not pretend it can repair BSE/SENSEX.
-            if (normalized.isBlank() || !(normalized.startsWith("NIFTY") || normalized.equals("INDIA VIX"))) {
+            if (normalized.isBlank() || !normalized.startsWith("NIFTY")) {
                 log.warn(methodName, "No configured NSE roster repair path for index " + normalized);
                 continue;
             }

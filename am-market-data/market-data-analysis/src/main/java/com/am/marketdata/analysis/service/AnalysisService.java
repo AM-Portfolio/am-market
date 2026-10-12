@@ -667,13 +667,26 @@ public class AnalysisService {
                         (e1, e2) -> e1,
                         LinkedHashMap::new));
 
-        // Never persist a broken INDICES 1D map (all/mostly zeros) — that is what stuck the UI.
-        boolean incompleteCoverage = isConstituentIndex && sortedHeatmap.size() != symbols.size();
-        if (incompleteCoverage || isDegenerateIndicesHeatmap(tfNorm, sortedHeatmap)) {
-            log.warn("Skipping cache save for degenerate heatmap {} {} (zeros={}/{})",
+        // Validate the roster itself before using it as the coverage denominator. Then
+        // tolerate a small number of unavailable members so one missing candle does not
+        // force every Heatmap visit to repeat the same expensive batch query.
+        int minRequired = com.am.marketdata.common.util.IndexMembershipUtils.minimumMembershipSize(symbol);
+        boolean validRoster = !isConstituentIndex || symbols.size() >= minRequired;
+        int threshold = isConstituentIndex
+                ? Math.max(minRequired, (int) Math.ceil(symbols.size() * 0.85))
+                : 1;
+        boolean incompleteCoverage = isConstituentIndex && (!validRoster || sortedHeatmap.size() < threshold);
+        boolean degenerate = isDegenerateIndicesHeatmap(tfNorm, sortedHeatmap);
+        if (incompleteCoverage) {
+            // Keep a prior validated cache entry; a temporary source gap must not
+            // erase good data and cause every following request to recompute it.
+            log.warn("Skipping incomplete heatmap cache save {} {} (validRoster={}, values={}/{}, required={})",
+                    symbol, tfNorm, validRoster, sortedHeatmap.size(), symbols.size(), threshold);
+        } else if (degenerate) {
+            log.warn("Skipping cache save for degenerate heatmap {} {} (zeros={}/{}, count={}/{})",
                     symbol, tfNorm,
                     sortedHeatmap.values().stream().filter(v -> v != null && Math.abs(v) < 1e-9).count(),
-                    sortedHeatmap.size());
+                    sortedHeatmap.size(), sortedHeatmap.size(), symbols.size());
             analysisRedisCache.deleteIndexHeatmap(symbol, tfNorm);
         } else {
             analysisRedisCache.saveIndexHeatmap(symbol, tfNorm, sortedHeatmap);

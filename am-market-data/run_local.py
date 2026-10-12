@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -17,5 +18,14 @@ if env_file.exists():
 if 'REDIS_FORCE_ENABLED' not in env:
     env['REDIS_FORCE_ENABLED'] = 'true'
 
-cwd = str(ROOT)
-subprocess.run(['mvn.cmd', '-o', '-pl', 'market-data-app', 'spring-boot:run'], cwd=cwd, env=env)
+wrapper = ROOT / ('mvnw.cmd' if os.name == 'nt' else 'mvnw')
+maven = str(wrapper) if wrapper.exists() else (shutil.which('mvn') or shutil.which('mvn.cmd'))
+if not maven:
+    raise SystemExit('Maven was not found. Install Maven or add the Maven wrapper to this repository.')
+
+command = [maven, '-pl', 'market-data-app', 'spring-boot:run']
+if env.get('AM_MAVEN_OFFLINE', '').strip().lower() in {'1', 'true', 'yes'}:
+    command.insert(1, '-o')
+
+result = subprocess.run(command, cwd=str(ROOT), env=env)
+raise SystemExit(result.returncode)

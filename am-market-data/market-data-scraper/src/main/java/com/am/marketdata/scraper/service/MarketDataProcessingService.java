@@ -35,8 +35,10 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -388,22 +390,37 @@ public class MarketDataProcessingService {
 
         // Validate minimum constituent counts to prevent storing truncated scrapes
         String indexName = response.getName() != null ? response.getName().trim().toUpperCase() : "";
-        int count = response.getData().size();
-
-        // A scrape with enough rows can still be truncated or malformed if it
-        // contains blanks or duplicate tickers. Reject it before it replaces the
-        // saved roster used by Heatmap and Top Movers.
-        Set<String> uniqueSymbols = new HashSet<>();
+        // Duplicate rows can appear in an upstream response. Remove exact ticker
+        // duplicates, but reject the snapshot if one ticker points to two identities.
+        int receivedCount = response.getData().size();
+        Map<String, NSEStockInsidicesData.StockData> uniqueMembers = new LinkedHashMap<>();
         for (NSEStockInsidicesData.StockData stock : response.getData()) {
             if (stock == null || stock.getSymbol() == null || stock.getSymbol().isBlank()) {
                 log.warn("Stock indices response for {} contains a blank member. Rejecting.", indexName);
                 return false;
             }
             String symbol = stock.getSymbol().trim().toUpperCase(Locale.ROOT);
-            if (!uniqueSymbols.add(symbol)) {
-                log.warn("Stock indices response for {} contains duplicate member {}. Rejecting.", indexName, symbol);
-                return false;
+            NSEStockInsidicesData.StockData existing = uniqueMembers.putIfAbsent(symbol, stock);
+            if (existing != null) {
+                String existingIdentity = stockIdentity(existing);
+                String incomingIdentity = stockIdentity(stock);
+                if (!existingIdentity.isBlank() && !incomingIdentity.isBlank()
+                        && !existingIdentity.equalsIgnoreCase(incomingIdentity)) {
+                    log.warn("Stock indices response for {} maps duplicate member {} to conflicting identities. Rejecting.",
+                            indexName, symbol);
+                    return false;
+                }
+                if (existingIdentity.isBlank() && !incomingIdentity.isBlank()) {
+                    uniqueMembers.put(symbol, stock);
+                }
+                log.warn("Stock indices response for {} contains duplicate member {}; keeping one row.", indexName, symbol);
             }
+        }
+        int count = uniqueMembers.size();
+        if (count != receivedCount) {
+            response.setData(new ArrayList<>(uniqueMembers.values()));
+            log.info("Normalized stock indices response for {} from {} rows to {} unique members",
+                    indexName, receivedCount, count);
         }
         int minimumMembers = com.am.marketdata.common.util.IndexMembershipUtils.minimumMembershipSize(indexName);
         if (count < minimumMembers) {
@@ -441,6 +458,14 @@ public class MarketDataProcessingService {
         }
 
         return true;
+    }
+
+    private String stockIdentity(NSEStockInsidicesData.StockData stock) {
+        if (stock.getMeta() != null && stock.getMeta().getIsin() != null
+                && !stock.getMeta().getIsin().isBlank()) {
+            return stock.getMeta().getIsin().trim().toUpperCase(Locale.ROOT);
+        }
+        return stock.getIdentifier() == null ? "" : stock.getIdentifier().trim().toUpperCase(Locale.ROOT);
     }
 
     private void processAndSendStockIndicesData(NSEStockInsidicesData stockIndicesResponse) {

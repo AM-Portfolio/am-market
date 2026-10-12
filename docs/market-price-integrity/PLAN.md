@@ -1009,6 +1009,10 @@ This addendum is part of the price-integrity work and introduces no UI response-
 later send the explicit symbol-type flag as defence in depth, but it is not required for the backend correction.
 # Movers and heatmap cache reliability - API-safe implementation plan
 
+## PR #64 review follow-up
+
+The PR review confirmed that shared numeric index-size validation, environment-only seeder credentials, seeder price preservation, date-aware previous-close selection, and repository-relative runner paths are already present. Remaining work is limited to standalone-index membership handling, safe duplicate normalization, heatmap cache coverage, unchanged snapshot acceptance, overlapping cross-pod mover recovery, seeder feed drift, local-runner portability, Influx configuration clarity, and managed admin task execution. Public API response shapes remain unchanged. No production data or cluster changes are part of this work.
+
 ## Purpose and evidence
 
 This plan fixes two related failures without changing the public Market UI contract:

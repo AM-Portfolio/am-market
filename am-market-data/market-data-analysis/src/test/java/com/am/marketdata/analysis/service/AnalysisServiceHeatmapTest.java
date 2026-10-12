@@ -12,7 +12,10 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
@@ -65,6 +68,55 @@ class AnalysisServiceHeatmapTest {
 
         assertFalse(result.containsKey("ABC"));
         verify(analysisRedisCache, never()).saveIndexHeatmap(eq("NIFTY TEST"), eq("1D"), anyMap());
+    }
+
+    @Test
+    void cachesHeatmapWhenOneMemberHasNoHistoryButCoverageIsAboveThreshold() {
+        MarketDataService marketDataService = mock(MarketDataService.class);
+        AnalysisRedisCache analysisRedisCache = mock(AnalysisRedisCache.class);
+        AnalysisService service = new AnalysisService(marketDataService, analysisRedisCache);
+        LocalDate today = LocalDate.now();
+        List<String> roster = List.of("A", "B", "C", "D", "E", "F", "G", "H", "I", "J");
+        Map<String, HistoricalData> history = new LinkedHashMap<>();
+        for (String symbol : roster.subList(0, 9)) {
+            history.put(symbol, HistoricalData.builder()
+                    .dataPoints(List.of(point(today.minusDays(1), 100.0), point(today, 101.0)))
+                    .build());
+        }
+        when(analysisRedisCache.getIndexHeatmap("NIFTY IT", "1D")).thenReturn(null);
+        when(marketDataService.getIndexConstituents("NIFTY IT")).thenReturn(roster);
+        when(marketDataService.getHistoricalDataBatch(anyList(), any(), any(), any(), anyBoolean(),
+                any(), any(), anyBoolean(), anyBoolean(), anyBoolean())).thenReturn(history);
+
+        Map<String, Double> result = service.getHeatmap("NIFTY IT", "1D", true);
+
+        assertEquals(9, result.size());
+        verify(analysisRedisCache).saveIndexHeatmap(eq("NIFTY IT"), eq("1D"), anyMap());
+        verify(analysisRedisCache, never()).deleteIndexHeatmap("NIFTY IT", "1D");
+    }
+
+    @Test
+    void doesNotCacheHeatmapFromAnUndersizedRosterOrDeleteAValidatedCache() {
+        MarketDataService marketDataService = mock(MarketDataService.class);
+        AnalysisRedisCache analysisRedisCache = mock(AnalysisRedisCache.class);
+        AnalysisService service = new AnalysisService(marketDataService, analysisRedisCache);
+        LocalDate today = LocalDate.now();
+        List<String> roster = List.of("A", "B", "C", "D", "E", "F", "G");
+        Map<String, HistoricalData> history = new LinkedHashMap<>();
+        for (String symbol : roster) {
+            history.put(symbol, HistoricalData.builder()
+                    .dataPoints(List.of(point(today.minusDays(1), 100.0), point(today, 101.0)))
+                    .build());
+        }
+        when(marketDataService.getIndexConstituents("NIFTY IT")).thenReturn(roster);
+        when(marketDataService.getHistoricalDataBatch(anyList(), any(), any(), any(), anyBoolean(),
+                any(), any(), anyBoolean(), anyBoolean(), anyBoolean())).thenReturn(history);
+
+        Map<String, Double> result = service.getHeatmap("NIFTY IT", "1D", true);
+
+        assertEquals(7, result.size());
+        verify(analysisRedisCache, never()).saveIndexHeatmap(eq("NIFTY IT"), eq("1D"), anyMap());
+        verify(analysisRedisCache, never()).deleteIndexHeatmap("NIFTY IT", "1D");
     }
 
     private static OHLCVTPoint point(LocalDate date, double close) {

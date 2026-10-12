@@ -104,7 +104,7 @@ class SmartStockPreviousCloseSnapshotTest {
     }
 
     @Test
-    void verifiesSnapshotThatMatchesLastPriceAgainstHistory() {
+    void acceptsCurrentSessionSnapshotWhenStockIsUnchanged() {
         LocalDate sessionDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
         when(marketCalendarService.getTimings("NSE", sessionDate)).thenReturn(openSession(sessionDate));
         when(marketDataService.getOHLC(eq(List.of("TCS")), eq(TimeFrame.DAY), eq(false), isNull(), eq(false)))
@@ -116,22 +116,12 @@ class SmartStockPreviousCloseSnapshotTest {
                         .tradeDate(sessionDate.toString())
                         .build()));
 
-        HistoricalData history = HistoricalData.builder()
-                .dataPoints(List.of(
-                        candle(sessionDate.minusDays(2), 2460.0),
-                        candle(sessionDate.minusDays(1), 2500.0)))
-                .build();
-        when(marketDataService.getHistoricalDataBatch(
-                eq(List.of("TCS")), any(Date.class), any(Date.class), eq(TimeFrame.DAY),
-                eq(false), isNull(), isNull(), eq(false), eq(false), eq(false)))
-                .thenReturn(Map.of("TCS", history));
-
         Map<String, OHLCQuote> result = smartStockService.getSmartQuotes(List.of("TCS"), TimeFrame.DAY);
 
         assertEquals(2500.0, result.get("TCS").getPreviousClose(), 0.001);
-        verify(marketDataService).getHistoricalDataBatch(
-                eq(List.of("TCS")), any(Date.class), any(Date.class), eq(TimeFrame.DAY),
-                eq(false), isNull(), isNull(), eq(false), eq(false), eq(false));
+        verify(marketDataService, never()).getHistoricalDataBatch(
+                anyList(), any(Date.class), any(Date.class), any(), anyBoolean(), any(), any(),
+                anyBoolean(), anyBoolean(), anyBoolean());
     }
 
     private static OHLCQuote quote(double lastPrice, double previousClose) {

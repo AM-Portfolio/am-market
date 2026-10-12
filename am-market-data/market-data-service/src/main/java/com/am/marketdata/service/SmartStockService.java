@@ -31,8 +31,17 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SmartStockService {
 
-    private static final DefaultRedisScript<Long> RELEASE_REFRESH_LOCK = new DefaultRedisScript<>(
-            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+    private static final DefaultRedisScript<List> ACQUIRE_REFRESH_LOCKS = new DefaultRedisScript<>(
+            "local acquired = {} "
+                    + "for i, key in ipairs(KEYS) do "
+                    + "if redis.call('set', key, ARGV[1], 'NX', 'EX', ARGV[2]) then "
+                    + "table.insert(acquired, i) end end return acquired",
+            List.class);
+    private static final DefaultRedisScript<Long> RELEASE_REFRESH_LOCKS = new DefaultRedisScript<>(
+            "local released = 0 "
+                    + "for _, key in ipairs(KEYS) do "
+                    + "if redis.call('get', key) == ARGV[1] then "
+                    + "released = released + redis.call('del', key) end end return released",
             Long.class);
 
     private final AppLogger log = AppLogger.getLogger(SmartStockService.class);
@@ -413,33 +422,74 @@ public class SmartStockService {
             return;
         }
 
-        String lockKey = "market:movers:refresh:" + hashSymbols(missingSymbols);
         String ownerToken = UUID.randomUUID().toString();
-        boolean lockAcquired;
+        List<InstrumentIdentity> orderedIdentities = missingIdentities.stream()
+                .filter(identity -> identity != null && !identity.symbol().isBlank())
+                .collect(Collectors.toMap(
+                        identity -> identity.exchange() + "|" + identity.symbol(),
+                        identity -> identity,
+                        (first, ignored) -> first,
+                        LinkedHashMap::new))
+                .values().stream()
+                .sorted(Comparator.comparing(InstrumentIdentity::exchange).thenComparing(InstrumentIdentity::symbol))
+                .toList();
+        List<String> lockKeys = orderedIdentities.stream().map(this::refreshLockKey).toList();
+        List<?> acquiredIndexes;
         try {
-            lockAcquired = Boolean.TRUE.equals(stringRedisTemplate.opsForValue()
-                    .setIfAbsent(lockKey, ownerToken, Duration.ofSeconds(Math.max(5, refreshLockTtlSeconds))));
+            // One Redis script claims all free per-instrument leases atomically.
+            // Overlapping requests can fetch their disjoint remainder without
+            // duplicating work for members another pod is already recovering.
+            acquiredIndexes = stringRedisTemplate.execute(
+                    ACQUIRE_REFRESH_LOCKS,
+                    lockKeys,
+                    ownerToken,
+                    String.valueOf(Math.max(5, refreshLockTtlSeconds)));
         } catch (Exception e) {
             // Fail closed: a Redis outage must not turn every app pod into a provider caller.
-            log.warn("getSmartQuotes", "Could not acquire shared quote-recovery lease; skipping provider batch", e);
+            log.warn("getSmartQuotes", "Could not acquire shared per-symbol quote leases; skipping provider batch", e);
             return;
         }
 
-        if (!lockAcquired) {
-            waitForSharedQuoteRecovery(missingSymbols, quotes);
+        Set<Integer> ownedIndexes = new HashSet<>();
+        if (acquiredIndexes != null) {
+            for (Object index : acquiredIndexes) {
+                try {
+                    ownedIndexes.add(Integer.parseInt(index.toString()) - 1);
+                } catch (NumberFormatException ignored) {
+                    log.warn("getSmartQuotes", "Redis returned an invalid quote lease index; skipping that lease result");
+                }
+            }
+        }
+
+        List<InstrumentIdentity> ownedIdentities = new ArrayList<>();
+        List<String> ownedLockKeys = new ArrayList<>();
+        Set<String> waitingSymbols = new LinkedHashSet<>();
+        for (int i = 0; i < orderedIdentities.size(); i++) {
+            if (ownedIndexes.contains(i)) {
+                ownedIdentities.add(orderedIdentities.get(i));
+                ownedLockKeys.add(lockKeys.get(i));
+            } else {
+                waitingSymbols.add(orderedIdentities.get(i).symbol());
+            }
+        }
+
+        if (ownedIdentities.isEmpty()) {
+            waitForSharedQuoteRecovery(waitingSymbols, quotes);
             return;
         }
 
         try {
             Map<String, OHLCQuote> recoveredQuotes = marketDataService.getOHLCForIdentities(
-                    missingIdentities, null);
+                    ownedIdentities, null);
             if (recoveredQuotes == null || recoveredQuotes.isEmpty()) {
-                log.warn("getSmartQuotes", "Batched OHLC recovery returned no quotes for {} requested symbols",
-                        missingSymbols.size());
+                log.warn("getSmartQuotes", "Batched OHLC recovery returned no quotes for {} leased symbols",
+                        ownedIdentities.size());
                 return;
             }
 
             int recoveredCount = 0;
+            Set<String> ownedSymbols = ownedIdentities.stream().map(InstrumentIdentity::symbol)
+                    .collect(Collectors.toSet());
             for (Map.Entry<String, OHLCQuote> entry : recoveredQuotes.entrySet()) {
                 OHLCQuote quote = entry.getValue();
                 if (quote == null || entry.getKey() == null || !Double.isFinite(quote.getLastPrice())
@@ -447,7 +497,7 @@ public class SmartStockService {
                     continue;
                 }
                 String returnedSymbol = canonicalTradingSymbol(entry.getKey());
-                String requestedSymbol = missingSymbols.stream()
+                String requestedSymbol = ownedSymbols.stream()
                         .filter(symbol -> canonicalTradingSymbol(symbol).equals(returnedSymbol))
                         .findFirst()
                         .orElse(null);
@@ -465,17 +515,22 @@ public class SmartStockService {
                     marketDataCacheService.cacheLatestPrices(Map.of(requestedSymbol, quote));
                 }
             }
-            log.info("getSmartQuotes", "Batched OHLC recovery returned valid prices for {}/{} symbols",
-                    recoveredCount, missingSymbols.size());
+            log.info("getSmartQuotes", "Batched OHLC recovery returned valid prices for {}/{} leased symbols",
+                    recoveredCount, ownedIdentities.size());
         } catch (Exception e) {
-            log.warn("getSmartQuotes", "Batched OHLC recovery failed for {} symbols", missingSymbols.size(), e);
+            log.warn("getSmartQuotes", "Batched OHLC recovery failed for {} leased symbols",
+                    ownedIdentities.size(), e);
         } finally {
             try {
-                stringRedisTemplate.execute(RELEASE_REFRESH_LOCK, List.of(lockKey), ownerToken);
+                stringRedisTemplate.execute(RELEASE_REFRESH_LOCKS, ownedLockKeys, ownerToken);
             } catch (Exception e) {
                 // The lease still expires automatically; never delete another pod's lease.
-                log.warn("getSmartQuotes", "Could not release owned quote-recovery lease; it will expire by TTL");
+                log.warn("getSmartQuotes", "Could not release owned quote-recovery leases; they will expire by TTL");
             }
+        }
+
+        if (!waitingSymbols.isEmpty()) {
+            waitForSharedQuoteRecovery(waitingSymbols, quotes);
         }
     }
 
@@ -511,16 +566,12 @@ public class SmartStockService {
                 symbols.size());
     }
 
-    private String hashSymbols(Set<String> symbols) {
-        String normalized = symbols.stream()
-                .map(this::canonicalTradingSymbol)
-                .filter(symbol -> !symbol.isBlank())
-                .sorted()
-                .collect(Collectors.joining(","));
+    private String refreshLockKey(InstrumentIdentity identity) {
+        String normalized = identity.exchange() + "|" + canonicalTradingSymbol(identity.symbol());
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(normalized.getBytes(StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(digest, 0, 12);
+            return "market:movers:refresh:" + java.util.HexFormat.of().formatHex(digest, 0, 12);
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is unavailable", e);
         }
@@ -606,8 +657,9 @@ public class SmartStockService {
                         if (needsPreviousClose(quote)) {
                             String clean = canonicalTradingSymbol(symbol);
                             Double prevClose = closeMap.get(clean);
-                            if (prevClose != null && prevClose > 0
-                                    && Double.compare(prevClose, quote.getLastPrice()) != 0) {
+                            // The snapshot trade date is the evidence that this is the
+                            // right session baseline; equality with LTP is a valid flat day.
+                            if (prevClose != null && Double.isFinite(prevClose) && prevClose > 0) {
                                 quote.setPreviousClose(prevClose);
                                 try {
                                     if (marketDataCacheService != null && quote.getLastPrice() > 0) {

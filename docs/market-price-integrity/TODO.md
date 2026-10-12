@@ -98,3 +98,21 @@
 - [ ] Enforce Redis (<=500), Mongo (100-250), and Influx (<=50, max two concurrent) micro-chunks with partial-chunk handling.
 - [ ] Prove cache hits make zero synchronous Redis writes and broad-index Heatmap requests make zero synchronous historical-provider calls.
 - [ ] Record a preprod latency histogram and approve the measured release budget before production rollout.
+
+## PR #64 review follow-ups
+
+- [x] Keep the shared index-size matcher; verify 150/250/500 boundary tests.
+- [x] Keep the seeder environment-only Mongo connection and preserve prices during roster updates.
+- [x] Keep date-aware previous-close selection when today's candle is absent.
+- [x] Preserve standalone index documents such as INDIA VIX without scheduling constituent repairs.
+- [x] Deduplicate identical index members, but reject conflicting duplicate identities.
+- [x] Cache valid partial heatmaps only when both the roster and result meet explicit coverage thresholds; preserve the last valid cache on an incomplete refresh.
+- [x] Trust a same-session previous-close snapshot even when the stock is unchanged.
+- [x] Coalesce overlapping mover recovery across pods with owner-token per-instrument leases and bounded waits.
+- [ ] Replace derived-index ticker sets with validated official feeds after confirming feed shape and minimum counts.
+- [x] Make the local runner portable and make offline Maven mode opt-in.
+- [x] Use a clear empty Influx URL default while retaining fail-fast validation when required configuration is absent.
+- [x] Run admin background work on a bounded Spring-managed executor and keep the existing endpoint response contract.
+- [x] Add focused regression tests for VIX, duplicate roster entries, partial heatmap cache behavior, and unchanged snapshots.
+- [ ] Add a Redis-backed concurrency regression test for overlapping quote recovery.
+- [ ] Run focused module tests when the private Spring Boot dependency metadata is available locally.
