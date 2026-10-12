@@ -115,6 +115,9 @@ class MemorySnapshotCache:
         del ttl_seconds
         self.holdings[key] = payload
 
+    async def clear_holdings(self) -> None:
+        self.holdings.clear()
+
     async def affairs_age_seconds(self) -> int | None:
         if self._affairs_at is None:
             return None
@@ -143,6 +146,10 @@ class MemoryFeedLock:
         self.held = False
 
 
+class MemorySymbolsLock(MemoryFeedLock):
+    """Separate lock for holdings-symbol ingest (does not block NIFTY feed)."""
+
+
 class MemoryFeedStateStore:
     def __init__(self) -> None:
         self.state = FeedState()
@@ -163,9 +170,23 @@ class MemoryResolver:
                 instrument_key="NSE_EQ|INE002A01018",
             ),
         )
+        self.by_symbol = {item.symbol.upper(): item for item in self.instruments}
 
     async def resolve_nifty50(self) -> tuple[Instrument, ...]:
         return self.instruments
+
+    async def resolve_symbols(self, symbols: list[str]) -> tuple[Instrument, ...]:
+        out: list[Instrument] = []
+        seen: set[str] = set()
+        for raw in symbols:
+            symbol = raw.strip().upper()
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            match = self.by_symbol.get(symbol)
+            if match is not None:
+                out.append(match)
+        return tuple(out)
 
 
 class CountingFetch:
@@ -188,6 +209,8 @@ def holdings_cache_key(symbols: tuple[str, ...]) -> str:
 AFFAIRS_KEY = "news:affairs:v1"
 TOKEN_KEY = "market_data:upstox:access_token"
 LOCK_KEY = "news:feed:lock"
+SYMBOLS_LOCK_KEY = "news:feed:symbols:lock"
+HOLDINGS_KEY_PREFIX = "news:holdings:v1:"
 
 
 def normalize_symbols(symbols: list[str], cap: int | None = None) -> tuple[str, ...]:

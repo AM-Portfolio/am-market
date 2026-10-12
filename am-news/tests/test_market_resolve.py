@@ -58,3 +58,45 @@ def test_resolve_sends_bearer_when_jwt_secret_set():
     resolved = asyncio.run(_run())
     assert str(captured["headers"]["Authorization"]).startswith("Bearer ")
     assert any(item.symbol == "RELIANCE" for item in resolved)
+
+
+def test_resolve_symbols_queries_requested_only():
+    captured: dict[str, object] = {}
+
+    class _Resp:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "results": [
+                    {
+                        "query": "IDEA",
+                        "matches": [
+                            {
+                                "symbol": "IDEA",
+                                "isin": "INE669E01016",
+                                "instrumentKey": "NSE_EQ|INE669E01016",
+                            }
+                        ],
+                    }
+                ]
+            }
+
+    async def _post(url, json=None, headers=None):
+        captured["json"] = json
+        return _Resp()
+
+    client = MagicMock()
+    client.post = AsyncMock(side_effect=_post)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+
+    async def _run():
+        with patch("am_news.adapters.market_data.httpx.AsyncClient", return_value=client):
+            return await MarketDataInstrumentResolver().resolve_symbols(["idea", "IDEA"])
+
+    resolved = asyncio.run(_run())
+    assert captured["json"]["queries"] == ["IDEA"]
+    assert len(resolved) == 1
+    assert resolved[0].symbol == "IDEA"

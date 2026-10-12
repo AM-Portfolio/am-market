@@ -129,6 +129,13 @@ def _claims_verified(token: str) -> dict:
     except InvalidTokenError:
         _unauthorized()
         raise AssertionError
+    except Exception as exc:
+        msg = str(exc).lower()
+        if any(token in msg for token in ("jwks", "connection", "timed out", "timeout", "unreachable")):
+            _oidc_unavailable()
+            raise AssertionError
+        _unauthorized()
+        raise AssertionError
     issuer = claims.get("iss")
     if not _issuer_matches(str(issuer) if issuer else None, settings.oidc_issuer):
         _unauthorized()

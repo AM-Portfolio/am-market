@@ -45,3 +45,25 @@ def test_user_jwt_cannot_read_feed(anon_client):
 def test_health_public(anon_client):
     assert anon_client.get("/health").status_code == 200
     assert anon_client.get("/ready").status_code == 200
+
+
+def test_unhandled_maps_jwks_to_503():
+    from am_news.main import _auth_failure_response
+
+    class PyJWKClientConnectionError(Exception):
+        pass
+
+    resp = _auth_failure_response(PyJWKClientConnectionError("jwks down"))
+    assert resp is not None
+    assert resp.status_code == 503
+
+
+def test_unhandled_maps_unauthorized_name_to_401():
+    from am_news.main import _auth_failure_response
+
+    class UnauthorizedError(Exception):
+        pass
+
+    resp = _auth_failure_response(UnauthorizedError("not authenticated"))
+    assert resp is not None
+    assert resp.status_code == 401

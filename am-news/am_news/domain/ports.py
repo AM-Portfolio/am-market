@@ -57,6 +57,9 @@ class SnapshotCache(Protocol):
     async def set_holdings(self, key: str, payload: dict[str, Any], ttl_seconds: int) -> None:
         ...
 
+    async def clear_holdings(self) -> None:
+        ...
+
     async def affairs_age_seconds(self) -> int | None:
         ...
 
@@ -76,6 +79,9 @@ class FeedLock(Protocol):
 
 class InstrumentResolver(Protocol):
     async def resolve_nifty50(self) -> tuple[Instrument, ...]:
+        ...
+
+    async def resolve_symbols(self, symbols: list[str]) -> tuple[Instrument, ...]:
         ...
 
 

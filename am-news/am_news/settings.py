@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     redis_hostname: str = ""
     redis_port: int = 6379
     redis_password: str = ""
+    redis_username: str = ""
     market_data_url: str = "http://am-market-data:8080"
     news_sync_enabled: bool = False
     news_docs_enabled: bool = True

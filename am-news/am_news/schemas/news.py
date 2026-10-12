@@ -34,6 +34,12 @@ class InsightRequest(BaseModel):
 class InsightResponse(BaseModel):
     current_affairs: list[NewsCard] = Field(default_factory=list)
     holdings: list[NewsCard] = Field(default_factory=list)
+    pending_ingest: bool = False
+    missing_symbols: list[str] = Field(default_factory=list)
+
+
+class SymbolsIngestRequest(BaseModel):
+    symbols: list[str] = Field(default_factory=list, examples=[["IDEA", "PWL"]])
 
 
 class HoldingsNewsResponse(BaseModel):

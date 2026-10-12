@@ -28,6 +28,9 @@ async def post_insight(
     container=Depends(get_container),
 ) -> InsightResponse:
     response.headers["Cache-Control"] = "private, max-age=30"
-    return await GetInsight(container.snapshots, container.articles, NIFTY50_SYMBOLS).execute(
-        body.symbols, include_affairs=True
-    )
+    return await GetInsight(
+        container.snapshots,
+        container.articles,
+        NIFTY50_SYMBOLS,
+        container=container,
+    ).execute(body.symbols, include_affairs=True)

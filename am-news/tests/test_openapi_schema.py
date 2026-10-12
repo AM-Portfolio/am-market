@@ -19,6 +19,7 @@ OPERATION_IDS = {
     "postInsight",
     "getHoldings",
     "startFeed",
+    "ingestSymbols",
 }
 
 

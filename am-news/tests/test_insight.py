@@ -11,6 +11,8 @@ def test_empty_insight_is_200(user_client):
     body = response.json()
     assert body["current_affairs"] == []
     assert body["holdings"] == []
+    assert body.get("pending_ingest") is False
+    assert body.get("missing_symbols") == []
     assert response.headers["cache-control"] == "private, max-age=30"
 
 
@@ -123,3 +125,78 @@ def test_process_refreshes_affairs(container):
     cached = asyncio.run(container.snapshots.get_affairs())
     assert cached is not None
     assert cached["items"][0]["heading"] == "Nifty wrap"
+
+
+def test_process_warm_affairs_false_skips_snapshot(container):
+    import asyncio
+
+    body = {
+        "status": "success",
+        "data": {
+            "NSE_EQ|INE002A01018": [
+                {
+                    "heading": "Holdings only",
+                    "article_link": "https://x/h",
+                    "published_time": 1788585096693,
+                    "summary": "s",
+                    "thumbnail": None,
+                }
+            ]
+        },
+    }
+    instruments = (Instrument(symbol="RELIANCE", isin="INE002A01018", instrument_key="NSE_EQ|INE002A01018"),)
+    asyncio.run(
+        ProcessRaw(container.parse, container.articles, container.snapshots, NIFTY50_SYMBOLS).execute(
+            body, instruments, warm_affairs=False
+        )
+    )
+    assert asyncio.run(container.snapshots.get_affairs()) is None
+    assert container.articles._articles
+
+
+def test_pending_ingest_when_sync_enabled(user_client, container, monkeypatch):
+    monkeypatch.setattr("am_news.application.get_insight.settings.news_sync_enabled", True)
+    response = user_client.post("/v1/insight", json={"symbols": ["IDEA"]})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["holdings"] == []
+    assert body["pending_ingest"] is True
+    assert "IDEA" in body["missing_symbols"]
+
+
+def test_admin_ingest_symbols_no_affairs_warm(user_client, container):
+    from am_news.domain.entities import Instrument
+    from am_news.adapters.memory import MemoryResolver
+
+    container.resolver = MemoryResolver(
+        (
+            Instrument(symbol="IDEA", isin="INE669E01016", instrument_key="NSE_EQ|INE669E01016"),
+        )
+    )
+    # Point fixture key at IDEA for parse match — CountingFetch returns RELIANCE fixture;
+    # use a custom fetch body with IDEA key.
+    from am_news.adapters.memory import CountingFetch
+
+    body = {
+        "status": "success",
+        "data": {
+            "NSE_EQ|INE669E01016": [
+                {
+                    "heading": "Idea story",
+                    "article_link": "https://example.com/idea",
+                    "published_time": 1788585096693,
+                    "summary": "s",
+                    "thumbnail": None,
+                }
+            ]
+        },
+    }
+    container.fetch = CountingFetch(body)
+    response = user_client.post("/v1/admin/feed/symbols", json={"symbols": ["IDEA"]})
+    assert response.status_code == 202
+    assert response.json()["message"].startswith("completed")
+    assert container.snapshots.affairs is None
+    assert container.articles._articles
+    insight = user_client.post("/v1/insight", json={"symbols": ["IDEA"]})
+    assert insight.status_code == 200
+    assert any(item["heading"] == "Idea story" for item in insight.json()["holdings"])

@@ -92,8 +92,39 @@ async def http_error(_: Request, exc: HTTPException) -> JSONResponse:
     )
 
 
+def _auth_failure_response(exc: Exception) -> JSONResponse | None:
+    """Map platform-security / JWKS failures to 401/503 instead of opaque 500."""
+    name = type(exc).__name__.lower()
+    msg = str(exc).lower()
+    if any(token in name or token in msg for token in ("jwks", "pyjwkclientconnection")):
+        return JSONResponse(
+            status_code=503,
+            content=ErrorEnvelope(error_code="OIDC_UNAVAILABLE", message="JWKS unavailable").model_dump(),
+        )
+    auth_markers = (
+        "unauthorized",
+        "unauthenticated",
+        "invalid token",
+        "expired",
+        "jwt",
+        "bearer",
+        "not authenticated",
+        "authentication",
+        "credentials",
+    )
+    if any(token in name or token in msg for token in auth_markers):
+        return JSONResponse(
+            status_code=401,
+            content=ErrorEnvelope(error_code="UNAUTHORIZED", message="JWT required").model_dump(),
+        )
+    return None
+
+
 @app.exception_handler(Exception)
 async def unhandled(_: Request, exc: Exception) -> JSONResponse:
+    mapped = _auth_failure_response(exc)
+    if mapped is not None:
+        return mapped
     return JSONResponse(
         status_code=500,
         content=ErrorEnvelope(error_code="INTERNAL_SERVER_ERROR", message="unexpected").model_dump(),
