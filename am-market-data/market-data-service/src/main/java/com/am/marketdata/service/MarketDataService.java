@@ -22,6 +22,7 @@ import com.zerodhatech.models.LTPQuote;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -74,13 +75,14 @@ public class MarketDataService {
     private final MarketHoursService marketHoursService;
     private final MarketDataCacheService cacheService;
 
+    @Autowired
     public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
             MeterRegistry meterRegistry, InstrumentMapper instrumentMapper,
             MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
             MarketDataRetrievalUtil marketDataRetrievalUtil,
             java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
             com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
-            FlowLogger flowLogger,
+            java.util.Optional<FlowLogger> flowLogger,
             java.util.Optional<MarketHoursService> marketHoursService,
             @org.springframework.beans.factory.annotation.Qualifier("serviceModuleMarketDataCacheService") MarketDataCacheService cacheService) {
         this.providerFactory = providerFactory;
@@ -90,11 +92,25 @@ public class MarketDataService {
         this.genericMapper = genericMapper;
         this.persistenceService = persistenceService;
         this.marketDataRetrievalUtil = marketDataRetrievalUtil;
-        this.producer = producer.orElse(null);
+        this.producer = producer != null ? producer.orElse(null) : null;
         this.stockIndicesService = stockIndicesService;
-        this.flowLogger = flowLogger;
-        this.marketHoursService = marketHoursService.orElse(null);
+        this.flowLogger = flowLogger != null ? flowLogger.orElse(null) : null;
+        this.marketHoursService = marketHoursService != null ? marketHoursService.orElse(null) : null;
         this.cacheService = cacheService;
+    }
+
+    public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
+            MeterRegistry meterRegistry, InstrumentMapper instrumentMapper,
+            MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
+            MarketDataRetrievalUtil marketDataRetrievalUtil,
+            java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
+            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
+            FlowLogger flowLogger,
+            java.util.Optional<MarketHoursService> marketHoursService,
+            MarketDataCacheService cacheService) {
+        this(providerFactory, instrumentService, meterRegistry, instrumentMapper, genericMapper,
+             persistenceService, marketDataRetrievalUtil, producer, stockIndicesService,
+             java.util.Optional.ofNullable(flowLogger), marketHoursService, cacheService);
     }
 
     private String resolveProviderName(String providerName) {
@@ -196,8 +212,8 @@ public class MarketDataService {
         String tfValue = timeFrame != null ? timeFrame.getApiValue() : "default";
         Timer.Sample timer = Timer.start(meterRegistry);
         
-        try (FlowSpan span = flowLogger.start("service.market.ohlc", 
-                "symbolsCount", tradingSymbols.size(), "timeFrame", tfValue, "forceRefresh", forceRefresh)) {
+        try (FlowSpan span = flowLogger != null ? flowLogger.start("service.market.ohlc", 
+                "symbolsCount", tradingSymbols.size(), "timeFrame", tfValue, "forceRefresh", forceRefresh) : null) {
             try {
                 providerName = resolveProviderName(providerName);
 
@@ -210,12 +226,16 @@ public class MarketDataService {
                 }
 
                 meterRegistry.counter("market.data.success.count", "operation", "getOHLC", "timeFrame", tfValue).increment();
-                flowLogger.complete(span, "provider", providerName, "resultCount", result != null ? result.size() : 0);
+                if (flowLogger != null && span != null) {
+                    flowLogger.complete(span, "provider", providerName, "resultCount", result != null ? result.size() : 0);
+                }
                 return result;
             } catch (Exception e) {
                 log.error("Error getting OHLC data for symbolsCount={} timeFrame={}", tradingSymbols.size(), tfValue, e);
                 meterRegistry.counter("market.data.failure.count", "operation", "getOHLC", "timeFrame", tfValue).increment();
-                flowLogger.fail(span, e);
+                if (flowLogger != null && span != null) {
+                    flowLogger.fail(span, e);
+                }
                 throw new RuntimeException("Failed to get OHLC data for timeFrame " + tfValue, e);
             } finally {
                 timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getOHLC", "timeFrame", tfValue));
@@ -369,8 +389,8 @@ public class MarketDataService {
         Timer.Sample timer = Timer.start(meterRegistry);
         String tfValue = interval != null ? interval.getApiValue() : "null";
         
-        try (FlowSpan span = flowLogger.start("service.market.historical.batch", 
-                "symbolsCount", symbols.size(), "interval", tfValue, "forceRefresh", forceRefresh)) {
+        try (FlowSpan span = flowLogger != null ? flowLogger.start("service.market.historical.batch", 
+                "symbolsCount", symbols.size(), "interval", tfValue, "forceRefresh", forceRefresh) : null) {
             try {
                 providerName = resolveProviderName(providerName);
 
@@ -400,12 +420,16 @@ public class MarketDataService {
                         .sum();
 
                 meterRegistry.counter("market.data.success.count", "operation", "getHistoricalDataBatch", "timeFrame", tfValue).increment();
-                flowLogger.complete(span, "provider", providerName, "resultCount", result.size(), "totalPoints", totalDataPoints);
+                if (flowLogger != null && span != null) {
+                    flowLogger.complete(span, "provider", providerName, "resultCount", result.size(), "totalPoints", totalDataPoints);
+                }
                 return result;
             } catch (Exception e) {
                 log.error("Error getting batch historical data for symbolsCount={} interval={}", symbols.size(), tfValue, e);
                 meterRegistry.counter("market.data.failure.count", "operation", "getHistoricalDataBatch").increment();
-                flowLogger.fail(span, e);
+                if (flowLogger != null && span != null) {
+                    flowLogger.fail(span, e);
+                }
                 throw new RuntimeException("Failed to get batch historical data", e);
             } finally {
                 timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getHistoricalDataBatch",

@@ -9,16 +9,16 @@
 - [ ] Discovery gate: capture current endpoint contracts, cache schemas/keys, membership owner, provider limits, Influx mapping, and baseline request/latency/error metrics.
 - [x] Record the approved `1M` definition and exact broker fixture: as-of time, start session/value, end session/value, and expected percentage.
 - [x] Add focused backend regression tests for stale quote rejection, timeframe base selection, unchanged quotes, and zero/missing provider rows.
-- [ ] Implement idempotent symbol qualification and true Upstox instrument resolution.
-- [ ] Implement dated previous-close semantics and cache validation.
+- [x] Implement idempotent symbol qualification and true Upstox instrument resolution.
+- [x] Implement dated previous-close semantics and cache validation.
 - [x] Verify `getMoversUnified` enriches once and sorts the same snapshot for gainers and losers; preserve this path.
 - [x] Verify the Top Movers request can enter provider history fallback through the 9-argument overload, the existing batch LTP size is configured as 500, and current per-symbol coalescing is JVM-local.
 - [x] Make Top Movers history reads cache/database-only; recover current-price misses through the batched LTP path under an owner-token Redis lease.
 - [ ] Capture the preprod baseline discovery report for one 50-member index: canonical identity, requested session range, row count, newest row date, and rejection reason. Do not log secrets, prices, or raw Flux.
 - [ ] Add a date-bounded multi-symbol Influx historical query in the existing common persistence/service modules; do not reuse latest-only `findByTradingSymbolIn` as a previous-close source.
 - [ ] Replace `HistoricalDataRetriever`'s per-symbol database loop with the bounded historical batch path: 100 identities per chunk and at most two concurrent chunks.
-- [ ] Correct previous-close snapshot semantics to record quote session and base session separately; accept a verified unchanged (`0.00%`) stock.
-- [ ] Use verified roster membership, rather than index-name minimums, for all-index Movers coverage, including NIFTY BANK and NIFTY IT.
+- [x] Correct previous-close snapshot semantics to record quote session and base session separately; accept a verified unchanged (`0.00%`) stock.
+- [x] Use verified roster membership, rather than index-name minimums, for all-index Movers coverage, including NIFTY BANK and NIFTY IT.
 - [ ] Seed streamer instrument-key-to-canonical-ticker mappings at subscribe time and reject ISIN-only cache keys for ticker lookups.
 - [ ] Add tests for 50-member no-N+1 retrieval, NIFTY 500 chunking, non-numeric sector rosters, identity mismatch, session/calendar boundaries, unchanged quotes, and partial chunk failure.
 - [ ] Preprod proof: trace a complete-index Movers request and verify bounded historical chunk count, non-zero valid bases, unchanged public JSON, and no request-time historical Upstox calls.
@@ -31,7 +31,7 @@
 - [x] Build streamer membership from configured broad/sector NSE indexes using one batch membership lookup; retain existing defaults, ETFs, and active-symbol behavior.
 - [x] Treat empty, duplicate, or undersized index documents as scraper-repair candidates; exclude them until a validated replacement is saved.
 - [ ] Verify sector membership shrink with a second scrape; report coverage because the NSE response model exposes no source total count.
-- [ ] Add cross-pod quote-refresh coalescing with owner-token Redis leases, bounded wait/timeout, cooldown, and fail-closed behavior when Redis coordination is unavailable.
+- [x] Add cross-pod quote-refresh coalescing with owner-token Redis leases, bounded wait/timeout, cooldown, and fail-closed behavior when Redis coordination is unavailable.
 - [ ] Track quote receipt time/source and upstream event time when supplied; prevent older ticks from overwriting newer cache values without changing public quote DTOs.
 - [x] Keep SENSEX out of complete Movers coverage until a validated BSE constituent source is available.
 - [x] Return existing empty `gainers`/`losers` arrays for an index when validated membership/quote/base coverage is incomplete; log structured counts without changing the response contract.
@@ -44,13 +44,13 @@
 - [ ] Add quote availability/freshness metadata while preserving existing quote fields and client compatibility.
 - [x] Update Paper Trading quote state: terminal unavailable/retry UI and block zero-price order calculations/submissions.
 - [ ] Add regression tests for live LTP, stale/zero cache value, disconnected subscription, after-hours close, and blocked zero-price order.
-- [ ] Repair and validate NIFTY 50 constituent ingestion.
-- [ ] Add reusable membership validation for null, duplicate, parent-index, and incomplete `data` arrays.
+- [x] Repair and validate NIFTY 50 constituent ingestion.
+- [x] Add reusable membership validation for null, duplicate, parent-index, and incomplete `data` arrays.
 - [ ] Route invalid index documents through the existing constituent scraper; retain the last valid `data` array when scrape validation fails.
 - [ ] Limit the Upstox EOD index refresh to metadata updates; it must not create/overwrite constituent lists.
-- [ ] Add member-count fixtures for NIFTY 50, NIFTY 100, NIFTY 200, and normalized NIFTY 500.
-- [ ] Change Heatmap and Movers to report unavailable price/history data instead of successful `0.00%` placeholders.
-- [ ] Reject degenerate all-zero heatmap cache writes for every constituent index.
+- [x] Add member-count fixtures for NIFTY 50, NIFTY 100, NIFTY 200, and normalized NIFTY 500.
+- [x] Change Heatmap and Movers to report unavailable price/history data instead of successful `0.00%` placeholders.
+- [x] Reject degenerate all-zero heatmap cache writes for every constituent index.
 - [ ] Preprod proof: membership recovery, metadata preservation, invalid Upstox key rejection, Influx failure handling, and partial Heatmap/Movers response.
 - [ ] Request explicit production approval before the one-time existing-scraper repair refresh.
 - [ ] Add membership version/hash and normalized added/removed-member audit logging.
@@ -116,3 +116,15 @@
 - [x] Add focused regression tests for VIX, duplicate roster entries, partial heatmap cache behavior, and unchanged snapshots.
 - [ ] Add a Redis-backed concurrency regression test for overlapping quote recovery.
 - [ ] Run focused module tests when the private Spring Boot dependency metadata is available locally.
+
+## Optional quote details and market depth
+
+- [ ] Inventory quote endpoint consumers and identify any strict JSON decoders before extending `/quotes`.
+- [ ] Add typed provider-neutral quote snapshot/depth DTOs and map available provider fields in each adapter.
+- [ ] Extend Redis real-time quote snapshot serialization/read paths to retain optional fields; preserve legacy cache entries without a flush.
+- [ ] Keep transient depth out of historical Influx candles and Mongo security documents unless a separate proven access pattern requires persistence.
+- [ ] Extend the quotes response additively with optional fields while preserving existing field names, types, and envelope; update OpenAPI and Postman.
+- [ ] Validate previous close/change against the same quote snapshot and market session; omit unsupported or inconsistent values.
+- [x] Apply one provider/cache depth freshness rule: allow up to 2 seconds of clock skew and omit missing or stale depth rather than representing it as zero.
+- [ ] Add adapter, Redis round-trip, API compatibility, legacy-cache, stale-depth, partial-provider, and multi-provider tests.
+- [ ] Verify Paper Trading consumes returned depth, then capture a preprod warm-cache and cold-cache trace before release.

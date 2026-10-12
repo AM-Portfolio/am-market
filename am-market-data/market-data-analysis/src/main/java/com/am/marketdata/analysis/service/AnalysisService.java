@@ -7,6 +7,7 @@ import com.am.marketdata.redis.cache.AnalysisRedisCache;
 import com.am.common.investment.model.historical.HistoricalData;
 import com.am.common.investment.model.historical.OHLCVTPoint;
 import com.am.marketdata.common.model.TimeFrame;
+import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.service.MarketDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -595,64 +596,94 @@ public class AnalysisService {
 
         boolean isIndexBatch = "INDICES".equalsIgnoreCase(symbol);
 
-        // 3. Fetch Data
-        Map<String, HistoricalData> batchData = marketDataService.getHistoricalDataBatch(
-                symbols,
-                java.sql.Date.valueOf(from.minusDays(10)), // Buffer
-                java.sql.Date.valueOf(to),
-                interval,
-                true,
-                null,
-                null,
-                isIndexBatch, // isIndex
-                bypassCache, // forceRefresh
-                // HTTP requests pass false and stay cache/database-only. The existing
-                // scheduler passes true, so it remains the asynchronous repair path.
-                bypassCache
-        );
-
-        // 4. Calculate Returns
+        // 3. Fetch Data & Calculate Returns
         Map<String, Double> heatmap = new HashMap<>();
 
-        // Target Date Logic
-        LocalDate targetStartDate = CalculateTargetDate(to, tfUpper);
-
-        for (String sym : symbols) {
-            HistoricalData hd = batchData.get(sym);
-            if (hd == null || hd.getDataPoints() == null || hd.getDataPoints().isEmpty()) {
-                log.warn("Skipping unavailable Heatmap point symbol={} timeframe={}", sym, tfNorm);
-                continue;
-            }
-
-            // Historical sources may expose immutable lists. Sort a local copy so
-            // calculating a Heatmap never mutates cached data or fails at runtime.
-            List<OHLCVTPoint> points = new ArrayList<>(hd.getDataPoints());
-            points.sort(Comparator.comparing(OHLCVTPoint::getTime));
-
-            // Find End Price (Latest)
-            OHLCVTPoint lastPoint = points.get(points.size() - 1);
-            Double endPrice = lastPoint.getClose();
-
-            // Find Start Price
-            // For 1D: Prev Close relative to Last Point
-            Double startPrice = null;
-
-            if (tfUpper.equals("1D")) {
-                // Find point before last point
-                if (points.size() >= 2) {
-                    startPrice = points.get(points.size() - 2).getClose();
+        if (tfUpper.equals("1D")) {
+            // For 1D timeframe: Use live session OHLC quotes directly via marketDataService.getOHLC.
+            // Historical candle lookups (InfluxDB) often do not have today's unclosed candle or may fail
+            // during active sessions, which previously resulted in empty data points and 0.00% across the board.
+            // Live OHLC quotes supply the exact session lastPrice and validated previousClose baseline,
+            // producing the true real-time percentage move: ((lastPrice - previousClose) / previousClose) * 100.
+            Map<String, OHLCQuote> dayQuotes = marketDataService.getOHLC(symbols, TimeFrame.DAY, bypassCache, null);
+            if (dayQuotes != null && !dayQuotes.isEmpty()) {
+                for (String sym : symbols) {
+                    OHLCQuote quote = dayQuotes.get(sym);
+                    if (quote == null && sym.contains(":")) {
+                        quote = dayQuotes.get(sym.substring(sym.indexOf(":") + 1));
+                    }
+                    if (quote == null) {
+                        quote = dayQuotes.get("NSE:" + sym);
+                    }
+                    if (quote != null && isValidPrice(quote.getLastPrice()) && isValidPrice(quote.getPreviousClose())) {
+                        double change = (quote.getLastPrice() - quote.getPreviousClose()) / quote.getPreviousClose() * 100.0;
+                        heatmap.put(sym, round2(change));
+                    }
                 }
-            } else {
-                // Find point closest to targetStartDate
-                startPrice = findClosestPrice(points, targetStartDate);
             }
+        }
 
-            if (isValidPrice(endPrice) && isValidPrice(startPrice)) {
-                double change = (endPrice - startPrice) / startPrice * 100.0;
-                heatmap.put(sym, round2(change));
-            } else {
-                log.warn("Skipping invalid Heatmap price symbol={} timeframe={} start={} end={}",
-                        sym, tfNorm, startPrice, endPrice);
+        // Recover only missing members so a partial live response does not force valid symbols
+        // through a slower history path or discard their current-session values.
+        Set<String> availableSymbols = new HashSet<>(heatmap.keySet());
+        List<String> symbolsNeedingHistory = symbols.stream()
+                .filter(candidate -> !availableSymbols.contains(candidate)).toList();
+        if (!symbolsNeedingHistory.isEmpty()) {
+            Map<String, HistoricalData> batchData = marketDataService.getHistoricalDataBatch(
+                    symbolsNeedingHistory,
+                    java.sql.Date.valueOf(from.minusDays(10)), // Buffer
+                    java.sql.Date.valueOf(to),
+                    interval,
+                    true,
+                    null,
+                    null,
+                    isIndexBatch, // isIndex
+                    bypassCache, // forceRefresh
+                    // HTTP requests pass false and stay cache/database-only. The existing
+                    // scheduler passes true, so it remains the asynchronous repair path.
+                    bypassCache
+            );
+
+            // Target Date Logic
+            LocalDate targetStartDate = CalculateTargetDate(to, tfUpper);
+
+            for (String sym : symbolsNeedingHistory) {
+                HistoricalData hd = batchData != null ? batchData.get(sym) : null;
+                if (hd == null || hd.getDataPoints() == null || hd.getDataPoints().isEmpty()) {
+                    log.warn("Skipping unavailable Heatmap point symbol={} timeframe={}", sym, tfNorm);
+                    continue;
+                }
+
+                // Historical sources may expose immutable lists. Sort a local copy so
+                // calculating a Heatmap never mutates cached data or fails at runtime.
+                List<OHLCVTPoint> points = new ArrayList<>(hd.getDataPoints());
+                points.sort(Comparator.comparing(OHLCVTPoint::getTime));
+
+                // Find End Price (Latest)
+                OHLCVTPoint lastPoint = points.get(points.size() - 1);
+                Double endPrice = lastPoint.getClose();
+
+                // Find Start Price
+                // For 1D: Prev Close relative to Last Point
+                Double startPrice = null;
+
+                if (tfUpper.equals("1D")) {
+                    // Find point before last point
+                    if (points.size() >= 2) {
+                        startPrice = points.get(points.size() - 2).getClose();
+                    }
+                } else {
+                    // Find point closest to targetStartDate
+                    startPrice = findClosestPrice(points, targetStartDate);
+                }
+
+                if (isValidPrice(endPrice) && isValidPrice(startPrice)) {
+                    double change = (endPrice - startPrice) / startPrice * 100.0;
+                    heatmap.put(sym, round2(change));
+                } else {
+                    log.warn("Skipping invalid Heatmap price symbol={} timeframe={} start={} end={}",
+                            sym, tfNorm, startPrice, endPrice);
+                }
             }
         }
 

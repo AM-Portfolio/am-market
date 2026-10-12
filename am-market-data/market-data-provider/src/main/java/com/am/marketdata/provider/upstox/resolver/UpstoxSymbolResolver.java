@@ -377,10 +377,32 @@ public class UpstoxSymbolResolver implements SymbolResolver {
      * Upstox hist SDK requires {@code SEGMENT|ISIN} keys. Dig/local docs sometimes store
      * bare tickers as instrument_key — rebuild from segment + ISIN when possible.
      */
+    private static final Map<String, String> STALE_ISIN_REMAP = Map.of(
+            "INE237A01028", "INE237A01036"
+    );
+
     private static com.am.marketdata.common.model.UpstoxInstrument normalizeInstrumentKey(
             com.am.marketdata.common.model.UpstoxInstrument inst) {
         if (inst == null) {
             return null;
+        }
+        if (inst.getIsin() != null && STALE_ISIN_REMAP.containsKey(inst.getIsin().trim().toUpperCase())) {
+            String activeIsin = STALE_ISIN_REMAP.get(inst.getIsin().trim().toUpperCase());
+            inst.setIsin(activeIsin);
+            if (inst.getInstrumentKey() != null && inst.getInstrumentKey().contains("|")) {
+                String seg = inst.getInstrumentKey().substring(0, inst.getInstrumentKey().indexOf('|'));
+                inst.setInstrumentKey(seg + "|" + activeIsin);
+            }
+        }
+        if (inst.getInstrumentKey() != null) {
+            for (Map.Entry<String, String> staleEntry : STALE_ISIN_REMAP.entrySet()) {
+                if (inst.getInstrumentKey().endsWith("|" + staleEntry.getKey())) {
+                    String seg = inst.getInstrumentKey().substring(0, inst.getInstrumentKey().indexOf('|'));
+                    inst.setInstrumentKey(seg + "|" + staleEntry.getValue());
+                    inst.setIsin(staleEntry.getValue());
+                    break;
+                }
+            }
         }
         String key = inst.getInstrumentKey();
         if (key != null && key.contains("|")) {

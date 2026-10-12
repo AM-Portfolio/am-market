@@ -85,9 +85,8 @@ public class OHLCMapper {
 
         double lastPrice = ohlcQuote.getLastPrice();
         double prevClose = ohlcQuote.getPreviousClose();
-        if (prevClose <= 0 && ohlcQuote.getOhlc() != null) {
-            prevClose = ohlcQuote.getOhlc().getClose();
-        }
+        // Today's candle close is not yesterday's close; leave daily change absent
+        // when the provider did not supply a valid previous-close baseline.
         double change = 0.0;
         double changePercent = 0.0;
         if (prevClose > 0) {

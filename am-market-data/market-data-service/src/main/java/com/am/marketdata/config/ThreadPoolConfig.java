@@ -5,16 +5,19 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.core.task.TaskDecorator;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Configuration for thread pools used in the application
  */
 @Configuration
-@RequiredArgsConstructor
 public class ThreadPoolConfig {
 
     private final TaskDecorator taskDecorator;
+
+    public ThreadPoolConfig(java.util.Optional<TaskDecorator> taskDecorator) {
+        this.taskDecorator = taskDecorator != null ? taskDecorator.orElse(null) : null;
+    }
 
     // Increased pool size from 5 to 15 to handle high-frequency streaming database/cache writes concurrently
     @Value("${market.data.persistence.thread.pool.size:15}")
@@ -37,7 +40,9 @@ public class ThreadPoolConfig {
         executor.setThreadNamePrefix("market-data-persistence-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
-        executor.setTaskDecorator(taskDecorator);
+        if (taskDecorator != null) {
+            executor.setTaskDecorator(taskDecorator);
+        }
         executor.initialize();
         return executor;
     }

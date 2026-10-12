@@ -3,6 +3,8 @@ package com.am.marketdata.provider.upstox;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.common.model.InstrumentIdentity;
+import com.am.marketdata.common.model.QuoteDepth;
+import com.am.marketdata.common.model.QuoteDepthLevel;
 import com.am.marketdata.provider.upstox.model.HistoricalDataResponse;
 import com.am.marketdata.provider.upstox.model.OHLCResponse;
 import com.marketdata.common.MarketDataProvider;
@@ -16,6 +18,9 @@ import com.zerodhatech.models.LTPQuote;
 import lombok.extern.slf4j.Slf4j;
 
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -196,6 +201,112 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 
                 log.info("getOHLC", String.format("Fetching OHLC batch: %d to %d", i, end));
 
+                // For daily timeframe (standard quotes, watchlist, movers, heatmap):
+                // Query Upstox /market-quote/quotes (via upstoxApiService.getLtp) which provides
+                // complete session quote snapshots in a single upstream call:
+                // - 'last_price': current traded price
+                // - 'net_change': session change (allowing dynamic derivation of previous_close)
+                // - 'ohlc': intraday open, high, low, close
+                // NOTE: Upstox /market-quote/ohlc returns 'prev_ohlc: null' during market hours and
+                // omits net_change, which previously caused previous_close to stay null/0.0.
+                if (timeFrame == null || timeFrame == TimeFrame.DAY) {
+                    try {
+                        com.am.marketdata.provider.upstox.model.MarketQuoteResponse apiQuotesResponse =
+                                upstoxApiService.getLtp(batchKeys);
+                        if (apiQuotesResponse != null && apiQuotesResponse.getData() != null && !apiQuotesResponse.getData().isEmpty()) {
+                            Set<String> returnedKeys = new HashSet<>();
+                            for (Map.Entry<String, com.am.marketdata.provider.upstox.model.common.StockQuote> qEntry : apiQuotesResponse.getData().entrySet()) {
+                                String instrumentKey = qEntry.getKey();
+                                com.am.marketdata.provider.upstox.model.common.StockQuote data = qEntry.getValue();
+                                if (data == null || data.getLastPrice() == null
+                                        || !Double.isFinite(data.getLastPrice()) || data.getLastPrice() <= 0.0) {
+                                    log.warn("getOHLC", "Ignoring unusable Upstox quote for instrumentKey={}", instrumentKey);
+                                    continue;
+                                }
+
+                                String normalizedKey = instrumentKey.replace(":", "|");
+                                String symbol = null;
+                                if (data.getInstrument_token() != null) {
+                                    symbol = context.getSymbol(data.getInstrument_token());
+                                }
+                                if (symbol == null) {
+                                    symbol = context.getSymbol(instrumentKey);
+                                }
+                                if (symbol == null) {
+                                    symbol = context.getSymbol(normalizedKey);
+                                }
+                                if (symbol == null && instrumentKey.contains(":")) {
+                                    symbol = context.getSymbol(instrumentKey.substring(instrumentKey.indexOf(":") + 1));
+                                }
+                                if (symbol == null) {
+                                    log.warn("getOHLC", "Upstox returned an instrument that could not be mapped to a requested symbol: {}", instrumentKey);
+                                    continue;
+                                }
+
+                                // Build unified OHLCQuote populated with session baseline:
+                                OHLCQuote quote = new OHLCQuote();
+                                quote.setLastPrice(data.getLastPrice());
+                                quote.setChange(finiteOrNull(data.getChange()));
+                                quote.setChangePercent(finiteOrNull(data.getChangePercent()));
+                                quote.setVolume(data.getVolume() != null && data.getVolume() >= 0 ? data.getVolume() : null);
+                                quote.setOi(data.getOi() != null && data.getOi() >= 0 ? data.getOi() : null);
+                                quote.setOiDayHigh(data.getOiDayHigh() != null && data.getOiDayHigh() >= 0
+                                        ? data.getOiDayHigh() : null);
+                                quote.setOiDayLow(data.getOiDayLow() != null && data.getOiDayLow() >= 0
+                                        ? data.getOiDayLow() : null);
+                                quote.setAveragePrice(finiteOrNull(data.getAveragePrice()));
+                                quote.setTotalBuyQuantity(finiteOrNull(data.getTotalBuyQuantity()));
+                                quote.setTotalSellQuantity(finiteOrNull(data.getTotalSellQuantity()));
+                                quote.setLowerCircuitLimit(finiteOrNull(data.getLowerCircuitLimit()));
+                                quote.setUpperCircuitLimit(finiteOrNull(data.getUpperCircuitLimit()));
+                                Instant quoteTime = resolveQuoteTimestamp(data);
+                                if (quoteTime != null) {
+                                    quote.setQuoteTimestamp(quoteTime);
+                                    quote.setQuoteTradeDate(quoteTime.atZone(ZoneId.of("Asia/Kolkata")).toLocalDate());
+                                }
+                                quote.setMarketDepth(toProviderNeutralDepth(data.getMarketDepth()));
+                                if (data.getOhlc() != null) {
+                                    OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
+                                    ohlc.setOpen(data.getOhlc().getOpen());
+                                    ohlc.setHigh(data.getOhlc().getHigh());
+                                    ohlc.setLow(data.getOhlc().getLow());
+                                    ohlc.setClose(data.getOhlc().getClose());
+                                    quote.setOhlc(ohlc);
+                                }
+                                // Use dynamically derived previousClose from data.getPreviousClose() (lastPrice - change)
+                                if (data.getPreviousClose() != null && data.getPreviousClose() > 0.0) {
+                                    quote.setPreviousClose(data.getPreviousClose());
+                                }
+                                result.put(symbol, quote);
+                                returnedKeys.add(normalizedKey);
+                                returnedKeys.add(instrumentKey);
+                                if (data.getInstrument_token() != null) {
+                                    returnedKeys.add(data.getInstrument_token().replace(":", "|"));
+                                }
+                                for (String bKey : batchKeys) {
+                                    String bSym = context.getSymbol(bKey);
+                                    if (symbol.equals(bSym)) {
+                                        returnedKeys.add(bKey.replace(":", "|"));
+                                    }
+                                }
+                            }
+
+                            List<String> missingKeys = batchKeys.stream()
+                                    .filter(key -> !returnedKeys.contains(key.replace(":", "|")))
+                                    .toList();
+                            if (missingKeys.isEmpty()) {
+                                continue;
+                            }
+                            // Keep valid provider rows and fall back only for the missing members.
+                            log.warn("getOHLC", "Upstox quote response missed {} of {} instruments; using OHLC fallback for missing keys only",
+                                    missingKeys.size(), batchKeys.size());
+                            batchKeys = missingKeys;
+                        }
+                    } catch (Exception qEx) {
+                        log.warn("getOHLC", "Failed to fetch quotes via market-quote API, falling back to OHLC: " + qEx.getMessage());
+                    }
+                }
+
                 OHLCResponse response = null;
 
                 // Try SDK Service first
@@ -266,8 +377,10 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
                         // InstrumentContext already maps the provider response back to the
                         // caller's requested symbol. Keep one map entry per requested quote;
-                        // adding aliases here makes downstream list counts double.
-                        result.put(symbol, quote);
+                        // do not overwrite if an earlier market-quote call already populated valid baseline data.
+                        if (!result.containsKey(symbol) || result.get(symbol).getPreviousClose() == 0.0) {
+                            result.put(symbol, quote);
+                        }
                     }
                 }
                 
@@ -292,6 +405,63 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             log.error("getOHLC", "Error fetching Upstox OHLC", e);
             return new HashMap<>();
         }
+    }
+
+    private QuoteDepth toProviderNeutralDepth(
+            com.am.marketdata.provider.upstox.model.common.MarketDepth providerDepth) {
+        if (providerDepth == null) {
+            return null;
+        }
+        List<QuoteDepthLevel> buy = toProviderNeutralDepthLevels(providerDepth.getBuyOrders());
+        List<QuoteDepthLevel> sell = toProviderNeutralDepthLevels(providerDepth.getSellOrders());
+        if (buy.isEmpty() && sell.isEmpty()) {
+            return null;
+        }
+        return QuoteDepth.builder().buy(buy).sell(sell).build();
+    }
+
+    private static Double finiteOrNull(Double value) {
+        return value != null && Double.isFinite(value) ? value : null;
+    }
+
+    private Instant resolveQuoteTimestamp(
+            com.am.marketdata.provider.upstox.model.common.StockQuote quote) {
+        if (quote.getLastUpdateTime() != null) {
+            return quote.getLastUpdateTime().toInstant();
+        }
+        String lastTradeTime = quote.getLastTradeTime();
+        if (lastTradeTime == null || lastTradeTime.isBlank()) {
+            return null;
+        }
+        try {
+            // Upstox sends last_trade_time as epoch milliseconds, unlike timestamp which is ISO-8601.
+            return Instant.ofEpochMilli(Long.parseLong(lastTradeTime));
+        } catch (NumberFormatException ignored) {
+            try {
+                return java.time.OffsetDateTime.parse(lastTradeTime).toInstant();
+            } catch (java.time.format.DateTimeParseException parseException) {
+                log.warn("getOHLC", "Ignoring unsupported Upstox quote timestamp format");
+                return null;
+            }
+        }
+    }
+
+    private List<QuoteDepthLevel> toProviderNeutralDepthLevels(
+            List<com.am.marketdata.provider.upstox.model.common.MarketDepth.DepthEntry> providerLevels) {
+        if (providerLevels == null || providerLevels.isEmpty()) {
+            return List.of();
+        }
+        return providerLevels.stream()
+                .filter(level -> level != null && level.getPrice() != null
+                        && Double.isFinite(level.getPrice()) && level.getPrice() > 0.0
+                        && level.getQuantity() != null && level.getQuantity() > 0)
+                .map(level -> QuoteDepthLevel.builder()
+                        .price(level.getPrice())
+                        .quantity(level.getQuantity())
+                        .orders(level.getOrders() != null && level.getOrders() >= 0 ? level.getOrders() : null)
+                        .build())
+                .limit(5)
+                .toList();
     }
 
     /**
