@@ -51,14 +51,39 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
         log.info("[CACHE] Attempting to fetch OHLC data from cache for {} symbols with timeFrame {}",
                 remainingSymbols.size(), tfValue);
 
-        // Pass timeFrame to persistence service if it supports it
-        Map<String, OHLCQuote> cachedData = persistenceService.getOHLCData(allSymbols, timeFrame, false);
+        // Call the cache service DIRECTLY (Redis-only).
+        // IMPORTANT: Do NOT use persistenceService.getOHLCData(false) here.
+        // That method first reads Redis, then queries InfluxDB for any remaining symbols —
+        // and if the InfluxDB query times out (~23s), it catches the exception and returns
+        // emptyMap(), losing all the Redis results we already had. The DATABASE step below
+        // already handles the InfluxDB lookup for whatever Redis misses.
+        Map<String, OHLCQuote> cachedData = persistenceService
+                .getMarketDataCacheService()
+                .getOHLCFromCache(allSymbols, timeFrame);
 
         if (cachedData != null && !cachedData.isEmpty()) {
             log.info("[CACHE] Found {} OHLC quotes in cache for timeFrame {}", cachedData.size(), tfValue);
 
-            // Remove found symbols from the remaining set
-            cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE:", "")));
+            // Build a set of clean cached symbol names (stripped of any exchange prefix and trimmed).
+            // The cache returns clean names like "MARUTI" but remainingSymbols may contain symbols
+            // with leading spaces (" MARUTI") from comma-separated parsing, or with exchange prefixes
+            // ("NSE_EQ:MARUTI"). A direct Set.remove("MARUTI") would silently fail for " MARUTI",
+            // leaving all symbols "remaining" and causing the provider to be called for 100 symbols
+            // instead of just the 4 that are truly missing from Redis.
+            Set<String> cleanCacheHits = cachedData.keySet().stream()
+                    .map(s -> s.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase())
+                    .collect(java.util.stream.Collectors.toSet());
+
+            // Remove the ORIGINAL-format keys from remainingSymbols by comparing their clean form.
+            // Using an iterator to safely remove while iterating.
+            java.util.Iterator<String> iter = remainingSymbols.iterator();
+            while (iter.hasNext()) {
+                String key = iter.next();
+                String cleanKey = key.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
+                if (cleanCacheHits.contains(cleanKey)) {
+                    iter.remove(); // safely removes the ORIGINAL key (e.g., " MARUTI")
+                }
+            }
 
             log.info("[CACHE] {} symbols remaining after cache lookup for timeFrame {}", remainingSymbols.size(),
                     tfValue);
@@ -68,6 +93,7 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
 
         return cachedData != null ? cachedData : Collections.emptyMap();
     }
+
 
     /**
      * Retrieve OHLC data from database
@@ -97,7 +123,7 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
             log.info("[DATABASE] Found {} OHLC quotes in database for timeFrame {}", dbData.size(), tfValue);
 
             // Remove found symbols from the remaining set
-            dbData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE:", "")));
+            dbData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "")));
 
             log.info("[DATABASE] {} symbols remaining after database lookup for timeFrame {}", remainingSymbols.size(),
                     tfValue);
@@ -132,12 +158,121 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
             if (providerData != null && !providerData.isEmpty()) {
                 log.info("[PROVIDER] {} Successfully fetched {} OHLC quotes from provider with timeFrame {}",
                         provider.getProviderName(), providerData.size(), tfValue);
+
+                // Fetch ISIN mappings for the requested symbols to support copying quote values back to ISIN keys.
+                Map<String, String> isinToSymbolMap = new HashMap<>();
+                try {
+                    com.am.marketdata.service.SecurityService securityService = 
+                            com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.marketdata.service.SecurityService.class);
+                    log.info("[PROVIDER_MAP] Fetching ISIN mapping from SecurityService for symbols: " + symbols);
+                    List<com.am.marketdata.service.model.security.SecurityDocument> docs = 
+                            securityService.findBySymbols(symbols);
+                    for (com.am.marketdata.service.model.security.SecurityDocument doc : docs) {
+                        if (doc.getKey() != null && doc.getKey().getIsin() != null && doc.getKey().getSymbol() != null) {
+                            isinToSymbolMap.put(doc.getKey().getIsin().toUpperCase().trim(), doc.getKey().getSymbol().toUpperCase().trim());
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to fetch ISIN mapping from SecurityService: " + e.getMessage(), e);
+                }
+
+                try {
+                    org.springframework.data.mongodb.core.MongoTemplate mongoTemplate = 
+                            com.am.marketdata.common.util.ApplicationContextProvider.getBean(org.springframework.data.mongodb.core.MongoTemplate.class);
+                    log.info("[PROVIDER_MAP] Fetching ISIN mapping from upstock_instruments for symbols: " + symbols);
+                    org.springframework.data.mongodb.core.query.Query mongoQuery = new org.springframework.data.mongodb.core.query.Query(
+                            org.springframework.data.mongodb.core.query.Criteria.where("isin").in(symbols)
+                    );
+                    List<com.am.marketdata.common.model.UpstoxInstrument> instruments = 
+                            mongoTemplate.find(mongoQuery, com.am.marketdata.common.model.UpstoxInstrument.class);
+                    for (com.am.marketdata.common.model.UpstoxInstrument inst : instruments) {
+                        if (inst.getIsin() != null && inst.getTradingSymbol() != null) {
+                            isinToSymbolMap.put(inst.getIsin().toUpperCase().trim(), inst.getTradingSymbol().toUpperCase().trim());
+                        }
+                    }
+                    log.info("[PROVIDER_MAP] Final Resolved ISIN mapping: " + isinToSymbolMap);
+                } catch (Exception e) {
+                    log.error("Failed to fetch ISIN mapping from MongoTemplate: " + e.getMessage(), e);
+                }
+                
+                // Map the results back to the original requested symbols.
+                // Upstox sometimes maps symbols internally to different trading symbols (e.g. AXISGOLD -> GOLDAXIS).
+                // If we cache GOLDAXIS, the next request for AXISGOLD will miss the cache.
+                Map<String, OHLCQuote> mappedData = new HashMap<>();
+                for (String reqSymbol : symbols) {
+                    String cleanReq = reqSymbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
+                    
+                    // Look for matches in the provider keys
+                    boolean matched = false;
+                    for (Map.Entry<String, OHLCQuote> entry : providerData.entrySet()) {
+                        String cleanProv = entry.getKey().replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
+                        
+                         // Handle known mappings:
+                         // 1. Exact match (e.g. RELIANCE == RELIANCE)
+                         // 2. Contains mapping (e.g. AXISGOLD matches GOLDAXIS, AXISNIFTY matches NIFTYAXIS, SEQUENT matches VIYASH, TATAMOTORS matches TMCV due to demerger)
+                         // 3. ISIN match: if the requested symbol is an ISIN mapping to this provider symbol
+                         if (cleanReq.equals(cleanProv) || 
+                             (cleanReq.equals("AXISGOLD") && cleanProv.equals("GOLDAXIS")) ||
+                             (cleanReq.equals("AXISNIFTY") && cleanProv.equals("NIFTYAXIS")) ||
+                             (cleanReq.equals("SEQUENT") && cleanProv.equals("VIYASH")) ||
+                             (cleanReq.equals("TATAMOTORS") && cleanProv.equals("TMCV")) ||
+                             cleanProv.equals(isinToSymbolMap.get(cleanReq))) {
+                             
+                             mappedData.put(reqSymbol, entry.getValue());
+                            matched = true;
+                            log.info("[PROVIDER_MAP] Mapped provider symbol {} back to requested symbol {}", entry.getKey(), reqSymbol);
+                            break;
+                        }
+                    }
+                    if (!matched) {
+                        // Fallback: if provider returned it under the original name directly
+                        if (providerData.containsKey(reqSymbol)) {
+                            mappedData.put(reqSymbol, providerData.get(reqSymbol));
+                        }
+                    }
+                }
+                
+                // Also carry forward anything else that was returned but didn't match the mapping loop
+                for (Map.Entry<String, OHLCQuote> entry : providerData.entrySet()) {
+                    if (!mappedData.containsKey(entry.getKey())) {
+                        mappedData.put(entry.getKey(), entry.getValue());
+                    }
+                }
+                
+                // OPTIMIZATION: Cache placeholders for any requested symbols that the provider failed to return.
+                // This prevents subsequent requests from repeatedly hitting the slow provider for invalid/empty symbols.
+                for (String reqSymbol : symbols) {
+                    if (!mappedData.containsKey(reqSymbol)) {
+                        log.warn("[PROVIDER_MAP] Provider returned no data for symbol {}. Caching empty placeholder to prevent repeat calls.", reqSymbol);
+                        mappedData.put(reqSymbol, OHLCQuote.builder()
+                                .lastPrice(0.0)
+                                .previousClose(0.0)
+                                .ohlc(OHLCQuote.OHLC.builder()
+                                        .open(0.0)
+                                        .high(0.0)
+                                        .low(0.0)
+                                        .close(0.0)
+                                        .build())
+                                .build());
+                    }
+                }
+                
+                return mappedData;
             } else {
                 log.info("[PROVIDER] {} No OHLC data returned from provider for timeFrame {}",
                         provider.getProviderName(), tfValue);
+                
+                // If the provider returned absolutely nothing, cache placeholders for all requested symbols
+                Map<String, OHLCQuote> placeholders = new HashMap<>();
+                for (String reqSymbol : symbols) {
+                    placeholders.put(reqSymbol, OHLCQuote.builder()
+                            .lastPrice(0.0)
+                            .previousClose(0.0)
+                            .ohlc(OHLCQuote.OHLC.builder().open(0.0).high(0.0).low(0.0).close(0.0).build())
+                            .build());
+                }
+                return placeholders;
             }
-
-            return providerData != null ? providerData : Collections.emptyMap();
         } catch (Exception e) {
             log.error(provider.getProviderName() + " Error fetching OHLC data for timeFrame {}: {}",
                     tfValue, e.getMessage(), e);

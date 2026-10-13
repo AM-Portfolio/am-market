@@ -1,5 +1,6 @@
 package com.marketdata.common;
 
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -135,6 +136,17 @@ public interface MarketDataProvider {
      * @return true if successful
      */
     boolean logout();
+
+    /**
+     * Get option chain data for an underlying instrument
+     *
+     * @param underlyingSymbol Underlying symbol (e.g. "NIFTY", "BANKNIFTY", "TCS")
+     * @param expiryDate       Expiry date (optional, may be null)
+     * @return Standardized option chain data map
+     */
+    default Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate) {
+        return Collections.emptyMap();
+    }
 
     /**
      * Get provider name

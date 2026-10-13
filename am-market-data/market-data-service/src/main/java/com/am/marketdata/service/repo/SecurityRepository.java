@@ -13,6 +13,10 @@ public interface SecurityRepository extends MongoRepository<SecurityDocument, St
     @Query("{ 'key.symbol' : { $in: ?0 } }")
     List<SecurityDocument> findBySymbolIn(List<String> symbols);
 
+    // This method finds multiple stocks using a list of ISIN numbers (like INE028A01039)
+    @Query("{ 'key.isin' : { $in: ?0 } }")
+    List<SecurityDocument> findByIsinIn(List<String> isins);
+
     // Find by ISIN
     @Query("{ 'key.isin' : ?0 }")
     SecurityDocument findByIsin(String isin);

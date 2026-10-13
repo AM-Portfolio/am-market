@@ -26,7 +26,10 @@ import com.am.marketdata.common.log.AppLogger;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import com.am.observability.trace.IgnoreTracing;
+
 @Service("upstoxMarketDataProvider")
+@IgnoreTracing
 public class UpstoxMarketDataProvider implements MarketDataProvider {
 
     private final AppLogger log = AppLogger.getLogger();
@@ -40,6 +43,70 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     private static final int BATCH_SIZE = 500;
     // Delay between batch requests to prevent triggering HTTP 429 Rate Limits.
     private static final int BATCH_DELAY_MS = 150;
+
+    // ---------------------------------------------------------------------------
+    // DynamicJsonMapper configuration for Upstox option-chain responses
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Maps Upstox-specific snake_case keys to our standard camelCase contract keys.
+     * Any key NOT in this map will be converted automatically via snake→camelCase.
+     */
+    private static final java.util.Map<String, String> UPSTOX_OPTION_ALIASES;
+
+    /**
+     * Upstox fields that are internal/redundant and must be dropped from the response.
+     */
+    private static final java.util.Set<String> UPSTOX_OPTION_EXCLUDES;
+
+    /**
+     * Contract keys that MUST always be stored as Double for type-safety.
+     * Prevents a broker sending an integer 0 for a price field from being stored as Long.
+     */
+    private static final java.util.Set<String> UPSTOX_CORE_DOUBLE_TYPES;
+
+    static {
+        java.util.Map<String, String> aliases = new java.util.HashMap<>();
+        // Market-data sub-object
+        aliases.put("ltp",            "ltp");           // keep as-is (explicit)
+        aliases.put("close_price",    "closePrice");
+        aliases.put("prev_oi",        "prevOi");
+        aliases.put("bid_price",      "bidPrice");
+        aliases.put("bid_qty",        "bidQty");
+        aliases.put("ask_price",      "askPrice");
+        aliases.put("ask_qty",        "askQty");
+        // Greeks sub-object
+        aliases.put("vega",   "vega");
+        aliases.put("theta",  "theta");
+        aliases.put("gamma",  "gamma");
+        aliases.put("delta",  "delta");
+        aliases.put("iv",     "iv");
+        aliases.put("pop",    "pop");
+        UPSTOX_OPTION_ALIASES = java.util.Collections.unmodifiableMap(aliases);
+
+        java.util.Set<String> excludes = new java.util.HashSet<>();
+        // Drop Upstox internal fields that pollute the payload
+        excludes.add("short_name");
+        excludes.add("company_name");
+        excludes.add("freeze_qty");
+        excludes.add("lot_size");    // exposed separately at the strike level if needed
+        UPSTOX_OPTION_EXCLUDES = java.util.Collections.unmodifiableSet(excludes);
+
+        java.util.Set<String> coreDoubles = new java.util.HashSet<>();
+        coreDoubles.add("ltp");
+        coreDoubles.add("closePrice");
+        coreDoubles.add("bidPrice");
+        coreDoubles.add("askPrice");
+        coreDoubles.add("oi");
+        coreDoubles.add("prevOi");
+        coreDoubles.add("vega");
+        coreDoubles.add("theta");
+        coreDoubles.add("gamma");
+        coreDoubles.add("delta");
+        coreDoubles.add("iv");
+        coreDoubles.add("pop");
+        UPSTOX_CORE_DOUBLE_TYPES = java.util.Collections.unmodifiableSet(coreDoubles);
+    }
 
     public UpstoxMarketDataProvider(
             UpstoxApiService upstoxApiService,
@@ -139,8 +206,17 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         String instrumentKey = entry.getKey();
                         OHLCResponse.OHLCData data = entry.getValue();
 
+                        // Upstox API responses sometimes return keys with ':' instead of '|' 
+                        String normalizedKey = instrumentKey.replace(":", "|");
+
                         // Map back to symbol if possible, otherwise use key
-                        String symbol = context.getSymbol(instrumentKey);
+                        String symbol = context.getSymbol(normalizedKey);
+                        if (symbol == null) {
+                            symbol = context.getSymbol(instrumentKey);
+                        }
+                        if (symbol == null) {
+                            symbol = instrumentKey;
+                        }
 
                         OHLCQuote quote = new OHLCQuote();
                         // Use getters as fields might be mapped differently or computed
@@ -211,99 +287,169 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             }
 
             log.info("backfillPreviousClose",
-                    "Backfilling previousClose via historical API for {} symbols: {}",
-                    symbolsNeedingPrevClose.size(), symbolsNeedingPrevClose);
+                    "Triggering background async backfill for {} symbols without blocking HTTP response",
+                    symbolsNeedingPrevClose.size());
 
-            java.time.LocalDate today = java.time.LocalDate.now();
-            String toDate = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
-            // Fetch 5 calendar days back to safely cover weekends/holidays
-            String fromDate = today.minusDays(5).format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
-
-            int callCount = 0;
-            for (String symbol : symbolsNeedingPrevClose) {
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
                 try {
-                    if (callCount > 0) {
-                        try {
-                            Thread.sleep(100); // Respect Upstox rate limits (10 requests/sec)
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            log.warn("backfillPreviousClose", "Interrupted during backfill rate-limit sleep");
-                            break;
-                        }
-                    }
-                    callCount++;
-
-                    // Resolve instrument key for this symbol, stripping exchange prefixes if present
-                    String cleanSymbol = symbol.replace("NSE_EQ:", "").replace("NSE:", "").trim();
-                    String instrumentKey = context.keyToSymbolMap.entrySet().stream()
-                            .filter(e -> e.getValue().equals(cleanSymbol) || e.getValue().equals(symbol))
-                            .map(Map.Entry::getKey)
-                            .findFirst()
-                            .orElse(null);
-
-                    if (instrumentKey == null) {
-                        log.warn("backfillPreviousClose",
-                                "Could not find instrument key for symbol: {} (cleaned: {}), skipping", symbol, cleanSymbol);
-                        continue;
-                    }
-
-                    com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
-                            upstoxSdkService.getHistoricalCandleData(instrumentKey, "days", 1, toDate, fromDate);
-
-                    if (histResponse != null && histResponse.getData() != null
-                            && histResponse.getData().getCandles() != null
-                            && !histResponse.getData().getCandles().isEmpty()) {
-
-                        java.util.List<java.util.List<Object>> candles = histResponse.getData().getCandles();
-                        double prevClose = 0.0;
-                        if (!candles.isEmpty()) {
-                            java.util.List<Object> newestCandle = candles.get(0);
-                            String candleDateStr = newestCandle.get(0) != null ? newestCandle.get(0).toString() : "";
-                            
-                            // Compare candle date against today's date in Asia/Kolkata timezone
-                            java.time.LocalDate todayKolkata = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
-                            String todayStr = todayKolkata.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
-                            boolean isTodayCandle = !candleDateStr.isEmpty() && candleDateStr.startsWith(todayStr);
-                            
-                            if (isTodayCandle && candles.size() >= 2) {
-                                // Index 0 represents today's trading candle; previous close is yesterday's candle (index 1)
-                                java.util.List<Object> prevCandle = candles.get(1);
-                                if (prevCandle != null && prevCandle.size() >= 5) {
-                                    Object closeObj = prevCandle.get(4);
-                                    if (closeObj instanceof Number) {
-                                        prevClose = ((Number) closeObj).doubleValue();
-                                    }
-                                }
-                            } else {
-                                // Index 0 represents yesterday's (or older) candle; it is the correct previous close
-                                if (newestCandle.size() >= 5) {
-                                    Object closeObj = newestCandle.get(4);
-                                    if (closeObj instanceof Number) {
-                                        prevClose = ((Number) closeObj).doubleValue();
+                    // 1. Try to load previousClose from local database in batch via EquityLatestPriceService (-5d window)
+                    try {
+                        com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService =
+                                com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.common.investment.service.EquityLatestPriceService.class);
+                        if (equityLatestPriceService != null) {
+                            List<com.am.common.investment.model.equity.EquityPrice> dbPrices =
+                                    equityLatestPriceService.getLatestPricesByTradingSymbols(symbolsNeedingPrevClose);
+                            if (dbPrices != null) {
+                                for (com.am.common.investment.model.equity.EquityPrice dbPrice : dbPrices) {
+                                    if (dbPrice.getPreviousClose() != null && dbPrice.getPreviousClose() > 0) {
+                                        String symbol = dbPrice.getSymbol();
+                                        if (result.containsKey(symbol)) {
+                                            result.get(symbol).setPreviousClose(dbPrice.getPreviousClose());
+                                            log.debug("backfillPreviousClose", "Loaded previousClose from DB for " + symbol + ": " + dbPrice.getPreviousClose());
+                                        }
                                     }
                                 }
                             }
                         }
-
-                        if (prevClose > 0) {
-                            result.get(symbol).setPreviousClose(prevClose);
-                            log.info("backfillPreviousClose",
-                                    "Backfilled previousClose for {}: {}", symbol, prevClose);
-                        } else {
-                            log.warn("backfillPreviousClose",
-                                    "Could not extract valid previousClose from historical candles for {}", symbol);
-                        }
-                    } else {
-                        log.warn("backfillPreviousClose",
-                                "No historical candle data returned for symbol: {}", symbol);
+                    } catch (Exception dbEx) {
+                        log.warn("backfillPreviousClose", "Failed to retrieve previousClose from EquityLatestPriceService: " + dbEx.getMessage());
                     }
-                } catch (Exception ex) {
-                    log.error("backfillPreviousClose",
-                            "Failed to backfill previousClose for symbol {}: {}", symbol, ex.getMessage());
+
+                    // 2. Filter remaining symbols that still have previousClose == 0.0 for API fallback
+                    List<String> remainingSymbols = result.entrySet().stream()
+                            .filter(e -> e.getValue().getPreviousClose() == 0.0)
+                            .map(Map.Entry::getKey)
+                            .collect(Collectors.toList());
+
+                    if (remainingSymbols.isEmpty()) {
+                        return;
+                    }
+
+
+                    java.time.LocalDate today = java.time.LocalDate.now();
+                    String toDate = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+                    String fromDate = today.minusDays(5).format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+
+                    for (int batchIdx = 0; batchIdx < remainingSymbols.size(); batchIdx += BATCH_SIZE) {
+                        int endIdx = Math.min(batchIdx + BATCH_SIZE, remainingSymbols.size());
+                        List<String> batchSymbols = remainingSymbols.subList(batchIdx, endIdx);
+                        int callCount = 0;
+                        for (String symbol : batchSymbols) {
+                            try {
+                                if (callCount > 0) {
+                                    try {
+                                        Thread.sleep(250); // Respect Upstox rate limits safely in background thread
+                                    } catch (InterruptedException ie) {
+                                        Thread.currentThread().interrupt();
+                                        log.warn("backfillPreviousClose", "Interrupted during backfill rate-limit sleep");
+                                        break;
+                                    }
+                                }
+                                callCount++;
+
+                                String cleanSymbol = symbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim();
+                                String instrumentKey = context.keyToSymbolMap.entrySet().stream()
+                                        .filter(e -> e.getValue().equals(cleanSymbol) || e.getValue().equals(symbol))
+                                        .map(Map.Entry::getKey)
+                                        .findFirst()
+                                        .orElse(null);
+
+                                if (instrumentKey == null) {
+                                    try {
+                                        com.am.marketdata.provider.common.InstrumentContext resolvedContext =
+                                                symbolResolver.resolveContext(java.util.Collections.singletonList(cleanSymbol));
+                                        if (resolvedContext != null && resolvedContext.instrumentKeys != null && !resolvedContext.instrumentKeys.isEmpty()) {
+                                            instrumentKey = resolvedContext.instrumentKeys.get(0);
+                                        }
+                                    } catch (Exception ignore) {}
+                                }
+
+                                if (instrumentKey == null) {
+                                    log.warn("backfillPreviousClose",
+                                            "Could not find instrument key for symbol: {} (cleaned: {}), skipping", symbol, cleanSymbol);
+                                    continue;
+                                }
+
+                                com.am.marketdata.provider.upstox.model.HistoricalDataResponse histResponse =
+                                        upstoxSdkService.getHistoricalCandleData(instrumentKey, "days", 1, toDate, fromDate);
+
+                                if (histResponse != null && histResponse.getData() != null
+                                        && histResponse.getData().getCandles() != null
+                                        && !histResponse.getData().getCandles().isEmpty()) {
+
+                                    java.util.List<java.util.List<Object>> candles = histResponse.getData().getCandles();
+                                    double prevClose = 0.0;
+                                    if (!candles.isEmpty()) {
+                                        java.util.List<Object> newestCandle = candles.get(0);
+                                        String candleDateStr = newestCandle.get(0) != null ? newestCandle.get(0).toString() : "";
+                                        
+                                        java.time.LocalDate todayKolkata = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+                                        String todayStr = todayKolkata.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+                                        boolean isTodayCandle = !candleDateStr.isEmpty() && candleDateStr.startsWith(todayStr);
+                                        
+                                        boolean matchesNewestCandle = false;
+                                        OHLCQuote liveQuote = result.get(symbol);
+                                        if (liveQuote != null && liveQuote.getOhlc() != null && newestCandle.size() >= 5) {
+                                            double liveOpen = liveQuote.getOhlc().getOpen();
+                                            double liveClose = liveQuote.getOhlc().getClose();
+                                            double candleOpen = parseDouble(newestCandle.get(1));
+                                            double candleClose = parseDouble(newestCandle.get(4));
+                                            if (liveOpen == candleOpen && liveClose == candleClose) {
+                                                matchesNewestCandle = true;
+                                            }
+                                        }
+
+                                        if ((isTodayCandle || matchesNewestCandle) && candles.size() >= 2) {
+                                            java.util.List<Object> prevCandle = candles.get(1);
+                                            if (prevCandle != null && prevCandle.size() >= 5) {
+                                                Object closeObj = prevCandle.get(4);
+                                                if (closeObj instanceof Number) {
+                                                    prevClose = ((Number) closeObj).doubleValue();
+                                                }
+                                            }
+                                        } else {
+                                            if (newestCandle.size() >= 5) {
+                                                Object closeObj = newestCandle.get(4);
+                                                if (closeObj instanceof Number) {
+                                                    prevClose = ((Number) closeObj).doubleValue();
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (prevClose > 0) {
+                                        result.get(symbol).setPreviousClose(prevClose);
+                                        log.info("backfillPreviousClose",
+                                                "Backfilled previousClose for {}: {}", symbol, prevClose);
+                                    } else {
+                                        log.warn("backfillPreviousClose",
+                                                "Could not extract valid previousClose from historical candles for {}", symbol);
+                                    }
+                                } else {
+                                    log.warn("backfillPreviousClose",
+                                            "No historical candle data returned for symbol: {}", symbol);
+                                }
+                            } catch (Exception ex) {
+                                log.error("backfillPreviousClose",
+                                        "Failed to backfill previousClose for symbol {}: {}", symbol, ex.getMessage());
+                            }
+                        }
+
+                        if (endIdx < remainingSymbols.size()) {
+                            try {
+                                Thread.sleep(BATCH_DELAY_MS);
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("backfillPreviousClose", "Error in backfillPreviousClose: {}", e.getMessage());
                 }
-            }
+            });
         } catch (Exception e) {
-            log.error("backfillPreviousClose", "Error in backfillPreviousClose: {}", e.getMessage());
+            log.error("backfillPreviousClose", "Error in backfillPreviousClose outer wrapper: {}", e.getMessage());
         }
     }
 
@@ -343,8 +489,17 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                         String instrumentKey = entry.getKey();
                         MarketQuoteSymbolLtpV3 data = entry.getValue();
 
+                        // Upstox API responses sometimes return keys with ':' instead of '|' 
+                        String normalizedKey = instrumentKey.replace(":", "|");
+
                         // Map back to symbol using the context map
-                        String symbol = context.getSymbol(instrumentKey);
+                        String symbol = context.getSymbol(normalizedKey);
+                        if (symbol == null) {
+                            symbol = context.getSymbol(instrumentKey);
+                        }
+                        if (symbol == null) {
+                            symbol = instrumentKey;
+                        }
 
                         LTPQuote quote = new LTPQuote();
                         quote.lastPrice = data.getLastPrice();
@@ -359,7 +514,17 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             String instrumentKey = entry.getKey();
                             com.am.marketdata.provider.upstox.model.common.StockQuote data = entry.getValue();
 
-                             String symbol = context.getSymbol(instrumentKey);
+                            // Upstox API responses sometimes return keys with ':' instead of '|' 
+                            String normalizedKey = instrumentKey.replace(":", "|");
+
+                            // Map back to symbol using the context map
+                            String symbol = context.getSymbol(normalizedKey);
+                            if (symbol == null) {
+                                symbol = context.getSymbol(instrumentKey);
+                            }
+                            if (symbol == null) {
+                                symbol = instrumentKey;
+                            }
 
                             LTPQuote quote = new LTPQuote();
                             quote.lastPrice = data.getLastPrice() != null ? data.getLastPrice() : 0.0;
@@ -407,8 +572,25 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             String fromDateStr = dateFormat.format(from);
             String toDateStr = dateFormat.format(to);
 
-            String v3Unit = mapToUpstoxV3Unit(interval);
-            int intervalValue = getUpstoxIntervalValue(interval);
+            boolean requiresAggregation = false;
+            int targetMinutes = 1;
+
+            if (interval == TimeFrame.FIVE_MINUTE) {
+                requiresAggregation = true;
+                targetMinutes = 5;
+            } else if (interval == TimeFrame.TEN_MINUTE) {
+                requiresAggregation = true;
+                targetMinutes = 10;
+            } else if (interval == TimeFrame.FIFTEEN_MINUTE) {
+                requiresAggregation = true;
+                targetMinutes = 15;
+            } else if (interval == TimeFrame.HOUR) {
+                requiresAggregation = true;
+                targetMinutes = 60;
+            }
+
+            String v3Unit = requiresAggregation ? "minutes" : mapToUpstoxV3Unit(interval);
+            int intervalValue = requiresAggregation ? 1 : getUpstoxIntervalValue(interval);
 
             // Resolve instrument key first as SDK works with keys
             List<String> symbolsList = Collections.singletonList(symbol);
@@ -422,6 +604,10 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 instrumentKey = symbol;
             }
 
+            // The Upstox SDK handles path parameter encoding internally.
+            // Do not URL-encode instrumentKey here to avoid double-encoding (e.g. '|' escaping to '%7C' then '%257C' in HTTP call).
+            String cleanKey = instrumentKey;
+
             HistoricalDataResponse response;
             try {
                 log.info("getHistoricalData",
@@ -429,7 +615,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                                 + ", interval: " + intervalValue + ", from: " + fromDateStr + ", to: " + toDateStr);
 
                 response = upstoxSdkService.getHistoricalCandleData(
-                        instrumentKey, v3Unit, intervalValue, toDateStr, fromDateStr);
+                        cleanKey, v3Unit, intervalValue, toDateStr, fromDateStr);
             } catch (Exception e) {
                 log.error("getHistoricalData", "Failed to fetch historical data via SDK: " + e.getMessage(), e);
                 return new HistoricalData();
@@ -481,14 +667,75 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
                     dataPoints.add(point);
                 }
-                historicalData.setDataPoints(dataPoints);
-            }
 
+                if (requiresAggregation) {
+                    List<OHLCVTPoint> aggregatedPoints = aggregateCandles(dataPoints, targetMinutes);
+                    historicalData.setDataPoints(aggregatedPoints);
+                    log.info("getHistoricalData", "Aggregated " + dataPoints.size() + " 1m candles into "
+                            + aggregatedPoints.size() + " " + interval.getApiValue() + " candles.");
+                } else {
+                    historicalData.setDataPoints(dataPoints);
+                }
+            }
             return historicalData;
         } catch (Exception e) {
             log.error("getHistoricalData", "Error fetching Upstox historical data", e);
             return new HistoricalData();
         }
+    }
+
+    private List<OHLCVTPoint> aggregateCandles(List<OHLCVTPoint> oneMinCandles, int targetMinutes) {
+        if (oneMinCandles == null || oneMinCandles.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Sort candles by timestamp ascending to ensure correct aggregation order
+        oneMinCandles.sort(Comparator.comparing(OHLCVTPoint::getTime));
+
+        List<OHLCVTPoint> aggregated = new ArrayList<>();
+        int i = 0;
+        int n = oneMinCandles.size();
+
+        while (i < n) {
+            OHLCVTPoint first = oneMinCandles.get(i);
+            java.time.LocalDateTime bucketStart = first.getTime();
+
+            double open = first.getOpen();
+            double high = first.getHigh();
+            double low = first.getLow();
+            double close = first.getClose();
+            long volume = first.getVolume();
+
+            int count = 1;
+            i++;
+            while (i < n && count < targetMinutes) {
+                OHLCVTPoint next = oneMinCandles.get(i);
+                long diffMinutes = java.time.Duration.between(bucketStart, next.getTime()).toMinutes();
+                if (diffMinutes >= targetMinutes) {
+                    break;
+                }
+
+                high = Math.max(high, next.getHigh());
+                low = Math.min(low, next.getLow());
+                close = next.getClose();
+                volume += next.getVolume();
+
+                i++;
+                count++;
+            }
+
+            OHLCVTPoint aggregatedPoint = new OHLCVTPoint();
+            aggregatedPoint.setTime(bucketStart);
+            aggregatedPoint.setOpen(open);
+            aggregatedPoint.setHigh(high);
+            aggregatedPoint.setLow(low);
+            aggregatedPoint.setClose(close);
+            aggregatedPoint.setVolume(volume);
+
+            aggregated.add(aggregatedPoint);
+        }
+
+        return aggregated;
     }
 
     private int getUpstoxIntervalValue(TimeFrame interval) {
@@ -519,7 +766,7 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
     }
 
     /**
-     * V3 historical candle path unit ({@code days}, {@code minutes}, …).
+     * V3 historical candle path unit ({@code days}, {@code minutes}, ...).
      * See https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/
      */
     private String mapToUpstoxV3Unit(TimeFrame interval) {
@@ -592,6 +839,256 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
             return Long.parseLong((String) value);
         }
         return 0L;
+    }
+
+    /**
+     * Fetches option chain for an underlying symbol (e.g., NIFTY, BANKNIFTY, RELIANCE).
+     * 
+     * PURPOSE & LATENCY OPTIMIZATIONS:
+     * 1. Decoupled Provider: Loose coupling ensures provider switching (Upstox -> Zerodha) works seamlessly.
+     * 2. Parallel Async Execution: Uses CompletableFuture to execute Upstox API calls (option contracts 
+     *    and option chain) concurrently in parallel, reducing overall API response latency to milliseconds.
+     * 3. Dynamic Expiry & Lot Size Resolution: Automatically extracts valid expiries list and dynamic 
+     *    lot size for indices and equity stocks.
+     */
+    @Override
+    public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate) {
+        if (underlyingSymbol == null || underlyingSymbol.trim().isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        try {
+            // Step 1: Resolve provider-agnostic symbol to Upstox instrument key (e.g., NSE_INDEX|Nifty Bank)
+            com.am.marketdata.provider.common.InstrumentContext context =
+                    symbolResolver.resolveContext(Collections.singletonList(underlyingSymbol));
+            String instrumentKey = null;
+            if (context != null && !context.getInstrumentKeys().isEmpty()) {
+                instrumentKey = context.getInstrumentKeys().get(0);
+            }
+
+            if (instrumentKey == null) {
+                // Fallback direct heuristic if resolver did not match
+                String clean = underlyingSymbol.toUpperCase().trim();
+                if (clean.equals("NIFTY") || clean.equals("NIFTY 50") || clean.equals("NIFTY50")) {
+                    instrumentKey = "NSE_INDEX|Nifty 50";
+                } else if (clean.equals("BANKNIFTY") || clean.equals("NIFTY BANK")) {
+                    instrumentKey = "NSE_INDEX|Nifty Bank";
+                } else if (clean.equals("FINNIFTY") || clean.equals("NIFTY FIN SERVICE")) {
+                    instrumentKey = "NSE_INDEX|Nifty Fin Service";
+                } else {
+                    instrumentKey = "NSE_EQ|" + clean;
+                }
+            }
+
+            String formattedExpiry = null;
+            if (expiryDate != null) {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+                formattedExpiry = sdf.format(expiryDate);
+            }
+
+            java.util.TreeSet<String> expiries = new java.util.TreeSet<>();
+            Double resolvedLotSize = null;
+
+            final String initialExpiry = formattedExpiry;
+            final String targetKey = instrumentKey;
+
+            // Step 2: Parallel Async Execution — Fetch Option Contracts (expiries & lot size) concurrently
+            java.util.concurrent.CompletableFuture<String> contractFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                try {
+                    return upstoxApiService.getOptionContracts(targetKey);
+                } catch (Exception ex) {
+                    log.warn("getOptionChain", "Failed to fetch option contract expiries: " + ex.getMessage());
+                    return null;
+                }
+            });
+
+            // Step 3: Parallel Async Execution — Fetch Option Chain concurrently if target expiry is known
+            java.util.concurrent.CompletableFuture<String> chainFuture = (initialExpiry != null)
+                    ? java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return upstoxApiService.getOptionChain(targetKey, initialExpiry);
+                        } catch (Exception ex) {
+                            log.warn("getOptionChain", "Failed to fetch option chain: " + ex.getMessage());
+                            return null;
+                        }
+                    })
+                    : null;
+
+            String contractJson = contractFuture.join();
+            if (contractJson != null && !contractJson.isEmpty()) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    com.fasterxml.jackson.databind.JsonNode cRoot = mapper.readTree(contractJson);
+                    com.fasterxml.jackson.databind.JsonNode cData = cRoot.get("data");
+                    if (cData != null && cData.isArray()) {
+                        for (com.fasterxml.jackson.databind.JsonNode cn : cData) {
+                            if (cn.has("expiry") && !cn.get("expiry").isNull()) {
+                                expiries.add(cn.get("expiry").asText());
+                            }
+                            if (resolvedLotSize == null && cn.has("lot_size") && !cn.get("lot_size").isNull()) {
+                                resolvedLotSize = cn.get("lot_size").asDouble();
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.warn("getOptionChain", "Failed to parse option contract expiries: " + ex.getMessage());
+                }
+            }
+
+            if (formattedExpiry == null && !expiries.isEmpty()) {
+                formattedExpiry = expiries.first();
+                log.info("getOptionChain", "Auto-resolved nearest expiry date: " + formattedExpiry + " for symbol: " + underlyingSymbol);
+            }
+
+            // Fallback for Equity stocks if primary instrument key (e.g., ISIN-based) returned no contract expiries
+            if (formattedExpiry == null && instrumentKey != null && !instrumentKey.startsWith("NSE_INDEX")) {
+                List<String> altKeys = List.of(
+                    "NSE_FO|" + underlyingSymbol.toUpperCase().trim(),
+                    "NSE_EQ|" + underlyingSymbol.toUpperCase().trim()
+                );
+                for (String altKey : altKeys) {
+                    if (!altKey.equals(instrumentKey)) {
+                        log.info("getOptionChain", "Attempting fallback contract lookup using alt key: " + altKey);
+                        try {
+                            String altContractJson = upstoxApiService.getOptionContracts(altKey);
+                            if (altContractJson != null && !altContractJson.isEmpty()) {
+                                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                                com.fasterxml.jackson.databind.JsonNode cRoot = mapper.readTree(altContractJson);
+                                com.fasterxml.jackson.databind.JsonNode cData = cRoot.get("data");
+                                if (cData != null && cData.isArray()) {
+                                    for (com.fasterxml.jackson.databind.JsonNode cn : cData) {
+                                        if (cn.has("expiry") && !cn.get("expiry").isNull()) {
+                                            expiries.add(cn.get("expiry").asText());
+                                        }
+                                        if (resolvedLotSize == null && cn.has("lot_size") && !cn.get("lot_size").isNull()) {
+                                            resolvedLotSize = cn.get("lot_size").asDouble();
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (Exception ex) {
+                            log.warn("getOptionChain", "Fallback contract lookup failed for alt key: " + altKey + ", error: " + ex.getMessage());
+                        }
+                        if (!expiries.isEmpty()) {
+                            formattedExpiry = expiries.first();
+                            instrumentKey = altKey;
+                            log.info("getOptionChain", "Resolved expiry date via alt key: " + altKey + " -> " + formattedExpiry);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Guard: If no valid expiry date could be resolved, return an empty mutable map cleanly instead of throwing 400/500
+            if (formattedExpiry == null) {
+                log.warn("getOptionChain", "No active option contract expiries found for symbol: " + underlyingSymbol);
+                return new HashMap<>();
+            }
+
+            String rawJson = null;
+            if (chainFuture != null && formattedExpiry.equals(initialExpiry)) {
+                rawJson = chainFuture.join();
+            } else {
+                rawJson = upstoxApiService.getOptionChain(instrumentKey, formattedExpiry);
+            }
+            if (rawJson == null || rawJson.trim().isEmpty()) {
+                return new HashMap<>();
+            }
+
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(rawJson);
+            com.fasterxml.jackson.databind.JsonNode dataArray = rootNode.get("data");
+
+            if (dataArray == null || !dataArray.isArray() || dataArray.isEmpty()) {
+                log.warn("getOptionChain", "Empty data array in Upstox option chain response for symbol: " + underlyingSymbol);
+                return new HashMap<>();
+            }
+
+            String resolvedExpiry = formattedExpiry;
+            Double spotPrice = null;
+            List<Map<String, Object>> strikesList = new ArrayList<>();
+
+            for (com.fasterxml.jackson.databind.JsonNode node : dataArray) {
+                if (resolvedExpiry == null && node.has("expiry")) {
+                    resolvedExpiry = node.get("expiry").asText();
+                }
+                if (spotPrice == null && node.has("underlying_spot_price")) {
+                    spotPrice = node.get("underlying_spot_price").asDouble();
+                }
+
+                Map<String, Object> strikeMap = new HashMap<>();
+                double strikePrice = node.has("strike_price") ? node.get("strike_price").asDouble() : 0.0;
+                strikeMap.put("strikePrice", strikePrice);
+
+                if (node.has("pcr")) {
+                    strikeMap.put("pcr", node.get("pcr").asDouble());
+                }
+
+                // Map Call Option — dynamic extraction via DynamicJsonMapper
+                if (node.has("call_options") && !node.get("call_options").isNull()) {
+                    com.fasterxml.jackson.databind.JsonNode callNode = node.get("call_options");
+                    Map<String, Object> callMap = new HashMap<>();
+                    if (callNode.has("instrument_key")) {
+                        callMap.put("instrumentKey", callNode.get("instrument_key").asText());
+                    }
+                    if (callNode.has("market_data")) {
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                callNode.get("market_data"), callMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
+                    }
+                    if (callNode.has("option_greeks")) {
+                        Map<String, Object> greeksMap = new HashMap<>();
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                callNode.get("option_greeks"), greeksMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
+                        callMap.put("greeks", greeksMap);
+                    }
+                    strikeMap.put("call", callMap);
+                }
+
+                // Map Put Option — dynamic extraction via DynamicJsonMapper
+                if (node.has("put_options") && !node.get("put_options").isNull()) {
+                    com.fasterxml.jackson.databind.JsonNode putNode = node.get("put_options");
+                    Map<String, Object> putMap = new HashMap<>();
+                    if (putNode.has("instrument_key")) {
+                        putMap.put("instrumentKey", putNode.get("instrument_key").asText());
+                    }
+                    if (putNode.has("market_data")) {
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                putNode.get("market_data"), putMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
+                    }
+                    if (putNode.has("option_greeks")) {
+                        Map<String, Object> greeksMap = new HashMap<>();
+                        com.am.marketdata.provider.common.DynamicJsonMapper.extractToMap(
+                                putNode.get("option_greeks"), greeksMap,
+                                UPSTOX_OPTION_ALIASES, UPSTOX_OPTION_EXCLUDES, UPSTOX_CORE_DOUBLE_TYPES);
+                        putMap.put("greeks", greeksMap);
+                    }
+                    strikeMap.put("put", putMap);
+                }
+
+                strikesList.add(strikeMap);
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("underlying", underlyingSymbol.toUpperCase());
+            response.put("underlyingKey", instrumentKey);
+            response.put("lotSize", resolvedLotSize);
+            // Preserve null instead of silently defaulting to 0.0 — consumers must handle
+            // null gracefully (shows 'price unavailable' instead of a misleading ₹0.00).
+            response.put("underlyingLtp", spotPrice);
+            response.put("expiry", resolvedExpiry);
+            response.put("expiries", new ArrayList<>(expiries));
+            response.put("timestamp", System.currentTimeMillis() / 1000);
+            response.put("isStale", false);
+            response.put("strikes", strikesList);
+
+            return response;
+        } catch (Exception e) {
+            log.error("getOptionChain", "Failed to fetch/parse option chain for symbol: " + underlyingSymbol + ", error: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to fetch option chain: " + e.getMessage(), e);
+        }
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.am.marketdata.analysis.service;
 
+// Trigger Push CI Action
+
 import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.model.stockindice.StockData;
 import com.am.marketdata.analysis.util.StockDataEnricher;
@@ -12,6 +14,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import com.am.marketdata.analysis.dto.StockMoverDTO;
+import com.am.marketdata.analysis.dto.SectorPerformanceDTO;
 
 @Service
 @RequiredArgsConstructor
@@ -63,7 +67,11 @@ public class MarketAnalyticsService {
                 from = to.minusDays(1);
                 break;
             case "1W":
-                interval = "1H";
+                // [Upstox Compatible Interval Mapping]
+                // Upstox API accepts intervals: '1minute', '30minute', 'day', 'week', 'month'.
+                // '1H' is not supported by Upstox v2/v3 and causes 0 data points.
+                // Using '30m' provides rich 30-minute historical candle progression for the 1-week window across both Stocks & Indices.
+                interval = "30m";
                 from = to.minusWeeks(1);
                 break;
             case "1M":
@@ -110,7 +118,35 @@ public class MarketAnalyticsService {
 
             // Filter data points by time range for each symbol
             if (response.getData() != null) {
-                long minTime = from.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+                // [1D Timeframe Chart Optimization]
+                // 1. Detect if today is a weekend or before market open. If so, roll back the query date target to the previous trading day.
+                //    This prevents the chart from being empty when viewed on a Saturday, Sunday, or early morning before open.
+                java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                java.time.DayOfWeek day = istNow.getDayOfWeek();
+                java.time.LocalDate targetDate = istNow.toLocalDate();
+                java.time.LocalTime time = istNow.toLocalTime();
+                
+                boolean isBeforeMarketOpen = time.isBefore(java.time.LocalTime.of(9, 15));
+                if (day == java.time.DayOfWeek.SATURDAY) {
+                    targetDate = targetDate.minusDays(1);
+                } else if (day == java.time.DayOfWeek.SUNDAY) {
+                    targetDate = targetDate.minusDays(2);
+                } else if (isBeforeMarketOpen) {
+                    // It's a weekday, but before market opens. Roll back to the previous trading day.
+                    targetDate = targetDate.minusDays(1);
+                    if (targetDate.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+                        targetDate = targetDate.minusDays(2);
+                    }
+                }
+
+                // 2. Bound the filter to the starting bell of the active market session (9:15 AM IST).
+                //    By using 9:15 AM today/Friday/yesterday instead of "now - 24 hours" (which points to yesterday afternoon),
+                //    we preserve the complete intraday chart progression rather than stripping out all daily candles.
+                java.time.LocalDateTime filterFrom = "1D".equalsIgnoreCase(range)
+                        ? targetDate.atTime(9, 15)
+                        : from;
+                java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
+                long minTime = filterFrom.atZone(kolkataZone).toInstant().toEpochMilli();
 
                 response.getData().forEach((s, symbolData) -> {
                     if (symbolData != null && symbolData.getDataPoints() != null) {
@@ -118,7 +154,8 @@ public class MarketAnalyticsService {
                                 .getDataPoints().stream()
                                 .filter(p -> {
                                     try {
-                                        long timestamp = p.getTime().atZone(java.time.ZoneId.systemDefault())
+                                        // Performance Optimization: Use pre-cached kolkataZone instance instead of calling ZoneId.of() inside stream loop
+                                        long timestamp = p.getTime().atZone(kolkataZone)
                                                 .toInstant()
                                                 .toEpochMilli();
                                         return timestamp >= minTime;
@@ -128,7 +165,9 @@ public class MarketAnalyticsService {
                                 })
                                 .collect(Collectors.toList());
 
-                        symbolData.setDataPoints(filteredPoints);
+                        if (!filteredPoints.isEmpty()) {
+                            symbolData.setDataPoints(filteredPoints);
+                        }
                     }
                 });
             }
@@ -153,7 +192,7 @@ public class MarketAnalyticsService {
      * @param expandIndices Whether to expand index symbols to constituent stocks
      * @return List of enriched stock data sorted by percentage change
      */
-    public List<Map<String, Object>> getMovers(int limit, String type, String indexSymbol,
+    public List<StockMoverDTO> getMovers(int limit, String type, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
         // Use provided index or default
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
@@ -179,42 +218,31 @@ public class MarketAnalyticsService {
     /**
      * Get Top Gainers AND Losers (Unified)
      */
-    public Map<String, List<Map<String, Object>>> getMoversUnified(int limit, String indexSymbol,
+    public Map<String, List<StockMoverDTO>> getMoversUnified(int limit, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
-
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
-
-        // 1. Fetch data ONCE
+        /*
+         * Read prices once, then sort the same snapshot in both directions.
+         * This avoids two slow provider calls and mismatched gainers/losers.
+         */
         List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices);
 
-        if (enrichedData.isEmpty()) {
-            return Map.of("gainers", Collections.emptyList(), "losers", Collections.emptyList());
-        }
-
-        // 2. Sort for Gainers (Descending)
-        List<EnrichedStockData> allSorted = stockDataEnricher.sortByPercentChange(enrichedData, true);
-
-        // 3. Extract Top Gainers (Strictly Positive)
-        List<Map<String, Object>> gainers = allSorted.stream()
-                .filter(d -> d.getPercentChange() > 0)
+        List<StockMoverDTO> gainers = stockDataEnricher
+                .sortByPercentChange(new ArrayList<>(enrichedData), true)
+                .stream()
+                .limit(limit)
+                .map(this::enrichedDataToMap)
+                .collect(Collectors.toList());
+        List<StockMoverDTO> losers = stockDataEnricher
+                .sortByPercentChange(new ArrayList<>(enrichedData), false)
+                .stream()
                 .limit(limit)
                 .map(this::enrichedDataToMap)
                 .collect(Collectors.toList());
 
-        // 4. Extract Top Losers (Reverse of the descending list is ascending)
-        // Or re-sort ascending
-        List<EnrichedStockData> allSortedAsc = stockDataEnricher.sortByPercentChange(enrichedData, false);
-
-        List<Map<String, Object>> losers = allSortedAsc.stream()
-                .filter(d -> d.getPercentChange() < 0)
-                .limit(limit)
-                .map(this::enrichedDataToMap)
-                .collect(Collectors.toList());
-
-        Map<String, List<Map<String, Object>>> result = new HashMap<>();
+        Map<String, List<StockMoverDTO>> result = new HashMap<>();
         result.put("gainers", gainers);
         result.put("losers", losers);
-
         return result;
     }
 
@@ -252,7 +280,7 @@ public class MarketAnalyticsService {
      * @param expandIndices Whether to expand index symbols to constituent stocks
      * @return List of sector performance data
      */
-    public List<Map<String, Object>> getSectorPerformance(String indexSymbol,
+    public List<SectorPerformanceDTO> getSectorPerformance(String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
         // Use provided index or default
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
@@ -289,22 +317,21 @@ public class MarketAnalyticsService {
                 esd -> symbolToSector.getOrDefault(esd.getSymbol(), "Unknown"));
 
         // Calculate sector performance
-        List<Map<String, Object>> sectorPerformance = new ArrayList<>();
+        List<SectorPerformanceDTO> sectorPerformance = new ArrayList<>();
 
         bySector.forEach((sector, stocks) -> {
             double avgChange = stockDataEnricher.calculateAveragePercentChange(stocks);
 
-            Map<String, Object> sectorData = new HashMap<>();
-            sectorData.put("sector", sector);
-            sectorData.put("change", avgChange);
-            sectorData.put("stockCount", stocks.size());
-            sectorData.put("status", avgChange >= 0 ? "Positive" : "Negative");
-
-            sectorPerformance.add(sectorData);
+            sectorPerformance.add(SectorPerformanceDTO.builder()
+                    .sector(sector)
+                    .change(avgChange)
+                    .stockCount(stocks.size())
+                    .status(avgChange >= 0 ? "Positive" : "Negative")
+                    .build());
         });
 
         // Sort by Performance Descending and limit to top 15
-        sectorPerformance.sort((a, b) -> Double.compare((Double) b.get("change"), (Double) a.get("change")));
+        sectorPerformance.sort((a, b) -> Double.compare(b.getChange(), a.getChange()));
 
         return sectorPerformance.stream().limit(15).collect(Collectors.toList());
     }
@@ -313,7 +340,7 @@ public class MarketAnalyticsService {
      * Get Index Performance (All Constituents)
      * Returns performance data for all stocks in the index for the given timeframe.
      */
-    public List<Map<String, Object>> getIndexPerformance(String indexSymbol,
+    public List<StockMoverDTO> getIndexPerformance(String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame) {
         String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
 
@@ -334,13 +361,14 @@ public class MarketAnalyticsService {
     /**
      * Convert EnrichedStockData to Map for API response
      */
-    private Map<String, Object> enrichedDataToMap(EnrichedStockData data) {
-        Map<String, Object> map = new HashMap<>();
-        map.put("symbol", data.getSymbol());
-        map.put("lastPrice", data.getLastPrice());
-        map.put("change", data.getChange());
-        map.put("pChange", data.getPercentChange());
-        map.put("previousClose", data.getPreviousClose());
-        return map;
+    private StockMoverDTO enrichedDataToMap(EnrichedStockData data) {
+        return StockMoverDTO.builder()
+                .symbol(data.getSymbol())
+                .lastPrice(data.getLastPrice())
+                .change(data.getChange())
+                .pChange(data.getPercentChange())
+                .percentChange(data.getPercentChange())
+                .previousClose(data.getPreviousClose())
+                .build();
     }
 }

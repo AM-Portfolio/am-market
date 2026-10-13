@@ -1,0 +1,32 @@
+apiVersion: am.spt/v1
+kind: ServiceLoadTest
+service: am-market-data
+label: am-market-data
+enabled: true
+runtime: java
+owners: [market-team]
+description: Market Data service load-test registration (OpenAPI via springdoc)
+createdBy: market-team
+updatedBy: market-team
+createdAt: "2026-07-25"
+updatedAt: "2026-07-25"
+tags: [market, java, springdoc]
+source:
+  repo: am-market
+  path: am-market-data/spt.yaml
+  team: market-team
+traces:
+  - name: onboarding
+    ref: docs/spt-onboarding.md
+  - name: configmap
+    ref: spt-catalog-am-market-data
+  - name: openapi
+    ref: /v3/api-docs
+  - name: namespace
+    ref: load-testing
+targets:
+  dev: "https://am-dev.asrax.in/market"
+  preprod: "https://am-preprod.asrax.in/market"
+  prod: "https://am.asrax.in/market"
+openapi:
+  path: /v3/api-docs

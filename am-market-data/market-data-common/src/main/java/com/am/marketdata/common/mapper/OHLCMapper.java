@@ -82,13 +82,30 @@ public class OHLCMapper {
         
         // Clean symbol (remove exchange prefix if present)
         String cleanSymbol = symbol.replace("NSE:", "");
+
+        double lastPrice = ohlcQuote.getLastPrice();
+        double prevClose = ohlcQuote.getPreviousClose();
+        if (prevClose <= 0 && ohlcQuote.getOhlc() != null) {
+            prevClose = ohlcQuote.getOhlc().getClose();
+        }
+        double change = 0.0;
+        double changePercent = 0.0;
+        if (prevClose > 0) {
+            change = lastPrice - prevClose;
+            changePercent = (change / prevClose) * 100.0;
+            change = Math.round(change * 100.0) / 100.0;
+            changePercent = Math.round(changePercent * 100.0) / 100.0;
+        }
         
         return EquityPrice.builder()
             .symbol(cleanSymbol)
-            .lastPrice(ohlcQuote.getLastPrice())
+            .lastPrice(lastPrice)
             .ohlcv(OHLCVTPoint.builder().open(ohlcQuote.getOhlc().getOpen()).high(ohlcQuote.getOhlc().getHigh()).low(ohlcQuote.getOhlc().getLow()).close(ohlcQuote.getOhlc().getClose()).build())
             .time(ZonedDateTime.now().toInstant())
             .exchange(exchange)
+            .previousClose(prevClose > 0 ? prevClose : null)
+            .change(prevClose > 0 ? change : null)
+            .changePercent(prevClose > 0 ? changePercent : null)
             .build();
     }
     

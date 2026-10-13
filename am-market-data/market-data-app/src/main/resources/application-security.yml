@@ -1,0 +1,19 @@
+am:
+  security:
+    enabled: true
+    proxy-name: "market-data"
+    oidc:
+      jwk-set-uri: ${OIDC_JWKS_URI:http://localhost:8001/realms/am-realm/protocol/openid-connect/certs}
+      issuer-uri: ${OIDC_ISSUER_URI:http://localhost:8001/realms/am-realm}
+      client-id: ${OAUTH2_CLIENT_ID:am-market-client}
+      client-secret: ${OAUTH2_CLIENT_SECRET:secret}
+    public-paths:
+      - "/actuator/**"
+      - "/market-data/actuator/**"
+      - "/v1/market-data/auth/**"
+    protected-paths:
+      - "/v1/**"
+  api:
+    core:
+      exception-handler:
+        enabled: true

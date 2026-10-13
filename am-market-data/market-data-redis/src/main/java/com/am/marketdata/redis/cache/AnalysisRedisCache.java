@@ -78,7 +78,21 @@ public class AnalysisRedisCache {
     // --- HEATMAP ---
 
     private String getIndexHeatmapKey(String symbol, String interval) {
-        return String.format("%s:index:%s:%s", HEATMAP_PREFIX, symbol.toUpperCase(), interval);
+        // Normalize interval so "1D" / "1d" share one key and forceRefresh overwrites reads.
+        String tf = interval == null ? "" : interval.trim().toUpperCase();
+        return String.format("%s:index:%s:%s", HEATMAP_PREFIX, symbol.toUpperCase(), tf);
+    }
+
+    /** Drop a cached index heatmap (e.g. after detecting a degenerate all-zero payload). */
+    public void deleteIndexHeatmap(String symbol, String interval) {
+        try {
+            String key = getIndexHeatmapKey(symbol, interval);
+            redisTemplate.delete(key);
+            log.debug("deleteIndexHeatmap", "Deleted index heatmap cache for " + symbol + " " + interval);
+        } catch (Exception e) {
+            log.error("deleteIndexHeatmap",
+                    "Error deleting index heatmap for " + symbol + ": " + e.getMessage());
+        }
     }
 
     public void saveHeatmap(CalendarHeatmapResponse response, int year) {
@@ -100,8 +114,11 @@ public class AnalysisRedisCache {
         try {
             String key = getIndexHeatmapKey(symbol, interval);
             String json = redisObjectMapper.writeValueAsString(heatmap);
-            redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
-            log.debug("saveIndexHeatmap", "Cached index heatmap for " + symbol);
+            // 1D moves change every session — don't pin a bad/stale map for 30 days.
+            String tf = interval == null ? "" : interval.trim().toUpperCase();
+            long ttl = "1D".equals(tf) ? Math.min(analysisTtlSeconds, 3600L) : analysisTtlSeconds;
+            redisTemplate.opsForValue().set(key, json, ttl, TimeUnit.SECONDS);
+            log.debug("saveIndexHeatmap", "Cached index heatmap for " + symbol + " ttlSec=" + ttl);
         } catch (Exception e) {
             log.error("saveIndexHeatmap",
                     "Error caching index heatmap for " + symbol + ": " + e.getMessage());
@@ -267,6 +284,48 @@ public class AnalysisRedisCache {
         } catch (Exception e) {
             log.error("getIndicesHistoricalPerformance",
                     "Error retrieving indices historical performance: " + e.getMessage());
+        }
+        return null;
+    }
+
+    // --- CONSTITUENTS HISTORICAL PERFORMANCE (PER INDEX) ---
+
+    private static final String CONSTITUENTS_HISTORY_PREFIX = "analysis:history:constituents";
+
+    private String getConstituentsHistoryKey(String indexSymbol, int years) {
+        String norm = indexSymbol == null ? "" : indexSymbol.trim().toUpperCase().replace(' ', '_');
+        return String.format("%s:%s:%d", CONSTITUENTS_HISTORY_PREFIX, norm, years);
+    }
+
+    public void saveConstituentsHistoricalPerformance(
+            com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse response,
+            String indexSymbol, int years) {
+        if (response == null)
+            return;
+        try {
+            String key = getConstituentsHistoryKey(indexSymbol, years);
+            String json = redisObjectMapper.writeValueAsString(response);
+            redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
+            log.debug("saveConstituentsHistoricalPerformance",
+                    "Cached constituents historical performance for " + indexSymbol + " / " + years + "y");
+        } catch (Exception e) {
+            log.error("saveConstituentsHistoricalPerformance",
+                    "Error caching constituents historical performance: " + e.getMessage());
+        }
+    }
+
+    public com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse getConstituentsHistoricalPerformance(
+            String indexSymbol, int years) {
+        try {
+            String key = getConstituentsHistoryKey(indexSymbol, years);
+            String json = redisTemplate.opsForValue().get(key);
+            if (json != null) {
+                return redisObjectMapper.readValue(json,
+                        com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse.class);
+            }
+        } catch (Exception e) {
+            log.error("getConstituentsHistoricalPerformance",
+                    "Error retrieving constituents historical performance: " + e.getMessage());
         }
         return null;
     }

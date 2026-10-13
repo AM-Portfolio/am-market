@@ -38,3 +38,5 @@ cd am-market-data
 This script acts as a bridge. It will intelligently deploy using the Universal Chart regardless of where this directory is located:
 1. **Fast Local Path**: If `am-cicd` is checked out next to `am-market`, it uses the local files instantly.
 2. **Git Fallback**: If you only cloned `am-market` and nothing else, the script silently shallow-clones the Universal Chart from GitHub directly into a temporary folder, runs the deployment using your `values.yaml`, and instantly cleans up. You do not need to manage complex repository structures!
+
+<!-- spt-on-commit: path-filter trigger for qa-agent-spt-notify (feature/working smoke). -->

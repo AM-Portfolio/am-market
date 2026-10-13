@@ -1,85 +1,403 @@
 package com.am.marketdata.watchlist.service;
 
-import com.am.marketdata.watchlist.dto.WatchlistItemDto;
+import com.am.marketdata.watchlist.dto.*;
+import com.am.marketdata.watchlist.entity.Watchlist;
 import com.am.marketdata.watchlist.entity.WatchlistItem;
+import com.am.marketdata.watchlist.repository.WatchlistItemRepository;
 import com.am.marketdata.watchlist.repository.WatchlistRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Service managing user-isolated multi-watchlist lifecycle, stock item additions,
+ * capacity checks (max 5 watchlists, max 50 stocks/list), and default list auto-seeding.
+ */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class WatchlistService {
 
-    private final WatchlistRepository watchlistRepository;
+    public static final String DEFAULT_ACTIVE_SET_KEY = "market:active-symbols";
+    public static final String DEFAULT_WATCHLIST_NAME = "My Watch List";
+    public static final int DEFAULT_MAX_WATCHLISTS_PER_USER = 5;
+    public static final int DEFAULT_MAX_STOCKS_PER_WATCHLIST = 50;
+    // Strip only exchange labels we understand. Unknown colon values stay invalid.
+    private static final Set<String> QUALIFIED_EXCHANGES = Set.of(
+            "NSE", "BSE", "NSE_EQ", "BSE_EQ", "NSE_FO", "BSE_FO", "MCX");
 
-    public List<WatchlistItemDto> getWatchlist(String userId) {
-        log.info("Getting watchlist for user: {}", userId);
-        return watchlistRepository.findByUserIdOrderByDisplayOrderAsc(userId)
-                .stream()
-                .map(this::toDto)
+    private final WatchlistRepository watchlistRepository;
+    private final WatchlistItemRepository watchlistItemRepository;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final String activeSetRedisKey;
+    private final int maxWatchlistsPerUser;
+    private final int maxStocksPerWatchlist;
+    private final String defaultWatchlistName;
+
+    public WatchlistService(
+            WatchlistRepository watchlistRepository,
+            WatchlistItemRepository watchlistItemRepository,
+            @Nullable StringRedisTemplate stringRedisTemplate,
+            @Value("${market.active-symbols.redis-key:" + DEFAULT_ACTIVE_SET_KEY + "}") String activeSetRedisKey,
+            @Value("${market.watchlist.max-per-user:" + DEFAULT_MAX_WATCHLISTS_PER_USER + "}") int maxWatchlistsPerUser,
+            @Value("${market.watchlist.max-stocks-per-list:" + DEFAULT_MAX_STOCKS_PER_WATCHLIST + "}") int maxStocksPerWatchlist,
+            @Value("${market.watchlist.default-name:" + DEFAULT_WATCHLIST_NAME + "}") String defaultWatchlistName) {
+        this.watchlistRepository = watchlistRepository;
+        this.watchlistItemRepository = watchlistItemRepository;
+        this.stringRedisTemplate = stringRedisTemplate;
+        this.activeSetRedisKey = activeSetRedisKey;
+        this.maxWatchlistsPerUser = maxWatchlistsPerUser;
+        this.maxStocksPerWatchlist = maxStocksPerWatchlist;
+        this.defaultWatchlistName = defaultWatchlistName;
+    }
+
+    /**
+     * Gets or seeds the default "My Watch List" for a user.
+     * Ensures every user has at least one default watchlist container.
+     */
+    public Watchlist getOrCreateDefaultWatchlist(String userId) {
+        return watchlistRepository.findByUserIdAndIsDefaultTrue(userId)
+                .orElseGet(() -> {
+                    log.info("Auto-seeding default watchlist '{}' for user {}", defaultWatchlistName, userId);
+                    Watchlist defaultList = Watchlist.builder()
+                            .userId(userId)
+                            .name(defaultWatchlistName)
+                            .isDefault(true)
+                            .displayOrder(0)
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
+                            .build();
+                    return watchlistRepository.save(defaultList);
+                });
+    }
+
+    /**
+     * Retrieves all custom watchlists owned by a user with stock counts.
+     * Automatically seeds default watchlist if user has none.
+     */
+    public List<WatchlistDto> getUserWatchlists(String userId) {
+        log.info("Fetching watchlists for user {}", userId);
+        getOrCreateDefaultWatchlist(userId); // Ensure default list exists
+
+        List<Watchlist> watchlists = watchlistRepository.findByUserIdOrderByDisplayOrderAsc(userId);
+        return watchlists.stream()
+                .map(wl -> {
+                    int count = (int) watchlistItemRepository.countByWatchlistId(wl.getId());
+                    return toWatchlistDto(wl, count);
+                })
                 .collect(Collectors.toList());
     }
 
-    public WatchlistItemDto addToWatchlist(String userId, String symbol) {
-        log.info("Adding symbol {} to watchlist for user {}", symbol, userId);
+    /**
+     * Creates a new custom named watchlist for a user.
+     * Enforces strict limit of maximum 5 watchlists per user.
+     */
+    public WatchlistDto createWatchlist(String userId, String name) {
+        String trimmedName = name != null ? name.trim() : "";
+        log.info("Creating custom watchlist '{}' for user {}", trimmedName, userId);
 
-        // Check if already exists
-        if (watchlistRepository.existsByUserIdAndSymbol(userId, symbol)) {
-            throw new IllegalArgumentException("Symbol already in watchlist");
+        if (trimmedName.isEmpty()) {
+            throw new IllegalArgumentException("Watchlist name cannot be empty");
         }
 
-        // Get next display order
-        long count = watchlistRepository.countByUserId(userId);
+        // Limit Check: Maximum watchlists per user
+        long currentCount = watchlistRepository.countByUserId(userId);
+        if (currentCount >= maxWatchlistsPerUser) {
+            log.warn("User {} exceeded maximum limit of {} watchlists", userId, maxWatchlistsPerUser);
+            throw new IllegalArgumentException("Maximum limit of " + maxWatchlistsPerUser + " watchlists reached");
+        }
 
-        WatchlistItem item = WatchlistItem.builder()
+        // Check for duplicate name for this user
+        if (watchlistRepository.existsByUserIdAndName(userId, trimmedName)) {
+            throw new IllegalArgumentException("A watchlist named '" + trimmedName + "' already exists");
+        }
+
+        Watchlist watchlist = Watchlist.builder()
                 .userId(userId)
-                .symbol(symbol.toUpperCase())
-                .displayOrder((int) count)
+                .name(trimmedName)
+                .isDefault(false)
+                .displayOrder((int) currentCount)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        WatchlistItem saved = watchlistRepository.save(item);
-        log.info("Added symbol {} to watchlist for user {}", symbol, userId);
-        return toDto(saved);
+        Watchlist saved = watchlistRepository.save(watchlist);
+        return toWatchlistDto(saved, 0);
+    }
+
+    /**
+     * Renames an existing custom watchlist owned by the user.
+     */
+    public WatchlistDto renameWatchlist(String userId, String watchlistId, String newName) {
+        String trimmedName = newName != null ? newName.trim() : "";
+        log.info("Renaming watchlist {} for user {} to '{}'", watchlistId, userId, trimmedName);
+
+        Watchlist watchlist = watchlistRepository.findByUserIdAndId(userId, watchlistId)
+                .orElseThrow(() -> new IllegalArgumentException("Watchlist not found or access denied"));
+
+        if (trimmedName.isEmpty()) {
+            throw new IllegalArgumentException("Watchlist name cannot be empty");
+        }
+
+        if (!watchlist.getName().equalsIgnoreCase(trimmedName) && watchlistRepository.existsByUserIdAndName(userId, trimmedName)) {
+            throw new IllegalArgumentException("A watchlist named '" + trimmedName + "' already exists");
+        }
+
+        watchlist.setName(trimmedName);
+        watchlist.setUpdatedAt(LocalDateTime.now());
+        Watchlist updated = watchlistRepository.save(watchlist);
+
+        int count = (int) watchlistItemRepository.countByWatchlistId(updated.getId());
+        return toWatchlistDto(updated, count);
+    }
+
+    /**
+     * Deletes a custom watchlist and all contained stock items.
+     * Prevents deletion of the default "My Watch List".
+     */
+    public void deleteWatchlist(String userId, String watchlistId) {
+        log.info("Deleting watchlist {} for user {}", watchlistId, userId);
+
+        Watchlist watchlist = watchlistRepository.findByUserIdAndId(userId, watchlistId)
+                .orElseThrow(() -> new IllegalArgumentException("Watchlist not found or access denied"));
+
+        if (Boolean.TRUE.equals(watchlist.getIsDefault())) {
+            throw new IllegalArgumentException("Default watchlist cannot be deleted");
+        }
+
+        watchlistItemRepository.deleteByWatchlistId(watchlistId);
+        watchlistRepository.deleteByUserIdAndId(userId, watchlistId);
+    }
+
+    /**
+     * Gets all stock items inside a specific watchlist owned by the user.
+     */
+    public List<WatchlistItemDto> getWatchlistItems(String userId, String watchlistId) {
+        log.info("Getting items in watchlist {} for user {}", watchlistId, userId);
+
+        // Ownership verification
+        watchlistRepository.findByUserIdAndId(userId, watchlistId)
+                .orElseThrow(() -> new IllegalArgumentException("Watchlist not found or access denied"));
+
+        return watchlistItemRepository.findByWatchlistIdOrderByDisplayOrderAsc(watchlistId)
+                .stream()
+                .map(this::toItemDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Adds a stock symbol to a specific watchlist owned by the user, with exchange support.
+     * Enforces strict capacity limit of maximum stocks per watchlist.
+     */
+    public WatchlistItemDto addStockToWatchlist(String userId, String watchlistId, String symbol, String exchange) {
+        CanonicalSymbol canonical = canonicalizeSymbol(symbol, exchange);
+        String cleanSymbol = canonical.symbol();
+        String cleanExchange = canonical.exchange();
+        log.info("Adding symbol {}:{} to watchlist {} for user {}", cleanExchange, cleanSymbol, watchlistId, userId);
+
+        // Ownership verification
+        Watchlist watchlist = watchlistRepository.findByUserIdAndId(userId, watchlistId)
+                .orElseThrow(() -> new IllegalArgumentException("Watchlist not found or access denied"));
+
+        // Capacity Check: Max stocks per watchlist
+        long itemCount = watchlistItemRepository.countByWatchlistId(watchlistId);
+        if (itemCount >= maxStocksPerWatchlist) {
+            log.warn("Watchlist {} exceeded maximum capacity of {} stocks", watchlistId, maxStocksPerWatchlist);
+            throw new IllegalArgumentException("Watchlist has reached maximum capacity of " + maxStocksPerWatchlist + " stocks");
+        }
+
+        // Duplicate Check: Verify uniqueness of (watchlistId, symbol, exchange)
+        if (watchlistItemRepository.existsByWatchlistIdAndSymbolAndExchange(watchlistId, cleanSymbol, cleanExchange)) {
+            throw new IllegalArgumentException("Symbol '" + cleanSymbol + "' on exchange '" + cleanExchange + "' is already in this watchlist");
+        }
+
+        WatchlistItem item = WatchlistItem.builder()
+                .watchlistId(watchlist.getId())
+                .userId(userId)
+                .symbol(cleanSymbol)
+                .exchange(cleanExchange)
+                .displayOrder((int) itemCount)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        WatchlistItem saved = watchlistItemRepository.save(item);
+        // Publish standard compound active symbol (e.g., "BSE:RELIANCE" or "NSE:RELIANCE")
+        publishActiveSymbol(cleanExchange + ":" + cleanSymbol);
+        return toItemDto(saved);
+    }
+
+    /**
+     * Backward-compatible overload defaulting exchange to NSE.
+     */
+    public WatchlistItemDto addStockToWatchlist(String userId, String watchlistId, String symbol) {
+        return addStockToWatchlist(userId, watchlistId, symbol, null);
+    }
+
+    /**
+     * Removes a stock symbol on a specific exchange from a watchlist.
+     */
+    public void removeStockFromWatchlist(String userId, String watchlistId, String symbol, String exchange) {
+        CanonicalSymbol canonical = canonicalizeSymbol(symbol, exchange);
+        String cleanSymbol = canonical.symbol();
+        String cleanExchange = canonical.exchange();
+        log.info("Removing symbol {}:{} from watchlist {} for user {}", cleanExchange, cleanSymbol, watchlistId, userId);
+
+        watchlistRepository.findByUserIdAndId(userId, watchlistId)
+                .orElseThrow(() -> new IllegalArgumentException("Watchlist not found or access denied"));
+
+        watchlistItemRepository.deleteByWatchlistIdAndSymbolAndExchange(watchlistId, cleanSymbol, cleanExchange);
+    }
+
+    /**
+     * Backward-compatible overload removing by symbol.
+     */
+    public void removeStockFromWatchlist(String userId, String watchlistId, String symbol) {
+        removeStockFromWatchlist(userId, watchlistId, symbol, null);
+    }
+
+    /**
+     * Returns containment status of a stock symbol across all watchlists owned by the user.
+     * Crucial for powering the UI "Add to Watchlist" popup modal.
+     */
+    public List<WatchlistCheckStatusDto> checkSymbolAcrossWatchlists(String userId, String symbol, String exchange) {
+        CanonicalSymbol canonical = canonicalizeSymbol(symbol, exchange);
+        String cleanSymbol = canonical.symbol();
+        String cleanExchange = canonical.exchange();
+        log.info("Checking symbol {}:{} containment across watchlists for user {}", cleanExchange, cleanSymbol, userId);
+
+        List<WatchlistDto> watchlists = getUserWatchlists(userId);
+        List<WatchlistCheckStatusDto> statusList = new ArrayList<>();
+
+        for (WatchlistDto wl : watchlists) {
+            boolean contains = watchlistItemRepository.existsByWatchlistIdAndSymbolAndExchange(wl.getId(), cleanSymbol, cleanExchange);
+            statusList.add(WatchlistCheckStatusDto.builder()
+                    .watchlistId(wl.getId())
+                    .name(wl.getName())
+                    .isDefault(wl.getIsDefault())
+                    .itemCount(wl.getItemCount())
+                    .containsSymbol(contains)
+                    .build());
+        }
+
+        return statusList;
+    }
+
+    /**
+     * Backward-compatible overload checking across watchlists defaulting to NSE.
+     */
+    public List<WatchlistCheckStatusDto> checkSymbolAcrossWatchlists(String userId, String symbol) {
+        return checkSymbolAcrossWatchlists(userId, symbol, null);
+    }
+
+    // --- Legacy Single-Watchlist Compatibility Helpers ---
+
+    public List<WatchlistItemDto> getWatchlist(String userId) {
+        Watchlist defaultList = getOrCreateDefaultWatchlist(userId);
+        return getWatchlistItems(userId, defaultList.getId());
+    }
+
+    public WatchlistItemDto addToWatchlist(String userId, String symbol) {
+        Watchlist defaultList = getOrCreateDefaultWatchlist(userId);
+        return addStockToWatchlist(userId, defaultList.getId(), symbol, null);
     }
 
     public void removeFromWatchlist(String userId, String symbol) {
-        log.info("Removing symbol {} from watchlist for user {}", symbol, userId);
-        watchlistRepository.deleteByUserIdAndSymbol(userId, symbol.toUpperCase());
-    }
-
-    public void reorderWatchlist(String userId, List<String> symbols) {
-        log.info("Reordering watchlist for user {}", userId);
-
-        for (int i = 0; i < symbols.size(); i++) {
-            final int order = i; // Make effectively final for lambda
-            String symbol = symbols.get(i);
-            watchlistRepository.findByUserIdAndSymbol(userId, symbol.toUpperCase())
-                    .ifPresent(item -> {
-                        item.setDisplayOrder(order);
-                        item.setUpdatedAt(LocalDateTime.now());
-                        watchlistRepository.save(item);
-                    });
-        }
+        Watchlist defaultList = getOrCreateDefaultWatchlist(userId);
+        removeStockFromWatchlist(userId, defaultList.getId(), symbol, null);
     }
 
     public boolean isInWatchlist(String userId, String symbol) {
-        return watchlistRepository.existsByUserIdAndSymbol(userId, symbol.toUpperCase());
+        Watchlist defaultList = getOrCreateDefaultWatchlist(userId);
+        CanonicalSymbol canonical = canonicalizeSymbol(symbol, null);
+        return watchlistItemRepository.existsByWatchlistIdAndSymbolAndExchange(
+                defaultList.getId(), canonical.symbol(), canonical.exchange());
     }
 
-    private WatchlistItemDto toDto(WatchlistItem item) {
+    // --- Private Helper Methods ---
+
+    private CanonicalSymbol canonicalizeSymbol(String symbol, String requestedExchange) {
+        /*
+         * Search may send IDEA, NSE:IDEA, or NSE:NSE:IDEA. Store only IDEA plus
+         * NSE so duplicate prefixes are never saved or published to Redis.
+         */
+        String remaining = symbol == null ? "" : symbol.trim().toUpperCase(Locale.ROOT);
+        if (remaining.isBlank()) {
+            throw new IllegalArgumentException("Symbol cannot be blank");
+        }
+
+        String suppliedExchange = requestedExchange == null || requestedExchange.isBlank()
+                ? null
+                : requestedExchange.trim().toUpperCase(Locale.ROOT);
+        String prefixedExchange = null;
+
+        // Repeated known labels are safe to remove: NSE:NSE:IDEA becomes IDEA.
+        while (remaining.contains(":")) {
+            int delimiter = remaining.indexOf(':');
+            String prefix = remaining.substring(0, delimiter);
+            if (!QUALIFIED_EXCHANGES.contains(prefix)) {
+                break;
+            }
+            if (prefixedExchange != null && !prefixedExchange.equals(prefix)) {
+                throw new IllegalArgumentException("Symbol contains conflicting exchange prefixes");
+            }
+            prefixedExchange = prefix;
+            remaining = remaining.substring(delimiter + 1).trim();
+        }
+
+        if (remaining.isBlank() || remaining.contains(":")) {
+            throw new IllegalArgumentException("Symbol must be a valid exchange-qualified ticker");
+        }
+        if (suppliedExchange != null && prefixedExchange != null && !suppliedExchange.equals(prefixedExchange)) {
+            throw new IllegalArgumentException("Exchange conflicts with the exchange prefix in symbol");
+        }
+
+        return new CanonicalSymbol(remaining, suppliedExchange != null ? suppliedExchange
+                : prefixedExchange != null ? prefixedExchange : "NSE");
+    }
+
+    private record CanonicalSymbol(String symbol, String exchange) {}
+
+    private WatchlistDto toWatchlistDto(Watchlist watchlist, int itemCount) {
+        return WatchlistDto.builder()
+                .id(watchlist.getId())
+                .userId(watchlist.getUserId())
+                .name(watchlist.getName())
+                .isDefault(watchlist.getIsDefault())
+                .displayOrder(watchlist.getDisplayOrder())
+                .itemCount(itemCount)
+                .createdAt(watchlist.getCreatedAt())
+                .updatedAt(watchlist.getUpdatedAt())
+                .build();
+    }
+
+    private WatchlistItemDto toItemDto(WatchlistItem item) {
         return WatchlistItemDto.builder()
                 .id(item.getId())
                 .symbol(item.getSymbol())
+                .exchange(item.getExchange() != null ? item.getExchange() : "NSE")
                 .displayOrder(item.getDisplayOrder())
                 .createdAt(item.getCreatedAt())
                 .build();
+    }
+
+    private void publishActiveSymbol(String symbol) {
+        if (stringRedisTemplate == null || symbol == null || symbol.isBlank()) {
+            return;
+        }
+        try {
+            stringRedisTemplate.opsForSet().add(activeSetRedisKey, symbol.trim().toUpperCase(Locale.ROOT));
+        } catch (Exception e) {
+            log.warn("Watchlist active-symbol publish failed (fail-open): {}", e.getMessage());
+        }
     }
 }

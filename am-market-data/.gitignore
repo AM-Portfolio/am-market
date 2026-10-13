@@ -96,3 +96,39 @@ market_data_web/.pub/
 market_data_web/.pub-cache/
 market_data_web/.metadata
 .env.docker
+
+# One-off Python query scripts
+check_pod_env.py
+curl_batch.py
+curl_batch_full.py
+curl_batch_missing.py
+curl_both.py
+db_check_docs.py
+get_batch_error.py
+get_exception_logs.py
+insert_missing_indices.py
+show_dbs_and_collections.py
+test_external_batch.py
+trigger_prev_close_now.py
+test_search_edge_cases.py
+
+# Ignore local test files
+*Test.java
+*Tests.java
+**/src/test/
+**/SmartRecommendationServiceTest.java
+**/MarketDataCacheServiceTest.java
+**/SmartStockServiceTest.java
+
+# Keep market-info contract tests under version control.
+!market-data-api/src/test/
+!market-data-api/src/test/java/
+!market-data-api/src/test/java/com/
+!market-data-api/src/test/java/com/am/
+!market-data-api/src/test/java/com/am/marketdata/
+!market-data-api/src/test/java/com/am/marketdata/api/
+!market-data-api/src/test/java/com/am/marketdata/api/MarketInfoSymbolMapTest.java
+!market-data-api/src/test/java/com/am/marketdata/api/MarketInfoDtoParseTest.java
+
+
+

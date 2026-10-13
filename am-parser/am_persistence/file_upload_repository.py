@@ -20,13 +20,18 @@ class FileUploadRepository:
         """Insert new file upload record"""
         file_data = file_upload.dict()
         file_data['_id'] = file_upload.file_id
+        if getattr(file_upload, 'user_id', None):
+            file_data['user_id'] = file_upload.user_id
         
         result = await self.collection.insert_one(file_data)
         return str(result.inserted_id)
     
-    async def get_file_upload(self, file_id: str) -> Optional[FileUpload]:
+    async def get_file_upload(self, file_id: str, user_id: Optional[str] = None) -> Optional[FileUpload]:
         """Get file upload by ID"""
-        document = await self.collection.find_one({"_id": file_id})
+        query = {"_id": file_id}
+        if user_id:
+            query["user_id"] = user_id
+        document = await self.collection.find_one(query)
         if document:
             return FileUpload(**document)
         return None
@@ -49,21 +54,27 @@ class FileUploadRepository:
         return [FileUpload(**doc) for doc in documents]
     
     async def get_all_files(self, skip: int = 0, limit: int = 100, 
-                           status_filter: Optional[ProcessingStatus] = None) -> List[FileUpload]:
+                           status_filter: Optional[ProcessingStatus] = None,
+                           user_id: Optional[str] = None) -> List[FileUpload]:
         """Get all file uploads with optional filtering"""
         query = {}
         if status_filter:
             query["status"] = status_filter
+        if user_id:
+            query["user_id"] = user_id
         
         cursor = self.collection.find(query).skip(skip).limit(limit).sort("created_at", -1)
         documents = await cursor.to_list(length=None)
         return [FileUpload(**doc) for doc in documents]
     
-    async def count_files(self, status_filter: Optional[ProcessingStatus] = None) -> int:
+    async def count_files(self, status_filter: Optional[ProcessingStatus] = None,
+                         user_id: Optional[str] = None) -> int:
         """Count total files with optional filtering"""
         query = {}
         if status_filter:
             query["status"] = status_filter
+        if user_id:
+            query["user_id"] = user_id
         
         return await self.collection.count_documents(query)
     

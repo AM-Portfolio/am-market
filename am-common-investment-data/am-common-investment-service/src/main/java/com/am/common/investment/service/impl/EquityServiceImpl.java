@@ -98,10 +98,18 @@ public class EquityServiceImpl implements EquityService {
 
     @Override
     public List<EquityPrice> getPriceHistoryByKey(String key, Instant startTime, Instant endTime) {
-        logger.debug("Fetching price history for key: {} between {} and {}", key, startTime, endTime);
+        return getPriceHistoryByKey(key, startTime, endTime, null);
+    }
+
+    /**
+     * Optimized historical price retrieval passing window interval down to InfluxDB Flux engine.
+     */
+    @Override
+    public List<EquityPrice> getPriceHistoryByKey(String key, Instant startTime, Instant endTime, String interval) {
+        logger.debug("Fetching price history for key: {} between {} and {} with interval: {}", key, startTime, endTime, interval);
         long queryStartTime = System.currentTimeMillis();
         
-        List<EquityPrice> prices = priceRepository.findByKeyAndTimeBetween(key, startTime, endTime)
+        List<EquityPrice> prices = priceRepository.findByKeyAndTimeBetween(key, startTime, endTime, interval)
             .stream()
             .map(mapper::toModel)
             .collect(Collectors.toList());

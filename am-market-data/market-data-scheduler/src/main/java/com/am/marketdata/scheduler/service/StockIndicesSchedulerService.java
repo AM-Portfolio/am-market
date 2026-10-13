@@ -30,6 +30,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.am.observability.trace.IgnoreTracing;
+
 /**
  * Scheduler service specifically for stock indices data.
  * Runs at 9:30 AM and 4:00 PM with retry mechanism.
@@ -38,6 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(name = "scheduler.stock-indices.enabled", havingValue = "true", matchIfMissing = true)
+@IgnoreTracing
 public class StockIndicesSchedulerService {
     @Value("${scheduler.stock-indices.retry.interval-minutes:15}")
     private int retryIntervalMinutes;

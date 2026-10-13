@@ -17,6 +17,7 @@ import java.io.Serializable;
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "securities")
+@TypeAlias("com.am.common.amcommondata.document.security.SecurityDocument")
 public class SecurityDocument implements Serializable {
 
     @Id

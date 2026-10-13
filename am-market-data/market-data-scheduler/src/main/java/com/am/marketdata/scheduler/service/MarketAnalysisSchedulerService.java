@@ -113,5 +113,17 @@ public class MarketAnalysisSchedulerService {
         } catch (Exception e) {
             log.error("Failed to calculate Indices Historical Performance", e);
         }
+
+        // Explicitly refresh the Market Heatmap (Indices) board — not covered by
+        // per-stock symbol iteration above.
+        List<String> indexHeatmapTimeframes = Arrays.asList("1D", "1W", "1M", "3M", "6M", "1Y");
+        for (String tf : indexHeatmapTimeframes) {
+            try {
+                analysisService.getHeatmap("INDICES", tf, true);
+                log.info("Refreshed INDICES heatmap for {}", tf);
+            } catch (Exception e) {
+                log.warn("Failed to refresh INDICES heatmap for {}", tf, e);
+            }
+        }
     }
 }

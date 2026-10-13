@@ -35,10 +35,14 @@ public class ScraperConfig {
             }
         }
 
+        // Pod runs as non-root with empty HOME; Chrome writes under HOME and crashes otherwise.
+        if (System.getenv("HOME") == null || System.getenv("HOME").isBlank() || "/".equals(System.getenv("HOME"))) {
+            System.setProperty("user.home", "/tmp");
+        }
         System.setProperty("wdm.cachePath", "/tmp");
         WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
-        
+
         // Basic headless configuration
         options.addArguments("--headless=new");
         options.addArguments("--disable-gpu");
@@ -46,19 +50,21 @@ public class ScraperConfig {
         options.addArguments("--disable-dev-shm-usage");
         options.addArguments("--remote-allow-origins=*");
         options.addArguments("--window-size=1920,1080");
-        options.addArguments("--user-data-dir=/tmp/chrome-user-data");
+        options.addArguments("--user-data-dir=/tmp/chrome-user-data-" + ProcessHandle.current().pid());
         options.addArguments("--disk-cache-dir=/tmp/chrome-cache");
-        
+        options.addArguments("--crash-dumps-dir=/tmp/chrome-crash");
+
         // Additional settings to improve reliability
         options.addArguments("--disable-blink-features=AutomationControlled");
         options.addArguments("--enable-javascript");
         options.addArguments("--disable-extensions");
         options.addArguments("--disable-popup-blocking");
         options.addArguments("--disable-notifications");
-        
-        // Set user agent to look more like a real browser
-        options.addArguments("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-        
+
+        // Match installed Chrome major when possible; avoid stale hard-coded UA.
+        options.addArguments(
+                "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36");
+
         webDriver = new ChromeDriver(options);
         return webDriver;
     }

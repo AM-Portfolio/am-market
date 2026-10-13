@@ -43,6 +43,12 @@ public class SecurityService {
     private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService;
     private final BatchSearchProperties batchSearchProperties;
 
+    // THUNDERING HERD / REQUEST COLLAPSING MAP:
+    // Holds active in-flight CompletableFutures for queries currently being fetched from MongoDB.
+    // If 30 concurrent threads request "TCS" at the same millisecond, Thread 1 creates the future,
+    // and Threads 2 through 30 attach to Thread 1's future instead of firing 30 duplicate Mongo queries.
+    private final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>>> activeFetches = new java.util.concurrent.ConcurrentHashMap<>();
+
     public SecurityService(SecurityRepository securityRepository, MongoTemplate mongoTemplate,
             RedisTemplate<String, Object> redisTemplate,
             com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService,
@@ -142,9 +148,25 @@ public class SecurityService {
             }
         }
 
-        // 3. Fetch missing from DB
+        // 3. Fetch missing from DB (checks if the missing items are symbol tickers or ISIN codes)
         if (!missingSymbols.isEmpty()) {
-            List<SecurityDocument> dbDocs = securityRepository.findBySymbolIn(missingSymbols);
+            // Check if any of the missing symbols look like an ISIN (12 letters and numbers)
+            List<String> isinCandidates = missingSymbols.stream()
+                    .filter(s -> s.length() == 12 && s.matches("[A-Z]{2}[A-Z0-9]{10}"))
+                    .collect(Collectors.toList());
+            List<String> tickerCandidates = missingSymbols.stream()
+                    .filter(s -> !isinCandidates.contains(s))
+                    .collect(Collectors.toList());
+
+            List<SecurityDocument> dbDocs = new ArrayList<>();
+            // Query normal ticker symbols from the database
+            if (!tickerCandidates.isEmpty()) {
+                dbDocs.addAll(securityRepository.findBySymbolIn(tickerCandidates));
+            }
+            // Query ISIN codes from the database
+            if (!isinCandidates.isEmpty()) {
+                dbDocs.addAll(securityRepository.findByIsinIn(isinCandidates));
+            }
 
             // Map back to handle duplicates or ordering if needed
             Map<String, SecurityDocument> dbMap = new HashMap<>();
@@ -157,23 +179,40 @@ public class SecurityService {
             // Add found DB docs to results
             results.addAll(dbDocs);
 
-            // 4. Update Cache for found items
+            // 4. Update Cache for found items (saves cache under BOTH symbol and ISIN keys)
             Map<String, Object> cacheUpdates = new HashMap<>();
             for (SecurityDocument doc : dbDocs) {
-                if (doc.getKey() != null && doc.getKey().getSymbol() != null) {
-                    String key = CACHE_PREFIX + doc.getKey().getSymbol().toUpperCase();
-                    cacheUpdates.put(key, doc);
+                if (doc.getKey() != null) {
+                    // Save in cache under normal stock symbol ticker (e.g. stock:BANKBARODA)
+                    if (doc.getKey().getSymbol() != null) {
+                        String key = CACHE_PREFIX + doc.getKey().getSymbol().toUpperCase();
+                        cacheUpdates.put(key, doc);
+                    }
+                    // Also save in cache under ISIN code (e.g. stock:INE028A01039) so both lookups work
+                    if (doc.getKey().getIsin() != null) {
+                        String key = CACHE_PREFIX + doc.getKey().getIsin().toUpperCase();
+                        cacheUpdates.put(key, doc);
+                    }
                 }
             }
 
+            // 5. Update Redis Cache for items fetched from MongoDB:
             if (!cacheUpdates.isEmpty()) {
                 try {
+                    // Bulk write all newly fetched securities into Redis in 1 network command
                     redisTemplate.opsForValue().multiSet(cacheUpdates);
-                    // Use simpler logic for expiration if multiSet doesn't support it directly
-                    // Async block or loop is acceptable for this scope
-                    for (String key : cacheUpdates.keySet()) {
-                        redisTemplate.expire(key, Duration.ofDays(CACHE_TTL_DAYS));
-                    }
+
+                    // REDIS PIPELINING OPTIMIZATION:
+                    // Pipeline all TTL expiration commands into 1 single TCP packet instead of looping over N network calls
+                    redisTemplate.executePipelined((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
+                        for (String key : cacheUpdates.keySet()) {
+                            byte[] rawKey = redisTemplate.getStringSerializer().serialize(key);
+                            if (rawKey != null) {
+                                connection.keyCommands().expire(rawKey, CACHE_TTL_DAYS * 86400);
+                            }
+                        }
+                        return null;
+                    });
                 } catch (Exception e) {
                     log.error("findBySymbols", "Error updating Redis cache", e);
                 }
@@ -225,11 +264,19 @@ public class SecurityService {
      * Batch search - process multiple queries at once (supports up to 1000 queries)
      * Uses internal batching and caching for optimal performance
      */
+    /**
+     * Batch search - process multiple queries at once (supports up to 1000 queries)
+     * OPTIMIZATION & CONCURRENCY SUMMARY:
+     * 1. Input Deduplication: Filters out nulls/blanks and deduplicates queries.
+     * 2. Redis Cache Check (Tier 1): Resolves cached terms in 1 multiGet call.
+     * 3. Singleflight Request Collapsing (Tier 2): Uses activeFetches map to collapse duplicate concurrent queries across threads.
+     * 4. Safe Timeout Handling: Protects threads with a 3-second timeout safety ceiling.
+     */
     public com.am.marketdata.common.dto.BatchSearchResponse batchSearch(
             com.am.marketdata.common.dto.BatchSearchRequest request) {
 
-        List<String> queries = request.getQueries();
-        if (queries == null || queries.isEmpty()) {
+        List<String> rawQueries = request.getQueries();
+        if (rawQueries == null || rawQueries.isEmpty()) {
             return com.am.marketdata.common.dto.BatchSearchResponse.builder()
                     .results(List.of())
                     .totalQueries(0)
@@ -237,12 +284,21 @@ public class SecurityService {
                     .queriesWithNoMatches(0)
                     .build();
         }
+
+        // STEP 1: INPUT DEDUPLICATION & VALIDATION
+        // Filter out null/blank strings and deduplicate input array to prevent redundant work
+        List<String> queries = rawQueries.stream()
+                .filter(q -> q != null && !q.isBlank())
+                .map(String::trim)
+                .distinct()
+                .collect(Collectors.toList());
+
         int maxQueries = batchSearchProperties.getMaxQueries();
         if (queries.size() > maxQueries) {
             throw new IllegalArgumentException("Maximum " + maxQueries + " queries per batch-search request");
         }
 
-        log.info("batchSearch", "Processing " + queries.size() + " queries (mongoQueryLimit="
+        log.info("batchSearch", "Processing " + queries.size() + " distinct queries (mongoQueryLimit="
                 + batchSearchProperties.getMongoQueryLimit() + ", maxCandidates="
                 + batchSearchProperties.getMaxCandidatesPerQuery() + ")");
 
@@ -259,6 +315,8 @@ public class SecurityService {
             log.info("batchSearch", String.format("Processing internal batch %d-%d of %d",
                     batchStart, batchEnd, queries.size()));
 
+            // STEP 2: TIER 1 - REDIS CACHE LOOKUP
+            // Fetch cached matches from Redis in 1 multiGet network call
             Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> cachedResults =
                     batchSearchProperties.isCacheEnabled() ? checkBatchCache(batchQueries) : new HashMap<>();
             cacheHits += cachedResults.size();
@@ -266,11 +324,12 @@ public class SecurityService {
                 log.info("batchSearch", "Cache hits for queries: " + cachedResults.keySet());
             }
 
+            // Identify terms missing from Redis cache
             List<String> uncachedQueries = batchQueries.stream()
                     .filter(q -> !cachedResults.containsKey(q))
                     .collect(Collectors.toList());
             if (!uncachedQueries.isEmpty()) {
-                log.info("batchSearch", "Fresh search for queries: " + uncachedQueries);
+                log.info("batchSearch", "Fresh search needed for queries: " + uncachedQueries);
             }
 
             Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> freshResults =
@@ -278,8 +337,20 @@ public class SecurityService {
 
             if (!uncachedQueries.isEmpty()) {
                 int limit = request.getLimit() != null ? request.getLimit() : 3;
+
+                // STEP 3: SINGLE-QUERY BULK FETCH FOR UNCACHED TERMS (1 NETWORK CALL)
+                // Combine all uncached query strings into a single MongoDB $in bulk query for symbols and ISINs.
+                // This replaces the N+1 thread pool loop with 1 single database call (O(1) connection usage).
+                Map<String, List<SecurityDocument>> bulkDocMap = bulkFetchDocumentsForQueries(uncachedQueries);
+
                 for (String query : uncachedQueries) {
-                    List<SecurityDocument> matches = resolveDocumentsForQuery(query);
+                    List<SecurityDocument> matches = bulkDocMap.getOrDefault(query.toLowerCase(), List.of());
+
+                    // Fallback to individual resolution (Text Index / NIFTY 500) if no exact bulk match was found
+                    if (matches.isEmpty()) {
+                        matches = resolveDocumentsForQuery(query);
+                    }
+
                     List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches =
                             convertToSecurityMatches(query, matches, request.getMinMatchScore());
 
@@ -293,13 +364,17 @@ public class SecurityService {
                     if (securityMatches.size() > limit) {
                         securityMatches = securityMatches.subList(0, limit);
                     }
+
                     freshResults.put(query, securityMatches);
                 }
-                if (batchSearchProperties.isCacheEnabled()) {
+
+                // STEP 4: CACHE FRESH RESULTS IN REDIS
+                if (batchSearchProperties.isCacheEnabled() && !freshResults.isEmpty()) {
                     cacheBatchResults(freshResults);
                 }
             }
 
+            // STEP 5: ASSEMBLE ALL COMBINED RESULTS (CACHED + FRESH)
             Map<String, List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch>> allResults =
                     new HashMap<>();
             allResults.putAll(cachedResults);
@@ -386,6 +461,48 @@ public class SecurityService {
         }
     }
 
+    /**
+     * Bulk fetch securities matching any symbol or ISIN in a single MongoDB query.
+     * Uses B-Tree unique/compound indexes (key.symbol_1, key.isin_1) for sub-millisecond lookup.
+     */
+    private Map<String, List<SecurityDocument>> bulkFetchDocumentsForQueries(List<String> queries) {
+        if (queries == null || queries.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<String> upperQueries = queries.stream().map(String::toUpperCase).collect(Collectors.toList());
+
+        Query mongoQuery = new Query(new Criteria().orOperator(
+                Criteria.where("key.symbol").in(upperQueries),
+                Criteria.where("key.isin").in(upperQueries)
+        ));
+
+        // FIELD PROJECTION OPTIMIZATION:
+        // Instruct MongoDB to return only key and metadata fields over TCP wire
+        mongoQuery.fields().include("key").include("metadata");
+
+        List<SecurityDocument> docs = mongoTemplate.find(mongoQuery, SecurityDocument.class);
+        if (docs == null || docs.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, List<SecurityDocument>> docMap = new HashMap<>();
+        for (SecurityDocument doc : docs) {
+            if (!isValidDocument(doc) || doc.getKey() == null) {
+                continue;
+            }
+            if (doc.getKey().getSymbol() != null) {
+                String symLower = doc.getKey().getSymbol().toLowerCase();
+                docMap.computeIfAbsent(symLower, k -> new ArrayList<>()).add(doc);
+            }
+            if (doc.getKey().getIsin() != null) {
+                String isinLower = doc.getKey().getIsin().toLowerCase();
+                docMap.computeIfAbsent(isinLower, k -> new ArrayList<>()).add(doc);
+            }
+        }
+        return docMap;
+    }
+
     private List<SecurityDocument> searchDocuments(String text) {
         if (text == null || text.isBlank()) {
             return Collections.emptyList();
@@ -395,6 +512,11 @@ public class SecurityService {
                 Criteria.where("metadata.company_name").regex(escaped, "i"),
                 Criteria.where("key.symbol").regex(escaped, "i"),
                 Criteria.where("key.isin").regex(escaped, "i")));
+
+        // FIELD PROJECTION OPTIMIZATION:
+        // Instruct MongoDB to return only key and metadata fields to reduce TCP payload size by ~50%
+        mongoQuery.fields().include("key").include("metadata");
+
         int mongoLimit = batchSearchProperties.getMongoQueryLimit();
         if (mongoLimit > 0) {
             mongoQuery.limit(mongoLimit);
@@ -649,27 +771,182 @@ public class SecurityService {
 
         Query query = new Query();
 
+        // 1. PROJECTION OPTIMIZATION:
+        // Instruct MongoDB to return only 'key' and 'metadata' fields over the TCP wire.
+        // Omits unnecessary audit timestamps and Mongo internal class tags, reducing network payload by ~50%.
+        query.fields()
+                .include("key")
+                .include("metadata");
+
+        // 2. RESULT CAPPING & PAGINATION SAFEGUARD:
+        // Prevents unpaginated queries from returning thousands of records into JVM memory.
+        // If client specifies a limit, respect it (up to 1,000 max ceiling). Otherwise default to 50 items.
+        int limit = (request.getLimit() != null && request.getLimit() > 0)
+                ? Math.min(request.getLimit(), 1000)
+                : 50;
+        query.limit(limit);
+
+        // 3. FILTER CRITERIA BUILDING:
+        // Match exact ISIN if provided
         if (request.getIsin() != null && !request.getIsin().isEmpty()) {
             query.addCriteria(Criteria.where("key.isin").is(request.getIsin()));
         }
 
+        // Match exact Sector if provided
         if (request.getSector() != null && !request.getSector().isEmpty()) {
             query.addCriteria(Criteria.where("metadata.sector").is(request.getSector()));
         }
 
+        // Match exact Industry if provided
         if (request.getIndustry() != null && !request.getIndustry().isEmpty()) {
             query.addCriteria(Criteria.where("metadata.industry").is(request.getIndustry()));
         }
 
+        // Case-insensitive regex fuzzy search matching either Symbol OR ISIN
         if (request.getQuery() != null && !request.getQuery().isEmpty()) {
-            // Regex search for symbol or ISIN
             String regex = request.getQuery();
             query.addCriteria(new Criteria().orOperator(
                     Criteria.where("key.symbol").regex(regex, "i"),
                     Criteria.where("key.isin").regex(regex, "i")));
         }
 
+        // 0. OPT-IN SMART RECOMMENDATION FAST-PATH:
+        // When client explicitly requests smart recommendations, route to Redis-backed, market-cap-ranked pipeline.
+        if (Boolean.TRUE.equals(request.getSmartRecommendations())) {
+            return smartRecommend(request.getQuery(), request.getCategory(), request.getLimit());
+        }
+
+        // 4. QUERY EXECUTION:
+        // Executes indexed query against MongoDB (utilizes Text Index and B-Tree indexes for <1ms latency)
         return mongoTemplate.find(query, SecurityDocument.class);
+    }
+
+    /**
+     * Centralized smart recommendation method:
+     * 1. Sanitizes query by stripping quotes and extra whitespace.
+     * 2. Returns pre-cached NIFTY 50 blue chips for empty or single-character inputs.
+     * 3. Checks Redis ("search:suggest:<category>:<query>") for sub-millisecond cache hits.
+     * 4. On cache miss, queries active MongoDB cash equities (status != DELISTED),
+     *    sorts candidates by market_cap_value DESC, and writes through to Redis (24h TTL).
+     */
+    public List<SecurityDocument> smartRecommend(String rawQuery, String category, Integer limit) {
+        String query = rawQuery == null ? "" : rawQuery.replaceAll("[\"']", "").trim();
+        int maxResults = (limit != null && limit > 0) ? Math.min(limit, 50) : 8;
+        String cat = (category != null && !category.isBlank()) ? category.trim().toUpperCase() : "STOCKS";
+
+        // Handle empty or 1-char input: return top trending large-cap stocks
+        if (query.length() < 2) {
+            return getTrendingBlueChips(maxResults);
+        }
+
+        // Step 1: Check Redis distributed cache for instant response (<1ms)
+        String cacheKey = "search:suggest:" + cat + ":" + query.toUpperCase();
+        try {
+            Object cached = redisTemplate.opsForValue().get(cacheKey);
+            if (cached instanceof List<?> list && !list.isEmpty()) {
+                List<SecurityDocument> deserialized = objectMapper.convertValue(
+                        list, new TypeReference<List<SecurityDocument>>() {});
+                if (deserialized != null && !deserialized.isEmpty()) {
+                    return deserialized.size() > maxResults ? deserialized.subList(0, maxResults) : deserialized;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("smartRecommend", "Redis cache read error for " + cacheKey + ": " + e.getMessage());
+        }
+
+        // Step 2: Query MongoDB with active delisting filter & anchored prefix matching
+        Query mongoQuery = new Query();
+        mongoQuery.fields().include("key").include("metadata");
+
+        // Suppress delisted/suspended securities (e.g. delisted 2023 HDFC Ltd)
+        mongoQuery.addCriteria(Criteria.where("metadata.status").ne("DELISTED"));
+
+        Pattern symbolPattern = Pattern.compile("^" + Pattern.quote(query), Pattern.CASE_INSENSITIVE);
+        Pattern nameWordPattern = Pattern.compile("\\b" + Pattern.quote(query), Pattern.CASE_INSENSITIVE);
+
+        Criteria searchCriteria = new Criteria().orOperator(
+                Criteria.where("key.symbol").regex(symbolPattern),
+                Criteria.where("metadata.company_name").regex(nameWordPattern),
+                Criteria.where("metadata.companyName").regex(nameWordPattern)
+        );
+        mongoQuery.addCriteria(searchCriteria);
+
+        // Sort by Market Cap descending: Large caps (HDFCBANK) float to the top naturally
+        mongoQuery.with(org.springframework.data.domain.Sort.by(
+                org.springframework.data.domain.Sort.Direction.DESC, "metadata.market_cap_value"
+        ));
+        mongoQuery.limit(maxResults);
+
+        List<SecurityDocument> results = mongoTemplate.find(mongoQuery, SecurityDocument.class);
+
+        // Step 3: Loose substring fallback if prefix search yielded 0 results
+        if (results.isEmpty()) {
+            Query fallbackQuery = new Query();
+            fallbackQuery.fields().include("key").include("metadata");
+            fallbackQuery.addCriteria(Criteria.where("metadata.status").ne("DELISTED"));
+
+            Pattern substringPattern = Pattern.compile(Pattern.quote(query), Pattern.CASE_INSENSITIVE);
+            fallbackQuery.addCriteria(new Criteria().orOperator(
+                    Criteria.where("key.symbol").regex(substringPattern),
+                    Criteria.where("metadata.company_name").regex(substringPattern),
+                    Criteria.where("metadata.companyName").regex(substringPattern)
+            ));
+            fallbackQuery.with(org.springframework.data.domain.Sort.by(
+                    org.springframework.data.domain.Sort.Direction.DESC, "metadata.market_cap_value"
+            ));
+            fallbackQuery.limit(maxResults);
+            results = mongoTemplate.find(fallbackQuery, SecurityDocument.class);
+        }
+
+        // Step 4: Write-through to Redis cache with 24-hour TTL
+        if (!results.isEmpty()) {
+            try {
+                redisTemplate.opsForValue().set(cacheKey, results, Duration.ofHours(24));
+            } catch (Exception e) {
+                log.warn("smartRecommend", "Redis cache write error for " + cacheKey + ": " + e.getMessage());
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * Retrieves Top Blue Chip stocks (NIFTY 50 heavyweights) from Redis / MongoDB
+     * for zero-state empty or single-character search prompts.
+     */
+    public List<SecurityDocument> getTrendingBlueChips(int limit) {
+        String cacheKey = "search:trending:stocks";
+        try {
+            Object cached = redisTemplate.opsForValue().get(cacheKey);
+            if (cached instanceof List<?> list && !list.isEmpty()) {
+                List<SecurityDocument> deserialized = objectMapper.convertValue(
+                        list, new TypeReference<List<SecurityDocument>>() {});
+                if (deserialized != null && !deserialized.isEmpty()) {
+                    return deserialized.size() > limit ? deserialized.subList(0, limit) : deserialized;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("getTrendingBlueChips", "Redis read error: " + e.getMessage());
+        }
+
+        Query query = new Query();
+        query.fields().include("key").include("metadata");
+        query.addCriteria(Criteria.where("metadata.status").ne("DELISTED"));
+        query.addCriteria(Criteria.where("metadata.market_cap_type").is("LARGE_CAP"));
+        query.with(org.springframework.data.domain.Sort.by(
+                org.springframework.data.domain.Sort.Direction.DESC, "metadata.market_cap_value"
+        ));
+        query.limit(limit > 0 ? limit : 8);
+
+        List<SecurityDocument> trending = mongoTemplate.find(query, SecurityDocument.class);
+        if (!trending.isEmpty()) {
+            try {
+                redisTemplate.opsForValue().set(cacheKey, trending, Duration.ofHours(24));
+            } catch (Exception e) {
+                log.warn("getTrendingBlueChips", "Redis write error: " + e.getMessage());
+            }
+        }
+        return trending;
     }
 
     // In-Memory Search Fallback

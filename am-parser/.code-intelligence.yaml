@@ -1,0 +1,34 @@
+enabled: true
+tool: gitnexus
+phase: local
+versions:
+  gitnexus: 1.6.9
+  graphifyy: 0.4.11
+production:
+  branch: main
+  embeddings: false
+  ci: false
+  mode: verify
+local:
+  sync_on_commit: true
+  sync_on_save: false
+  index_workspace: true
+  watch_debounce_sec: 30
+gitnexus:
+  skipAgentsMd: true
+  skipSkills: true
+  group_path: services/am-parser
+capabilities:
+  domain: parser
+  surfaces:
+    - http
+    - mongodb
+    - redis
+    - config
+  pdg: true
+  scan:
+    scan_roots:
+      - .
+  config_prefixes:
+    - app
+    - am
