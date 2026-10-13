@@ -4,35 +4,85 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Select Image Tag"
-        required: true
-        default: "latest"
-        type: choice
-        options:
-          - latest
-          - custom
-      custom_tag:
-        description: "If 'custom' selected, enter tag here"
+        description: "GHCR tag (leave empty = use current preprod pin from am-gitops)"
         required: false
         type: string
+        default: ""
       environment:
-        description: "Target Environment"
+        description: "Target Environment (Contabo Argo only; GitHub Environment approval)"
         required: true
-        default: "preprod"
+        default: "dev"
         type: choice
         options:
+          - dev
           - preprod
           - prod
+          - dr
+
+permissions:
+  contents: read
+  actions: write
 
 jobs:
   deploy:
-    name: Deploy Market Data to ${{ github.event.inputs.environment }}
-    uses: AM-Portfolio/am-pipelines/.github/workflows/central-deploy.yml@main
-    with:
-      service_name: "am-market-data"
-      working_directory: "am-market-data"
-      language: "java"
-      environment: ${{ github.event.inputs.environment }}
-      image_tag: ${{ github.event.inputs.image_tag == 'custom' && github.event.inputs.custom_tag || github.event.inputs.image_tag }}
-      namespace: ${{ github.event.inputs.environment == 'prod' && 'am-apps-prod' || 'am-apps-preprod' }}
-    secrets: inherit
+    name: Contabo Argo → ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout am-pipelines scripts
+        uses: actions/checkout@v4
+        with:
+          repository: AM-Portfolio/am-pipelines
+          path: am-pipelines-repo
+          ref: main
+          token: ${{ secrets.GITHUB_PAT || secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Resolve tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_PAT || secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+          TAG_IN: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          SVC=am-market-data
+          TAG="$TAG_IN"
+          if [[ -z "$TAG" ]]; then
+            RAW=$(gh api "repos/AM-Portfolio/am-gitops/contents/preprod/image-tags/${SVC}.yaml" -H "Accept: application/vnd.github.raw")
+            TAG=$(echo "$RAW" | sed -n 's/.*tag:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+            echo "Resolved tag from preprod pin: ${TAG}"
+          fi
+          if [[ -z "$TAG" ]]; then
+            echo "::error::No image tag — pass image_tag or ensure preprod pin exists"
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy + verify Contabo (dev/preprod)
+        if: inputs.environment == 'dev' || inputs.environment == 'preprod'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_PAT || secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          INPUT_SERVICE_NAME: am-market-data
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_IMAGE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          chmod +x am-pipelines-repo/scripts/ci/argo-api-lib.sh
+          chmod +x am-pipelines-repo/scripts/ci/argo-pin-and-wait.sh
+          am-pipelines-repo/scripts/ci/argo-pin-and-wait.sh
+
+      - name: Promote + verify Contabo (prod/dr)
+        if: inputs.environment == 'prod' || inputs.environment == 'dr'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_PAT || secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          INPUT_SERVICE_NAME: am-market-data
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_IMAGE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          chmod +x am-pipelines-repo/scripts/ci/argo-api-lib.sh
+          chmod +x am-pipelines-repo/scripts/ci/argo-promote-and-wait.sh
+          am-pipelines-repo/scripts/ci/argo-promote-and-wait.sh

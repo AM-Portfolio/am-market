@@ -68,6 +68,9 @@ WORKDIR /app
 # Copy the built JAR from build stage
 COPY --from=build /build/am-market-data/market-data-app/target/*.jar app.jar
 
+# Copy data directory for instrument seeding
+COPY am-market-data/data/ data/
+
 # Install curl, Google Chrome for Selenium scraper, and set timezone
 RUN apt-get update && \
   apt-get install -y curl wget gnupg2 && \

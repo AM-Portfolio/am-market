@@ -1,0 +1,16 @@
+# Local amctl identity — matches CI image_name
+name: am-market-data
+release: am-market-data
+image: ghcr.io/am-portfolio/am-market-data
+runtime: java
+language: java
+dockerfile: Dockerfile
+context: ..
+github:
+  repo: AM-Portfolio/am-market
+  deploy_workflow: direct-deploy.yml
+  service: am-market-data
+  ref: main
+deploy:
+  via: helm
+  rebuild: on-change

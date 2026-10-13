@@ -1,0 +1,15 @@
+{
+  "_comment": "Stub — replace with live frozen v1 response after Module 1. Must use etfs key; no return1Y/sparklineCloses required.",
+  "items": ["NIFTYBEES"],
+  "totalFound": 1,
+  "etfs": [
+    {
+      "symbol": "NIFTYBEES",
+      "name": "PLACEHOLDER",
+      "isin": "PLACEHOLDER",
+      "holdings": [],
+      "holdingsCount": 0
+    }
+  ],
+  "notFound": []
+}

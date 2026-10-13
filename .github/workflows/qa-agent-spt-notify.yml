@@ -1,0 +1,62 @@
+# Manual / emergency Commit→SPT starter — same Temporal start as Contabo post-deploy.
+#
+# Contabo path (default after deploy):
+#   market-data.yml → enable_commit_spt → am-pipelines glue → spt-after-deploy.yml
+#
+# This workflow: test that same reusable without waiting on Contabo.
+#   Actions → QA Agent SPT Notify → Run workflow (env = dev|preprod|prod)
+#
+# Push auto-start stays OFF unless repo var SPT_USE_GHA_START=true (avoids double SPT).
+
+name: QA Agent SPT Notify
+
+on:
+  push:
+    branches: ["main", "develop", "dev", "test/**", "feature/**", "hotfix/**", "fix/**"]
+    paths:
+      - "am-market-data/**"
+      - ".github/workflows/qa-agent-spt-notify.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "QA env / domain (same map as Contabo spt-after-deploy)"
+        required: true
+        type: choice
+        options: [dev, preprod, prod]
+        default: "dev"
+      git_ref:
+        description: "Branch for CommitSpt matrix (empty = current ref)"
+        required: false
+        type: string
+        default: ""
+      git_sha:
+        description: "Commit SHA (empty = github.sha)"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: qa-agent-spt-notify-${{ github.repository }}-${{ github.ref }}-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  start-temporal:
+    name: SPT after deploy (${{ github.event.inputs.environment || 'dev' }})
+    # Manual dispatch always on; push only if SPT_USE_GHA_START=true
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.SPT_USE_GHA_START == 'true' }}
+    uses: AM-Portfolio/am-qa-agents/.github/workflows/spt-after-deploy.yml@main
+    with:
+      service: am-market-data
+      environment: ${{ github.event.inputs.environment || 'dev' }}
+      git_ref: ${{ github.event.inputs.git_ref || github.ref_name }}
+      git_sha: ${{ github.event.inputs.git_sha || github.sha }}
+      committer_email: ${{ github.event.head_commit.author.email || github.event.pusher.email || github.actor || '' }}
+      committer_name: ${{ github.event.head_commit.author.name || github.actor || '' }}
+      repo: ${{ github.repository }}
+      github_run_id: ${{ github.run_id }}
+      github_run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      github_workflow: ${{ github.workflow }}
+      github_event_name: ${{ github.event_name }}
+      commit_message: ${{ github.event.head_commit.message || '' }}
+    secrets:
+      QA_AGENT_GATEWAY_TOKEN: ${{ secrets.QA_AGENT_GATEWAY_TOKEN || secrets.SPT_CI_API_KEY }}

@@ -5,6 +5,7 @@ import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.marketdata.scraper.service.MarketDataProcessingService;
 import com.am.marketdata.service.MarketDataCacheService;
 import com.am.marketdata.common.model.OHLCQuote;
+import com.am.marketdata.common.model.TimeFrame;
 import com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -42,11 +43,21 @@ public class StockIndicesService {
     private boolean cacheEnabled;
 
     public List<StockIndicesMarketData> getLatestIndicesData(List<String> indexSymbols) {
-        return getLatestIndicesData(indexSymbols, false);
+        return getLatestIndicesData(indexSymbols, false, "1D");
     }
 
     public List<StockIndicesMarketData> getLatestIndicesData(List<String> indexSymbols, boolean forceRefresh) {
+        return getLatestIndicesData(indexSymbols, forceRefresh, "1D");
+    }
+
+    public List<StockIndicesMarketData> getLatestIndicesData(List<String> indexSymbols, boolean forceRefresh, String timeframeStr) {
         String methodName = "getLatestIndicesData";
+        String normalizedTimeframe = timeframeStr == null ? "1D" : timeframeStr.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!java.util.Set.of("1D", "1W", "1M", "3M", "6M", "1Y", "5Y").contains(normalizedTimeframe)) {
+            log.warn(methodName, "Unsupported timeframe requested: " + timeframeStr);
+            return new ArrayList<>();
+        }
+        boolean isDailyTimeframe = "1D".equals(normalizedTimeframe);
         try {
             List<StockIndicesMarketData> finalResults = new ArrayList<>();
             List<String> symbolsToProcess = new ArrayList<>();
@@ -72,9 +83,13 @@ public class StockIndicesService {
 
             // Fallback for missing symbols to marketDataCacheService.getLivePrices
             Set<String> missingSymbols = new HashSet<>();
-            for (String sym : requestedSymbols) {
-                if (!latestPrices.containsKey(sym) || latestPrices.get(sym).getLastPrice() == 0.0) {
-                    missingSymbols.add(sym);
+            if (forceRefresh) {
+                missingSymbols.addAll(requestedSymbols);
+            } else {
+                for (String sym : requestedSymbols) {
+                    if (!latestPrices.containsKey(sym) || latestPrices.get(sym).getLastPrice() == 0.0) {
+                        missingSymbols.add(sym);
+                    }
                 }
             }
 
@@ -96,24 +111,10 @@ public class StockIndicesService {
                                 log.info(methodName, "🚀 [COALESCING] Initiating single flight live price fetch for symbol: " + sym);
                                 return CompletableFuture.supplyAsync(() -> {
                                     try {
-                                        // Use isIndexSymbol=true to fetch live index prices directly
-                                        Map<String, Object> liveResponse = marketDataCacheService.getLivePrices(Set.of(sym), true, forceRefresh);
-                                        if (liveResponse != null && liveResponse.get("prices") instanceof List) {
-                                            List<?> pricesList = (List<?>) liveResponse.get("prices");
-                                            if (!pricesList.isEmpty() && pricesList.get(0) instanceof com.am.common.investment.model.equity.EquityPrice) {
-                                                com.am.common.investment.model.equity.EquityPrice ep = (com.am.common.investment.model.equity.EquityPrice) pricesList.get(0);
-                                                OHLCQuote quote = new OHLCQuote();
-                                                quote.setLastPrice(ep.getLastPrice() != null ? ep.getLastPrice() : 0.0);
-                                                if (ep.getOhlcv() != null) {
-                                                    OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
-                                                    ohlc.setOpen(ep.getOhlcv().getOpen() != null ? ep.getOhlcv().getOpen() : 0.0);
-                                                    ohlc.setHigh(ep.getOhlcv().getHigh() != null ? ep.getOhlcv().getHigh() : 0.0);
-                                                    ohlc.setLow(ep.getOhlcv().getLow() != null ? ep.getOhlcv().getLow() : 0.0);
-                                                    ohlc.setClose(ep.getOhlcv().getClose() != null ? ep.getOhlcv().getClose() : 0.0);
-                                                    quote.setOhlc(ohlc);
-                                                }
-                                                return quote;
-                                            }
+                                        // Use getOHLC to fetch complete daily OHLC and previous close directly from provider
+                                        Map<String, OHLCQuote> ohlcResponse = marketDataCacheService.getOHLC(Set.of(sym), true, TimeFrame.DAY, forceRefresh);
+                                        if (ohlcResponse != null && ohlcResponse.containsKey(sym)) {
+                                            return ohlcResponse.get(sym);
                                         }
                                         return null;
                                     } catch (Exception e) {
@@ -147,6 +148,55 @@ public class StockIndicesService {
                 java.time.LocalDateTime now = java.time.LocalDateTime.now();
                 long nowMs = System.currentTimeMillis();
 
+                /*
+                 * A 1W/1M/etc. return compares today's price with the close near
+                 * the start of that period. The UI receives the finished result.
+                 */
+                Map<String, Double> basePrices = new java.util.HashMap<>();
+                if (!isDailyTimeframe) {
+                    java.time.ZoneId exchangeZone = java.time.ZoneId.of("Asia/Kolkata");
+                    java.time.LocalDate startDate = java.time.LocalDate.now(exchangeZone);
+                    if ("1M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(1);
+                    else if ("3M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(3);
+                    else if ("6M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(6);
+                    else if ("1Y".equals(normalizedTimeframe)) startDate = startDate.minusYears(1);
+                    else if ("5Y".equals(normalizedTimeframe)) startDate = startDate.minusYears(5);
+                    else if ("1W".equals(normalizedTimeframe)) startDate = startDate.minusWeeks(1);
+
+                    // A small window finds the first trading day after a holiday.
+                    java.time.LocalDate endDate = startDate.plusDays(7);
+                    java.util.Date fromD = java.util.Date.from(startDate.atStartOfDay(exchangeZone).toInstant());
+                    java.util.Date toD = java.util.Date.from(endDate.atStartOfDay(exchangeZone).toInstant());
+                    try {
+                        com.am.marketdata.api.model.HistoricalDataResponseV1 histResp = marketDataCacheService.getHistoricalDataMultipleSymbols(
+                                requestedSymbols, fromD, toD, com.am.marketdata.common.model.TimeFrame.DAY, "INDEX", new java.util.HashMap<>(), false, false);
+                        if (histResp != null && histResp.getData() != null) {
+                            for (Map.Entry<String, com.am.common.investment.model.historical.HistoricalData> entry : histResp.getData().entrySet()) {
+                                java.util.List<com.am.common.investment.model.historical.OHLCVTPoint> points = entry.getValue().getDataPoints();
+                                if (points != null && !points.isEmpty()) {
+                                    // Cache order can vary, so use the earliest valid close as the base.
+                                    com.am.common.investment.model.historical.OHLCVTPoint earliest = null;
+                                    for (com.am.common.investment.model.historical.OHLCVTPoint point : points) {
+                                        if (point == null || point.getClose() <= 0.0) {
+                                            continue;
+                                        }
+                                        if (earliest == null || (point.getTime() != null &&
+                                                (earliest.getTime() == null || point.getTime().isBefore(earliest.getTime())))) {
+                                            earliest = point;
+                                        }
+                                    }
+                                    if (earliest != null) {
+                                        basePrices.put(entry.getKey(), earliest.getClose());
+                                        log.debug(methodName, "Timeframe " + normalizedTimeframe + " base price for " + entry.getKey() + " is " + earliest.getClose());
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception ex) {
+                        log.error(methodName, "Error fetching timeframe base prices", ex);
+                    }
+                }
+
                 for (StockIndicesMarketData data : finalResults) {
                     String symbol = data.getIndexSymbol();
                     OHLCQuote priceQuote = latestPrices.get(symbol);
@@ -166,18 +216,26 @@ public class StockIndicesService {
                         // 1. Check the real-time priceQuote received from the WebSocket/API.
                         // 2. If the quote doesn't have it (is 0.0), query the Redis cache where the Upstox-based PreviousCloseScheduler stores daily pre-fetched closes.
                         // 3. If still empty, fall back to the historical/existing previousClose saved in MongoDB index metadata.
-                        double previousClose = priceQuote.getPreviousClose();
-                        if (previousClose == 0.0) {
-                            Double cachedPrevClose = redisCacheService.getPreviousClose(symbol);
-                            if (cachedPrevClose != null && cachedPrevClose != 0.0) {
-                                previousClose = cachedPrevClose;
-                            }
+                        /*
+                         * previousClose is only yesterday's close. In the old code a 1M base
+                         * could replace it in MongoDB, breaking later daily change values.
+                         */
+                        double dailyPreviousClose = priceQuote.getPreviousClose();
+
+                        if (dailyPreviousClose == 0.0) {
+                                Double cachedPrevClose = redisCacheService.getPreviousClose(symbol);
+                                if (cachedPrevClose != null && cachedPrevClose != 0.0) {
+                                    dailyPreviousClose = cachedPrevClose;
+                                }
                         }
-                        if (previousClose == 0.0 && meta.getPreviousClose() != null) {
-                            previousClose = meta.getPreviousClose();
+                        if (dailyPreviousClose == 0.0 && meta.getPreviousClose() != null) {
+                            dailyPreviousClose = meta.getPreviousClose();
                         }
+                        double previousClose = isDailyTimeframe
+                                ? dailyPreviousClose
+                                : basePrices.getOrDefault(symbol, 0.0);
                         // Validate previousClose against lastPrice to prevent wildly inaccurate percent changes if data is corrupted:
-                        if (previousClose != 0.0 && lastPrice != 0.0) {
+                        if (isDailyTimeframe && previousClose != 0.0 && lastPrice != 0.0) {
                             double deviation = Math.abs(previousClose - lastPrice) / lastPrice;
                             if (deviation > 0.10) {
                                 // More than 10% apart — this previousClose is stale/corrupted. Fall back to open or last price to correct it.
@@ -195,14 +253,16 @@ public class StockIndicesService {
                         if (open != 0.0) meta.setOpen(open);
                         if (high != 0.0) meta.setHigh(high);
                         if (low != 0.0) meta.setLow(low);
-                        if (previousClose != 0.0) meta.setPreviousClose(previousClose);
+                        // Save only the daily close. Timeframe bases exist for this response only.
+                        if (dailyPreviousClose != 0.0) meta.setPreviousClose(dailyPreviousClose);
                         meta.setChange(change);
                         meta.setPercChange(changePercent);
                         meta.setTimeVal(String.valueOf(nowMs));
 
                         // 1. Check local JVM memory cooldown to prevent race conditions (bypass if forceRefresh is true)
                         long lastSaveTime = lastMongoSaveTimeMap.getOrDefault(symbol, 0L);
-                        boolean shouldSave = forceRefresh || (nowMs - lastSaveTime) >= MONGO_SAVE_COOLDOWN_MS;
+                        // A historical request calculates a view; it must not change daily stored data.
+                        boolean shouldSave = isDailyTimeframe && (forceRefresh || (nowMs - lastSaveTime) >= MONGO_SAVE_COOLDOWN_MS);
 
                         if (shouldSave && !forceRefresh) {
                             // 2. Check document's actual database timestamp for timezone-safe validation
@@ -372,48 +432,122 @@ public class StockIndicesService {
         }
     }
 
+    /**
+     * Fetch EOD index values directly from Upstox API instead of the NSE website scraper.
+     * This avoids reliance on fragile cookie sessions and browser-scraping endpoints.
+     */
     private void fetchFreshData(List<String> symbolsToProcess, List<StockIndicesMarketData> finalResults,
             String methodName) {
-        log.info(methodName, "Fetching fresh data for " + symbolsToProcess.size() + " symbols: " + symbolsToProcess);
-
-        // Fetch in parallel
-        List<CompletableFuture<Boolean>> futures = new ArrayList<>();
-        for (String symbol : symbolsToProcess) {
-            try {
-                futures.add(marketDataProcessingService.fetchAndProcessStockIndices(symbol)
-                        .exceptionally(e -> {
-                            log.error(methodName, "Error fetching data for symbol: " + symbol, e);
-                            return false;
-                        }));
-            } catch (Exception e) {
-                log.error(methodName, "Rejected execution or error submitting scraper task for symbol: " + symbol, e);
-            }
-        }
-
-        // Wait for completion with a timeout guard to prevent API hanging if a scraper fails
-        if (!futures.isEmpty()) {
-            try {
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                        .get(4, TimeUnit.SECONDS);
-            } catch (java.util.concurrent.TimeoutException e) {
-                log.warn(methodName, "Scraping fresh index data timed out after 4 seconds, continuing with cached/seeded records");
-            } catch (Exception e) {
-                log.error(methodName, "Error during parallel index data fetch", e);
-            }
-        }
+        log.info(methodName, "Fetching fresh index data from Upstox for symbols: " + symbolsToProcess);
 
         try {
-            // Add a small delay to ensure data is persisted
-            TimeUnit.SECONDS.sleep(1);
+            // 1. Fetch latest OHLC quotes for the requested indices from Upstox in a single batch
+            Map<String, OHLCQuote> quotes = marketDataCacheService.getOHLC(
+                    new HashSet<>(symbolsToProcess), true, TimeFrame.DAY, true);
 
-            // FIX: Retrieve freshly persisted data from database
-            List<StockIndicesMarketData> freshData = stockIndicesMarketDataService
-                    .findByIndexSymbols(symbolsToProcess.stream().collect(Collectors.toSet()));
-            finalResults.addAll(freshData);
+            if (quotes == null || quotes.isEmpty()) {
+                log.warn(methodName, "No index quotes returned from Upstox provider.");
+                return;
+            }
 
-            log.info(methodName, "Retrieved " + freshData.size() + " freshly fetched indices from database");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            // 2. Fetch existing documents from MongoDB to update them, or create new ones
+            List<StockIndicesMarketData> existingDocs = stockIndicesMarketDataService
+                    .findByIndexSymbols(new HashSet<>(symbolsToProcess));
+            Map<String, StockIndicesMarketData> docMap = existingDocs.stream()
+                    .collect(Collectors.toMap(StockIndicesMarketData::getIndexSymbol, doc -> doc));
+
+            List<StockIndicesMarketData> docsToSave = new ArrayList<>();
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            long nowMs = System.currentTimeMillis();
+
+            for (String symbol : symbolsToProcess) {
+                OHLCQuote priceQuote = quotes.get(symbol);
+                if (priceQuote == null || priceQuote.getLastPrice() == 0.0) {
+                    log.warn(methodName, "No valid Upstox quote found for symbol: " + symbol);
+                    continue;
+                }
+
+                // Get existing MongoDB record or instantiate a new one
+                String cleanSymbol = symbol != null && symbol.contains(":") ? symbol.substring(symbol.indexOf(":") + 1) : symbol;
+                StockIndicesMarketData data = docMap.get(symbol);
+                if (data == null && cleanSymbol != null) {
+                    data = docMap.get(cleanSymbol);
+                }
+                if (data == null && cleanSymbol != null) {
+                    List<StockIndicesMarketData> existing = stockIndicesMarketDataService.findByIndexSymbols(java.util.Collections.singleton(cleanSymbol));
+                    if (!existing.isEmpty()) {
+                        data = existing.get(0);
+                    }
+                }
+                if (data == null) {
+                    data = new StockIndicesMarketData();
+                    data.setIndexSymbol(cleanSymbol);
+                }
+
+                IndexMetadata meta = data.getMetadata();
+                if (meta == null) {
+                    meta = new IndexMetadata();
+                    data.setMetadata(meta);
+                }
+
+                double lastPrice = priceQuote.getLastPrice();
+                double open = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getOpen() : 0.0;
+                double high = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getHigh() : 0.0;
+                double low = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getLow() : 0.0;
+                double previousClose = priceQuote.getPreviousClose();
+
+                if (previousClose == 0.0) {
+                    Double cachedPrevClose = redisCacheService.getPreviousClose(symbol);
+                    if (cachedPrevClose != null && cachedPrevClose != 0.0) {
+                        previousClose = cachedPrevClose;
+                    }
+                }
+                if (previousClose == 0.0 && meta.getPreviousClose() != null) {
+                    previousClose = meta.getPreviousClose();
+                }
+
+                // Sanity check to avoid abnormal percent deviations
+                if (previousClose != 0.0 && lastPrice != 0.0) {
+                    double deviation = Math.abs(previousClose - lastPrice) / lastPrice;
+                    if (deviation > 0.10) {
+                        previousClose = open != 0.0 ? open : lastPrice;
+                    }
+                }
+
+                double change = previousClose != 0.0 ? lastPrice - previousClose : 0.0;
+                double changePercent = previousClose != 0.0 ? (change / previousClose) * 100.0 : 0.0;
+
+                meta.setLast(lastPrice);
+                if (open != 0.0) meta.setOpen(open);
+                if (high != 0.0) meta.setHigh(high);
+                if (low != 0.0) meta.setLow(low);
+                if (previousClose != 0.0) meta.setPreviousClose(previousClose);
+                meta.setChange(change);
+                meta.setPercChange(changePercent);
+                meta.setTimeVal(String.valueOf(nowMs));
+
+                com.am.common.investment.model.stockindice.AuditData audit = data.getAudit();
+                if (audit == null) {
+                    audit = new com.am.common.investment.model.stockindice.AuditData();
+                    audit.setCreatedAt(now);
+                    data.setAudit(audit);
+                }
+                audit.setUpdatedAt(now);
+
+                docsToSave.add(data);
+            }
+
+            // Save EOD index values to MongoDB database
+            if (!docsToSave.isEmpty()) {
+                for (StockIndicesMarketData doc : docsToSave) {
+                    stockIndicesMarketDataService.save(doc);
+                }
+                finalResults.addAll(docsToSave);
+                log.info(methodName, "Successfully fetched and saved " + docsToSave.size() + " EOD index prices from Upstox.");
+            }
+
+        } catch (Exception e) {
+            log.error(methodName, "Error while performing EOD index sync using Upstox", e);
         }
     }
 
@@ -424,7 +558,14 @@ public class StockIndicesService {
     public StockIndicesMarketData getLatestIndexData(String indexSymbol, boolean forceRefresh) {
         String methodName = "getLatestIndexData";
         try {
-            List<StockIndicesMarketData> data = getLatestIndicesData(List.of(indexSymbol), forceRefresh);
+            List<String> symbolsToSearch = new ArrayList<>();
+            if (indexSymbol != null) {
+                symbolsToSearch.add(indexSymbol);
+                if (indexSymbol.contains(":")) {
+                    symbolsToSearch.add(indexSymbol.substring(indexSymbol.indexOf(":") + 1));
+                }
+            }
+            List<StockIndicesMarketData> data = getLatestIndicesData(symbolsToSearch, forceRefresh);
             return data.isEmpty() ? null : data.get(0);
         } catch (Exception e) {
             log.error(methodName, "Error while fetching stock index data for symbol: " + indexSymbol, e);

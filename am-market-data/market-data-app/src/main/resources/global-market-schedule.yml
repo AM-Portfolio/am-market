@@ -1,0 +1,148 @@
+# global-market-schedule.yml
+#
+# Defines the trading hours for each global market index tracked by the system.
+#
+# PURPOSE:
+#   Used by GlobalMarketScheduleService to determine whether the WebSocket
+#   should be connected (via the Redis voting flag market:websocket:vote:global).
+#   The WebSocket is connected when ANY exchange below is open, and all
+#   configured GLOBAL_* instrument keys are subscribed at once. Upstox
+#   naturally only sends ticks for the currently active markets.
+#
+# TIMEZONE HANDLING:
+#   All times are defined in the exchange's LOCAL timezone (not IST).
+#   GlobalMarketScheduleService converts them to IST at runtime using
+#   java.time.ZoneId, which handles Daylight Saving Time (DST) automatically.
+#   This prevents the 1-hour shift bug that occurs twice a year for US/European markets.
+#
+# HOLIDAY HANDLING:
+#   Standard national/bank holidays are automatically handled by the
+#   Jollyday library (using the exchange's country code).
+#   Ad-hoc closures (natural disasters, national mourning) are handled
+#   by the 30-minute no-tick circuit breaker in GlobalMarketScheduleService.
+#
+# INFLUX AGGREGATE OFFSET:
+#   The influxAggregateOffset is the Flux duration string used in aggregateWindow
+#   queries to align daily candle boundaries to the exchange's trading session.
+#   Without this, a NYSE daily candle (9:30AM-4PM EST) would be split across
+#   two UTC calendar days, producing incorrect OHLC chart data.
+#
+# HOW TO ADD A NEW EXCHANGE:
+#   1. Add an entry below following the same format.
+#   2. Find the Upstox instrument key from the Global Instruments JSON.
+#   3. Seed the new entry into the global_index_config MongoDB collection
+#      (or call POST /v1/market-data/admin/global/sync?force=true after restart).
+
+global:
+  markets:
+
+    - name: "Dow Jones Industrial Average"
+      symbol: "DJI"
+      instrumentKey: "GLOBAL_INDEX|DJI"
+      exchange: "NYSE"
+      # IANA timezone for DST-safe conversion. NYSE follows EST (UTC-5) / EDT (UTC-4).
+      timezone: "America/New_York"
+      # NYSE regular trading hours in local time
+      marketOpen: "09:30"
+      marketClose: "16:00"
+      # Flux offset: shifts daily bucket start to NYSE open (14h30m before UTC midnight)
+      influxAggregateOffset: "-14h30m"
+      jollidayCountry: "US"
+
+    - name: "S&P 500"
+      symbol: "SPX"
+      instrumentKey: "GLOBAL_INDEX|SPX"
+      exchange: "NYSE"
+      timezone: "America/New_York"
+      marketOpen: "09:30"
+      marketClose: "16:00"
+      influxAggregateOffset: "-14h30m"
+      jollidayCountry: "US"
+
+    - name: "Nasdaq Composite"
+      symbol: "IXIC"
+      instrumentKey: "GLOBAL_INDEX|IXIC"
+      exchange: "NASDAQ"
+      timezone: "America/New_York"
+      marketOpen: "09:30"
+      marketClose: "16:00"
+      influxAggregateOffset: "-14h30m"
+      jollidayCountry: "US"
+
+    - name: "FTSE 100"
+      symbol: "FTSE"
+      instrumentKey: "GLOBAL_INDEX|FTSE"
+      exchange: "LSE"
+      # LSE follows GMT (UTC+0) / BST (UTC+1) in summer.
+      timezone: "Europe/London"
+      marketOpen: "08:00"
+      marketClose: "16:30"
+      # Offset: 8h before UTC midnight (LSE opens at 08:00 GMT)
+      influxAggregateOffset: "-8h"
+      jollidayCountry: "GB"
+
+    - name: "DAX"
+      symbol: "GDAXI"
+      instrumentKey: "GLOBAL_INDEX|GDAXI"
+      exchange: "XETRA"
+      # Frankfurt follows CET (UTC+1) / CEST (UTC+2) in summer.
+      timezone: "Europe/Berlin"
+      marketOpen: "09:00"
+      marketClose: "17:30"
+      influxAggregateOffset: "-8h"
+      jollidayCountry: "DE"
+
+    - name: "CAC 40"
+      symbol: "FCHI"
+      instrumentKey: "GLOBAL_INDEX|FCHI"
+      exchange: "Euronext Paris"
+      timezone: "Europe/Paris"
+      marketOpen: "09:00"
+      marketClose: "17:30"
+      influxAggregateOffset: "-8h"
+      jollidayCountry: "FR"
+
+    - name: "Nikkei 225"
+      symbol: "N225"
+      instrumentKey: "GLOBAL_INDEX|N225"
+      exchange: "TSE"
+      # Japan does NOT observe DST. UTC+9 year-round.
+      timezone: "Asia/Tokyo"
+      marketOpen: "09:00"
+      marketClose: "15:30"
+      # TSE opens 9AM JST = 00:30 UTC → offset is 30 minutes from UTC midnight
+      influxAggregateOffset: "30m"
+      jollidayCountry: "JP"
+
+    - name: "Hang Seng"
+      symbol: "HSI"
+      instrumentKey: "GLOBAL_INDEX|HSI"
+      exchange: "HKEX"
+      # Hong Kong does NOT observe DST. UTC+8 year-round.
+      timezone: "Asia/Hong_Kong"
+      marketOpen: "09:30"
+      marketClose: "16:00"
+      influxAggregateOffset: "1h30m"
+      jollidayCountry: "HK"
+
+    - name: "Shanghai Composite"
+      symbol: "SSEC"
+      instrumentKey: "GLOBAL_INDEX|SSEC"
+      exchange: "SSE"
+      # China does NOT observe DST. UTC+8 year-round.
+      timezone: "Asia/Shanghai"
+      marketOpen: "09:30"
+      marketClose: "15:00"
+      influxAggregateOffset: "1h30m"
+      jollidayCountry: "CN"
+
+    - name: "GIFT NIFTY"
+      symbol: "GIFTNIFTY"
+      instrumentKey: "GLOBAL_INDEX|GIFTNIFTY"
+      exchange: "NSE_IFSC"
+      # GIFT City runs on IST. Extended hours: 6AM to 11:30PM IST.
+      timezone: "Asia/Kolkata"
+      marketOpen: "06:00"
+      marketClose: "23:30"
+      influxAggregateOffset: "+5h30m"
+      jollidayCountry: "IN"

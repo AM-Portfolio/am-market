@@ -49,6 +49,19 @@ public interface MarketDataFetchService {
         Map<String, Object> getLivePrices(Set<String> symbols, boolean indexSymbol, boolean forceRefresh);
 
         /**
+         * Get live LTP with day change from cached EquityPrice previousClose baseline.
+         *
+         * @param symbols      Trading symbols (already exchange-qualified when needed)
+         * @param exchange     Fallback exchange when EquityPrice.exchange is blank
+         * @param timeframe    Requested timeframe API value (e.g. 1D); invalid values default to DAY
+         * @param indexSymbol  Whether symbols are indices
+         * @param forceRefresh Whether to bypass cache
+         * @return Map with count, timeframe, data (exchange:symbol keys), timestamp
+         */
+        Map<String, Object> getLiveLTP(Set<String> symbols, String exchange, String timeframe,
+                        boolean indexSymbol, boolean forceRefresh);
+
+        /**
          * Get historical data for multiple symbols from cache or service
          * 
          * @param symbols          List of trading symbols

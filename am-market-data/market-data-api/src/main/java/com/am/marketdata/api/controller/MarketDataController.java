@@ -2,26 +2,26 @@ package com.am.marketdata.api.controller;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.stream.Collectors;
 
 import com.am.marketdata.api.dto.HistoricalDataRequest;
 import com.am.marketdata.api.model.OHLCRequest;
 import com.am.marketdata.api.model.QuotesRequest;
 import com.am.marketdata.api.model.HistoricalDataResponseV1;
 import com.am.marketdata.api.service.MarketDataFetchService;
+import com.am.marketdata.api.util.SymbolParseUtils;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.MarketDataService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -158,10 +158,11 @@ public class MarketDataController {
     })
     public ResponseEntity<Map<String, Object>> getQuotes(
             @RequestParam("symbols") String symbols,
+            @RequestParam(name = "exchange", required = false, defaultValue = "NSE") String exchange,
             @RequestParam(name = "timeFrame", defaultValue = "5m") String timeFrameStr,
             @RequestParam(name = "refresh", defaultValue = "false") boolean forceRefresh) {
 
-        Set<String> symbolList = parseSymbols(symbols);
+        Set<String> symbolList = SymbolParseUtils.parseSymbols(symbols, exchange);
         try (FlowSpan span = flowLogger.start("market.quotes.fetch",
                 "symbolsCount", symbolList.size(), "timeFrame", timeFrameStr, "forceRefresh", forceRefresh)) {
             try {
@@ -206,15 +207,29 @@ public class MarketDataController {
      * @param request The quotes request containing symbols and timeframe
      * @return Map of symbol to quote data with metadata
      */
-    @PostMapping(value = "/quotes", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/quotes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get quotes for multiple symbols (POST)", description = "Retrieves latest quotes for multiple symbols with support for different timeframes using POST request")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Quotes retrieved successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
             @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<Map<String, Object>> getQuotesPost(@RequestBody QuotesRequest request) {
-        Set<String> symbolList = parseSymbols(request.getSymbols());
+    public ResponseEntity<Map<String, Object>> getQuotesPost(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "Quotes request payload containing symbols, timeframe, and options",
+                    required = true,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = QuotesRequest.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    name = "Batch Stock Quotes Request",
+                                    summary = "Sample quotes request for RELIANCE and TCS",
+                                    value = "{\"symbols\": [\"NSE_EQ:RELIANCE\", \"NSE_EQ:TCS\"], \"timeFrame\": \"1d\", \"indexSymbol\": false, \"forceRefresh\": false}"
+                            )
+                    )
+            )
+            @RequestBody QuotesRequest request) {
+        Set<String> symbolList = SymbolParseUtils.parseSymbols(request.getSymbols(), request.getExchange());
         try (FlowSpan span = flowLogger.start("market.quotes.fetch.post",
                 "symbolsCount", symbolList.size(), "timeFrame", request.getTimeFrame(), "forceRefresh",
                 request.isForceRefresh())) {
@@ -253,15 +268,29 @@ public class MarketDataController {
      * @param request Request body containing symbols and options
      * @return Map of symbol to OHLC data with cache status
      */
-    @PostMapping(value = "/ohlc", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/ohlc", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get OHLC data for multiple symbols", description = "Retrieves Open-High-Low-Close data for multiple symbols with support for different timeframes")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "OHLC data retrieved successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
             @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<?> getOHLC(@RequestBody OHLCRequest request) {
-        Set<String> symbolList = parseSymbols(request.getSymbols());
+    public ResponseEntity<?> getOHLC(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "OHLC request payload containing symbols, timeframe, and options",
+                    required = true,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = OHLCRequest.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    name = "Batch OHLC Request",
+                                    summary = "Sample OHLC request for RELIANCE and INFY",
+                                    value = "{\"symbols\": [\"NSE_EQ:RELIANCE\", \"NSE_EQ:INFY\"], \"timeFrame\": \"1d\", \"indexSymbol\": false, \"forceRefresh\": false}"
+                            )
+                    )
+            )
+            @RequestBody OHLCRequest request) {
+        Set<String> symbolList = SymbolParseUtils.parseSymbols(request.getSymbols(), request.getExchange());
         try (FlowSpan span = flowLogger.start("market.ohlc.fetch",
                 "symbolsCount", symbolList.size(), "timeFrame", request.getTimeFrame(), "indexSymbol",
                 request.isIndexSymbol(), "forceRefresh", request.isForceRefresh())) {
@@ -298,7 +327,7 @@ public class MarketDataController {
             @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     public ResponseEntity<HistoricalDataResponseV1> getHistoricalData(@RequestBody HistoricalDataRequest request) {
-        Set<String> symbolList = parseSymbols(request.getSymbols());
+        Set<String> symbolList = SymbolParseUtils.parseSymbols(request.getSymbols());
         try (FlowSpan span = flowLogger.start("market.historical.fetch",
                 "symbolsCount", symbolList.size(), "interval", request.getInterval(), "forceRefresh",
                 request.isForceRefresh())) {
@@ -312,8 +341,9 @@ public class MarketDataController {
                         log.warn("Validation error: {}", errorType);
                         return ResponseEntity.badRequest().body(response);
                     } else {
-                        flowLogger.fail(span, new Exception(response.getError()));
-                        return ResponseEntity.internalServerError().body(response);
+                        // Return HTTP 200 OK for unseeded or partial date ranges so frontend receives empty/partial payload gracefully
+                        log.info("Returning HTTP 200 OK with partial/empty data payload for error message: {}", errorType);
+                        return ResponseEntity.ok(response);
                     }
                 }
 
@@ -415,21 +445,25 @@ public class MarketDataController {
                     }
                 }
 
-                Map<String, Object> response = marketDataCacheService.getOptionChain(underlyingSymbol, expiry,
-                        forceRefresh);
-
-                if (response.containsKey("error")) {
-                    log.warn("Option chain fetch returned error underlying={}", underlyingSymbol);
-                    flowLogger.fail(span, new Exception(String.valueOf(response.get("error"))));
-                    return ResponseEntity.internalServerError().body(response);
+                Map<String, Object> responseMap = marketDataCacheService.getOptionChain(underlyingSymbol, expiry, forceRefresh);
+                if (responseMap == null) {
+                    responseMap = new HashMap<>();
+                } else if (responseMap.isEmpty() || !responseMap.getClass().getName().contains("HashMap")) {
+                    responseMap = new HashMap<>(responseMap);
                 }
 
-                if (!response.containsKey("cached")) {
-                    response.put("cached", !forceRefresh);
+                if (responseMap.containsKey("error")) {
+                    log.warn("Option chain fetch returned error underlying={}", underlyingSymbol);
+                    flowLogger.fail(span, new Exception(String.valueOf(responseMap.get("error"))));
+                    return ResponseEntity.internalServerError().body(responseMap);
+                }
+
+                if (!responseMap.containsKey("cached")) {
+                    responseMap.put("cached", !forceRefresh);
                 }
 
                 flowLogger.complete(span);
-                return ResponseEntity.ok(response);
+                return ResponseEntity.ok(responseMap);
             } catch (Exception e) {
                 log.error("Unexpected error in controller while getting option chain underlying={}", underlyingSymbol, e);
                 Map<String, Object> errorResponse = new HashMap<>();
@@ -568,9 +602,10 @@ public class MarketDataController {
     })
     public ResponseEntity<Map<String, Object>> getLivePrices(
             @RequestParam(name = "symbols", required = false) String symbols,
+            @RequestParam(name = "exchange", required = false, defaultValue = "NSE") String exchange,
             @RequestParam(name = "isIndexSymbol", required = false) boolean indexSymbol,
             @RequestParam(name = "refresh", defaultValue = "false") boolean forceRefresh) {
-        Set<String> symbolList = parseSymbols(symbols);
+        Set<String> symbolList = SymbolParseUtils.parseSymbols(symbols, exchange);
         try (FlowSpan span = flowLogger.start("market.liveprices.fetch",
                 "symbolsCount", symbolList.size(), "isIndex", indexSymbol, "forceRefresh", forceRefresh)) {
             try {
@@ -603,8 +638,9 @@ public class MarketDataController {
 
     /**
      * Get live LTP with change calculation based on historical closing price
-     * 
+     *
      * @param symbols     Comma-separated list of symbols
+     * @param exchange    Target exchange (e.g. NSE, BSE)
      * @param timeframe   Timeframe for historical comparison (1D, 1W, 1M, 1Y)
      * @param indexSymbol Whether symbols are indices
      * @return Map containing LTP, change, and changePercent for each symbol
@@ -617,11 +653,12 @@ public class MarketDataController {
     })
     public ResponseEntity<Map<String, Object>> getLiveLTP(
             @RequestParam(name = "symbols", required = true) String symbols,
+            @RequestParam(name = "exchange", required = false, defaultValue = "NSE") String exchange,
             @RequestParam(name = "timeframe", defaultValue = "1D") String timeframe,
             @RequestParam(name = "isIndexSymbol", required = false, defaultValue = "true") boolean indexSymbol,
             @RequestParam(name = "refresh", defaultValue = "false") boolean forceRefresh) {
 
-        Set<String> symbolList = parseSymbols(symbols);
+        Set<String> symbolList = SymbolParseUtils.parseSymbols(symbols, exchange);
         try (FlowSpan span = flowLogger.start("market.live.ltp.fetch",
                 "symbolsCount", symbolList.size(), "timeframe", timeframe, "isIndex", indexSymbol, "forceRefresh",
                 forceRefresh)) {
@@ -630,66 +667,14 @@ public class MarketDataController {
                     log.warn("Live LTP request with no symbols");
                     Map<String, Object> errorResponse = new HashMap<>();
                     errorResponse.put("error", "No symbols provided");
-                    log.warn("No symbols provided");
                     return ResponseEntity.badRequest().body(errorResponse);
                 }
 
-                TimeFrame tf;
-                try {
-                    tf = TimeFrame.fromApiValue(timeframe);
-                } catch (Exception e) {
-                    log.warn("Invalid timeframe: {} defaulting to 1D", timeframe);
-                    tf = TimeFrame.DAY;
-                }
+                Map<String, Object> response = marketDataCacheService.getLiveLTP(
+                        symbolList, exchange, timeframe, indexSymbol, forceRefresh);
 
-                Map<String, OHLCQuote> historicalData = marketDataCacheService.getOHLC(symbolList, indexSymbol, tf, false);
-                Map<String, Object> livePrices = marketDataCacheService.getLivePrices(symbolList, indexSymbol,
-                        forceRefresh);
-
-                Map<String, Map<String, Object>> result = new HashMap<>();
-                Object pricesObj = livePrices.get("prices");
-                if (pricesObj instanceof List) {
-                    @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> pricesList = (List<Map<String, Object>>) pricesObj;
-
-                    for (Map<String, Object> priceData : pricesList) {
-                        String symbol = (String) priceData.get("symbol");
-                        if (symbol == null)
-                            continue;
-
-                        Double currentPrice = ((Number) priceData.get("lastPrice")).doubleValue();
-                        OHLCQuote historical = historicalData.get(symbol);
-                        if (historical == null) {
-                            historical = historicalData.get("NSE:" + symbol);
-                        }
-
-                        double previousClose = 0.0;
-                        if (historical != null && historical.getOhlc() != null) {
-                            previousClose = historical.getOhlc().getClose();
-                        }
-
-                        double change = currentPrice - previousClose;
-                        double changePercent = previousClose != 0 ? (change / previousClose) * 100 : 0.0;
-
-                        Map<String, Object> ltpData = new HashMap<>();
-                        ltpData.put("symbol", symbol);
-                        ltpData.put("lastPrice", currentPrice);
-                        ltpData.put("previousClose", previousClose);
-                        ltpData.put("change", change);
-                        ltpData.put("changePercent", changePercent);
-                        ltpData.put("timeframe", tf.getApiValue());
-
-                        result.put(symbol, ltpData);
-                    }
-                }
-
-                Map<String, Object> response = new HashMap<>();
-                response.put("count", result.size());
-                response.put("timeframe", tf.getApiValue());
-                response.put("data", result);
-                response.put("timestamp", new Date());
-
-                flowLogger.complete(span, "resultCount", result.size());
+                flowLogger.complete(span, "resultCount",
+                        response.containsKey("count") ? response.get("count") : 0);
                 return ResponseEntity.ok(response);
             } catch (Exception e) {
                 log.error("Unexpected error while fetching live LTP symbolsCount={}", symbolList.size(), e);
@@ -701,22 +686,4 @@ public class MarketDataController {
             }
         }
     }
-
-    /**
-     * Utility method to convert comma-separated string to Set of symbols
-     * 
-     * @param symbols Comma-separated string of symbols
-     * @return Set of trimmed symbols, or empty set if input is null/empty
-     */
-    private Set<String> parseSymbols(String symbols) {
-        if (symbols == null || symbols.isEmpty()) {
-            return new HashSet<>();
-        }
-
-        return Arrays.stream(symbols.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .collect(Collectors.toSet());
-    }
 }
-

@@ -17,6 +17,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.am.marketdata.analysis.dto.StockMoverDTO;
+import com.am.marketdata.analysis.dto.SectorPerformanceDTO;
 import java.util.List;
 import java.util.Map;
 
@@ -122,9 +124,10 @@ public class AnalysisController {
     @GetMapping("/heatmap")
     public ResponseEntity<java.util.Map<String, Double>> getHeatmap(
             @RequestParam String symbol,
-            @RequestParam(defaultValue = "1D") String timeframe) {
+            @RequestParam(defaultValue = "1D") String timeframe,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
 
-        return ResponseEntity.ok(analysisService.getHeatmap(symbol, timeframe));
+        return ResponseEntity.ok(analysisService.getHeatmap(symbol, timeframe, forceRefresh));
     }
 
     @GetMapping("/indices/historical-performance")
@@ -132,6 +135,15 @@ public class AnalysisController {
             @RequestParam(defaultValue = "10") int years) {
 
         return ResponseEntity.ok(analysisService.getIndicesHistoricalPerformance(years));
+    }
+
+    @GetMapping("/indices/constituents/historical-performance")
+    @Operation(summary = "Constituent monthly winners", description = "Top/worst stock among an index's constituents per month")
+    public ResponseEntity<com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse> getConstituentsHistoricalPerformance(
+            @RequestParam String symbol,
+            @RequestParam(defaultValue = "10") int years) {
+
+        return ResponseEntity.ok(analysisService.getConstituentsHistoricalPerformance(symbol, years));
     }
 
     // --- Migrated Market Analytics Endpoints ---
@@ -182,7 +194,7 @@ public class AnalysisController {
      */
     @GetMapping(value = "/sectors", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get Sector Performance", description = "Aggregates market performance by sector (Industry) from the specified index")
-    public ResponseEntity<List<Map<String, Object>>> getSectorPerformance(
+    public ResponseEntity<List<SectorPerformanceDTO>> getSectorPerformance(
             @RequestParam(required = false) String indexSymbol,
             @RequestParam(required = false) String timeFrame,
             @RequestParam(defaultValue = "false") boolean expandIndices) {
@@ -198,7 +210,7 @@ public class AnalysisController {
      */
     @GetMapping(value = "/index-performance", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get Index Performance", description = "Retrieves performance of all constituent stocks in the specified index for a given timeframe")
-    public ResponseEntity<List<Map<String, Object>>> getIndexPerformance(
+    public ResponseEntity<List<StockMoverDTO>> getIndexPerformance(
             @RequestParam(required = false) String indexSymbol,
             @RequestParam(required = false) String timeFrame) {
 

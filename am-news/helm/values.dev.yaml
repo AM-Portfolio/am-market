@@ -1,0 +1,57 @@
+environment: dev
+replicaCount: 1
+
+env:
+  ENVIRONMENT: "dev"
+  MONGO_DB: "am_news"
+  MARKET_DATA_URL: "http://am-market-data:8080"
+  NEWS_SYNC_ENABLED: "1"
+  NEWS_DOCS_ENABLED: "1"
+  LOG_LEVEL: "INFO"
+
+probes:
+  port: 8080
+  startup:
+    path: /health
+    timeoutSeconds: 10
+    failureThreshold: 30
+    periodSeconds: 10
+  liveness:
+    path: /health
+    timeoutSeconds: 10
+  readiness:
+    path: /ready
+    timeoutSeconds: 10
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-dev-dev-global-cors@kubernetescrd,
+      am-apps-dev-dev-strip-prefix@kubernetescrd
+  hosts:
+    - host: am-dev.asrax.in
+      paths:
+        - path: /news
+          pathType: Prefix
+
+vault:
+  enabled: true
+  secretPaths:
+    otel:
+      path: "apps/data/dev/infra/observability"
+    mongodb:
+      path: "apps/data/dev/infra/mongodb"
+    redis:
+      path: "apps/data/dev/infra/redis"
+    identity-oidc:
+      path: "apps/data/dev/services/am-identity"
+    market:
+      path: "apps/data/dev/services/am-market-data"

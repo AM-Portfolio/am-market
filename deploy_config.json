@@ -26,14 +26,6 @@
       "port_env": "ANALYSIS_PORT",
       "container_port": 8010,
       "host_port": 8010
-    },
-    {
-      "name": "market-data-web",
-      "path": "am_market_ui/live",
-      "type": "flutter",
-      "port_env": "WEB_PORT",
-      "container_port": 80,
-      "host_port": 9002
     }
   ]
 }

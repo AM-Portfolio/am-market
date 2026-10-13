@@ -23,4 +23,8 @@ public class EquityPrice {
     private OHLCVTPoint ohlcv;
     private String exchange;
     private String currency;
+    /** Prior session close — baseline for day change. */
+    private Double previousClose;
+    private Double change;
+    private Double changePercent;
 }

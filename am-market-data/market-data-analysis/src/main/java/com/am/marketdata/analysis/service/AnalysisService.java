@@ -528,11 +528,18 @@ public class AnalysisService {
     }
 
     public Map<String, Double> getHeatmap(String symbol, String timeframeStr, boolean bypassCache) {
-        // Check Cache
+        String tfNorm = timeframeStr == null ? "1D" : timeframeStr.trim().toUpperCase();
+
+        // Check Cache — ignore degenerate INDICES maps (almost all 0.0) so UI recovers
+        // without waiting for the long analysis TTL to expire.
         if (!bypassCache) {
-            Map<String, Double> cached = analysisRedisCache.getIndexHeatmap(symbol, timeframeStr);
-            if (cached != null) {
+            Map<String, Double> cached = analysisRedisCache.getIndexHeatmap(symbol, tfNorm);
+            if (cached != null && !isDegenerateIndicesHeatmap(symbol, tfNorm, cached)) {
                 return cached;
+            }
+            if (cached != null) {
+                log.warn("Discarding degenerate cached heatmap for {} {}", symbol, tfNorm);
+                analysisRedisCache.deleteIndexHeatmap(symbol, tfNorm);
             }
         }
 
@@ -557,7 +564,7 @@ public class AnalysisService {
         LocalDate from;
 
         // Custom logic for duration
-        String tfUpper = timeframeStr.toUpperCase();
+        String tfUpper = tfNorm;
         if (tfUpper.equals("1D")) {
             from = to.minusDays(5); // Look back enough to find prev close
         } else if (tfUpper.equals("1W") || tfUpper.equals("5D")) {
@@ -597,7 +604,7 @@ public class AnalysisService {
                 null,
                 null,
                 isIndexBatch, // isIndex
-                false // forceRefresh
+                bypassCache // forceRefresh
         );
 
         // 4. Calculate Returns
@@ -653,8 +660,39 @@ public class AnalysisService {
                         (e1, e2) -> e1,
                         LinkedHashMap::new));
 
-        analysisRedisCache.saveIndexHeatmap(symbol, timeframeStr, sortedHeatmap);
+        // Never persist a broken INDICES 1D map (all/mostly zeros) — that is what stuck the UI.
+        if (isDegenerateIndicesHeatmap(symbol, tfNorm, sortedHeatmap)) {
+            log.warn("Skipping cache save for degenerate heatmap {} {} (zeros={}/{})",
+                    symbol, tfNorm,
+                    sortedHeatmap.values().stream().filter(v -> v != null && Math.abs(v) < 1e-9).count(),
+                    sortedHeatmap.size());
+            analysisRedisCache.deleteIndexHeatmap(symbol, tfNorm);
+        } else {
+            analysisRedisCache.saveIndexHeatmap(symbol, tfNorm, sortedHeatmap);
+        }
         return sortedHeatmap;
+    }
+
+    /**
+     * INDICES 1D heatmap that is almost entirely 0.0 usually means incomplete history
+     * or a bad scrape day — not a real flat market across every index.
+     */
+    private boolean isDegenerateIndicesHeatmap(String symbol, String timeframe,
+            Map<String, Double> heatmap) {
+        if (heatmap == null || heatmap.isEmpty()) {
+            return false;
+        }
+        if (!"INDICES".equalsIgnoreCase(symbol)) {
+            return false;
+        }
+        if (timeframe == null || !"1D".equalsIgnoreCase(timeframe.trim())) {
+            return false;
+        }
+        long zeroCount = heatmap.values().stream()
+                .filter(v -> v == null || Math.abs(v) < 1e-9)
+                .count();
+        // >70% exact zeros with at least 5 symbols → treat as bad cache / bad compute
+        return heatmap.size() >= 5 && zeroCount * 10 >= heatmap.size() * 7;
     }
 
     private LocalDate CalculateTargetDate(LocalDate to, String tf) {
@@ -817,6 +855,134 @@ public class AnalysisService {
                 .build();
 
         analysisRedisCache.saveIndicesHistoricalPerformance(response, years);
+        return response;
+    }
+
+    /**
+     * Top/worst constituent stock per month for a given index (Mode B Constituents tab).
+     */
+    public com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse getConstituentsHistoricalPerformance(
+            String indexSymbol, int years) {
+        return getConstituentsHistoricalPerformance(indexSymbol, years, false);
+    }
+
+    public com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse getConstituentsHistoricalPerformance(
+            String indexSymbol, int years, boolean bypassCache) {
+        String index = indexSymbol == null ? "" : indexSymbol.trim();
+        if (index.isEmpty()) {
+            return com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse.builder()
+                    .startYear(LocalDate.now().getYear() - years + 1)
+                    .endYear(LocalDate.now().getYear())
+                    .monthlyPerformance(Collections.emptyList())
+                    .build();
+        }
+
+        if (!bypassCache) {
+            com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse cached = analysisRedisCache
+                    .getConstituentsHistoricalPerformance(index, years);
+            if (cached != null) {
+                return cached;
+            }
+        }
+
+        List<String> symbols = marketDataService.getIndexConstituents(index);
+        if (symbols == null || symbols.isEmpty()) {
+            symbols = Collections.singletonList(index);
+        }
+
+        Map<Integer, Map<Integer, List<com.am.marketdata.common.model.analysis.IndexPerformance>>> aggregateMap = new TreeMap<>(
+                Collections.reverseOrder());
+
+        for (String stock : symbols) {
+            try {
+                com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse response = getHistoricalPerformance(
+                        stock, years, false, bypassCache);
+
+                if (response != null && response.getYearlyPerformance() != null) {
+                    for (com.am.marketdata.common.model.analysis.YearlyPerformance yp : response
+                            .getYearlyPerformance()) {
+                        int year = yp.getYear();
+                        Map<String, Double> monthly = yp.getMonthlyReturns();
+
+                        if (monthly != null) {
+                            for (Map.Entry<String, Double> entry : monthly.entrySet()) {
+                                String monthStr = entry.getKey();
+                                Double ret = entry.getValue();
+                                if (ret == null)
+                                    continue;
+
+                                try {
+                                    Month m = Month.valueOf(monthStr);
+                                    int monthVal = m.getValue();
+
+                                    aggregateMap.computeIfAbsent(year, k -> new TreeMap<>())
+                                            .computeIfAbsent(monthVal, k -> new ArrayList<>())
+                                            .add(com.am.marketdata.common.model.analysis.IndexPerformance.builder()
+                                                    .symbol(stock)
+                                                    .returnPercentage(ret)
+                                                    .build());
+                                } catch (IllegalArgumentException e) {
+                                    log.warn("Invalid month string: {}", monthStr);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error fetching historical performance for constituent: {}", stock, e);
+            }
+        }
+
+        List<com.am.marketdata.common.model.analysis.MonthlyIndicesPerformance> performanceList = new ArrayList<>();
+
+        for (Map.Entry<Integer, Map<Integer, List<com.am.marketdata.common.model.analysis.IndexPerformance>>> yearEntry : aggregateMap
+                .entrySet()) {
+            int year = yearEntry.getKey();
+
+            for (Map.Entry<Integer, List<com.am.marketdata.common.model.analysis.IndexPerformance>> monthEntry : yearEntry
+                    .getValue().entrySet()) {
+                int month = monthEntry.getKey();
+                List<com.am.marketdata.common.model.analysis.IndexPerformance> stocksPerf = monthEntry.getValue();
+
+                if (stocksPerf.isEmpty())
+                    continue;
+
+                stocksPerf.sort((a, b) -> Double.compare(b.getReturnPercentage(), a.getReturnPercentage()));
+
+                com.am.marketdata.common.model.analysis.IndexPerformance top = stocksPerf.get(0);
+                com.am.marketdata.common.model.analysis.IndexPerformance worst = stocksPerf
+                        .get(stocksPerf.size() - 1);
+
+                performanceList.add(com.am.marketdata.common.model.analysis.MonthlyIndicesPerformance.builder()
+                        .year(year)
+                        .month(month)
+                        .monthName(Month.of(month).toString())
+                        .topPerformer(top)
+                        .worstPerformer(worst)
+                        .allIndices(stocksPerf)
+                        .build());
+            }
+        }
+
+        performanceList.sort((a, b) -> {
+            if (a.getYear() != b.getYear()) {
+                return b.getYear() - a.getYear();
+            }
+            return b.getMonth() - a.getMonth();
+        });
+
+        LocalDate to = LocalDate.now();
+        int endYear = to.getYear();
+        int startYear = endYear - years + 1;
+
+        com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse response = com.am.marketdata.common.model.analysis.IndicesHistoricalPerformanceResponse
+                .builder()
+                .startYear(startYear)
+                .endYear(endYear)
+                .monthlyPerformance(performanceList)
+                .build();
+
+        analysisRedisCache.saveConstituentsHistoricalPerformance(response, index, years);
         return response;
     }
 

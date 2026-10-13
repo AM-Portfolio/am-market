@@ -41,6 +41,7 @@ class FileUpload(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     error_message: Optional[str] = Field(default=None, description="Error message if processing failed")
     processing_metadata: Optional[dict] = Field(default=None, description="Additional processing information")
+    user_id: Optional[str] = Field(default=None, description="Owner user ID")
 
     class Config:
         allow_population_by_field_name = True

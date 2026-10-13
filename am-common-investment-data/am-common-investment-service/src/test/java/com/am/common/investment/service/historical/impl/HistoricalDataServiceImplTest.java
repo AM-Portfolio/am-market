@@ -35,11 +35,22 @@ class HistoricalDataServiceImplTest {
     @Mock
     private MarketIndexIndicesService marketIndexIndicesService;
 
+    @Mock
+    private com.am.common.investment.persistence.repository.measurement.impl.GlobalIndexInfluxRepository globalIndexInfluxRepository;
+
+    @Mock
+    private com.am.common.investment.persistence.document.global.GlobalIndexConfigRepository globalIndexConfigRepository;
+
     private HistoricalDataServiceImpl historicalDataService;
 
     @BeforeEach
     void setUp() {
-        historicalDataService = new HistoricalDataServiceImpl(equityService, marketIndexIndicesService);
+        historicalDataService = new HistoricalDataServiceImpl(
+                equityService, 
+                marketIndexIndicesService,
+                globalIndexInfluxRepository,
+                globalIndexConfigRepository
+        );
     }
 
     @Test

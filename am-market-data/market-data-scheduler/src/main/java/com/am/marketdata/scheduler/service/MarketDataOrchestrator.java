@@ -110,6 +110,7 @@ public class MarketDataOrchestrator {
      * Starts Ingestion
      */
     @Scheduled(cron = "${scheduler.ingestion.start-cron:0 15 9 * * MON-FRI}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_ingestionStart", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerMarketOpenJobs() {
         log.info("Orchestrator: Triggering Market Open Jobs");
         if (ingestionScheduler.isPresent()) {
@@ -142,6 +143,7 @@ public class MarketDataOrchestrator {
      * Stops Ingestion
      */
     @Scheduled(cron = "${scheduler.ingestion.stop-cron:0 30 15 * * MON-FRI}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_ingestionStop", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerIngestionStop() {
         log.info("Orchestrator: Triggering Ingestion Stop");
         if (ingestionScheduler.isPresent()) {
@@ -175,6 +177,7 @@ public class MarketDataOrchestrator {
      * Evening Stock Indices Fetch (e.g., 4:00 PM)
      */
     @Scheduled(cron = "${scheduler.stock-indices.evening-fetch:0 0 16 * * *}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_eveningFetch", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerEveningStockIndicesFetch() {
         log.info("Orchestrator: Triggering Evening Stock Indices Fetch");
         if (stockIndicesSchedulerService.isPresent()) {
@@ -205,6 +208,7 @@ public class MarketDataOrchestrator {
      * Historical Data Sync (e.g. 7:15 AM)
      */
     @Scheduled(cron = "${scheduler.historical.sync-cron:0 15 7 * * *}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_historicalSync", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerHistoricalSync() {
         log.info("Orchestrator: Triggering Historical Data Sync");
         if (ingestionScheduler.isPresent()) {
@@ -218,6 +222,7 @@ public class MarketDataOrchestrator {
      * Daily Market Analysis: Runs at 7:15 AM
      */
     @Scheduled(cron = "${scheduler.analysis.daily:0 15 7 * * *}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_dailyAnalysis", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerDailyAnalysis() {
         log.info("Orchestrator: Triggering Daily Market Analysis");
         if (marketAnalysisSchedulerService.isPresent()) {
@@ -232,6 +237,7 @@ public class MarketDataOrchestrator {
      * Redis Cache Cleanup (e.g., 2:00 AM)
      */
     @Scheduled(cron = "${scheduler.redis.cleanup.cron:0 0 2 * * *}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_redisCleanup", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerRedisCleanup() {
         log.info("Orchestrator: Triggering Redis Cleanup");
         if (redisCacheCleanupScheduler.isPresent()) {

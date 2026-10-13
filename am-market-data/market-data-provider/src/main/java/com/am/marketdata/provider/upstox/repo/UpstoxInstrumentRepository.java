@@ -16,6 +16,9 @@ public interface UpstoxInstrumentRepository extends MongoRepository<UpstoxInstru
     // Also support finding by trading symbol list
     List<UpstoxInstrument> findByTradingSymbolIn(List<String> tradingSymbols);
 
+    // This method finds multiple Upstox instruments using their ISIN numbers
+    List<UpstoxInstrument> findByIsinIn(List<String> isins);
+
     // "Semantic search" / text search implementation using Regex
     // Search in name, assetSymbol, or tradingSymbol
     @Query("{ '$or': [ { 'name': { '$regex': ?0, '$options': 'i' } }, { 'assetSymbol': { '$regex': ?0, '$options': 'i' } }, { 'tradingSymbol': { '$regex': ?0, '$options': 'i' } } ] }")

@@ -10,24 +10,43 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-# Vault Configuration (Prod Override)
-vault:
-  secretPaths:
-    auth:
-      path: apps/data/prod/services/am-auth
-    logging:
-      path: apps/data/prod/services/logging
-    market:
-      path: apps/data/prod/services/am-market-data
-    mongodb: 
-      path: "apps/data/prod/infra/mongodb"
-    together:
-      path: "apps/data/prod/infra/shared-api"
-
 env:
-  ENVIRONMENT: "prod"
+  ROOT_PATH: "/parser"
   MONGO_DB: "mutual_funds"
   MARKET_DATA_URL: "http://am-market-data:8080"
   LOG_LEVEL: "INFO"
   ETF_LIST_CACHE_MINUTES: "60"
   ETF_HOLDINGS_CACHE_DAYS: "1"
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-prod-global-cors@kubernetescrd,
+      am-apps-prod-strip-prefix-apps@kubernetescrd
+  hosts:
+    - host: am.asrax.in
+      paths:
+        - path: /parser
+          pathType: Prefix
+
+vault:
+  enabled: true
+  secretPaths:
+    otel:
+      path: "apps/data/prod/infra/observability"
+    auth:
+      path: apps/data/prod/services/am-auth
+    market:
+      path: apps/data/prod/services/am-market-data
+    mongodb:
+      path: "apps/data/prod/infra/mongodb"
+    together:
+      path: "apps/data/prod/infra/shared-api"
+    identity-oidc:
+      path: "apps/data/prod/services/am-identity"
+    service-oauth:
+      path: "apps/data/prod/services/am-parser"

@@ -42,6 +42,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
     private final MarketDataCacheService marketDataCacheService;
     private final ThreadPoolTaskExecutor taskExecutor;
     private final EquityService equityService;
+    private final com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService;
     private final OHLCMapper ohlcMapper;
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
 
@@ -49,12 +50,14 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             HistoricalDataService historicalDataService,
             MarketDataCacheService marketDataCacheService,
             EquityService equityService,
+            com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService,
             OHLCMapper ohlcMapper,
             StockIndicesMarketDataService stockIndicesMarketDataService,
             @Qualifier("marketDataPersistenceExecutor") ThreadPoolTaskExecutor taskExecutor) {
         this.historicalDataService = historicalDataService;
         this.marketDataCacheService = marketDataCacheService;
         this.equityService = equityService;
+        this.equityLatestPriceService = equityLatestPriceService;
         this.ohlcMapper = ohlcMapper;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.taskExecutor = taskExecutor;
@@ -240,7 +243,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             ));
             List<String> filteredSymbols = tradingSymbols.stream()
                     .filter(symbol -> {
-                        String clean = symbol.replace("NSE:", "").replace("NSE_EQ:", "").trim().toUpperCase();
+                        String clean = symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "").trim().toUpperCase();
                         return !knownIndices.contains(clean) && 
                                !clean.startsWith("NIFTY ") && 
                                !clean.contains("VIX") && 
@@ -271,7 +274,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
                     // Remove found symbols
                     cachedData.keySet().forEach(key -> {
-                        String symbol = key.replace("NSE:", "").replace("NSE_EQ:", "");
+                        String symbol = key.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "");
                         remainingSymbols.remove(symbol);
                     });
 
@@ -292,11 +295,21 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
                 // Clean symbols (remove NSE: prefix if present)
                 List<String> cleanSymbols = remainingSymbols.stream()
-                        .map(symbol -> symbol.replace("NSE:", ""))
+                        .map(symbol -> symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", ""))
                         .collect(Collectors.toList());
 
-                // Get equity prices from database
-                List<EquityPrice> equityPrices = equityService.getPricesByTradingSymbols(cleanSymbols);
+                /*
+                 * FAST DATABASE FALLBACK LOOKUP:
+                 * ---------------------------------------------------------------------------------------------
+                 * WHAT PROBLEM IT SOLVES:
+                 * Previously, this called equityService.getPricesByTradingSymbols(...) which scanned 30 days
+                 * (-30d) of historical tick data before running last(), causing a 10-second InfluxDB delay.
+                 * 
+                 * HOW IT WORKS:
+                 * We call equityLatestPriceService.getLatestPricesByTradingSymbols(...) which uses a narrow 
+                 * holiday-safe -5d time window, returning latest quotes in ~35ms instead of 10,000ms.
+                 */
+                List<EquityPrice> equityPrices = equityLatestPriceService.getLatestPricesByTradingSymbols(cleanSymbols);
 
                 if (!equityPrices.isEmpty()) {
                     // Convert equity prices to OHLCQuote format
@@ -399,8 +412,8 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         }
 
         try {
-            // Clean symbol (remove NSE: prefix if present)
-            String cleanSymbol = symbol.replace("NSE:", "");
+            // Clean symbol (remove exchange prefixes like NSE_EQ|, NSE_INDEX|, NSE:, NSE_EQ: if present)
+            String cleanSymbol = symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "").trim();
 
             // Parse dates - handle potential format variations
             LocalDate from;
@@ -433,8 +446,8 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             // If not in cache or cache range is invalid, try to get from database
             log.debug("No valid historical data found in cache, fetching from database for symbol: {}", symbol);
 
-            // Map interval to the format expected by the database service
-            String mappedInterval = interval.name().toLowerCase();
+            // Map interval to the format expected by the database service (e.g. "5m", "1H") rather than enum name ("five_minute")
+            String mappedInterval = interval.getApiValue();
 
             // Get historical data from database using HistoricalDataService
             // Convert LocalDate to Instant at the start of the day in UTC

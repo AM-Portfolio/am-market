@@ -15,6 +15,7 @@ import com.am.marketdata.service.util.DataRetrievalStrategyUtil;
 import com.am.marketdata.service.util.HistoricalDataRetriever;
 import com.am.marketdata.service.util.MarketDataRetrievalUtil;
 import com.am.marketdata.service.util.OHLCDataRetriever;
+import com.am.marketdata.service.util.OfficialClosePolicy;
 import com.marketdata.common.MarketDataProvider;
 import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import com.zerodhatech.models.LTPQuote;
@@ -30,10 +31,14 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -65,6 +70,8 @@ public class MarketDataService {
 
     private final FlowLogger flowLogger;
     private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService;
+    private final MarketHoursService marketHoursService;
+    private final MarketDataCacheService cacheService;
 
     public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
             MeterRegistry meterRegistry, InstrumentMapper instrumentMapper,
@@ -72,7 +79,9 @@ public class MarketDataService {
             MarketDataRetrievalUtil marketDataRetrievalUtil,
             java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
             com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
-            FlowLogger flowLogger) {
+            FlowLogger flowLogger,
+            java.util.Optional<MarketHoursService> marketHoursService,
+            @org.springframework.beans.factory.annotation.Qualifier("serviceModuleMarketDataCacheService") MarketDataCacheService cacheService) {
         this.providerFactory = providerFactory;
         this.instrumentService = instrumentService;
         this.meterRegistry = meterRegistry;
@@ -83,6 +92,8 @@ public class MarketDataService {
         this.producer = producer.orElse(null);
         this.stockIndicesService = stockIndicesService;
         this.flowLogger = flowLogger;
+        this.marketHoursService = marketHoursService.orElse(null);
+        this.cacheService = cacheService;
     }
 
     private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh) {
@@ -98,7 +109,7 @@ public class MarketDataService {
 
     private String resolveProviderName(String providerName) {
         if (providerName == null || providerName.trim().isEmpty()) {
-            providerName = persistenceService.getMarketDataCacheService().getActiveProvider();
+            providerName = cacheService.getActiveProvider();
         }
         if (providerName == null) {
             providerName = defaultProvider;
@@ -133,7 +144,7 @@ public class MarketDataService {
             if (requestToken == null || requestToken.trim().isEmpty()) {
                 throw new IllegalArgumentException("Request token cannot be null or empty");
             }
-            String providerName = persistenceService.getMarketDataCacheService().getActiveProvider();
+            String providerName = cacheService.getActiveProvider();
             providerName = resolveProviderName(providerName);
             String finalProviderName = providerName;
             finalProviderName = "upstox"; // For lambda
@@ -143,7 +154,7 @@ public class MarketDataService {
                     "generateSession");
 
             // Set active provider
-            persistenceService.getMarketDataCacheService().setActiveProvider(finalProviderName);
+            cacheService.setActiveProvider(finalProviderName);
 
             return session;
         } catch (Exception e) {
@@ -156,6 +167,9 @@ public class MarketDataService {
     }
 
     public Map<String, Object> getQuotes(String[] symbols, String providerName) {
+        if (symbols == null || symbols.length == 0) {
+            return Collections.emptyMap();
+        }
         Timer.Sample timer = Timer.start(meterRegistry);
         try {
             providerName = resolveProviderName(providerName);
@@ -176,6 +190,9 @@ public class MarketDataService {
 
     public Map<String, OHLCQuote> getOHLC(List<String> tradingSymbols, TimeFrame timeFrame, boolean forceRefresh,
             String providerName) {
+        if (tradingSymbols == null || tradingSymbols.isEmpty()) {
+            return Collections.emptyMap();
+        }
         String tfValue = timeFrame != null ? timeFrame.getApiValue() : "default";
         Timer.Sample timer = Timer.start(meterRegistry);
         
@@ -188,7 +205,8 @@ public class MarketDataService {
                 Map<String, OHLCQuote> result = retriever.retrieveData(tradingSymbols, timeFrame, forceRefresh);
 
                 if (result != null && !result.isEmpty()) {
-                    persistenceService.getMarketDataCacheService().overlayLatestPrices(result);
+                    cacheService.overlayLatestPrices(result);
+                    applyOfficialDailyCloseWhenMarketClosed(result);
                 }
 
                 meterRegistry.counter("market.data.success.count", "operation", "getOHLC", "timeFrame", tfValue).increment();
@@ -203,6 +221,147 @@ public class MarketDataService {
                 timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getOHLC", "timeFrame", tfValue));
             }
         }
+    }
+
+    /**
+     * After NSE close, Upstox live OHLC {@code lastPrice} is last trade, not official close.
+     * Liquid names look fine (last trade ≈ close). Thin ETFs/SGB do not.
+     *
+     * <p>Reuse {@link #getHistoricalDataBatch} daily candles (same source as previous-close
+     * backfill). Prefer today's candle. On weekend/holiday there is no today candle — use
+     * the latest session close in the window (last trading day). On a trading day after
+     * 15:30, if today's candle is not published yet, leave lastPrice unchanged so we do
+     * not paint yesterday as today.
+     *
+     * <p>No-op while the market is open, and if hours cannot be resolved (fail-open).
+     */
+    private void applyOfficialDailyCloseWhenMarketClosed(Map<String, OHLCQuote> quotes) {
+        if (quotes == null || quotes.isEmpty()) {
+            return;
+        }
+        if (marketHoursService == null) {
+            return;
+        }
+        try {
+            if (marketHoursService.isMarketOpen()) {
+                return;
+            }
+        } catch (Exception e) {
+            log.warn("Could not resolve market hours; skipping official-close overlay: {}", e.getMessage());
+            return;
+        }
+
+        // LATENCY OPTIMIZATION: Redis Fast-Path
+        // -----------------------------------------------------------------------------------------
+        // WHAT PROBLEM IT SOLVES:
+        // Previously, this method unconditionally called getHistoricalDataBatch() for ALL symbols when the
+        // market was closed. That triggered 5-50 sequential InfluxDB HTTP queries, causing a 2-second delay.
+        //
+        // HOW IT WORKS:
+        // Check if Redis already provided a valid previousClose (> 0.0) during overlayLatestPrices().
+        // If yes, update lastPrice and close price directly in 0ms without touching InfluxDB.
+        // We only fetch historical candles for symbols that are genuinely missing from Redis.
+        List<String> missingSymbols = new ArrayList<>();
+        int updatedCount = 0;
+
+        for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
+            OHLCQuote quote = entry.getValue();
+            if (quote != null) {
+                if (quote.getPreviousClose() > 0.0) {
+                    // Fast path: Use Redis-cached previousClose as the official close
+                    quote.setLastPrice(quote.getPreviousClose());
+                    if (quote.getOhlc() != null) {
+                        quote.getOhlc().setClose(quote.getPreviousClose());
+                    }
+                    updatedCount++;
+                } else {
+                    // Missing from Redis: Needs InfluxDB fallback lookup
+                    missingSymbols.add(entry.getKey());
+                }
+            }
+        }
+
+        if (missingSymbols.isEmpty()) {
+            log.info("Applied official daily close via Redis fast-path for {}/{} symbols in 0ms",
+                    updatedCount, quotes.size());
+            return;
+        }
+
+        log.info("Redis missed official close for {}/{} symbols. Triggering non-blocking background DB backfill...",
+                missingSymbols.size(), quotes.size());
+
+        java.time.ZoneId ist = java.time.ZoneId.of("Asia/Kolkata");
+        java.time.LocalDate today = java.time.LocalDate.now(ist);
+        boolean sessionDay = true;
+        try {
+            sessionDay = marketHoursService.isCashSessionDay();
+        } catch (Exception e) {
+            log.warn("Could not resolve session day; requiring today's candle: {}", e.getMessage());
+        }
+        final boolean isSessionDay = sessionDay;
+        Date fromDate = Date.from(today.minusDays(7).atStartOfDay(ist).toInstant());
+        Date toDate = Date.from(today.plusDays(1).atStartOfDay(ist).toInstant());
+
+        // LATENCY OPTIMIZATION: Execute DB lookup in background so HTTP response is returned immediately
+        CompletableFuture.runAsync(() -> {
+            try {
+                Map<String, HistoricalData> history = getHistoricalDataBatch(
+                        missingSymbols,
+                        fromDate,
+                        toDate,
+                        TimeFrame.DAY,
+                        false,
+                        null,
+                        null,
+                        false,
+                        false,
+                        false /* allowProviderFallback = false */);
+
+                int updated = 0;
+                List<String> stillMissingSymbols = new ArrayList<>();
+
+                if (history != null && !history.isEmpty()) {
+                    for (String symbol : missingSymbols) {
+                        HistoricalData data = history.get(symbol);
+                        if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
+                            stillMissingSymbols.add(symbol);
+                            continue;
+                        }
+                        Double officialClose = OfficialClosePolicy.pickSessionClose(
+                                data.getDataPoints(), today, isSessionDay);
+                        if (officialClose == null) {
+                            stillMissingSymbols.add(symbol);
+                            continue;
+                        }
+                        OHLCQuote quote = quotes.get(symbol);
+                        if (quote != null) {
+                            quote.setLastPrice(officialClose);
+                            if (quote.getOhlc() != null) {
+                                quote.getOhlc().setClose(officialClose);
+                            }
+                            quote.setPreviousClose(officialClose);
+                            updated++;
+                        }
+                    }
+                } else {
+                    stillMissingSymbols.addAll(missingSymbols);
+                }
+
+                if (updated > 0) {
+                    log.info("Applied official daily close via background DB fallback for {}/{} missing symbols",
+                            updated, missingSymbols.size());
+                }
+
+                if (!stillMissingSymbols.isEmpty()) {
+                    log.info("Non-blocking hybrid strategy: {} symbols missing from local DB. Triggering async background seed.", stillMissingSymbols.size());
+                    final String pName = defaultProvider;
+                    getHistoricalDataBatch(stillMissingSymbols, fromDate, toDate, TimeFrame.DAY, false, null, pName, false, true, true);
+                    log.info("Async background seed completed for {} missing symbols", stillMissingSymbols.size());
+                }
+            } catch (Exception e) {
+                log.warn("Official daily close background overlay failed: {}", e.getMessage());
+            }
+        });
     }
 
     public HistoricalData getHistoricalData(String symbol, Date fromDate, Date toDate, TimeFrame interval,
@@ -282,6 +441,16 @@ public class MarketDataService {
     public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, Date fromDate, Date toDate,
             TimeFrame interval, boolean continuous, Map<String, Object> additionalParams, String providerName,
             boolean isIndexSymbol, boolean forceRefresh) {
+        return getHistoricalDataBatch(symbols, fromDate, toDate, interval, continuous, additionalParams,
+                providerName, isIndexSymbol, forceRefresh, true);
+    }
+
+    public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, Date fromDate, Date toDate,
+            TimeFrame interval, boolean continuous, Map<String, Object> additionalParams, String providerName,
+            boolean isIndexSymbol, boolean forceRefresh, boolean allowProviderFallback) {
+        if (symbols == null || symbols.isEmpty()) {
+            return Collections.emptyMap();
+        }
         Timer.Sample timer = Timer.start(meterRegistry);
         String tfValue = interval != null ? interval.getApiValue() : "null";
         
@@ -290,7 +459,9 @@ public class MarketDataService {
             try {
                 providerName = resolveProviderName(providerName);
 
-                List<DataSourceType> retrievalOrder = DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh);
+                List<DataSourceType> retrievalOrder = allowProviderFallback
+                        ? DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh)
+                        : java.util.Arrays.asList(DataSourceType.CACHE, DataSourceType.DATABASE);
                 HistoricalDataRetriever retriever = HistoricalDataRetriever.builder()
                         .persistenceService(persistenceService)
                         .providerFactory(providerFactory)
@@ -548,20 +719,42 @@ public class MarketDataService {
             if (cachedData != null && !cachedData.isEmpty()) {
                 log.info("[CACHE] Found {} live prices in cache", cachedData.size());
 
-                // Convert cached OHLC data to EquityPrice
-                Map<String, LTPQuote> ltpMap = new HashMap<>();
+                // Map OHLC cache → EquityPrice (lastPrice + ohlcv). Day change for
+                // live-ltp uses ohlcv.close as previousClose baseline — do not call
+                // setPreviousClose/setChange (not on all published EquityPrice jars).
                 for (Map.Entry<String, OHLCQuote> entry : cachedData.entrySet()) {
-                    LTPQuote ltp = new LTPQuote();
-                    ltp.lastPrice = entry.getValue().getLastPrice();
-                    ltp.instrumentToken = 0;
-                    ltpMap.put(entry.getKey(), ltp);
+                    String key = entry.getKey();
+                    OHLCQuote quote = entry.getValue();
+                    if (quote == null) {
+                        continue;
+                    }
+                    String[] exchangeAndSymbol = resolveExchangeAndSymbol(key, tradingSymbols);
+                    String exchange = exchangeAndSymbol[0];
+                    String symbol = exchangeAndSymbol[1];
+                    Double last = quote.getLastPrice() > 0
+                            ? quote.getLastPrice()
+                            : (quote.getOhlc() != null ? quote.getOhlc().getClose() : null);
+                    EquityPrice price = new EquityPrice();
+                    price.setSymbol(symbol);
+                    price.setExchange(exchange);
+                    price.setLastPrice(last);
+                    if (quote.getOhlc() != null) {
+                        // Prefer true previousClose when Redis has it; else day close.
+                        double closeForChange = quote.getPreviousClose() > 0
+                                ? quote.getPreviousClose()
+                                : quote.getOhlc().getClose();
+                        price.setOhlcv(com.am.common.investment.model.historical.OHLCVTPoint.builder()
+                                .open(quote.getOhlc().getOpen())
+                                .high(quote.getOhlc().getHigh())
+                                .low(quote.getOhlc().getLow())
+                                .close(closeForChange)
+                                .build());
+                    }
+                    result.add(price);
                 }
 
-                List<EquityPrice> cachedPrices = genericMapper.mapLTPquoteToEquityPrices(ltpMap);
-                result.addAll(cachedPrices);
-
-                // Remove symbols found in cache from remaining
-                cachedData.keySet().forEach(symbol -> remainingSymbols.remove(symbol.replace("NSE:", "")));
+                // FO/BSE-safe remaining removal (never substring-replace "NSE:" — corrupts NSE_FO:)
+                removeCachedHitsFromRemaining(remainingSymbols, cachedData.keySet());
 
                 log.info("[CACHE] {} symbols remaining after cache lookup", remainingSymbols.size());
             } else {
@@ -591,25 +784,255 @@ public class MarketDataService {
         }
     }
 
+    /** Segment prefixes for equity, F&O, and other Indian venues (prefix-anchored only). */
+    private static final Pattern SEGMENT_PREFIX = Pattern.compile(
+            "(?i)^(NSE_EQ|NSE_FO|BSE_EQ|BSE_FO|NSE|BSE|NFO|BFO|CDS|MCX):(.+)$");
+
+    /**
+     * Resolve exchange/segment + trading symbol from a cache key.
+     * Prefixed keys win; bare Redis keys (NSE equity convention) inherit exchange from the matching request.
+     */
+    private static String[] resolveExchangeAndSymbol(String key, List<String> tradingSymbols) {
+        if (key == null) {
+            return new String[] { "NSE", "" };
+        }
+        String trimmed = key.trim();
+        Matcher keyed = SEGMENT_PREFIX.matcher(trimmed);
+        if (keyed.matches()) {
+            return new String[] { normalizeExchangeSegment(keyed.group(1)), keyed.group(2) };
+        }
+
+        if (tradingSymbols != null) {
+            for (String req : tradingSymbols) {
+                if (req == null || req.isBlank()) {
+                    continue;
+                }
+                String rq = req.trim();
+                Matcher reqMatch = SEGMENT_PREFIX.matcher(rq);
+                if (reqMatch.matches()) {
+                    if (reqMatch.group(2).equalsIgnoreCase(trimmed)) {
+                        return new String[] { normalizeExchangeSegment(reqMatch.group(1)), trimmed };
+                    }
+                } else if (rq.equalsIgnoreCase(trimmed)) {
+                    return new String[] { "NSE", trimmed };
+                }
+            }
+        }
+        // Unprefixed Redis key with no matching request → NSE equity (main cache convention).
+        return new String[] { "NSE", trimmed };
+    }
+
+    private static String normalizeExchangeSegment(String segment) {
+        if (segment == null || segment.isBlank()) {
+            return "NSE";
+        }
+        String seg = segment.trim().toUpperCase();
+        if ("NSE_EQ".equals(seg)) {
+            return "NSE";
+        }
+        if ("BSE_EQ".equals(seg)) {
+            return "BSE";
+        }
+        return seg;
+    }
+
+    /**
+     * Remove cache hits from remaining request symbols without substring-replacing "NSE:"
+     * (which corrupts NSE_FO:...). Bare cache keys clear NSE equity only; BSE/FO stay segment-scoped.
+     */
+    private static void removeCachedHitsFromRemaining(Set<String> remainingSymbols, Set<String> cacheKeys) {
+        if (remainingSymbols == null || remainingSymbols.isEmpty() || cacheKeys == null || cacheKeys.isEmpty()) {
+            return;
+        }
+
+        for (String cacheKey : cacheKeys) {
+            if (cacheKey == null || cacheKey.isBlank()) {
+                continue;
+            }
+            String ck = cacheKey.trim();
+            Matcher cacheMatch = SEGMENT_PREFIX.matcher(ck);
+            final boolean cachePrefixed = cacheMatch.matches();
+            final String cacheSeg = cachePrefixed ? cacheMatch.group(1).toUpperCase() : null;
+            final String cacheSym = cachePrefixed ? cacheMatch.group(2) : ck;
+            final boolean cacheIsFo = cachePrefixed
+                    && (cacheSeg.contains("_FO") || "NFO".equals(cacheSeg) || "BFO".equals(cacheSeg));
+            final boolean cacheIsBseEquity = cachePrefixed
+                    && ("BSE".equals(cacheSeg) || "BSE_EQ".equals(cacheSeg));
+            final boolean cacheIsNseEquity = !cachePrefixed
+                    || "NSE".equals(cacheSeg) || "NSE_EQ".equals(cacheSeg);
+
+            Iterator<String> iter = remainingSymbols.iterator();
+            while (iter.hasNext()) {
+                String req = iter.next();
+                if (req == null || req.isBlank()) {
+                    continue;
+                }
+                String rq = req.trim();
+                if (rq.equalsIgnoreCase(ck)) {
+                    iter.remove();
+                    continue;
+                }
+
+                Matcher reqMatch = SEGMENT_PREFIX.matcher(rq);
+                if (cacheIsFo) {
+                    if (reqMatch.matches()
+                            && reqMatch.group(1).equalsIgnoreCase(cacheSeg)
+                            && reqMatch.group(2).equalsIgnoreCase(cacheSym)) {
+                        iter.remove();
+                    }
+                } else if (cacheIsBseEquity) {
+                    if (reqMatch.matches()) {
+                        String reqSeg = reqMatch.group(1).toUpperCase();
+                        if (("BSE".equals(reqSeg) || "BSE_EQ".equals(reqSeg))
+                                && reqMatch.group(2).equalsIgnoreCase(cacheSym)) {
+                            iter.remove();
+                        }
+                    }
+                } else if (cacheIsNseEquity) {
+                    if (!reqMatch.matches() && rq.equalsIgnoreCase(cacheSym)) {
+                        iter.remove();
+                    } else if (reqMatch.matches()) {
+                        String reqSeg = reqMatch.group(1).toUpperCase();
+                        if (("NSE".equals(reqSeg) || "NSE_EQ".equals(reqSeg))
+                                && reqMatch.group(2).equalsIgnoreCase(cacheSym)) {
+                            iter.remove();
+                        }
+                    }
+                } else if (cachePrefixed && reqMatch.matches()
+                        && reqMatch.group(1).equalsIgnoreCase(cacheSeg)
+                        && reqMatch.group(2).equalsIgnoreCase(cacheSym)) {
+                    iter.remove();
+                }
+            }
+        }
+    }
+
     public List<String> getIndexConstituents(String indexSymbol) {
+        // "INDICES" is a special virtual index symbol used exclusively to fetch
+        // historical data points for the "Market Heatmap (Indices)" dashboard section.
         if ("INDICES".equalsIgnoreCase(indexSymbol)) {
             return java.util.Arrays.asList("NIFTY 50", "NIFTY BANK", "NIFTY IT", "SENSEX", "NIFTY MIDCAP 50",
-                    "NIFTY SMALLCAP 50", "NIFTY 100", "NIFTY AUTO", "NIFTY PHARMA", "NIFTY FMCG", "NIFTY METAL",
+                    "NIFTY SMLCAP 50", "NIFTY 100", "NIFTY AUTO", "NIFTY PHARMA", "NIFTY FMCG", "NIFTY METAL",
                     "NIFTY REALTY", "NIFTY ENERGY", "NIFTY INFRA");
         }
 
-        // Use StockIndicesService to fetch constituents
+        // Use StockIndicesService to fetch constituents (case-insensitive lookup)
         com.am.common.investment.model.stockindice.StockIndicesMarketData indexData = stockIndicesService
-                .findByIndexSymbol(indexSymbol);
+                .findByIndexSymbol(indexSymbol != null ? indexSymbol.trim().toUpperCase() : "");
 
         if (indexData != null && indexData.getData() != null) {
             return indexData.getData().stream()
                     .map(com.am.common.investment.model.stockindice.StockData::getSymbol)
+                    .filter(sym -> !sym.equalsIgnoreCase(indexSymbol)) // Exclude parent index symbol
                     .collect(java.util.stream.Collectors.toList());
         }
 
         log.warn("No constituents found for index: {}", indexSymbol);
         return new java.util.ArrayList<>();
+    }
+
+    /**
+     * Get Option Chain data for an underlying instrument.
+     * Features:
+     * 1. Cache-aside with dynamic TTL (60s live, 12h after-hours/holidays)
+     * 2. Thundering-herd / Cache-stampede shield using distributed mutex lock
+     * 3. Disaster recovery / Stale fallback if upstream provider fails
+     */
+    public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate, String providerName, boolean forceRefresh) {
+        if (underlyingSymbol == null || underlyingSymbol.trim().isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        String provider = (providerName != null && !providerName.isEmpty()) ? providerName : defaultProvider;
+        String formattedExpiry = null;
+        if (expiryDate != null) {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd");
+            formattedExpiry = sdf.format(expiryDate);
+        }
+
+        // 1. Check Redis Cache first (unless forceRefresh is requested)
+        if (!forceRefresh) {
+            Map<String, Object> cached = cacheService.getOptionChainFromCache(underlyingSymbol, formattedExpiry);
+            if (cached != null && !cached.isEmpty()) {
+                log.debug("Serving option chain from cache for symbol={} expiry={}", underlyingSymbol, formattedExpiry);
+                return cached;
+            }
+
+            // Smart Market-Hours Strategy: If market is currently CLOSED, serve static closing data from cache / stale fallback directly without invoking Upstox API
+            boolean isMarketOpen = marketHoursService != null && marketHoursService.isMarketOpen();
+            if (!isMarketOpen) {
+                log.info("Market is CLOSED for symbol={}. Serving static closing data from local cache without Upstox API call.", underlyingSymbol);
+                Map<String, Object> staticClosingData = cacheService.getStaleOptionChain(underlyingSymbol, formattedExpiry);
+                if (staticClosingData != null && !staticClosingData.isEmpty()) {
+                    return staticClosingData;
+                }
+            }
+        }
+
+        // 2. Thundering Herd Shield: Acquire mutex lock so only 1 thread fetches from Upstox
+        boolean lockAcquired = cacheService.acquireOptionChainLock(underlyingSymbol, formattedExpiry, 5);
+        if (!lockAcquired) {
+            // Another thread is already refreshing the cache; wait briefly and read from cache
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ignored) {}
+            Map<String, Object> cachedAfterWait = cacheService.getOptionChainFromCache(underlyingSymbol, formattedExpiry);
+            if (cachedAfterWait != null && !cachedAfterWait.isEmpty()) {
+                return cachedAfterWait;
+            }
+        }
+
+        try {
+            MarketDataProvider dataProvider = providerFactory.getProvider(provider);
+            if (dataProvider == null) {
+                log.error("Provider {} not found for option chain", provider);
+                // Try fallback stale cache
+                Map<String, Object> stale = cacheService.getStaleOptionChain(underlyingSymbol, formattedExpiry);
+                return stale != null ? stale : Collections.emptyMap();
+            }
+
+            log.info("Fetching fresh option chain via provider={} for symbol={} expiry={}", provider, underlyingSymbol, formattedExpiry);
+            Map<String, Object> freshData = dataProvider.getOptionChain(underlyingSymbol, expiryDate);
+
+            if (freshData != null && !freshData.isEmpty()) {
+                // Determine market open status for dynamic TTL
+                boolean isMarketOpen = marketHoursService != null && marketHoursService.isMarketOpen();
+
+                // Failsafe: If marketHoursService reported closed, check if timestamp is fresh (< 5 min)
+                if (!isMarketOpen && freshData.containsKey("timestamp")) {
+                    try {
+                        long ts = ((Number) freshData.get("timestamp")).longValue();
+                        long currentTs = System.currentTimeMillis() / 1000;
+                        if (Math.abs(currentTs - ts) < 300) {
+                            log.info("Recent timestamp detected in option chain ({}s ago), treating market as active for TTL", Math.abs(currentTs - ts));
+                            isMarketOpen = true;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // Cache the fresh result
+                cacheService.cacheOptionChain(underlyingSymbol, formattedExpiry, freshData, isMarketOpen);
+                return freshData;
+            }
+
+            // If empty response from provider, fall back to stale cache if available
+            Map<String, Object> stale = cacheService.getStaleOptionChain(underlyingSymbol, formattedExpiry);
+            return stale != null ? stale : Collections.emptyMap();
+
+        } catch (Exception e) {
+            log.error("Error fetching option chain from provider={}: {}", provider, e.getMessage());
+            // Upstream failure resilience: Serve stale data tagged with isStale: true
+            Map<String, Object> stale = cacheService.getStaleOptionChain(underlyingSymbol, formattedExpiry);
+            if (stale != null && !stale.isEmpty()) {
+                log.warn("Serving stale fallback option chain for symbol={} due to upstream error", underlyingSymbol);
+                return stale;
+            }
+            throw new RuntimeException("Failed to fetch option chain: " + e.getMessage(), e);
+        } finally {
+            if (lockAcquired) {
+                cacheService.releaseOptionChainLock(underlyingSymbol, formattedExpiry);
+            }
+        }
     }
 }
 

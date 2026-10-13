@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 public class WatchlistItemDto {
     private String id;
     private String symbol;
+    private String exchange;
     private Integer displayOrder;
     private LocalDateTime createdAt;
 }

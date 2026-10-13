@@ -23,7 +23,7 @@ public class EquityPriceMapper {
         .close(measurement.getClose())
         .low(measurement.getLow())
         .high(measurement.getHigh())
-        .volume(measurement.getVolume())
+        .volume(measurement.getVolumeAsLong())
         .build());
         model.setExchange(measurement.getExchange());
         model.setCurrency(measurement.getCurrency());
@@ -44,7 +44,7 @@ public class EquityPriceMapper {
         measurement.setHigh(model.getOhlcv().getHigh());
         measurement.setLow(model.getOhlcv().getLow());
         measurement.setClose(model.getOhlcv().getClose());
-        measurement.setVolume(model.getOhlcv().getVolume());
+        measurement.setVolume(model.getOhlcv().getVolume() != null ? model.getOhlcv().getVolume().doubleValue() : 0.0);
         measurement.setExchange(model.getExchange());
         measurement.setCurrency(model.getCurrency());
         return measurement;

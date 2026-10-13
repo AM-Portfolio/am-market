@@ -7,22 +7,22 @@ INFRA_HOST: ${INFRA_HOST:localhost}
 #mongoDB Configuration
 MONGODB_DATABASE_NAME: ${MONGODB_DATABASE:market_data}
 MONGODB_USERNAME_INTERNAL: ${MONGODB_USERNAME:admin}
-MONGODB_PASSWORD_INTERNAL: ${MONGODB_PASSWORD:<REDACTED_PASSWORD>}
+MONGODB_PASSWORD_INTERNAL: ${MONGODB_PASSWORD:}
 
 # InfluxDB Configuration
-INFLUXDB_TOKEN_INTERNAL: ${INFLUXDB_TOKEN:my-super-secret-auth-token}
+INFLUXDB_TOKEN_INTERNAL: ${INFLUXDB_TOKEN:}
 INFLUXDB_ORG_INTERNAL: ${INFLUXDB_ORG:am-portfolio}
 INFLUXDB_BUCKET_INTERNAL: ${INFLUXDB_BUCKET:market-data}
 INFLUXDB_URL_INTERNAL: http://${INFRA_HOST}:8086
 
 # Redis Configuration
 REDIS_HOSTNAME: ${INFRA_HOST}
-REDIS_PASSWORD_INTERNAL: ${REDIS_PASSWORD:<REDACTED_PASSWORD>}
+REDIS_PASSWORD_INTERNAL: ${REDIS_PASSWORD:}
 REDIS_PORT: 6379
 
 # Grafana Configuration
-GRAFANA_ADMIN_USER: 1109403
-GRAFANA_ADMIN_PASSWORD: XXXXXXXXXX
+GRAFANA_ADMIN_USER: ${GRAFANA_USER:admin}
+GRAFANA_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:}
 
 # Application Configuration
 STOKUPATE_TOPIC_NAME: am-stock-price-update
@@ -43,21 +43,26 @@ MARKET_DATA_THREAD_QUEUE_CAPACITY: 10
 MARKET_DATA_MAX_AGE_MINUTES: 15
 
 # Upstox Configuration
-UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
-UPSTOX_SECRET_KEY: ${UPSTOX_SECRET_KEY}
-UPSTOX_CODE: ${UPSTOX_CODE}
+UPSTOX_ACCESS_TOKEN_VALUE: ${UPSTOX_ACCESS_TOKEN:}
+UPSTOX_SECRET_KEY_VALUE: ${UPSTOX_SECRET_KEY:}
+UPSTOX_CODE_VALUE: ${UPSTOX_CODE:}
 
 app:
   kafka:
     enabled: ${MARKET_DATA_KAFKA_ENABLED:false}
 
 am:
+  feature-flag:
+    enabled: ${GROWTHBOOK_ENABLED:true}
+    api-host: ${GROWTHBOOK_API_HOST:https://growthbook.asrax.in/gbapi}
+    client-key: ${GROWTHBOOK_CLIENT_KEY:${GROWTHBOOK_SDK_KEY:sdk-8WmIFrhYLelAXr8}}
   # Centralized observability from am-core-services
   observability:
     enabled: ${AM_OBSERVABILITY_ENABLED:true}
     request-log:
       # Emit a structured JSON log for every incoming HTTP request
       enabled: true
+      log-payloads: true
       ignore-paths:
         - "/actuator/**"
         - "/**/health/**"
@@ -71,6 +76,8 @@ am:
         - access_token
         - refresh_token
         - client_secret
+        - cookieHeader
+        - cookie_header
 
 kafka:
   topics:
@@ -91,10 +98,6 @@ spring:
     mongodb:
       uri: ${MONGODB_URL:mongodb://${MONGODB_USERNAME_INTERNAL}:${MONGODB_PASSWORD_INTERNAL}@${INFRA_HOST}:27017/market_data?authSource=admin}
       database: ${MONGODB_DATABASE_NAME}
-      username: ${MONGODB_USERNAME_INTERNAL}
-      password: ${MONGODB_PASSWORD_INTERNAL}
-      authentication-database: admin
-
   # Multipart file upload configuration (for bulk security updates)
   servlet:
     multipart:
@@ -105,10 +108,10 @@ spring:
 
   # InfluxDB Configuration
   influx:
-    url: ${INFLUXDB_URL_INTERNAL}
-    token: ${INFLUXDB_TOKEN_INTERNAL}
-    org: ${INFLUXDB_ORG_INTERNAL}
-    bucket: ${INFLUXDB_BUCKET_INTERNAL}
+    url: ${INFLUXDB_URL_INTERNAL:http://localhost:8086}
+    token: ${INFLUXDB_TOKEN_INTERNAL:R9LT2CZpDZXxTkNDpdmfhgUCEnP1qGnV}
+    org: ${INFLUXDB_ORG_INTERNAL:am-portfolio}
+    bucket: ${INFLUXDB_BUCKET_INTERNAL:market-data}
 
   # Management and Metrics Configuration
 
@@ -120,8 +123,35 @@ spring:
       #- classpath:application-endpoints.yml
       - classpath:application-zerodha.yml
 
+springdoc:
+  swagger-ui:
+    url: ${SPRINGDOC_SWAGGER_UI_URL:/market/v3/api-docs}
+    config-url: ${SPRINGDOC_SWAGGER_UI_CONFIG_URL:/market/v3/api-docs/swagger-config}
+    disable-swagger-default-url: true
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
 market-data:
   provider: upstox
+  calendar:
+    source: ${MARKET_DATA_CALENDAR_SOURCE:upstox}
+    exchange: ${MARKET_DATA_CALENDAR_EXCHANGE:NSE}
+    sync:
+      enabled: ${MARKET_DATA_CALENDAR_SYNC_ENABLED:true}
+  ipo:
+    enabled: ${MARKET_DATA_IPO_ENABLED:true}
+    source: ${MARKET_DATA_IPO_SOURCE:nse}
+    sync:
+      past-on-startup-if-empty: ${MARKET_DATA_IPO_PAST_ON_STARTUP:true}
+    subscription:
+      max-concurrency: ${MARKET_DATA_IPO_BID_CONCURRENCY:3}
+      max-retries: ${MARKET_DATA_IPO_BID_RETRIES:2}
+  market:
+    hours:
+      start: ${MARKET_DATA_MARKET_HOURS_START:09:15}
+      end: ${MARKET_DATA_MARKET_HOURS_END:15:30}
+    timezone: ${MARKET_DATA_MARKET_TIMEZONE:Asia/Kolkata}
   batch-search:
     max-queries: ${BATCH_SEARCH_MAX_QUERIES:1000}
     internal-batch-size: ${BATCH_SEARCH_INTERNAL_BATCH_SIZE:100}
@@ -135,6 +165,9 @@ market-data:
     enabled: true
     price-ttl-minutes: ${MARKET_DATA_CACHE_PRICE_TTL_MINUTES:15}
     history-ttl-minutes: ${MARKET_HISTORY_DATA_CACHE_HISTORY_TTL_MINUTES:15}
+  nse:
+    cookies:
+      ttl-minutes: ${NSE_COOKIES_TTL_MINUTES:60}
 # Logging Configuration
 logging:
   # NOTE: logging.file.name and logging.pattern.* are intentionally NOT set.
@@ -152,15 +185,18 @@ logging:
     "[org.springframework]": WARN
     "[org.apache.kafka]": INFO
     "[org.springframework.data.redis]": WARN # Reduce Redis connection logging
+    "[com.upstox]": INFO
+    "[org.apache.http]": WARN
+
 
 upstox:
   interval: I1
   auth:
     base-url: https://api.upstox.com/v2
-    code: ${UPSTOX_CODE}
-    api-key: ${UPSTOX_API_KEY}
-    secret-key: ${UPSTOX_SECRET_KEY}
-    access-token: ${UPSTOX_ACCESS_TOKEN}
+    code: ${UPSTOX_CODE_VALUE:}
+    api-key: ${UPSTOX_API_KEY:}
+    secret-key: ${UPSTOX_SECRET_KEY_VALUE:}
+    access-token: ${UPSTOX_ACCESS_TOKEN_VALUE:}
     redirect-uri: ${UPSTOX_REDIRECT_URI:http://localhost:${server.port}/v1/market-data/auth/session}
     authorization-url: https://api-v2.upstox.com/login/authorization/dialog
     token-url: https://api-v2.upstox.com/login/authorization/token
@@ -174,9 +210,32 @@ scraper:
 # Server Configuration
 server:
   port: ${SERVER_PORT:8080}
+  compression:
+    enabled: true
+    mime-types: application/json,text/html,text/plain,application/xml
+    min-response-size: 1024
+
+market:
+  cache:
+    async-backfill:
+      enabled: ${MARKET_CACHE_ASYNC_ENABLED:true}
+      core-pool-size: ${MARKET_CACHE_CORE_POOL_SIZE:5}
+      max-pool-size: ${MARKET_CACHE_MAX_POOL_SIZE:15}
+      queue-capacity: ${MARKET_CACHE_QUEUE_CAPACITY:500}
+  watchlist:
+    default-name: ${MARKET_WATCHLIST_DEFAULT_NAME:My Watch List}
+    max-per-user: ${MARKET_WATCHLIST_MAX_PER_USER:5}
+    max-stocks-per-list: ${MARKET_WATCHLIST_MAX_STOCKS_PER_LIST:50}
+
 
 scheduler:
   timezone: ${SCHEDULER_TIMEZONE:Asia/Kolkata}
+  # ── Symbol universe (previous-close / streamer) ───────────────────────────
+  symbols:
+    default: ${SCHEDULER_SYMBOLS_DEFAULT:RELIANCE}
+    include-portfolio-active-set: ${SCHEDULER_SYMBOLS_INCLUDE_PORTFOLIO_ACTIVE_SET:true}
+    active-set-redis-key: ${SCHEDULER_SYMBOLS_ACTIVE_SET_REDIS_KEY:market:active-symbols}
+    cache-ttl-seconds: ${SCHEDULER_SYMBOLS_CACHE_TTL_SECONDS:900}
   # ── Cookie / NSE session ──────────────────────────────────────────────────
   cookie:
     enabled: ${SCHEDULER_COOKIE_ENABLED:false}
@@ -214,6 +273,10 @@ scheduler:
   # ── Historical sync ───────────────────────────────────────────────────────
   historical:
     sync-cron: "${SCHEDULER_HISTORICAL_SYNC_CRON:0 15 7 * * *}"          # 7:15 AM daily
+  market-calendar:
+    sync-cron: "${SCHEDULER_MARKET_CALENDAR_SYNC_CRON:0 30 6 * * *}"     # 6:30 AM daily
+  ipo:
+    current-upcoming-cron: "${SCHEDULER_IPO_CURRENT_UPCOMING_CRON:0 0 */3 * * *}"  # every 3 hours
   # ── Analysis ─────────────────────────────────────────────────────────────
   analysis:
     daily: "${SCHEDULER_ANALYSIS_DAILY_CRON:0 15 7 * * *}"               # 7:15 AM daily
@@ -226,6 +289,9 @@ scheduler:
     cleanup:
       enabled: ${SCHEDULER_REDIS_CLEANUP_ENABLED:true}
       cron: "${SCHEDULER_REDIS_CLEANUP_CRON:0 0 2 * * *}"                # 2:00 AM daily
+
+ 
+
 
 redis:
   cleanup:
@@ -257,6 +323,10 @@ management:
       group:
         readiness:
           include: diskSpace,mongodb,redis,kafka,influx
+  metrics:
+    tags:
+      # Required for Grafana Technical / Services Service dropdown
+      application: ${spring.application.name}
   health:
     livenessstate:
       enabled: true

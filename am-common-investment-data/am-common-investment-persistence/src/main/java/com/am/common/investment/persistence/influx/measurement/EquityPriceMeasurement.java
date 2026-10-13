@@ -41,7 +41,11 @@ public class EquityPriceMeasurement {
     private Double close;
     
     @Column(name = "volume")
-    private Long volume;
+    private Double volume;
+    
+    public Long getVolumeAsLong() {
+        return volume != null ? volume.longValue() : 0L;
+    }
     
     @Column(name = "currency")
     private String currency;

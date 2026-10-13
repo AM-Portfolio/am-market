@@ -65,17 +65,43 @@ public class UpstoxSdkService {
         }
         
         try {
+            // 1. Try to read from Redis cache first
             String cachedToken = redisTemplate.opsForValue().get(REDIS_KEY_ACCESS_TOKEN);
+            
             if (cachedToken != null && !cachedToken.isEmpty()) {
+                // Check remaining TTL in Redis
+                Long remainingTtlSeconds = redisTemplate.getExpire(REDIS_KEY_ACCESS_TOKEN, java.util.concurrent.TimeUnit.SECONDS);
+                
+                // If it has less than 24 hours left (86400 seconds), trigger a warm-up refresh from Vault config
+                if (remainingTtlSeconds != null && remainingTtlSeconds > 0 && remainingTtlSeconds < 86400) {
+                    log.info("getDynamicAccessToken", "Access token is nearing expiration (< 24 hours left). Refreshing from Vault configuration.");
+                    String freshToken = upstoxConfig.getAccessToken();
+                    if (freshToken != null && !freshToken.isEmpty()) {
+                        String sanitized = sanitizeAccessToken(freshToken);
+                        redisTemplate.opsForValue().set(REDIS_KEY_ACCESS_TOKEN, sanitized, 7, java.util.concurrent.TimeUnit.DAYS);
+                        this.accessToken = sanitized;
+                        return this.accessToken;
+                    }
+                }
+                
                 this.accessToken = sanitizeAccessToken(cachedToken);
                 return this.accessToken;
             }
         } catch (Exception e) {
-            log.warn("Failed to get access token from Redis in SDK service: {}", e.getMessage());
+            log.warn("getDynamicAccessToken", "Failed to get or verify access token TTL in Redis: " + e.getMessage());
         }
         
+        // 2. Fallback to Vault configuration (Cache-Aside DB fallback)
         if (upstoxConfig.getAccessToken() != null && !upstoxConfig.getAccessToken().isEmpty()) {
-            this.accessToken = sanitizeAccessToken(upstoxConfig.getAccessToken());
+            String sanitized = sanitizeAccessToken(upstoxConfig.getAccessToken());
+            try {
+                // 3. Self-heal: Cache it back in Redis for 7 days
+                redisTemplate.opsForValue().set(REDIS_KEY_ACCESS_TOKEN, sanitized, 7, java.util.concurrent.TimeUnit.DAYS);
+                log.info("getDynamicAccessToken", "Successfully cached Vault Upstox Access Token in Redis for 7 days (Self-healed)");
+            } catch (Exception e) {
+                log.warn("getDynamicAccessToken", "Failed to write self-healed token to Redis: " + e.getMessage());
+            }
+            this.accessToken = sanitized;
         }
         return this.accessToken;
     }
@@ -271,41 +297,178 @@ public class UpstoxSdkService {
             throw new IllegalStateException("Upstox Access token is not initialized");
         }
 
-        try {
-            ApiClient apiClient = new ApiClient();
-            OAuth oAuth = (OAuth) apiClient.getAuthentication("OAUTH2");
-            if (oAuth != null) {
-                oAuth.setAccessToken(this.accessToken);
-            } else {
-                apiClient.setAccessToken(this.accessToken);
+        int maxRetries = 3;
+        int attempt = 0;
+        long backoffMs = 1000;
+
+        while (true) {
+            try {
+                ApiClient apiClient = new ApiClient();
+                OAuth oAuth = (OAuth) apiClient.getAuthentication("OAUTH2");
+                if (oAuth != null) {
+                    oAuth.setAccessToken(this.accessToken);
+                } else {
+                    apiClient.setAccessToken(this.accessToken);
+                }
+
+                HistoryV3Api historyV3Api = new HistoryV3Api(apiClient);
+                boolean useDateRange = fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate);
+
+                String normalizedKey = instrumentKey != null ? instrumentKey.replace(":", "|") : null;
+
+                java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+                boolean isQueryingToday = toDate != null && !java.time.LocalDate.parse(toDate).isBefore(today);
+
+                // [Unified Direct REST Fetching for Stocks & Indices]
+                // The Upstox Java SDK client has known URL path parameter encoding bugs where:
+                // 1. Pipe symbols in equity instrument keys (e.g., 'NSE_EQ|INE040A01034') get double-encoded to '%257C' on the wire.
+                // 2. Spaces in index symbols get encoded as '+' instead of '%20'.
+                //
+                // By routing all requests (both Stocks and Indices) through fetchHistoricalCandleDirect:
+                // - Stock instrument keys are cleanly URL-encoded once ('NSE_EQ%7CINE...').
+                // - 1D intraday queries hit /v2/historical-candle/intraday/{key}/1minute 24/7, providing 75 5-minute candles.
+                // - 1W, 1M, 1Y, 5Y historical ranges query Upstox's standard historical endpoint with proper date ranges.
+                // - Preserves 100% backward compatibility with existing index charts.
+                return fetchHistoricalCandleDirect(normalizedKey, unit, interval, toDate, fromDate, isQueryingToday);
+            } catch (Exception e) {
+                // Check if the exception or its message indicates a Rate Limit (HTTP 429)
+                boolean isRateLimit = false;
+                if (e instanceof ApiException && ((ApiException) e).getCode() == 429) {
+                    isRateLimit = true;
+                } else if (e.getMessage() != null && (e.getMessage().contains("429") || e.getMessage().contains("Too Many Requests"))) {
+                    isRateLimit = true;
+                } else if (e.getCause() != null && e.getCause().getMessage() != null && 
+                        (e.getCause().getMessage().contains("429") || e.getCause().getMessage().contains("Too Many Requests"))) {
+                    isRateLimit = true;
+                }
+
+                if (isRateLimit && attempt < maxRetries) {
+                    attempt++;
+                    log.warn("Upstox API rate limited (HTTP 429) for key {}. Retrying in {}ms... (Attempt {}/{})", 
+                            instrumentKey, backoffMs, attempt, maxRetries);
+                    try {
+                        Thread.sleep(backoffMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Interrupted during backoff sleep", ie);
+                    }
+                    backoffMs *= 2; // exponential backoff
+                    continue;
+                }
+
+                log.error("Error getting historical candle data from SDK for key: {}", instrumentKey, e);
+                throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error getting historical candle data", e);
             }
-
-            HistoryV3Api historyV3Api = new HistoryV3Api(apiClient);
-            boolean useDateRange = fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate);
-
-            String normalizedKey = instrumentKey != null ? instrumentKey.replace(":", "|") : null;
-
-            GetHistoricalCandleResponse sdkResponse;
-            if (useDateRange) {
-                log.info(
-                        "Fetching historical data (range) key={}, unit={}, interval={}, to={}, from={}",
-                        normalizedKey, unit, interval, toDate, fromDate);
-                sdkResponse = historyV3Api.getHistoricalCandleData1(
-                        normalizedKey, unit, interval, toDate, fromDate);
-            } else {
-                log.info(
-                        "Fetching historical data (to_date only) key={}, unit={}, interval={}, to={}",
-                        normalizedKey, unit, interval, toDate);
-                sdkResponse = historyV3Api.getHistoricalCandleData(
-                        normalizedKey, unit, interval, toDate);
-            }
-
-            return mapToHistoricalDataResponse(sdkResponse);
-        } catch (Exception e) {
-            log.error("Error getting historical candle data from SDK", e);
-            throw new RuntimeException("Error getting historical candle data", e);
         }
     }
+
+    /**
+     * Bypasses the Upstox SDK to directly query the REST API for index symbols.
+     * This avoids SDK path parameter encoding issues where spaces are encoded as '+' instead of '%20'.
+     */
+    private com.am.marketdata.provider.upstox.model.HistoricalDataResponse fetchHistoricalCandleDirect(
+            String normalizedKey, String unit, Integer interval, String toDate, String fromDate, boolean isQueryingToday) {
+        try {
+            String token = getDynamicAccessToken();
+            // Safeguard against double-encoding (decodes the key to plain text first, then encodes it cleanly exactly once)
+            String decodedKey = java.net.URLDecoder.decode(normalizedKey, java.nio.charset.StandardCharsets.UTF_8.toString());
+            String encodedKey = java.net.URLEncoder.encode(decodedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
+                    .replace("+", "%20");
+
+            String urlStr;
+            if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
+                urlStr = String.format("https://api.upstox.com/v2/historical-candle/intraday/%s/1minute", encodedKey);
+            } else {
+                String tf;
+                if ("day".equalsIgnoreCase(unit) || "days".equalsIgnoreCase(unit)) {
+                    tf = "day";
+                } else if ("week".equalsIgnoreCase(unit) || "weeks".equalsIgnoreCase(unit)) {
+                    tf = "week";
+                } else if ("month".equalsIgnoreCase(unit) || "months".equalsIgnoreCase(unit)) {
+                    tf = "month";
+                } else {
+                    String singularUnit = unit != null && unit.endsWith("s")
+                            ? unit.substring(0, unit.length() - 1)
+                            : unit;
+                    tf = interval + singularUnit; // e.g. 1minute, 30minute, day
+                }
+                if (fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate)) {
+                    urlStr = String.format("https://api.upstox.com/v2/historical-candle/%s/%s/%s/%s", encodedKey, tf, toDate, fromDate);
+                } else {
+                    urlStr = String.format("https://api.upstox.com/v2/historical-candle/%s/%s/%s", encodedKey, tf, toDate);
+                }
+            }
+
+            log.info("Directly fetching historical data from URL: {}", urlStr);
+
+            java.net.URL url = new java.net.URL(urlStr);
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Authorization", "Bearer " + token);
+            conn.setRequestProperty("Accept", "application/json");
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode == 200) {
+                java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()));
+                String inputLine;
+                StringBuilder response = new StringBuilder();
+                while ((inputLine = in.readLine()) != null) {
+                    response.append(inputLine);
+                }
+                in.close();
+
+                // Deserialize JSON response manually
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(response.toString());
+
+                com.am.marketdata.provider.upstox.model.HistoricalDataResponse res = new com.am.marketdata.provider.upstox.model.HistoricalDataResponse();
+                res.setStatus(rootNode.path("status").asText());
+
+                com.fasterxml.jackson.databind.JsonNode candlesNode = rootNode.path("data").path("candles");
+                List<List<Object>> candlesList = new java.util.ArrayList<>();
+                if (candlesNode.isArray()) {
+                    for (com.fasterxml.jackson.databind.JsonNode candle : candlesNode) {
+                        List<Object> candleData = new java.util.ArrayList<>();
+                        for (com.fasterxml.jackson.databind.JsonNode val : candle) {
+                            if (val.isNumber()) {
+                                candleData.add(val.doubleValue());
+                            } else {
+                                candleData.add(val.asText());
+                            }
+                        }
+                        candlesList.add(candleData);
+                    }
+                }
+
+                // FALLBACK: If querying today's intraday returned 0 candles (e.g. Nifty 500 is not supported on live endpoint),
+                // fallback to querying the historical range endpoint for today's date.
+                if (candlesList.isEmpty() && isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
+                    log.info("Intraday endpoint returned 0 candles for index: {}. Falling back to historical range endpoint for date: {}", normalizedKey, toDate);
+                    return fetchHistoricalCandleDirect(normalizedKey, unit, interval, toDate, toDate, false);
+                }
+
+                com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload dataPayload = 
+                        new com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload();
+                dataPayload.setCandles(candlesList);
+                res.setData(dataPayload);
+                return res;
+            } else {
+                java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getErrorStream() != null ? conn.getErrorStream() : conn.getInputStream()));
+                String inputLine;
+                StringBuilder errorResponse = new StringBuilder();
+                while ((inputLine = in.readLine()) != null) {
+                    errorResponse.append(inputLine);
+                }
+                in.close();
+                log.error("Direct fetch failed. Code={}, Response={}", responseCode, errorResponse.toString());
+                throw new RuntimeException("Direct fetch failed with code: " + responseCode);
+            }
+        } catch (Exception e) {
+            log.error("Error fetching historical candle direct for key: " + normalizedKey, e);
+            throw new RuntimeException("Error fetching historical candle direct", e);
+        }
+    }
+
 
     private com.am.marketdata.provider.upstox.model.HistoricalDataResponse mapToHistoricalDataResponse(
             GetHistoricalCandleResponse sdkResponse) {
@@ -322,6 +485,45 @@ public class UpstoxSdkService {
         }
 
         return response;
+    }
+
+    private com.am.marketdata.provider.upstox.model.HistoricalDataResponse mapIntradayToHistoricalDataResponse(
+            com.upstox.api.GetIntraDayCandleResponse sdkResponse) {
+        com.am.marketdata.provider.upstox.model.HistoricalDataResponse response = new com.am.marketdata.provider.upstox.model.HistoricalDataResponse();
+
+        if (sdkResponse != null && sdkResponse.getStatus() != null) {
+            response.setStatus(sdkResponse.getStatus().toString());
+        }
+
+        if (sdkResponse != null && sdkResponse.getData() != null && sdkResponse.getData().getCandles() != null) {
+            com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload dataPayload = new com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload();
+            dataPayload.setCandles(sdkResponse.getData().getCandles());
+            response.setData(dataPayload);
+        }
+
+        return response;
+    }
+
+    public com.upstox.api.GetHolidayResponse getHolidays() throws ApiException {
+        ApiClient apiClient = createAuthenticatedClient();
+        io.swagger.client.api.MarketHolidaysAndTimingsApi api =
+                new io.swagger.client.api.MarketHolidaysAndTimingsApi(apiClient);
+        return api.getHolidays();
+    }
+
+    private ApiClient createAuthenticatedClient() {
+        String token = getDynamicAccessToken();
+        if (token == null || token.isEmpty()) {
+            throw new IllegalStateException("Upstox Access token is not initialized");
+        }
+        ApiClient apiClient = new ApiClient();
+        OAuth oAuth = (OAuth) apiClient.getAuthentication("OAUTH2");
+        if (oAuth != null) {
+            oAuth.setAccessToken(token);
+        } else {
+            apiClient.setAccessToken(token);
+        }
+        return apiClient;
     }
 
 }

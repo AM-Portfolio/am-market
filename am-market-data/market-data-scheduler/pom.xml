@@ -52,6 +52,11 @@
             <artifactId>am-common-investment-service-lib</artifactId>
             <version>${investment-model.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.am.libraries</groupId>
+            <artifactId>am-scheduler-logbook-lib</artifactId>
+            <version>1.0.412-SNAPSHOT</version>
+        </dependency>
         
         <!-- Spring Boot Dependencies -->
         <dependency>

@@ -58,7 +58,7 @@ public class TestDataUtil {
         measurement.setHigh(high);
         measurement.setLow(low);
         measurement.setClose(close);
-        measurement.setVolume(volume);
+        measurement.setVolume(volume != null ? volume.doubleValue() : null);
         measurement.setExchange(exchange);
         measurement.setCurrency(currency);
         measurement.setTime(time);

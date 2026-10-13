@@ -115,8 +115,15 @@ public class UpstoxInstrumentService implements InstrumentDataProvider {
                     org.springframework.data.mongodb.core.query.Criteria.where("exchange").in(criteria.getExchanges()));
         }
         if (criteria.getInstrumentTypes() != null && !criteria.getInstrumentTypes().isEmpty()) {
-            criteriaList.add(org.springframework.data.mongodb.core.query.Criteria.where("instrumentType")
-                    .in(criteria.getInstrumentTypes()));
+            List<String> types = new ArrayList<>(criteria.getInstrumentTypes());
+            // Upstox stores equity instruments with instrument_type = "EQ".
+            // To ensure full backward compatibility with callers passing "EQUITY",
+            // automatically alias "EQUITY" to include "EQ" in the Mongo criteria search.
+            if (types.contains("EQUITY") && !types.contains("EQ")) {
+                types.add("EQ");
+            }
+            criteriaList.add(org.springframework.data.mongodb.core.query.Criteria.where("instrument_type")
+                    .in(types));
         }
         if (criteria.getSegments() != null && !criteria.getSegments().isEmpty()) {
             criteriaList.add(
@@ -131,7 +138,7 @@ public class UpstoxInstrumentService implements InstrumentDataProvider {
                     .add(org.springframework.data.mongodb.core.query.Criteria.where("isin").in(criteria.getIsins()));
         }
         if (criteria.getTradingSymbols() != null && !criteria.getTradingSymbols().isEmpty()) {
-            criteriaList.add(org.springframework.data.mongodb.core.query.Criteria.where("tradingSymbol")
+            criteriaList.add(org.springframework.data.mongodb.core.query.Criteria.where("trading_symbol")
                     .in(criteria.getTradingSymbols()));
         }
 
@@ -142,15 +149,21 @@ public class UpstoxInstrumentService implements InstrumentDataProvider {
             // 1. Exact match on ISIN or Asset Symbol (Priority)
             orCriteria.add(
                     org.springframework.data.mongodb.core.query.Criteria.where("isin").in(criteria.getQueries()));
-            orCriteria.add(org.springframework.data.mongodb.core.query.Criteria.where("assetSymbol")
+            orCriteria.add(org.springframework.data.mongodb.core.query.Criteria.where("asset_symbol")
                     .in(criteria.getQueries()));
 
-            // 2. Regex text search for Name and Asset Symbol (excluding Trading Symbol)
+            // 2. Regex text search for Name, Asset Symbol, Trading Symbol, and Underlying Key/Symbol
             for (String text : criteria.getQueries()) {
                 String regex = ".*" + java.util.regex.Pattern.quote(text) + ".*";
                 orCriteria.add(org.springframework.data.mongodb.core.query.Criteria.where("name").regex(regex, "i"));
                 orCriteria.add(
-                        org.springframework.data.mongodb.core.query.Criteria.where("assetSymbol").regex(regex, "i"));
+                        org.springframework.data.mongodb.core.query.Criteria.where("asset_symbol").regex(regex, "i"));
+                orCriteria.add(
+                        org.springframework.data.mongodb.core.query.Criteria.where("trading_symbol").regex(regex, "i"));
+                orCriteria.add(
+                        org.springframework.data.mongodb.core.query.Criteria.where("underlying_key").regex(regex, "i"));
+                orCriteria.add(
+                        org.springframework.data.mongodb.core.query.Criteria.where("underlying_symbol").regex(regex, "i"));
             }
 
             // Combine with OR

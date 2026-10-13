@@ -14,6 +14,13 @@ image:
   repository: am-parser
   pullPolicy: Always
 
+# Service-owned Ingress (same model as am-identity / am-market-data).
+# Hosts/paths set per-env in values.<env>.yaml.
+ingress:
+  enabled: false
+  className: "traefik"
+  hosts: []
+
 resources:
   limits:
     cpu: 500m
@@ -36,3 +43,13 @@ vault:
   enabled: true
   role: "am-backend-role"
   serviceAccountName: "am-backend-sa"
+  secretPaths: {}
+
+# Plane A - Prometheus scrape
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+env:
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318/v1/traces" 

@@ -1,70 +1,65 @@
 package com.am.marketdata.service;
 
+import com.am.marketdata.service.calendar.MarketCalendarService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.time.*;
-import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class MarketHoursService {
 
-    @Value("${market-data.market.hours.start:09:15}")
-    private String marketHoursStart;
+    private final MarketCalendarService marketCalendarService;
 
-    @Value("${market-data.market.hours.end:15:30}")
-    private String marketHoursEnd;
+    // PERFORMANCE OPTIMIZATION: In-Memory Request Caching
+    // Reduces redundant MongoDB calendar queries during a single HTTP request lifecycle.
+    // 15 seconds TTL is short enough to detect market closing transitions almost instantly
+    // while dropping duplicate database roundtrips down to 0.
+    private static final long CACHE_TTL_MS = 15_000; // 15 seconds
 
-    @Value("${market-data.market.timezone:Asia/Kolkata}")
-    private String timezone;
+    private final AtomicLong lastOpenCheckTime = new AtomicLong(0);
+    private final AtomicBoolean cachedIsOpen = new AtomicBoolean(false);
 
-    // Hardcoded holidays for now, ideally strictly from config or DB
-    // 2026 Holidays
-    private final Set<LocalDate> holidays = Set.of(
-            LocalDate.of(2026, 1, 26), // Republic Day
-            LocalDate.of(2026, 3, 7), // Holi (Example)
-            LocalDate.of(2026, 8, 15), // Independence Day
-            LocalDate.of(2026, 10, 2), // Gandhi Jayanti
-            LocalDate.of(2026, 12, 25) // Christmas
-    );
+    private final AtomicLong lastSessionCheckTime = new AtomicLong(0);
+    private final AtomicBoolean cachedIsSessionDay = new AtomicBoolean(true);
 
     public boolean isMarketOpen() {
+        long now = System.currentTimeMillis();
+        if (now - lastOpenCheckTime.get() < CACHE_TTL_MS) {
+            return cachedIsOpen.get();
+        }
+
         try {
-            ZonedDateTime now = ZonedDateTime.now(ZoneId.of(timezone));
-            LocalDate today = now.toLocalDate();
-            DayOfWeek dayOfWeek = now.getDayOfWeek();
-
-            // 1. Check Weekend
-            if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
-                log.debug("Market status: CLOSED (Weekend: {})", dayOfWeek);
-                return false;
-            }
-
-            // 2. Check Holidays
-            if (holidays.contains(today)) {
-                log.debug("Market status: CLOSED (Holiday: {})", today);
-                return false;
-            }
-
-            // 3. Check Time
-            LocalTime time = now.toLocalTime();
-            LocalTime start = LocalTime.parse(marketHoursStart);
-            LocalTime end = LocalTime.parse(marketHoursEnd);
-
-            boolean isOpen = !time.isBefore(start) && !time.isAfter(end);
-
-            if (log.isDebugEnabled()) {
-                log.debug("Market status: {} (Time: {}, Range: {}-{})", isOpen ? "OPEN" : "CLOSED", time, start, end);
-            }
+            boolean isOpen = marketCalendarService.isMarketOpen("NSE");
+            cachedIsOpen.set(isOpen);
+            lastOpenCheckTime.set(now);
             return isOpen;
-
         } catch (Exception e) {
             log.error("Error checking market hours: {}", e.getMessage());
-            // Fail safe - assume closed to prevent error loops, or open?
-            // Safer to assume closed for streaming purposes to trigger fallback
             return false;
+        }
+    }
+
+    /** True on an NSE cash session date (Mon–Fri, not a holiday). False on weekend/holiday. */
+    public boolean isCashSessionDay() {
+        long now = System.currentTimeMillis();
+        if (now - lastSessionCheckTime.get() < CACHE_TTL_MS) {
+            return cachedIsSessionDay.get();
+        }
+
+        try {
+            java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+            boolean isSession = marketCalendarService.getTimings("NSE", today).open();
+            cachedIsSessionDay.set(isSession);
+            lastSessionCheckTime.set(now);
+            return isSession;
+        } catch (Exception e) {
+            log.warn("Could not resolve session day: {}", e.getMessage());
+            return true;
         }
     }
 }

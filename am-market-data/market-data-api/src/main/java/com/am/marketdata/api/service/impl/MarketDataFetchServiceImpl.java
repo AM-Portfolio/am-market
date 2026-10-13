@@ -17,6 +17,7 @@ import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.MarketDataService;
 import com.am.marketdata.service.MarketHoursService;
+import com.am.marketdata.service.calendar.MarketCalendarService;
 import org.springframework.stereotype.Service;
 
 import java.text.ParseException;
@@ -36,17 +37,20 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final InstrumentUtils instrumentUtils;
     private final MarketHoursService marketHoursService;
+    private final MarketCalendarService marketCalendarService;
 
     public MarketDataFetchServiceImpl(FlowLogger flowLogger,
             MarketDataService marketDataService,
             StockIndicesMarketDataService stockIndicesMarketDataService,
             InstrumentUtils instrumentUtils,
-            MarketHoursService marketHoursService) {
+            MarketHoursService marketHoursService,
+            MarketCalendarService marketCalendarService) {
         this.flowLogger = flowLogger;
         this.marketDataService = marketDataService;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.instrumentUtils = instrumentUtils;
         this.marketHoursService = marketHoursService;
+        this.marketCalendarService = marketCalendarService;
     }
 
     @Override
@@ -92,6 +96,31 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
             Map<String, OHLCQuote> ohlcData = marketDataService.getOHLC(new ArrayList<>(symbols), timeFrame,
                     forceRefresh, null);
+            if (ohlcData != null) {
+                ohlcData = new HashMap<>(ohlcData);
+                instrumentUtils.aliasQuotesUnderOriginalIsins(tradingSymbols, ohlcData);
+
+                // KEY DUP FIX: Ensure the final map contains ONLY the exact symbol keys requested by the caller.
+                // If caller requested "NSE:INFY", return key "NSE:INFY" and filter out the unrequested base key "INFY".
+                // This prevents returning 10 entries for 5 requested symbols.
+                Map<String, OHLCQuote> sanitizedQuotes = new HashMap<>();
+                for (String requestedSym : tradingSymbols) {
+                    if (ohlcData.containsKey(requestedSym)) {
+                        sanitizedQuotes.put(requestedSym, ohlcData.get(requestedSym));
+                    } else {
+                        // Fallback lookup: match clean symbol if requested symbol had exchange prefix or vice versa
+                        String cleanReq = requestedSym.contains(":") ? requestedSym.substring(requestedSym.indexOf(":") + 1).trim() : requestedSym;
+                        if (ohlcData.containsKey(cleanReq)) {
+                            sanitizedQuotes.put(requestedSym, ohlcData.get(cleanReq));
+                        }
+                    }
+                }
+                if (!sanitizedQuotes.isEmpty()) {
+                    ohlcData = sanitizedQuotes;
+                }
+            } else {
+                ohlcData = new HashMap<>();
+            }
 
             Map<String, Object> response = new HashMap<>();
             response.put("quotes", ohlcData);
@@ -124,6 +153,76 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     }
 
     @Override
+    public Map<String, Object> getLiveLTP(Set<String> symbols, String exchange, String timeframe,
+            boolean indexSymbol, boolean forceRefresh) {
+        TimeFrame tf;
+        try {
+            tf = TimeFrame.fromApiValue(timeframe);
+        } catch (Exception e) {
+            log.warn("Invalid timeframe: {} defaulting to 1D", timeframe);
+            tf = TimeFrame.DAY;
+        }
+
+        // Single cache/provider read. Day change uses previousClose on EquityPrice
+        // (populated from Redis OHLC cache) — avoid a second sequential getOHLC.
+        Map<String, Object> livePrices = getLivePrices(symbols, indexSymbol, forceRefresh);
+
+        Map<String, Map<String, Object>> result = new HashMap<>();
+        Object pricesObj = livePrices.get("prices");
+        if (pricesObj instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<com.am.common.investment.model.equity.EquityPrice> pricesList =
+                    (List<com.am.common.investment.model.equity.EquityPrice>) pricesObj;
+
+            for (com.am.common.investment.model.equity.EquityPrice priceData : pricesList) {
+                String symbol = priceData.getSymbol();
+                if (symbol == null) {
+                    continue;
+                }
+
+                Double currentPrice = priceData.getLastPrice();
+                if (currentPrice == null) {
+                    continue;
+                }
+
+                double previousClose = 0.0;
+                if (priceData.getOhlcv() != null && priceData.getOhlcv().getClose() > 0) {
+                    previousClose = priceData.getOhlcv().getClose();
+                }
+
+                double change = previousClose > 0 ? (currentPrice - previousClose) : 0.0;
+                double changePercent = previousClose != 0 ? (change / previousClose) * 100 : 0.0;
+
+                String priceExchange = priceData.getExchange();
+                if (priceExchange == null || priceExchange.isBlank()) {
+                    priceExchange = exchange;
+                }
+
+                Map<String, Object> ltpData = new HashMap<>();
+                ltpData.put("symbol", symbol);
+                ltpData.put("exchange", priceExchange);
+                ltpData.put("lastPrice", currentPrice);
+                ltpData.put("previousClose", previousClose);
+                ltpData.put("change", change);
+                ltpData.put("changePercent", changePercent);
+                ltpData.put("timeframe", tf.getApiValue());
+
+                String resultKey = (priceExchange != null && !priceExchange.isBlank())
+                        ? priceExchange + ":" + symbol
+                        : symbol;
+                result.put(resultKey, ltpData);
+            }
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("count", result.size());
+        response.put("timeframe", tf.getApiValue());
+        response.put("data", result);
+        response.put("timestamp", new Date());
+        return response;
+    }
+
+    @Override
     public HistoricalDataResponseV1 getHistoricalDataMultipleSymbols(Set<String> symbols,
             Date fromDate, Date toDate,
             TimeFrame interval, String instrumentType,
@@ -150,14 +249,20 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 HistoricalDataFilterUtil.FilterParams filterParams = HistoricalDataFilterUtil
                         .extractFilterParams(additionalParams);
 
-                // Partition symbols into stocks and indices to query with correct isIndexSymbol flags
+                // Keep a map of resolved symbols to original symbols to map results back correctly
+                Map<String, String> resolvedToOriginal = new HashMap<>();
                 Set<String> indexSymbols = new java.util.HashSet<>();
                 Set<String> stockSymbols = new java.util.HashSet<>();
-                for (String sym : resolvedSymbols) {
-                    if (sym.startsWith("NSE_EQ:")) {
-                        stockSymbols.add(sym);
-                    } else {
-                        indexSymbols.add(sym);
+                
+                for (String originalSymbol : symbols) {
+                    Set<String> resolved = instrumentUtils.resolveSymbols(List.of(originalSymbol), fetchIndexStocks);
+                    for (String sym : resolved) {
+                        resolvedToOriginal.put(sym, originalSymbol);
+                        if (sym.startsWith("GLOBAL_INDEX|") || sym.startsWith("NSE_INDEX|") || sym.startsWith("BSE_INDEX|")) {
+                            indexSymbols.add(sym);
+                        } else {
+                            stockSymbols.add(sym);
+                        }
                     }
                 }
 
@@ -177,20 +282,22 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 int totalDataPoints = 0;
                 int totalFilteredDataPoints = 0;
 
-                for (String symbol : symbols) {
-                    HistoricalData historicalData = batchResult.get(symbol);
-                    if (historicalData != null && historicalData.getDataPoints() != null
+                for (Map.Entry<String, HistoricalData> entry : batchResult.entrySet()) {
+                    String resolvedSymbol = entry.getKey();
+                    HistoricalData historicalData = entry.getValue();
+                    String originalSymbol = resolvedToOriginal.get(resolvedSymbol);
+                    
+                    if (originalSymbol != null && historicalData != null && historicalData.getDataPoints() != null
                             && !historicalData.getDataPoints().isEmpty()) {
                         List<OHLCVTPoint> dataPoints = historicalData.getDataPoints();
                         int originalCount = dataPoints.size();
 
                         if (filterParams.isFiltered()) {
-                            // Fixed SLF4J pattern in helper classes might also have been updated
                             dataPoints = HistoricalDataFilterUtil.applyFilterStrategy(dataPoints, filterParams);
                         }
 
                         HistoricalData filteredHistoricalData = new HistoricalData();
-                        filteredHistoricalData.setTradingSymbol(symbol);
+                        filteredHistoricalData.setTradingSymbol(originalSymbol);
                         filteredHistoricalData.setInterval(interval.getApiValue());
                         filteredHistoricalData.setDataPoints(dataPoints);
                         filteredHistoricalData.setDataPointCount(dataPoints.size());
@@ -201,7 +308,7 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         filteredHistoricalData.setToDate(historicalData.getToDate());
                         filteredHistoricalData.setRetrievalTime(historicalData.getRetrievalTime());
 
-                        symbolsData.put(symbol, filteredHistoricalData);
+                        symbolsData.put(originalSymbol, filteredHistoricalData);
                         successCount++;
                         totalDataPoints += originalCount;
                         totalFilteredDataPoints += dataPoints.size();
@@ -244,11 +351,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     @Override
     public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate, boolean forceRefresh) {
         log.debug(
-                "Fetching option chain for symbol={} expiryDate={}", underlyingSymbol, expiryDate);
-        // Option chain functionality not yet migrated to MarketDataService
-        Map<String, Object> result = new HashMap<>();
-        result.put("error", "Option chain not yet supported");
-        return result;
+                "Fetching option chain for symbol={} expiryDate={} forceRefresh={}",
+                underlyingSymbol, expiryDate, forceRefresh);
+        return marketDataService.getOptionChain(underlyingSymbol, expiryDate, null, forceRefresh);
     }
 
     @Override
@@ -313,6 +418,12 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         Date fromDate;
         Date toDate;
         try {
+            if (request.getFrom() == null || request.getFrom().trim().isEmpty()) {
+                return HistoricalDataResponseV1.builder()
+                        .error("Missing required parameter: from")
+                        .message("The 'from' date parameter (YYYY-MM-DD) is required.")
+                        .build();
+            }
             SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
             fromDate = dateFormat.parse(request.getFrom());
 
@@ -323,6 +434,17 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         dateFormat.format(toDate));
             } else {
                 toDate = dateFormat.parse(request.getTo());
+                // [Inclusive toDate Fix]
+                // SimpleDateFormat.parse("yyyy-MM-dd") returns midnight (00:00:00.000) of that day.
+                // This excludes all data points generated during the market hours of that day.
+                // We adjust toDate to the end of the day (23:59:59.999) to make the query fully inclusive of the target day.
+                java.util.Calendar cal = java.util.Calendar.getInstance();
+                cal.setTime(toDate);
+                cal.set(java.util.Calendar.HOUR_OF_DAY, 23);
+                cal.set(java.util.Calendar.MINUTE, 59);
+                cal.set(java.util.Calendar.SECOND, 59);
+                cal.set(java.util.Calendar.MILLISECOND, 999);
+                toDate = cal.getTime();
             }
         } catch (ParseException e) {
             return HistoricalDataResponseV1.builder()
@@ -330,6 +452,26 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                     .message("Use yyyy-MM-dd format for dates")
                     .build();
         }
+
+        // Adjust query dates to the last active trading session if they fall on weekends or holidays.
+        // This prevents querying empty holiday/weekend ranges and avoids Upstox API rejections.
+        java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
+        java.time.LocalDate localTo = toDate.toInstant().atZone(kolkataZone).toLocalDate();
+        java.time.LocalDate localFrom = fromDate.toInstant().atZone(kolkataZone).toLocalDate();
+
+        // Roll to-date back to the last active trading day if currently closed
+        localTo = adjustToLastTradingDay(localTo);
+
+        // Ensure from-date is not after the adjusted to-date (collapses 1D queries correctly)
+        if (localFrom.isAfter(localTo)) {
+            localFrom = localTo;
+        }
+
+        // Convert back to java.util.Date, preserving end-of-day precision for toDate
+        toDate = java.util.Date.from(localTo.atTime(23, 59, 59, 999).atZone(kolkataZone).toInstant());
+        fromDate = java.util.Date.from(localFrom.atStartOfDay(kolkataZone).toInstant());
+
+        log.info("[HOLIDAY_ROLLBACK] Adjusted query range: {} to {}", fromDate, toDate);
 
         Map<String, Object> additionalParams = request.getAdditionalParams();
         if (additionalParams == null) {
@@ -371,23 +513,29 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             boolean forceRefresh) {
 
         // Fallback for Index Symbols when Market is Closed
-        if (isIndexSymbol && !marketHoursService.isMarketOpen()) {
+        // We only use this MongoDB fallback if we are NOT performing a force refresh.
+        // If forceRefresh is true, we want to bypass this block and contact the Upstox API
+        // directly to fetch the fresh, accurate End-of-Day (EOD) prices.
+        if (isIndexSymbol && !marketHoursService.isMarketOpen() && !forceRefresh) {
             log.info("Market is closed. Fetching OHLC for index symbols from MongoDB fallback: {}", symbols);
             Map<String, OHLCQuote> fallbackData = new HashMap<>();
-            for (String symbol : symbols) {
-                var indexData = stockIndicesMarketDataService.findByIndexSymbol(symbol);
-                if (indexData != null && indexData.getMetadata() != null) {
-                    var meta = indexData.getMetadata();
-                    fallbackData.put(symbol, OHLCQuote.builder()
-                        .lastPrice(meta.getLast())
-                        .previousClose(meta.getPreviousClose())
-                        .ohlc(OHLCQuote.OHLC.builder()
-                            .open(meta.getOpen())
-                            .high(meta.getHigh())
-                            .low(meta.getLow())
-                            .close(meta.getLast())
-                            .build())
-                        .build());
+            List<com.am.common.investment.model.stockindice.StockIndicesMarketData> indexDocs = stockIndicesMarketDataService.findByIndexSymbols(symbols);
+            if (indexDocs != null) {
+                for (com.am.common.investment.model.stockindice.StockIndicesMarketData indexData : indexDocs) {
+                    if (indexData != null && indexData.getIndexSymbol() != null && indexData.getMetadata() != null) {
+                        String symbol = indexData.getIndexSymbol();
+                        var meta = indexData.getMetadata();
+                        fallbackData.put(symbol, OHLCQuote.builder()
+                            .lastPrice(meta.getLast())
+                            .previousClose(meta.getPreviousClose())
+                            .ohlc(OHLCQuote.OHLC.builder()
+                                .open(meta.getOpen())
+                                .high(meta.getHigh())
+                                .low(meta.getLow())
+                                .close(meta.getLast())
+                                .build())
+                            .build());
+                    }
                 }
             }
             if (!fallbackData.isEmpty()) {
@@ -399,12 +547,33 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         // isIndexSymbol=true means keep as-is (fetchIndexStocks=false)
         // isIndexSymbol=false means expand indices (fetchIndexStocks=true)
         boolean fetchIndexStocks = !isIndexSymbol;
+        Set<String> requested = new HashSet<>(symbols);
         symbols = instrumentUtils.resolveSymbols(new ArrayList<>(symbols), fetchIndexStocks);
 
         Map<String, OHLCQuote> ohlcData = marketDataService.getOHLC(new ArrayList<>(symbols), timeFrame, forceRefresh,
                 null);
 
         if (ohlcData != null) {
+            ohlcData = new HashMap<>(ohlcData);
+            instrumentUtils.aliasQuotesUnderOriginalIsins(requested, ohlcData);
+
+            // EXCHANGE-AWARE KEY SANITIZATION: Ensure the final map contains ONLY the exact symbol keys requested by the caller.
+            // Preserves NSE vs BSE distinctions (e.g., NSE_EQ:RELIANCE vs BSE_EQ:RELIANCE) without collisions or unrequested bare keys.
+            Map<String, OHLCQuote> sanitizedOHLC = new HashMap<>();
+            for (String requestedSym : requested) {
+                if (ohlcData.containsKey(requestedSym)) {
+                    sanitizedOHLC.put(requestedSym, ohlcData.get(requestedSym));
+                } else {
+                    String cleanReq = requestedSym.contains(":") ? requestedSym.substring(requestedSym.indexOf(":") + 1).trim() : requestedSym;
+                    if (ohlcData.containsKey(cleanReq)) {
+                        sanitizedOHLC.put(requestedSym, ohlcData.get(cleanReq));
+                    }
+                }
+            }
+            if (!sanitizedOHLC.isEmpty()) {
+                ohlcData = sanitizedOHLC;
+            }
+
             log.info("Fetched OHLC data for keys: {}", ohlcData.keySet());
             return ohlcData;
         } else {
@@ -497,6 +666,31 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             errorResponse.put("error", "Failed to fetch chart data");
             errorResponse.put("message", e.getMessage());
             return errorResponse;
+        }
+    }
+
+    /**
+     * Recursively rolls back a date to the nearest preceding active trading day (non-weekend, non-holiday).
+     */
+    private java.time.LocalDate adjustToLastTradingDay(java.time.LocalDate date) {
+        java.time.LocalDate current = date;
+        while (!isTradingDay(current)) {
+            current = current.minusDays(1);
+        }
+        return current;
+    }
+
+    /**
+     * Checks if a specific date is a valid trading day using the market calendar database (includes mid-week holidays).
+     */
+    private boolean isTradingDay(java.time.LocalDate date) {
+        try {
+            var timings = marketCalendarService.getTimings("NSE", date);
+            return timings != null && timings.open();
+        } catch (Exception e) {
+            // Fallback: simple day-of-week check if calendar db lookup fails
+            java.time.DayOfWeek dow = date.getDayOfWeek();
+            return dow != java.time.DayOfWeek.SATURDAY && dow != java.time.DayOfWeek.SUNDAY;
         }
     }
 }

@@ -4,7 +4,9 @@ import com.am.marketdata.common.model.NSEIndicesResponse;
 import com.am.marketdata.common.model.NSEStockInsidicesData;
 import com.am.marketdata.scraper.exception.NSEApiException;
 import com.am.marketdata.scraper.cookie.CookieCache;
+import com.am.marketdata.scraper.cookie.CookieManager;
 import com.am.marketdata.scraper.exception.CookieException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -31,6 +33,7 @@ public class NSEApiClient {
     @Qualifier("nseApiRestTemplate")
     private final RestTemplate restTemplate;
     private final CookieCache cookieCache;
+    private final CookieManager cookieManager;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
 
@@ -75,6 +78,28 @@ public class NSEApiClient {
                 .record(() -> executeApiCall("/api/allIndices", NSEIndicesResponse.class, this::logIndicesResponse));
     }
 
+    public JsonNode getIpoPastIssues() {
+        return executeApiCall("/api/public-past-issues", JsonNode.class, body ->
+                log.info("IPO past issues count={}", body == null || !body.isArray() ? 0 : body.size()));
+    }
+
+    public JsonNode getIpoCurrentIssues() {
+        return executeApiCall("/api/ipo-current-issue", JsonNode.class, body ->
+                log.info("IPO current issues count={}", body == null || !body.isArray() ? 0 : body.size()));
+    }
+
+    public JsonNode getIpoUpcomingIssues() {
+        return executeApiCall("/api/all-upcoming-issues?category=ipo", JsonNode.class, body ->
+                log.info("IPO upcoming issues count={}", body == null || !body.isArray() ? 0 : body.size()));
+    }
+
+    public JsonNode getIpoBidDetails(String symbol, String series) {
+        String sym = java.net.URLEncoder.encode(symbol, java.nio.charset.StandardCharsets.UTF_8);
+        String ser = java.net.URLEncoder.encode(series == null ? "EQ" : series, java.nio.charset.StandardCharsets.UTF_8);
+        return executeApiCall("/api/ipo-bid-details?symbol=" + sym + "&series=" + ser, JsonNode.class, body ->
+                log.info("IPO bid details symbol={} series={}", symbol, series));
+    }
+
     private HttpHeaders createBasicHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.USER_AGENT, USER_AGENT);
@@ -105,6 +130,10 @@ public class NSEApiClient {
             logApiResponse(endpoint, response, responseLogger);
             return response.getBody();
 
+        } catch (CookieException e) {
+            log.error("Cookie unavailable for NSE API - Endpoint: {}, Error: {}", endpoint, e.getMessage());
+            recordError(endpoint, "cookie_error");
+            throw e;
         } catch (HttpClientErrorException.Unauthorized e) {
             String responseBody = e.getResponseBodyAsString();
             log.error("Unauthorized access to NSE API - Endpoint: {}, Response: {}, Headers: {}",
@@ -149,11 +178,7 @@ public class NSEApiClient {
     }
 
     private String getCookiesOrThrow() {
-        String cookies = cookieCache.getCookies();
-        if (cookies == null) {
-            throw new CookieException("No valid cookies found in cache");
-        }
-        return cookies;
+        return cookieManager.getCookiesForApi();
     }
 
     private HttpEntity<String> createHttpEntity(String cookies) {
@@ -161,6 +186,8 @@ public class NSEApiClient {
         headers.set(HttpHeaders.COOKIE, cookies);
         headers.set(HttpHeaders.USER_AGENT, USER_AGENT);
         headers.set(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
+        headers.set(HttpHeaders.REFERER, baseUrl + "/");
+        headers.set(HttpHeaders.ACCEPT_LANGUAGE, "en-US,en;q=0.9");
         return new HttpEntity<>(headers);
     }
 

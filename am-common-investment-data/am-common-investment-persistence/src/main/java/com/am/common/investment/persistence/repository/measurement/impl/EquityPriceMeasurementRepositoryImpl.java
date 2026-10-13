@@ -198,24 +198,56 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
 
     @Override
     public List<EquityPriceMeasurement> findBySymbolAndTimeBetween(String symbol, Instant startTime, Instant endTime) {
+        return findBySymbolAndTimeBetween(symbol, startTime, endTime, null);
+    }
+
+    /**
+     * Optimized InfluxDB query with DB-level window aggregation.
+     * Pushes downscaling to InfluxDB engine using aggregateWindow(every: interval, createEmpty: false),
+     * preventing raw-tick network bloat and eliminating JVM-side CPU lockups.
+     */
+    @Override
+    public List<EquityPriceMeasurement> findBySymbolAndTimeBetween(String symbol, Instant startTime, Instant endTime, String windowInterval) {
+        String fluxInterval = normalizeWindowInterval(windowInterval);
+        String windowClause = (fluxInterval != null && !fluxInterval.isEmpty())
+                ? String.format("|> aggregateWindow(every: %s, fn: last, createEmpty: false) ", fluxInterval)
+                : "";
+
         String query = String.format(
             "from(bucket: \"%s\") " +
             "|> range(start: %s, stop: %s) " +
             "|> filter(fn: (r) => r._measurement == \"equity\") " +
             "|> filter(fn: (r) => r.symbol == \"%s\") " +
+            "%s" +
             "|> pivot(rowKey: [\"_time\"], " +
             "        columnKey: [\"_field\"], " +
             "        valueColumn: \"_value\") ",
-            influxDBConfig.getBucket(), startTime, endTime, symbol
+            influxDBConfig.getBucket(), startTime, endTime, symbol, windowClause
         );
 
-        logger.debug("Executing findBySymbolAndTimeBetween query for symbol: {}, start: {}, end: {}", 
-            symbol, startTime, endTime);
+        logger.debug("Executing findBySymbolAndTimeBetween query for symbol: {}, start: {}, end: {}, fluxInterval: {}", 
+            symbol, startTime, endTime, fluxInterval);
         List<EquityPriceMeasurement> results = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
         logger.debug("Found {} results", results.size());
         
         results.forEach(measurement -> measurement.setSymbol(symbol));
         return results;
+    }
+
+    private String normalizeWindowInterval(String interval) {
+        if (interval == null || interval.trim().isEmpty()) {
+            return null;
+        }
+        String clean = interval.trim();
+        if ("1D".equalsIgnoreCase(clean) || "DAY".equalsIgnoreCase(clean)) return "1d";
+        if ("1W".equalsIgnoreCase(clean) || "WEEK".equalsIgnoreCase(clean)) return "1w";
+        if ("1M".equalsIgnoreCase(clean) || "MONTH".equalsIgnoreCase(clean)) return "1mo";
+        if ("5m".equalsIgnoreCase(clean) || "FIVE_MINUTE".equalsIgnoreCase(clean)) return "5m";
+        if ("15m".equalsIgnoreCase(clean) || "FIFTEEN_MINUTE".equalsIgnoreCase(clean)) return "15m";
+        if ("30m".equalsIgnoreCase(clean) || "THIRTY_MINUTE".equalsIgnoreCase(clean)) return "30m";
+        if ("1H".equalsIgnoreCase(clean) || "60m".equalsIgnoreCase(clean) || "ONE_HOUR".equalsIgnoreCase(clean)) return "1h";
+        // Return lowercase clean value as fallback
+        return clean.toLowerCase();
     }
 
     @Override
@@ -231,19 +263,30 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
 
     @Override
     public List<EquityPriceMeasurement> findByIsinAndTimeBetween(String isin, Instant startTime, Instant endTime) {
+        return findByIsinAndTimeBetween(isin, startTime, endTime, null);
+    }
+
+    @Override
+    public List<EquityPriceMeasurement> findByIsinAndTimeBetween(String isin, Instant startTime, Instant endTime, String windowInterval) {
+        String fluxInterval = normalizeWindowInterval(windowInterval);
+        String windowClause = (fluxInterval != null && !fluxInterval.isEmpty())
+                ? String.format("|> aggregateWindow(every: %s, fn: last, createEmpty: false) ", fluxInterval)
+                : "";
+
         String query = String.format(
             "from(bucket: \"%s\") " +
             "|> range(start: %s, stop: %s) " +
             "|> filter(fn: (r) => r._measurement == \"equity\") " +
             "|> filter(fn: (r) => r.isin == \"%s\") " +
+            "%s" +
             "|> pivot(rowKey: [\"_time\"], " +
             "        columnKey: [\"_field\"], " +
             "        valueColumn: \"_value\") ",
-            influxDBConfig.getBucket(), startTime, endTime, isin
+            influxDBConfig.getBucket(), startTime, endTime, isin, windowClause
         );
 
-        logger.debug("Executing findByIsinAndTimeBetween query for isin: {}, start: {}, end: {}", 
-            isin, startTime, endTime);
+        logger.debug("Executing findByIsinAndTimeBetween query for isin: {}, start: {}, end: {}, fluxInterval: {}", 
+            isin, startTime, endTime, fluxInterval);
         List<EquityPriceMeasurement> results = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
         logger.debug("Found {} results", results.size());
         
@@ -274,17 +317,22 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
 
     @Override
     public List<EquityPriceMeasurement> findByKeyAndTimeBetween(String key, Instant startTime, Instant endTime) {
-        logger.debug("Searching for prices by key: {} between {} and {}", key, startTime, endTime);
+        return findByKeyAndTimeBetween(key, startTime, endTime, null);
+    }
+
+    @Override
+    public List<EquityPriceMeasurement> findByKeyAndTimeBetween(String key, Instant startTime, Instant endTime, String windowInterval) {
+        logger.debug("Searching for prices by key: {} between {} and {} (windowInterval: {})", key, startTime, endTime, windowInterval);
         
         // Try by symbol first
-        List<EquityPriceMeasurement> bySymbol = findBySymbolAndTimeBetween(key, startTime, endTime);
+        List<EquityPriceMeasurement> bySymbol = findBySymbolAndTimeBetween(key, startTime, endTime, windowInterval);
         if (!bySymbol.isEmpty()) {
             logger.debug("Found {} results by symbol", bySymbol.size());
             return bySymbol;
         }
         
         // If not found by symbol, try by ISIN
-        List<EquityPriceMeasurement> byIsin = findByIsinAndTimeBetween(key, startTime, endTime);
+        List<EquityPriceMeasurement> byIsin = findByIsinAndTimeBetween(key, startTime, endTime, windowInterval);
         logger.debug("Found {} results by ISIN", byIsin.size());
         return byIsin;
     }
@@ -295,55 +343,83 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
             logger.warn("Empty or null trading symbols list provided");
             return List.of();
         }
-        
-        String symbolList = tradingSymbols.stream()
-                .map(symbol -> "\"" + symbol + "\"")
-                .collect(Collectors.joining(", "));
-        
-        String query = String.format(
-            "from(bucket: \"%s\") " +
-            "|> range(start: %s) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
-            "|> filter(fn: (r) => contains(value: r.symbol, set: [%s])) " +
-            "|> pivot(rowKey: [\"_time\"], " +
-            "        columnKey: [\"_field\"], " +
-            "        valueColumn: \"_value\") ",
-            influxDBConfig.getBucket(), parseRange(rangeConfig.getDefaultRange()), symbolList
-        );
 
-        logger.debug("Executing findByTradingSymbolIn query for symbols: {}", tradingSymbols);
-        List<EquityPriceMeasurement> results = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
-        logger.debug("Found {} results for trading symbols", results.size());
-        
-        return results;
+        // Chunk size of 100 to prevent InfluxDB "Program is nested too deep" Flux compilation limits
+        List<EquityPriceMeasurement> allResults = new java.util.ArrayList<>();
+        int chunkSize = 100;
+        for (int i = 0; i < tradingSymbols.size(); i += chunkSize) {
+            List<String> chunk = tradingSymbols.subList(i, Math.min(i + chunkSize, tradingSymbols.size()));
+
+            String symbolFilter = chunk.stream()
+                    .map(symbol -> "r.symbol == \"" + symbol + "\"")
+                    .collect(Collectors.joining(" or "));
+
+            String query = String.format(
+                "from(bucket: \"%s\") " +
+                "|> range(start: %s) " +
+                "|> filter(fn: (r) => r._measurement == \"equity\") " +
+                "|> filter(fn: (r) => %s) " +
+                "|> last() " +
+                "|> pivot(rowKey: [\"_time\"], " +
+                "        columnKey: [\"_field\"], " +
+                "        valueColumn: \"_value\") ",
+                influxDBConfig.getBucket(), parseRange(rangeConfig.getHistoryRange()), symbolFilter
+            );
+
+            logger.info("Executing findByTradingSymbolIn query for chunk of {} symbols (total {})", chunk.size(), tradingSymbols.size());
+            long startTime = System.currentTimeMillis();
+            List<EquityPriceMeasurement> chunkResults = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info("Found {} results in {}ms for current chunk", chunkResults != null ? chunkResults.size() : 0, duration);
+
+            if (chunkResults != null) {
+                allResults.addAll(chunkResults);
+            }
+        }
+
+        return allResults;
     }
-    
+
     @Override
     public List<EquityPriceMeasurement> findByIsinIn(List<String> isins) {
         if (isins == null || isins.isEmpty()) {
             logger.warn("Empty or null ISINs list provided");
             return List.of();
         }
-        
-        String isinList = isins.stream()
-                .map(isin -> "\"" + isin + "\"")
-                .collect(Collectors.joining(", "));
-        
-        String query = String.format(
-            "from(bucket: \"%s\") " +
-            "|> range(start: %s) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
-            "|> filter(fn: (r) => contains(value: r.isin, set: [%s])) " +
-            "|> pivot(rowKey: [\"_time\"], " +
-            "        columnKey: [\"_field\"], " +
-            "        valueColumn: \"_value\") ",
-            influxDBConfig.getBucket(), parseRange(rangeConfig.getDefaultRange()), isinList
-        );
 
-        logger.debug("Executing findByIsinIn query for ISINs: {}", isins);
-        List<EquityPriceMeasurement> results = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
-        logger.debug("Found {} results for ISINs", results.size());
-        
-        return results;
+        // Chunk size of 100 to prevent InfluxDB "Program is nested too deep" Flux compilation limits
+        List<EquityPriceMeasurement> allResults = new java.util.ArrayList<>();
+        int chunkSize = 100;
+        for (int i = 0; i < isins.size(); i += chunkSize) {
+            List<String> chunk = isins.subList(i, Math.min(i + chunkSize, isins.size()));
+
+            String isinFilter = chunk.stream()
+                    .map(isin -> "r.isin == \"" + isin + "\"")
+                    .collect(Collectors.joining(" or "));
+
+            String query = String.format(
+                "from(bucket: \"%s\") " +
+                "|> range(start: %s) " +
+                "|> filter(fn: (r) => r._measurement == \"equity\") " +
+                "|> filter(fn: (r) => %s) " +
+                "|> last() " +
+                "|> pivot(rowKey: [\"_time\"], " +
+                "        columnKey: [\"_field\"], " +
+                "        valueColumn: \"_value\") ",
+                influxDBConfig.getBucket(), parseRange(rangeConfig.getHistoryRange()), isinFilter
+            );
+
+            logger.info("Executing findByIsinIn query for chunk of {} ISINs (total {})", chunk.size(), isins.size());
+            long startTime = System.currentTimeMillis();
+            List<EquityPriceMeasurement> chunkResults = influxDBClient.getQueryApi().query(query, EquityPriceMeasurement.class);
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info("Found {} results in {}ms for current chunk", chunkResults != null ? chunkResults.size() : 0, duration);
+
+            if (chunkResults != null) {
+                allResults.addAll(chunkResults);
+            }
+        }
+
+        return allResults;
     }
 }

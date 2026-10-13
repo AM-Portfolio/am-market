@@ -1,9 +1,15 @@
 env:
-  SPRING_PROFILES_ACTIVE: "preprod"
-  JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=preprod"
+  SPRING_PROFILES_ACTIVE: "preprod,security"
+  JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=preprod,security"
   # JVM reads JAVA_TOOL_OPTIONS automatically (chart entrypoint did not expand JAVA_OPTS)
   JAVA_TOOL_OPTIONS: "-Xms512m -Xmx768m"
+  # Micro-chunking: controls maximum number of stock symbols flushed per pipelined Redis write batch
+  REDIS_CACHE_INTRADAY_BATCH_CHUNK_SIZE: "50"
+  # Internal Kubernetes DNS endpoint for GrowthBook (bypasses Cloudflare HTTP 400 blocking)
+  GROWTHBOOK_API_HOST: "http://growthbook-backend.growthbook.svc.cluster.local:3100/api"
 environment: preprod
+
+replicaCount: 1
 
 probes:
   port: 8080
@@ -32,6 +38,8 @@ vault:
   enabled: true
   role: "am-backend-role"
   secretPaths:
+    otel:
+      path: "apps/data/preprod/infra/observability"
     postgres:
       path: "apps/data/preprod/infra/postgres"
     mongodb:
@@ -44,10 +52,18 @@ vault:
       path: "apps/data/preprod/infra/kafka"
     market-data:
       path: "apps/data/preprod/services/am-market-data"
+    jwt:
+      path: "apps/data/preprod/services/am-market-data"
+    zerodha:
+      path: "apps/data/preprod/services/am-market-data"
     upstox:
       path: "apps/data/preprod/services/am-market-data"
     scheduler-config:
       path: "apps/data/preprod/services/am-market-data-scheduler"
+    identity-oidc:
+      path: "apps/data/preprod/services/am-identity"
+    service-oauth:
+      path: "apps/data/preprod/services/am-market-data"
 
 # Application Configuration
 config:
@@ -119,10 +135,21 @@ service:
   type: ClusterIP
   port: 8080
 
-# Ingress Configuration (disabled for Kind)
+# Preprod app host only — am.asrax.in reserved for prod
 ingress:
-  enabled: false
-  ipAddress: 127.0.0.1
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      am-apps-preprod-global-cors@kubernetescrd,
+      am-apps-preprod-strip-prefix-apps@kubernetescrd
+  hosts:
+    - host: am-preprod.asrax.in
+      paths:
+        - path: /market
+          pathType: Prefix
 
 # Resource Configuration (reduced for Kind)
 resources:
@@ -132,8 +159,6 @@ resources:
   requests:
     cpu: 250m
     memory: 512Mi
-
-replicaCount: 1
 
 # Monitoring Configuration
 monitoring:

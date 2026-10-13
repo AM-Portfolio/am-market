@@ -35,6 +35,8 @@ docs/
 # Test
 test/
 *.test
+spt/
+**/spt/
 
 # Node modules (if any)
 node_modules/

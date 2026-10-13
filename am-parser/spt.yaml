@@ -1,0 +1,32 @@
+apiVersion: am.spt/v1
+kind: ServiceLoadTest
+service: am-parser
+label: am-parser
+enabled: true
+runtime: python
+owners: [market-team]
+description: Parser service load-test registration (OpenAPI via FastAPI)
+createdBy: market-team
+updatedBy: market-team
+createdAt: "2026-07-25"
+updatedAt: "2026-07-25"
+tags: [market, python, fastapi]
+source:
+  repo: am-market
+  path: am-parser/spt.yaml
+  team: market-team
+traces:
+  - name: onboarding
+    ref: docs/spt-onboarding.md
+  - name: configmap
+    ref: spt-catalog-am-parser
+  - name: openapi
+    ref: /openapi.json
+  - name: namespace
+    ref: load-testing
+targets:
+  dev: "https://am-dev.asrax.in/parser"
+  preprod: "https://am-preprod.asrax.in/parser"
+  prod: "https://am.asrax.in/parser"
+openapi:
+  path: /openapi.json

@@ -25,6 +25,7 @@ public class SmartStockService {
 
     private final AppLogger log = AppLogger.getLogger(SmartStockService.class);
     private final MarketDataService marketDataService;
+    private final MarketDataCacheService marketDataCacheService;
 
     /**
      * Get the latest quotes for a list of symbols with TimeFrame support.
@@ -139,14 +140,24 @@ public class SmartStockService {
         }
 
         // 1. Try Cache & Database (No Provider)
-        Map<String, OHLCQuote> quotes = marketDataService.getOHLC(symbols, TimeFrame.DAY, false, null);
+        Map<String, OHLCQuote> rawQuotes = marketDataService.getOHLC(symbols, TimeFrame.DAY, false, null);
+        Map<String, OHLCQuote> quotes = new HashMap<>();
+
+        if (rawQuotes != null) {
+            for (Map.Entry<String, OHLCQuote> entry : rawQuotes.entrySet()) {
+                OHLCQuote q = entry.getValue();
+                if (q != null && q.getLastPrice() > 0.0) {
+                    boolean hasOhlc = q.getOhlc() != null && q.getOhlc().getOpen() > 0.0;
+                    boolean hasDiffPrevClose = q.getPreviousClose() > 0.0 && Math.abs(q.getLastPrice() - q.getPreviousClose()) > 0.0001;
+                    if (hasOhlc || hasDiffPrevClose) {
+                        quotes.put(entry.getKey(), q);
+                    }
+                }
+            }
+        }
 
         Set<String> missingSymbols = new HashSet<>(symbols);
-        if (quotes != null) {
-            missingSymbols.removeAll(quotes.keySet());
-        } else {
-            quotes = new HashMap<>();
-        }
+        missingSymbols.removeAll(quotes.keySet());
 
         if (missingSymbols.isEmpty()) {
             return quotes;
@@ -183,38 +194,65 @@ public class SmartStockService {
 
             if (historyMap != null) {
                 for (String symbol : missingSymbols) {
-                    if (historyMap.containsKey(symbol)) {
-                        var history = historyMap.get(symbol);
-                        if (history.getDataPoints() != null && !history.getDataPoints().isEmpty()) {
+                    var history = historyMap.get(symbol);
+                    if (history == null) {
+                        String clean = symbol.contains(":") ? symbol.substring(symbol.indexOf(":") + 1) : symbol;
+                        history = historyMap.get(clean);
+                        if (history == null) {
+                            history = historyMap.get("NSE_EQ:" + clean);
+                        }
+                        if (history == null) {
+                            history = historyMap.get("NSE:" + clean);
+                        }
+                    }
+                    if (history != null && history.getDataPoints() != null && !history.getDataPoints().isEmpty()) {
                             // Sort to get latest
                             var points = history.getDataPoints();
                             // Assuming points are sorted, get last
                             var lastPoint = points.get(points.size() - 1);
 
-                            // Create Fallback Quote
+                            // Create Fallback Quote from latest available historical daily candle
+                            double lastClose = lastPoint.getClose() != null ? lastPoint.getClose() : 0.0;
+                            double openPrice = lastPoint.getOpen() != null ? lastPoint.getOpen() : lastClose;
+                            double highPrice = lastPoint.getHigh() != null ? lastPoint.getHigh() : lastClose;
+                            double lowPrice = lastPoint.getLow() != null ? lastPoint.getLow() : lastClose;
+
                             OHLCQuote.OHLC ohlcData = OHLCQuote.OHLC.builder()
-                                    .open(lastPoint.getClose())
-                                    .high(lastPoint.getClose())
-                                    .low(lastPoint.getClose())
-                                    .close(lastPoint.getClose())
+                                    .open(openPrice)
+                                    .high(highPrice)
+                                    .low(lowPrice)
+                                    .close(lastClose)
                                     .build();
 
+                            // Resolve verified prior session close from C_N-1 (calendar/weekend resilient)
+                            double prevClose = lastClose;
+                            if (points.size() > 1) {
+                                var prevPoint = points.get(points.size() - 2);
+                                if (prevPoint != null && prevPoint.getClose() != null && prevPoint.getClose() > 0) {
+                                    prevClose = prevPoint.getClose();
+                                }
+                            }
+
                             OHLCQuote fallback = OHLCQuote.builder()
-                                    .lastPrice(lastPoint.getClose())
-                                    .previousClose(lastPoint.getClose())
+                                    .lastPrice(lastClose)
+                                    .previousClose(prevClose)
                                     .ohlc(ohlcData)
                                     .build();
 
-                            // Try to get actual previous close if we have > 1 point
-                            if (points.size() > 1) {
-                                var prevPoint = points.get(points.size() - 2);
-                                fallback.setPreviousClose(prevPoint.getClose());
+                            quotes.put(symbol, fallback);
+
+                            // Write-through to Redis with 7-day TTL so subsequent requests hit cache in <2ms
+                            try {
+                                if (marketDataCacheService != null && lastClose > 0) {
+                                    marketDataCacheService.cacheLatestPrices(Map.of(symbol, fallback));
+                                }
+                            } catch (Exception cacheEx) {
+                                log.warn("getSmartQuotes", "Failed to cache synthesized fallback for " + symbol, cacheEx);
                             }
 
-                            quotes.put(symbol, fallback);
-                            log.debug("getSmartQuotes", "Synthesized quote for {} from history.", symbol);
+                            log.debug("getSmartQuotes", "Synthesized quote for {} from history. lastPrice={}, prevClose={}",
+                                    symbol, lastClose, prevClose);
                         }
-                    }
                 }
             }
         } catch (Exception e) {
@@ -278,18 +316,22 @@ public class SmartStockService {
                             LocalDate lastPointDate = lastPoint.getTime().toLocalDate();
 
                             double prevClose = 0.0;
-                            if (lastPointDate.equals(today)) {
-                                if (points.size() >= 2) {
-                                    prevClose = points.get(points.size() - 2).getClose();
-                                } else {
-                                    prevClose = lastPoint.getClose();
-                                }
+                            if (points.size() >= 2) {
+                                // Candle C_N-1 is the genuine prior session close (covers weekdays, weekends, and holidays)
+                                prevClose = points.get(points.size() - 2).getClose();
                             } else {
                                 prevClose = lastPoint.getClose();
                             }
 
                             if (prevClose > 0) {
                                 quote.setPreviousClose(prevClose);
+                                try {
+                                    if (marketDataCacheService != null && quote.getLastPrice() > 0) {
+                                        marketDataCacheService.cacheLatestPrices(Map.of(symbol, quote));
+                                    }
+                                } catch (Exception cacheEx) {
+                                    log.warn("backfillPreviousCloseForDay", "Failed to cache backfilled quote for " + symbol, cacheEx);
+                                }
                                 log.debug("backfillPreviousCloseForDay", "Backfilled previousClose for " + symbol + ": " + prevClose);
                             }
                         }

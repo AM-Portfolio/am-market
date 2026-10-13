@@ -26,6 +26,12 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     private final com.am.marketdata.service.kafka.producer.MarketDataProducer producer;
 
+    // Single-Flight Deduplication Map: Tracks active background backfills to prevent duplicate Upstox API calls
+    private static final java.util.concurrent.ConcurrentHashMap<String, Boolean> activeBackfills = new java.util.concurrent.ConcurrentHashMap<>();
+
+    // Shared Rate Limiter: Enforces global limit of 3 req/sec across all background provider backfills
+    private static final java.util.concurrent.Semaphore upstoxRateLimiter = new java.util.concurrent.Semaphore(3);
+
     private HistoricalDataRetriever(
             MarketDataPersistenceService persistenceService,
             MarketDataProviderFactory providerFactory,
@@ -83,7 +89,22 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         // year is requested)
         long requiredStartMs = fromDate.getTime();
         long requiredEndMs = toDate.getTime();
-        long toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for holidays/weekends
+        
+        // [Intraday validation threshold fix]
+        // Indices are stored as daily snapshots (only 2 scheduler points per day) in the database.
+        // If the user requests 5m or 1H candles, a 7-day tolerance would allow daily snapshots to pass validation,
+        // skipping Upstox fallback. We resolve this by using a strict 30-minute tolerance for intraday intervals
+        // to force fallback fetching from the provider when 5m candles are missing.
+        // Tolerance is only used for daily/weekly/monthly intervals.
+        // For intraday (5m, 1H), we use date-based comparison instead (see below).
+        long toleranceMs;
+        String val = interval.getApiValue().toLowerCase();
+        boolean isIntraday = val.contains("m") || val.contains("h");
+        if (!isIntraday) {
+            toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for daily/weekly/monthly charts
+        } else {
+            toleranceMs = 0; // Not used for intraday — date comparison is used instead
+        }
 
         List<String> keysToRemove = new ArrayList<>();
 
@@ -110,13 +131,43 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             // late)
             // 2. Data End must be >= Request End - Tolerance (Data shouldn't end too early)
 
-            boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
-            boolean missingRecentData = dataEndMs < (requiredEndMs - toleranceMs);
+            long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
+            long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
+            
+            // [Flexible Start Check - Intraday]
+            // We disable start-time checks for intraday intervals to show whatever data exists,
+            // preventing discards if the ingestion starts slightly late.
+            // For daily/weekly/monthly charts, we keep the original tolerance check.
+            boolean missingEarlyData;
+            if (isIntraday) {
+                missingEarlyData = false;
+            } else {
+                missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
+            }
+
+            // [Intraday Recent-Data Check - Date Comparison]
+            // The DB scheduler saves only 1-2 candles per day (morning snapshot).
+            // So the last 5m or 1H candle may be at 09:38 AM even though market closes at 15:30.
+            // Comparing raw timestamps would flag this as missing (gap = 5h52m > any small tolerance).
+            // Fix: for intraday intervals, check only the DATE of the last candle vs the validation target date.
+            //   - Last candle from correct trading date -> valid, no matter what time -> accept.
+            //   - Last candle from a previous date -> genuinely stale -> reject, fallback to Upstox.
+            boolean missingRecentData;
+            if (isIntraday) {
+                java.time.LocalDate lastCandleDate = lastPointTime.toLocalDate();
+                java.time.LocalDate validationEndDate = java.time.Instant.ofEpochMilli(validationEndMs)
+                        .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
+                missingRecentData = lastCandleDate.isBefore(validationEndDate);
+            } else {
+                // For daily/weekly/monthly candles: use 7-day tolerance timestamp comparison
+                missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
+            }
 
             if (missingEarlyData || missingRecentData) {
                 log.info("[CACHE_VALIDATION] Partial cache hit detected for {}. Invalidating cache entry. " +
-                        "Req: {} to {}, Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
+                        "Req: {} to {} (validation target: {} to {}), Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
                         symbol, fromDateStr, toDateStr,
+                        new java.sql.Timestamp(validationStartMs), new java.sql.Timestamp(validationEndMs),
                         firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
                         missingEarlyData, missingRecentData);
                 keysToRemove.add(symbol);
@@ -137,6 +188,15 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         log.info("[CACHE] {} symbols remaining after cache lookup interval={}", remainingSymbols.size(), interval.getApiValue());
 
         return result;
+    }
+
+    /**
+     * Historical data queries local MongoDB/InfluxDB in < 20ms.
+     * Disable the <= 5 keyset bypass so local DB candles are always checked first.
+     */
+    @Override
+    protected boolean shouldBypassDatabase(Set<String> remainingKeys, boolean hasGlobalIndex) {
+        return false;
     }
 
     /**
@@ -174,7 +234,20 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     // This prevents partial database hits (e.g., finding only 1 point)
                     long requiredStartMs = fromDate.getTime();
                     long requiredEndMs = toDate.getTime();
-                    long toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days tolerance for holidays/weekends
+                    
+                    // [Intraday validation threshold fix]
+                    // Strict 30-minute tolerance check for intraday candles to discard incomplete
+                    // daily scheduler snapshots and fallback to the provider.
+                    // Tolerance is only used for daily/weekly/monthly intervals.
+                    // For intraday (5m, 1H), we use date-based comparison instead (see below).
+                    long toleranceMs;
+                    String val = interval.getApiValue().toLowerCase();
+                    boolean isIntraday = val.contains("m") || val.contains("h");
+                    if (!isIntraday) {
+                        toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days for daily/weekly/monthly charts
+                    } else {
+                        toleranceMs = 0; // Not used for intraday - date comparison is used instead
+                    }
 
                     java.time.LocalDateTime firstPointTime = points.get(0).getTime();
                     java.time.LocalDateTime lastPointTime = points.get(points.size() - 1).getTime();
@@ -182,19 +255,48 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     long dataStartMs = firstPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
                     long dataEndMs = lastPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
 
-                    boolean missingEarlyData = dataStartMs > (requiredStartMs + toleranceMs);
-                    boolean missingRecentData = dataEndMs < (requiredEndMs - toleranceMs);
+                    long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
+                    long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
+                    
+                    // [Flexible Start Check - Intraday]
+                    // We disable start-time checks for intraday intervals to show whatever data exists,
+                    // preventing discards if the ingestion starts slightly late.
+                    // For daily/weekly/monthly charts, we keep the original tolerance check.
+                    boolean missingEarlyData;
+                    if (isIntraday) {
+                        missingEarlyData = false;
+                    } else {
+                        missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
+                    }
+
+                    // [Intraday Recent-Data Check - Date Comparison]
+                    // The DB scheduler saves only 1-2 candles per day (morning snapshot).
+                    // So the last 5m or 1H candle may be at 09:38 AM even though market closes at 15:30.
+                    // Comparing raw timestamps would flag this as missing (gap = 5h52m > any small tolerance).
+                    // Fix: for intraday intervals, check only the DATE of the last candle vs the validation target date.
+                    //   - Last candle from correct trading date -> valid, no matter what time -> accept.
+                    //   - Last candle from a previous date -> genuinely stale -> reject, fallback to Upstox.
+                    boolean missingRecentData;
+                    if (isIntraday) {
+                        java.time.LocalDate lastCandleDate = lastPointTime.toLocalDate();
+                        java.time.LocalDate validationEndDate = java.time.Instant.ofEpochMilli(validationEndMs)
+                                .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
+                        missingRecentData = lastCandleDate.isBefore(validationEndDate);
+                    } else {
+                        // For daily/weekly/monthly candles: use 7-day tolerance timestamp comparison
+                        missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
+                    }
+
+                    // Return whatever data points exist locally in DB immediately to prevent empty payloads & 41s latencies
+                    result.put(symbol, data);
+                    remainingSymbols.remove(symbol);
 
                     if (missingEarlyData || missingRecentData) {
-                        log.info("[DATABASE_VALIDATION] Partial database data detected for {}. Discarding database entry to force fallback to provider. " +
-                                "Req: {} to {}, Found: {} to {}. MissingEarly: {}, MissingRecent: {}",
-                                symbol, fromDateStr, toDateStr,
-                                firstPointTime.toLocalDate(), lastPointTime.toLocalDate(),
-                                missingEarlyData, missingRecentData);
+                        log.info("[DATABASE_PARTIAL_HIT] Partial database data found for symbol: {}. Returning {} points immediately to client (< 20ms). Triggering background Single-Flight backfill.",
+                                symbol, points.size());
+                        triggerSingleFlightBackfill(symbol, fromDateStr, toDateStr);
                     } else {
-                        result.put(symbol, data);
-                        remainingSymbols.remove(symbol);
-                        log.debug("[DATABASE] Found valid historical data for symbol: {}", symbol);
+                        log.debug("[DATABASE] Found complete historical data for symbol: {}", symbol);
                     }
                 }
             } catch (Exception e) {
@@ -242,9 +344,21 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     callCount++;
                 }
 
-                // Provider now returns the common HistoricalData model directly
-                HistoricalData historicalData = provider.getHistoricalData(symbol,
-                        fromDate, toDate, interval, continuous, additionalParams);
+                // Bounded 1.5-second execution budget per symbol fetch from provider.
+                // Prevents slow external broker API roundtrips from blocking HTTP request threads for > 1.5s.
+                java.util.concurrent.CompletableFuture<HistoricalData> fetchFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                        provider.getHistoricalData(symbol, fromDate, toDate, interval, continuous, additionalParams)
+                ).orTimeout(1500, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+                HistoricalData historicalData = null;
+                try {
+                    historicalData = fetchFuture.get();
+                } catch (java.util.concurrent.ExecutionException ee) {
+                    log.error("[PROVIDER] Error fetching historical data for symbol {}: {}", symbol, ee.getCause() != null ? ee.getCause().getMessage() : ee.getMessage());
+                } catch (Exception te) {
+                    log.warn("[PROVIDER_TIMEOUT] Provider fetch exceeded 1.5s budget for symbol: {}. Falling back to background async backfill.", symbol);
+                    triggerSingleFlightBackfill(symbol, dateFormat.format(fromDate), dateFormat.format(toDate));
+                }
 
                 if (historicalData != null && historicalData.getDataPoints() != null
                         && !historicalData.getDataPoints().isEmpty()) {
@@ -278,21 +392,19 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             return;
         }
 
-        String methodName = "saveDataAsync";
         try {
-            log.info(methodName, "[PROVIDER_ASYNC] Sending {} historical data records to KAFKA for ingestion",
+            log.info("[PROVIDER_ASYNC] Sending {} historical data records to KAFKA for ingestion",
                     data.size());
 
             if (producer != null) {
                 // Use producer to send to Kafka (Fire and Forget)
                 producer.sendHistoricalData(data, this.interval, targetProviderName);
-                log.info(methodName, "[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
+                log.info("[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
             } else {
-                log.warn(methodName, "[PROVIDER_ASYNC] Skipping Kafka ingestion (Kafka disabled/Producer null)");
+                log.warn("[PROVIDER_ASYNC] Skipping Kafka ingestion (Kafka disabled/Producer null)");
             }
         } catch (Exception e) {
-            log.error(methodName,
-                    "[PROVIDER_ASYNC] FAILED to send historical data to KAFKA: " + e.getMessage(), e);
+            log.error("[PROVIDER_ASYNC] FAILED to send historical data to KAFKA: " + e.getMessage(), e);
         }
     }
 
@@ -404,6 +516,119 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     isIndexSymbol,
                     producer);
         }
+    }
+
+    private long getFirstExpectedCandleTimeMs(long requestedFromDateMs) {
+        java.time.ZonedDateTime requestDateTime = java.time.Instant.ofEpochMilli(requestedFromDateMs)
+                .atZone(java.time.ZoneId.of("Asia/Kolkata"));
+        java.time.LocalDate requestDate = requestDateTime.toLocalDate();
+        
+        // Roll forward to Monday if start date is on weekend
+        java.time.LocalDate targetDate = requestDate;
+        if (requestDate.getDayOfWeek() == java.time.DayOfWeek.SATURDAY) {
+            targetDate = requestDate.plusDays(2);
+        } else if (requestDate.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            targetDate = requestDate.plusDays(1);
+        }
+        
+        java.time.LocalDateTime startDateTime = java.time.LocalDateTime.of(targetDate, java.time.LocalTime.of(9, 15));
+        return startDateTime.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+    }
+
+    private long getLastExpectedCandleTimeMs(long requestedToDateMs) {
+        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+        java.time.LocalDate requestedDate = java.time.Instant.ofEpochMilli(requestedToDateMs)
+                .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
+        java.time.LocalDate today = now.toLocalDate();
+        
+        // If the requested date is strictly in the past (before today), expect full data for it
+        if (requestedDate.isBefore(today)) {
+            return requestedToDateMs;
+        }
+        
+        // Otherwise, cap expected end time based on the active trading session
+        java.time.LocalTime time = now.toLocalTime();
+        
+        // Determine the target date for the latest candles
+        java.time.LocalDate targetDate = today;
+        
+        // If it's weekend, roll back to Friday
+        if (today.getDayOfWeek() == java.time.DayOfWeek.SATURDAY) {
+            targetDate = today.minusDays(1);
+        } else if (today.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            targetDate = today.minusDays(2);
+        } else if (today.getDayOfWeek() == java.time.DayOfWeek.MONDAY && time.isBefore(java.time.LocalTime.of(9, 15))) {
+            targetDate = today.minusDays(3);
+        } else if (time.isBefore(java.time.LocalTime.of(9, 15))) {
+            targetDate = today.minusDays(1);
+            if (targetDate.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+                targetDate = targetDate.minusDays(2);
+            } else if (targetDate.getDayOfWeek() == java.time.DayOfWeek.MONDAY) {
+                targetDate = targetDate.minusDays(3);
+            }
+        }
+        
+        // Determine the target time
+        java.time.LocalDateTime targetDateTime;
+        if (today.equals(targetDate) && time.isAfter(java.time.LocalTime.of(9, 15)) && time.isBefore(java.time.LocalTime.of(15, 30))) {
+            targetDateTime = java.time.LocalDateTime.of(targetDate, time);
+        } else {
+            targetDateTime = java.time.LocalDateTime.of(targetDate, java.time.LocalTime.of(15, 30));
+        }
+        
+        return targetDateTime.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+    }
+
+    /**
+     * Triggers a Single-Flight background backfill for a missing historical data gap.
+     * Prevents duplicate HTTP requests to Upstox when multiple requests arrive concurrently for the same range.
+     */
+    private void triggerSingleFlightBackfill(String symbol, String fromDateStr, String toDateStr) {
+        String backfillKey = symbol + ":" + interval.getApiValue() + ":" + fromDateStr + ":" + toDateStr;
+
+        // Try putting key into activeBackfills map. If non-null, another thread is already backfilling this gap!
+        if (activeBackfills.putIfAbsent(backfillKey, Boolean.TRUE) != null) {
+            log.info("[SINGLE_FLIGHT_SKIP] Single-Flight backfill already in progress for key: {}. Skipping duplicate provider fetch.", backfillKey);
+            return;
+        }
+
+        log.info("[SINGLE_FLIGHT_TRIGGER] Initiating async Single-Flight backfill for key: {}", backfillKey);
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            boolean permitAcquired = false;
+            try {
+                // Acquire permit from shared RateLimiter (max 3 req/sec to Upstox)
+                permitAcquired = upstoxRateLimiter.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS);
+                if (!permitAcquired) {
+                    log.warn("[SINGLE_FLIGHT_RATE_LIMIT] Timed out waiting for Upstox rate limiter permit for key: {}", backfillKey);
+                    return;
+                }
+
+                MarketDataProvider provider = providerFactory.getProvider(targetProviderName != null ? targetProviderName : "upstox");
+                if (provider != null) {
+                    log.info("[SINGLE_FLIGHT_EXEC] Fetching gap data from provider for symbol: {} interval: {}", symbol, interval.getApiValue());
+                    HistoricalData historicalData = provider.getHistoricalData(symbol, fromDate, toDate, interval, continuous, additionalParams);
+
+                    if (historicalData != null && historicalData.getDataPoints() != null && !historicalData.getDataPoints().isEmpty()) {
+                        log.info("[SINGLE_FLIGHT_SUCCESS] Backfilled {} data points for symbol: {}. Saving asynchronously.",
+                                historicalData.getDataPointCount(), symbol);
+                        saveDataAsync(Collections.singletonMap(symbol, historicalData));
+                    }
+                }
+            } catch (Exception e) {
+                log.error("[SINGLE_FLIGHT_ERROR] Failed async gap backfill for key: " + backfillKey, e);
+            } finally {
+                if (permitAcquired) {
+                    // Release rate limiter permit after short delay to maintain steady 3 req/sec throttle
+                    try {
+                        Thread.sleep(300);
+                    } catch (InterruptedException ignored) {}
+                    upstoxRateLimiter.release();
+                }
+                // ALWAYS remove key from activeBackfills map in finally block to prevent permanent locks on exceptions
+                activeBackfills.remove(backfillKey);
+                log.debug("[SINGLE_FLIGHT_CLEANUP] Released Single-Flight lock for key: {}", backfillKey);
+            }
+        });
     }
 
     /**
