@@ -649,6 +649,17 @@ public class AnalysisService {
 
             for (String sym : symbolsNeedingHistory) {
                 HistoricalData hd = batchData != null ? batchData.get(sym) : null;
+                if (hd == null && batchData != null) {
+                    if (sym.contains(":")) {
+                        hd = batchData.get(sym.substring(sym.indexOf(":") + 1));
+                    }
+                    if (hd == null) {
+                        hd = batchData.get("NSE_EQ:" + sym);
+                    }
+                    if (hd == null) {
+                        hd = batchData.get("NSE:" + sym);
+                    }
+                }
                 if (hd == null || hd.getDataPoints() == null || hd.getDataPoints().isEmpty()) {
                     log.warn("Skipping unavailable Heatmap point symbol={} timeframe={}", sym, tfNorm);
                     continue;
