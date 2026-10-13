@@ -105,13 +105,13 @@ Replace `{portfolio_id}` with one of the IDs from the upload response.
 ### **Option A: MongoDB Web Interface**
 - **URL**: http://127.0.0.1:8081
 - **Username**: `admin`
-- **Password**: `password123`
+- **Password**: `<REDACTED_PASSWORD>`
 - **Database**: `mutual_funds`
 - **Collection**: `portfolios`
 
 ### **Option B: Direct MongoDB Query**
 ```powershell
-docker exec -it am_parser_mongodb mongosh --authenticationDatabase admin -u admin -p password123 mutual_funds --eval "db.portfolios.find().pretty()"
+docker exec -it am_parser_mongodb mongosh --authenticationDatabase admin -u admin -p <REDACTED_PASSWORD> mutual_funds --eval "db.portfolios.find().pretty()"
 ```
 
 ---

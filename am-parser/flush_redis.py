@@ -5,7 +5,7 @@ try:
     # Use config from env or default
     host = "100.72.208.15"
     port = 6379
-    password = "password123"
+    password = "<REDACTED_PASSWORD>"
     
     print(f"Connecting to Redis at {host}:{port}...")
     r = redis.Redis(host=host, port=port, password=password, decode_responses=True)

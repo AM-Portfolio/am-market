@@ -22,6 +22,7 @@ class ETFHoldingsService:
     def _get_holdings_collection(self):
         if self._holdings_collection is None:
             self._client = get_async_mongo_client(self.mongo_uri)
+
             self._db = self._client[self.db_name]
             self._holdings_collection = self._db.etf_holdings
             self._holdings_collection.create_index("isin", unique=True)

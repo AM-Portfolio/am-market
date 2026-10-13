@@ -19,7 +19,7 @@ docker-compose ps
 # Show connection info
 echo ""
 echo "✅ Environment Ready!"
-echo "🗄️  MongoDB: mongodb://admin:password123@localhost:27017"
+echo "🗄️  MongoDB: mongodb://admin:<REDACTED_PASSWORD>@localhost:27017"
 echo "🌐 Web UI: http://localhost:8081"
 echo "   Username: webadmin"
 echo "   Password: webpass123"

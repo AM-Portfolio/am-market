@@ -15,6 +15,8 @@ _log = get_logger("smart_etf_holdings")
 
 
 class SmartETFHoldingsService:
+    """ETF Holdings Service with intelligent caching"""
+
     def __init__(
         self,
         holdings_service: Optional[ETFHoldingsService] = None,
@@ -28,6 +30,7 @@ class SmartETFHoldingsService:
             else settings.etf_holdings_cache_days
         )
         self.force_refresh = force_refresh
+
 
     def set_cache_policy(self, expiry_days: int = 1, force_refresh: bool = False):
         self.cache_expiry_days = expiry_days

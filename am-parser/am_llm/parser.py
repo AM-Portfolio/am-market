@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from am_services import Portfolio, Fund, Holding, Totals, load_tabular
+from am_common.observability import get_logger
+logger = get_logger("am_llm.parser")
 
 # Import Together AI service if available
 try:
@@ -114,7 +116,7 @@ class LLMParserService:
         result = client.structured_portfolio_from_table(table_rows, system_prompt=system_prompt)
         
         if dry_run:
-            print("🔍 Dry run - would return:", result)
+            logger.info("Dry run - would return parsed portfolio data", extra={"result_preview": str(result)[:200]})
             return result
         
         return result
@@ -141,7 +143,7 @@ class LLMParserService:
         sheet_name = sheet if isinstance(sheet, str) else f"Sheet{sheet}" if sheet is not None else "Sheet1"
         
         if dry_run:
-            print(f"🔍 Dry run - would extract from {file_path}, sheet '{sheet_name}' using Together AI")
+            logger.info("Dry run - would extract using Together AI", extra={"file_path": str(file_path), "sheet_name": sheet_name})
             return {
                 "mutual_fund_name": f"Mock Fund from {file_path.name}",
                 "portfolio_date": "March 2025",

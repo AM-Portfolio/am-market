@@ -1,0 +1,708 @@
+{
+  "info": {
+    "_postman_id": "am-parser-api-collection-v1",
+    "name": "AM Parser API",
+    "description": "Complete Postman collection for the AM Parser service.\n\nBase URL: https://am-dev.asrax.in/market/parser\n\nCovers:\n- Health & Debug\n- Mutual Fund Portfolios\n- File Upload & Processing\n- Background Jobs\n- ETF Holdings",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://am-dev.asrax.in/market/parser",
+      "type": "string",
+      "description": "Base URL for the AM Parser service (dev environment)"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Debug",
+      "description": "Health check and debug endpoints to verify service status and MongoDB connectivity.",
+      "item": [
+        {
+          "name": "Health Live",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "live"]
+            },
+            "description": "Liveness check. Returns alive status without checking MongoDB."
+          },
+          "response": []
+        },
+        {
+          "name": "Health (DB Check)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Full health check including MongoDB connectivity and total portfolio count."
+          },
+          "response": []
+        },
+        {
+          "name": "Root Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Returns API version and list of all available endpoints."
+          },
+          "response": []
+        },
+        {
+          "name": "Debug Mongo Config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/debug/mongo",
+              "host": ["{{baseUrl}}"],
+              "path": ["debug", "mongo"]
+            },
+            "description": "Returns the MongoDB URI this process is using. Useful for diagnosing connection issues."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Mutual Fund Portfolios",
+      "description": "Endpoints to save, retrieve, list, and search mutual fund portfolio data.",
+      "item": [
+        {
+          "name": "List Portfolios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/portfolios?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios"],
+              "query": [
+                {
+                  "key": "fund_name",
+                  "value": "",
+                  "description": "Optional: filter by fund name",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Max portfolios to return (default: 50)"
+                }
+              ]
+            },
+            "description": "List all portfolios. Optionally filter by fund_name and limit results."
+          },
+          "response": []
+        },
+        {
+          "name": "Search Portfolios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/portfolios/search?fund_name=HDFC",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios", "search"],
+              "query": [
+                {
+                  "key": "fund_name",
+                  "value": "HDFC",
+                  "description": "Fund name to search for (required)"
+                }
+              ]
+            },
+            "description": "Search portfolios by fund name (partial match supported)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Portfolio by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/portfolios/:portfolio_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios", ":portfolio_id"],
+              "variable": [
+                {
+                  "key": "portfolio_id",
+                  "value": "YOUR_PORTFOLIO_ID_HERE",
+                  "description": "MongoDB ObjectId of the portfolio"
+                }
+              ]
+            },
+            "description": "Retrieve a single portfolio by its MongoDB ObjectId."
+          },
+          "response": []
+        },
+        {
+          "name": "Save Portfolio (Manual)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mutual_fund_name\": \"HDFC Top 100 Fund\",\n  \"portfolio_date\": \"2026-04-30\",\n  \"total_holdings\": 2,\n  \"holdings\": [\n    {\n      \"stock_name\": \"HDFC Bank Ltd\",\n      \"isin_code\": \"INE040A01034\",\n      \"percentage\": 8.5,\n      \"market_value\": 1500000,\n      \"quantity\": 2000\n    },\n    {\n      \"stock_name\": \"Infosys Ltd\",\n      \"isin_code\": \"INE009A01021\",\n      \"percentage\": 7.2,\n      \"market_value\": 1200000,\n      \"quantity\": 800\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/portfolios",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios"]
+            },
+            "description": "Save a mutual fund portfolio manually via JSON body."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Holdings by ISIN",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/holdings/INE040A01034",
+              "host": ["{{baseUrl}}"],
+              "path": ["holdings", "INE040A01034"],
+              "variable": []
+            },
+            "description": "Get all mutual fund portfolios that hold a specific stock identified by ISIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Bulk Holdings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/holdings/bulk?limit=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["holdings", "bulk"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Max portfolios to return with full holdings (default: 100)"
+                }
+              ]
+            },
+            "description": "Get all portfolios with their complete holdings data in one call."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Fund Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/funds/:fund_name/statistics",
+              "host": ["{{baseUrl}}"],
+              "path": ["funds", ":fund_name", "statistics"],
+              "variable": [
+                {
+                  "key": "fund_name",
+                  "value": "HDFC Top 100 Fund",
+                  "description": "Exact fund name to get statistics for"
+                }
+              ]
+            },
+            "description": "Get aggregated statistics for a specific mutual fund."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "File Upload & Processing",
+      "description": "Upload Excel files (.xlsx/.xls) containing mutual fund portfolio data. The service will split sheets, parse them and save portfolios automatically.",
+      "item": [
+        {
+          "name": "Upload Excel (Complete Sync)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Excel file (.xlsx or .xls) containing mutual fund data"
+                },
+                {
+                  "key": "parse_method",
+                  "value": "together",
+                  "type": "text",
+                  "description": "Parsing method: 'together' (LLM, default) or 'manual'"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["upload"]
+            },
+            "description": "Complete synchronous workflow:\n1. Upload and persist the Excel file\n2. Split into individual sheets\n3. Parse each sheet\n4. Save all portfolios to DB\n\nReturns full results when done. Use /upload-excel-async for large files."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Excel Complete (Alt)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Excel file (.xlsx or .xls)"
+                },
+                {
+                  "key": "parse_method",
+                  "value": "together",
+                  "type": "text",
+                  "description": "'together' (default) or 'manual'"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/upload/excel",
+              "host": ["{{baseUrl}}"],
+              "path": ["upload", "excel"]
+            },
+            "description": "Alternative complete Excel upload endpoint. Same workflow as /upload but a different code path."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Background Jobs",
+      "description": "Async job management. Use /v1/upload-excel-async to submit a file, then poll /v1/{job_id}/status to check progress.",
+      "item": [
+        {
+          "name": "Upload Excel Async",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Excel file (.xlsx or .xls)"
+                },
+                {
+                  "key": "parse_method",
+                  "value": "together",
+                  "type": "text",
+                  "description": "'together' (default) or 'manual'"
+                },
+                {
+                  "key": "callback_url",
+                  "value": "https://your-webhook.example.com/callback",
+                  "type": "text",
+                  "description": "Optional: webhook URL to notify on completion",
+                  "disabled": true
+                },
+                {
+                  "key": "user_id",
+                  "value": "user123",
+                  "type": "text",
+                  "description": "Optional: user ID for filtering jobs",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/upload-excel-async",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "upload-excel-async"]
+            },
+            "description": "Upload Excel file for async background processing. Returns immediately with a job_id. Use the status URL to poll for completion."
+          },
+          "response": []
+        },
+        {
+          "name": "List Jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", ""],
+              "query": [
+                {
+                  "key": "job_status",
+                  "value": "PENDING",
+                  "description": "Filter by status: PENDING, RUNNING, COMPLETED, FAILED, CANCELLED",
+                  "disabled": true
+                },
+                {
+                  "key": "user_id",
+                  "value": "user123",
+                  "description": "Filter by user ID",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Max jobs to return"
+                }
+              ]
+            },
+            "description": "List all background jobs. Optionally filter by status or user ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/:job_id/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", ":job_id", "status"],
+              "variable": [
+                {
+                  "key": "job_id",
+                  "value": "YOUR_JOB_ID_HERE",
+                  "description": "Job ID returned from /upload-excel-async"
+                }
+              ]
+            },
+            "description": "Poll the current status and progress of a background job."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Result",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/:job_id/result",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", ":job_id", "result"],
+              "variable": [
+                {
+                  "key": "job_id",
+                  "value": "YOUR_JOB_ID_HERE",
+                  "description": "Job ID to get result for"
+                }
+              ]
+            },
+            "description": "Retrieve the final result of a completed or failed job."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Job",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/:job_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", ":job_id"],
+              "variable": [
+                {
+                  "key": "job_id",
+                  "value": "YOUR_JOB_ID_HERE",
+                  "description": "Job ID to cancel"
+                }
+              ]
+            },
+            "description": "Cancel a PENDING or RUNNING job."
+          },
+          "response": []
+        },
+        {
+          "name": "[Admin] Fix Stuck Job",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/fix-stuck-job/:job_id?mark_as_failed=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "fix-stuck-job", ":job_id"],
+              "query": [
+                {
+                  "key": "mark_as_failed",
+                  "value": "true",
+                  "description": "true = mark as FAILED, false = reset to PENDING"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "job_id",
+                  "value": "YOUR_JOB_ID_HERE",
+                  "description": "Stuck job ID to fix"
+                }
+              ]
+            },
+            "description": "Admin: Fix a single stuck job after a server restart."
+          },
+          "response": []
+        },
+        {
+          "name": "[Admin] Recover All Stuck Jobs",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/recover-stuck-jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "recover-stuck-jobs"]
+            },
+            "description": "Admin: Recover ALL stuck jobs at once. Run this after a server restart."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "ETF Holdings",
+      "description": "Endpoints for managing and fetching ETF holdings data from Moneycontrol.",
+      "item": [
+        {
+          "name": "ETF Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "etf", "stats"]
+            },
+            "description": "Get overall ETF database statistics: total ETFs, ISIN coverage, holdings coverage."
+          },
+          "response": []
+        },
+        {
+          "name": "ETF Cache Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/cache-stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "etf", "cache-stats"]
+            },
+            "description": "Get cache statistics: fresh records today, stale records, cache hit potential."
+          },
+          "response": []
+        },
+        {
+          "name": "Search ETFs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/search?query=NIFTY&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "etf", "search"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "NIFTY",
+                  "description": "Search term: symbol, name, or ISIN (use '*' for all)"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Max results to return (default: 10)"
+                }
+              ]
+            },
+            "description": "Search ETFs by symbol, name, or ISIN. Use '*' as query to list all ETFs."
+          },
+          "response": []
+        },
+        {
+          "name": "Get ETF Holdings (by Symbol or ISIN)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/holdings/NIFTYBEES",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "etf", "holdings", "NIFTYBEES"],
+              "variable": []
+            },
+            "description": "Get stored holdings for a specific ETF. Accepts symbol (e.g. NIFTYBEES) or ISIN. Also supports comma-separated list: NIFTYBEES,BANKBEES"
+          },
+          "response": []
+        },
+        {
+          "name": "Get ETF Holdings (Multiple)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/holdings/NIFTYBEES,BANKBEES,GOLDBEES",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "etf", "holdings", "NIFTYBEES,BANKBEES,GOLDBEES"]
+            },
+            "description": "Get holdings for multiple ETFs in one call. Pass comma-separated symbols or ISINs."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Bulk ETF Holdings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/holdings/bulk?limit=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "etf", "holdings", "bulk"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Limit number of ETFs returned (optional)"
+                }
+              ]
+            },
+            "description": "Returns a map of {ISIN: {symbol, name, holdings}} for all ETFs that have holdings data. Optimized for Java service syncing."
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Holdings for Single ETF (Async)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/fetch-holdings/NIFTYBEES",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "etf", "fetch-holdings", "NIFTYBEES"],
+              "query": [
+                {
+                  "key": "callback_url",
+                  "value": "https://your-webhook.example.com/callback",
+                  "description": "Optional webhook URL to notify on completion",
+                  "disabled": true
+                },
+                {
+                  "key": "user_id",
+                  "value": "user123",
+                  "description": "Optional user ID",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "description": "Trigger async background fetch of holdings for a single ETF from Moneycontrol. Returns immediately with a job_id."
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch All ETF Holdings (Async)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/fetch-all-holdings?force_refresh=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "etf", "fetch-all-holdings"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Limit number of ETFs to process (optional, useful for testing)",
+                  "disabled": true
+                },
+                {
+                  "key": "force_refresh",
+                  "value": "false",
+                  "description": "true = fetch even if data exists today; false = skip already cached"
+                },
+                {
+                  "key": "callback_url",
+                  "value": "https://your-webhook.example.com/callback",
+                  "description": "Optional webhook URL to notify on completion",
+                  "disabled": true
+                },
+                {
+                  "key": "user_id",
+                  "value": "user123",
+                  "description": "Optional user ID",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Trigger async background fetch for ALL ETFs with ISINs. Smart caching: skips already-fetched ETFs unless force_refresh=true. Returns job_id immediately."
+          },
+          "response": []
+        },
+        {
+          "name": "Load ETFs from JSON File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "JSON file (array of ETF records)"
+                },
+                {
+                  "key": "dry_run",
+                  "value": "false",
+                  "type": "text",
+                  "description": "true = validate only, don't save to DB"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/load-from-json?dry_run=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "etf", "load-from-json"],
+              "query": [
+                {
+                  "key": "dry_run",
+                  "value": "false",
+                  "description": "Validate only without saving"
+                }
+              ]
+            },
+            "description": "Upload an etf_details.json file to bulk-load ETF instruments into the database. Supports dry_run for validation."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -28,7 +28,7 @@ curl http://localhost:8000/docs
 | Service | Port | Purpose | Credentials |
 |---------|------|---------|-------------|
 | AM API | 8000 | FastAPI Server | - |
-| MongoDB | 27017 | Database | admin / password123 |
+| MongoDB | 27017 | Database | admin / <REDACTED_PASSWORD> |
 | Mongo Express | 8081 | Web UI | webadmin / webpass123 |
 
 ### API Usage
@@ -113,7 +113,7 @@ Create a `.env` file in the project root for custom configuration:
 
 ```env
 # MongoDB Connection (optional - defaults work with docker-compose)
-MONGO_URI=mongodb://admin:password123@mongodb:27017
+MONGO_URI=mongodb://admin:<REDACTED_PASSWORD>@mongodb:27017
 MONGO_DB=mutual_funds
 
 # LLM Configuration (if using LLM parsing)
@@ -139,7 +139,7 @@ docker-compose up -d --build
 docker-compose ps
 
 # Test MongoDB connection
-docker-compose exec mongodb mongosh -u admin -p password123
+docker-compose exec mongodb mongosh -u admin -p <REDACTED_PASSWORD>
 ```
 
 **Port conflicts:**
