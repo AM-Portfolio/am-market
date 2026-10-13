@@ -40,6 +40,11 @@ class RedisStores:
             decode_responses=True,
         )
 
+    @property
+    def client(self):
+        """Shared async Redis client for sibling locks (e.g. symbols ingest)."""
+        return self._redis
+
     async def get_affairs(self) -> dict[str, Any] | None:
         raw = await self._redis.get(AFFAIRS_KEY)
         return json.loads(raw) if raw else None

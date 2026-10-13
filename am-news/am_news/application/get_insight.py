@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from am_news.adapters.memory import holdings_cache_key, normalize_symbols
 from am_news.application.get_current_affairs import GetCurrentAffairs
@@ -10,6 +11,14 @@ from am_news.schemas.news import HoldingsNewsResponse, InsightResponse
 from am_news.settings import settings
 
 logger = logging.getLogger(__name__)
+
+# Process-local cooldown so missing symbols (e.g. no Upstox stories) do not
+# spawn an ingest task on every insight hit when NEWS_SYNC_ENABLED=1.
+_ingest_cooldown_until: dict[str, float] = {}
+
+
+def _cooldown_key(symbols: list[str]) -> str:
+    return ",".join(sorted(symbols))
 
 
 class GetInsight:
@@ -54,6 +63,11 @@ class GetInsight:
         )
 
     def _enqueue_ingest(self, missing: list[str]) -> bool:
+        key = _cooldown_key(missing)
+        now = time.monotonic()
+        if now < _ingest_cooldown_until.get(key, 0.0):
+            # Recently attempted — do not claim pending or spawn another task.
+            return False
         try:
             from am_news.application.ingest_symbols import IngestSymbols
 
@@ -63,10 +77,15 @@ class GetInsight:
                 except Exception:
                     logger.exception("background_symbol_ingest_failed")
 
+            # Arm cooldown before create_task so concurrent insights coalesce.
+            _ingest_cooldown_until[key] = now + float(
+                settings.insight_ingest_cooldown_seconds
+            )
             loop = asyncio.get_running_loop()
             loop.create_task(_run())
             return True
         except Exception:
+            _ingest_cooldown_until.pop(key, None)
             logger.exception("enqueue_symbol_ingest_failed")
             return False
 

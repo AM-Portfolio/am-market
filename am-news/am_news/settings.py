@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     affairs_ttl_seconds: int = 120
     holdings_ttl_seconds: int = 60
     feed_lock_ttl_seconds: int = 900
+    insight_ingest_cooldown_seconds: int = 300
     affairs_limit: int = 10
     holdings_limit: int = 15
     symbols_cap: int = 80

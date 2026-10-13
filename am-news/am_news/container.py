@@ -77,7 +77,7 @@ def build_container() -> Container:
         snapshots = redis
         tokens = redis
         lock = redis
-        symbols_lock = RedisSymbolsLock(redis._redis)
+        symbols_lock = RedisSymbolsLock(redis.client)
     else:
         snapshots = MemorySnapshotCache()
         tokens = MemoryTokenStore()

@@ -155,6 +155,9 @@ def test_process_warm_affairs_false_skips_snapshot(container):
 
 
 def test_pending_ingest_when_sync_enabled(user_client, container, monkeypatch):
+    from am_news.application import get_insight as gi
+
+    gi._ingest_cooldown_until.clear()
     monkeypatch.setattr("am_news.application.get_insight.settings.news_sync_enabled", True)
     response = user_client.post("/v1/insight", json={"symbols": ["IDEA"]})
     assert response.status_code == 200
@@ -162,6 +165,11 @@ def test_pending_ingest_when_sync_enabled(user_client, container, monkeypatch):
     assert body["holdings"] == []
     assert body["pending_ingest"] is True
     assert "IDEA" in body["missing_symbols"]
+    # Cooldown: second hit must not claim pending or spawn another task.
+    again = user_client.post("/v1/insight", json={"symbols": ["IDEA"]})
+    assert again.status_code == 200
+    assert again.json()["pending_ingest"] is False
+    assert again.json()["missing_symbols"] == []
 
 
 def test_admin_ingest_symbols_no_affairs_warm(user_client, container):

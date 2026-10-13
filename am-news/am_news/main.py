@@ -93,26 +93,45 @@ async def http_error(_: Request, exc: HTTPException) -> JSONResponse:
 
 
 def _auth_failure_response(exc: Exception) -> JSONResponse | None:
-    """Map platform-security / JWKS failures to 401/503 instead of opaque 500."""
+    """Map clear OIDC/JWT failures to 401/503 — never Redis/Mongo auth noise."""
     name = type(exc).__name__.lower()
     msg = str(exc).lower()
+    # Storage / network faults must stay 500 even if message mentions "auth".
+    infra_markers = (
+        "redis",
+        "mongo",
+        "motor",
+        "pymongo",
+        "connection refused",
+        "connection reset",
+        "broken pipe",
+        "socket",
+    )
+    if any(token in name or token in msg for token in infra_markers):
+        return None
     if any(token in name or token in msg for token in ("jwks", "pyjwkclientconnection")):
         return JSONResponse(
             status_code=503,
             content=ErrorEnvelope(error_code="OIDC_UNAVAILABLE", message="JWKS unavailable").model_dump(),
         )
+    # Narrow markers only — avoid "credentials"/"authentication"/"jwt" alone.
     auth_markers = (
         "unauthorized",
         "unauthenticated",
+        "invalid access token",
         "invalid token",
-        "expired",
-        "jwt",
-        "bearer",
         "not authenticated",
-        "authentication",
-        "credentials",
+        "jwt required",
     )
-    if any(token in name or token in msg for token in auth_markers):
+    type_markers = (
+        "unauthorized",
+        "unauthenticated",
+        "invalidtoken",
+        "expiredsignature",
+    )
+    if any(token in name for token in type_markers) or any(
+        token in msg for token in auth_markers
+    ):
         return JSONResponse(
             status_code=401,
             content=ErrorEnvelope(error_code="UNAUTHORIZED", message="JWT required").model_dump(),
