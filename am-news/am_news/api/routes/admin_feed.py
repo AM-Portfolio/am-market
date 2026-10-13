@@ -1,9 +1,15 @@
 from fastapi import APIRouter, Depends, status
 
 from am_news.api.deps import get_container, require_admin
+from am_news.application.ingest_symbols import IngestSymbols
 from am_news.application.start_feed import StartFeed
 from am_news.domain.entities import Principal
-from am_news.schemas.news import AcceptedFeedResponse, ErrorEnvelope, FeedStatusResponse
+from am_news.schemas.news import (
+    AcceptedFeedResponse,
+    ErrorEnvelope,
+    FeedStatusResponse,
+    SymbolsIngestRequest,
+)
 
 router = APIRouter(prefix="/v1/admin", tags=["Admin"])
 
@@ -27,6 +33,22 @@ async def start_feed(
     container=Depends(get_container),
 ) -> AcceptedFeedResponse:
     return await StartFeed(container).execute(http_start=True)
+
+
+@router.post(
+    "/feed/symbols",
+    response_model=AcceptedFeedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="ingestSymbols",
+    summary="Ingest news for posted symbols (no affairs warm)",
+    responses=_ERRORS,
+)
+async def ingest_symbols(
+    body: SymbolsIngestRequest,
+    _: Principal = Depends(require_admin),
+    container=Depends(get_container),
+) -> AcceptedFeedResponse:
+    return await IngestSymbols(container).execute(body.symbols, http_start=True)
 
 
 @router.post(

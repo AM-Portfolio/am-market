@@ -35,6 +35,10 @@ class StartFeed:
                 await self._c.feed_state.set(state)
                 return AcceptedFeedResponse(status=FeedStatus.token_missing, message="token_missing")
             instruments = await self._c.resolver.resolve_nifty50()
+            if not instruments:
+                state = FeedState(status=FeedStatus.idle, message="resolve_empty")
+                await self._c.feed_state.set(state)
+                return AcceptedFeedResponse(status=FeedStatus.idle, message="resolve_empty")
             self._process = ProcessRaw(
                 self._c.parse, self._c.articles, self._c.snapshots, NIFTY50_SYMBOLS
             )

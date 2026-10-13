@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 import jwt
 
+from am_news.adapters.memory import normalize_symbols
 from am_news.domain.entities import Instrument
 from am_news.domain.universe import NIFTY50_SYMBOLS
 from am_news.settings import settings
@@ -30,8 +31,14 @@ def _service_bearer() -> str | None:
 
 class MarketDataInstrumentResolver:
     async def resolve_nifty50(self) -> tuple[Instrument, ...]:
+        return await self.resolve_symbols(list(NIFTY50_SYMBOLS))
+
+    async def resolve_symbols(self, symbols: list[str]) -> tuple[Instrument, ...]:
+        wanted = normalize_symbols(symbols, settings.symbols_cap)
+        if not wanted:
+            return ()
         url = f"{settings.market_data_url.rstrip('/')}/v1/securities/batch-search"
-        payload = {"queries": list(NIFTY50_SYMBOLS), "limit": 1, "minMatchScore": 0.7}
+        payload = {"queries": list(wanted), "limit": 1, "minMatchScore": 0.7}
         headers = {"Accept": "application/json"}
         bearer = _service_bearer()
         if bearer:
@@ -55,7 +62,7 @@ class MarketDataInstrumentResolver:
             if matches and isinstance(matches, list) and isinstance(matches[0], dict):
                 by_query[query] = matches[0]
         resolved: list[Instrument] = []
-        for symbol in NIFTY50_SYMBOLS:
+        for symbol in wanted:
             match = by_query.get(symbol)
             if not match:
                 continue
