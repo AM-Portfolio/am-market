@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     redis_hostname: str = ""
     redis_port: int = 6379
     redis_password: str = ""
+    redis_username: str = ""
     market_data_url: str = "http://am-market-data:8080"
     news_sync_enabled: bool = False
     news_docs_enabled: bool = True
@@ -29,6 +30,7 @@ class Settings(BaseSettings):
     affairs_ttl_seconds: int = 120
     holdings_ttl_seconds: int = 60
     feed_lock_ttl_seconds: int = 900
+    insight_ingest_cooldown_seconds: int = 300
     affairs_limit: int = 10
     holdings_limit: int = 15
     symbols_cap: int = 80

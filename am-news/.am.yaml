@@ -1,7 +1,7 @@
 # Local amctl identity — matches CI image_name
 name: am-news
 release: am-news
-image: ghcr.io/am-portfolio/am-news
+image: ghcr.io/am-portfolio/am-market/am-news
 runtime: python
 language: python
 entrypoint: am_news.main:app

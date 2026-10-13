@@ -8,6 +8,7 @@ vault:
         REDIS_HOSTNAME: "host"
         REDIS_PASSWORD: "password"
         REDIS_PORT: "port"
+        REDIS_USERNAME: "username"
     identity-oidc:
       mappings:
         OIDC_JWKS_URL: "OIDC_JWKS_URL"

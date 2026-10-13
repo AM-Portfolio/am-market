@@ -9,11 +9,12 @@ from am_news.adapters.memory import (
     MemoryFeedStateStore,
     MemoryRawStore,
     MemorySnapshotCache,
+    MemorySymbolsLock,
     MemoryTokenStore,
 )
 from am_news.adapters.mongo import MongoStores
 from am_news.adapters.parse import UpstoxNewsParse
-from am_news.adapters.redis_store import RedisStores
+from am_news.adapters.redis_store import RedisStores, RedisSymbolsLock
 from am_news.adapters.upstox import UpstoxNewsAdapter
 from am_news.domain.ports import (
     ArticleStore,
@@ -36,6 +37,7 @@ class Container:
     snapshots: SnapshotCache
     tokens: TokenStore
     lock: FeedLock
+    symbols_lock: FeedLock
     fetch: NewsFetchPort
     parse: NewsParsePort
     resolver: InstrumentResolver
@@ -66,14 +68,21 @@ def build_container() -> Container:
         raw = MemoryRawStore()
         feed_state = MemoryFeedStateStore()
     if settings.redis_hostname:
-        redis = RedisStores(settings.redis_hostname, settings.redis_port, settings.redis_password)
+        redis = RedisStores(
+            settings.redis_hostname,
+            settings.redis_port,
+            settings.redis_password,
+            username=settings.redis_username,
+        )
         snapshots = redis
         tokens = redis
         lock = redis
+        symbols_lock = RedisSymbolsLock(redis.client)
     else:
         snapshots = MemorySnapshotCache()
         tokens = MemoryTokenStore()
         lock = MemoryFeedLock()
+        symbols_lock = MemorySymbolsLock()
     fetch = UpstoxNewsAdapter(tokens)
     resolver = MarketDataInstrumentResolver()
     return Container(
@@ -82,6 +91,7 @@ def build_container() -> Container:
         snapshots=snapshots,
         tokens=tokens,
         lock=lock,
+        symbols_lock=symbols_lock,
         fetch=fetch,
         parse=parse,
         resolver=resolver,

@@ -30,6 +30,8 @@ def fixture_body() -> dict:
 
 
 def make_container(*, token: str | None = "tok", fetch=None) -> Container:
+    from am_news.adapters.memory import MemorySymbolsLock
+
     tokens = MemoryTokenStore(token)
     return Container(
         articles=MemoryArticleStore(),
@@ -37,6 +39,7 @@ def make_container(*, token: str | None = "tok", fetch=None) -> Container:
         snapshots=MemorySnapshotCache(),
         tokens=tokens,
         lock=MemoryFeedLock(),
+        symbols_lock=MemorySymbolsLock(),
         fetch=fetch or CountingFetch(fixture_body()),
         parse=UpstoxNewsParse(),
         resolver=MemoryResolver(),
