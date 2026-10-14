@@ -11,6 +11,7 @@ env:
   SCHEDULER_INGESTION_POLL_ENABLED: "false"
   SCHEDULER_INGESTION_POLL_HISTORICAL: "false"
   SCHEDULER_INGESTION_USE_WEBSOCKET: "true"
+  INFLUXDB_URL: "http://influxdb.asrax.in:8086"
 
 environment: dev
 replicaCount: 1

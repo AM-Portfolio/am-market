@@ -33,11 +33,53 @@ public class UpstoxSymbolResolver implements SymbolResolver {
 
     private final UpstoxIndexIdentifier indexIdentifier;
 
+    private final com.am.marketdata.provider.upstox.repo.SymbolAliasRepository symbolAliasRepository;
+
+    private final Map<String, String> isinRemapCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, String> symbolAliasCache = new java.util.concurrent.ConcurrentHashMap<>();
+
     public UpstoxSymbolResolver(
             @Qualifier("upstoxInstrumentService") InstrumentDataProvider instrumentDataProvider,
-            UpstoxIndexIdentifier indexIdentifier) {
+            UpstoxIndexIdentifier indexIdentifier,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.am.marketdata.provider.upstox.repo.SymbolAliasRepository symbolAliasRepository) {
         this.instrumentDataProvider = instrumentDataProvider;
         this.indexIdentifier = indexIdentifier;
+        this.symbolAliasRepository = symbolAliasRepository;
+        loadAliases();
+    }
+
+    public UpstoxSymbolResolver(
+            InstrumentDataProvider instrumentDataProvider,
+            UpstoxIndexIdentifier indexIdentifier) {
+        this(instrumentDataProvider, indexIdentifier, null);
+    }
+
+    @jakarta.annotation.PostConstruct
+    public void loadAliases() {
+        if (symbolAliasRepository == null) {
+            return;
+        }
+        try {
+            List<com.am.marketdata.common.model.SymbolAlias> aliases = symbolAliasRepository.findAll();
+            if (aliases != null) {
+                isinRemapCache.clear();
+                symbolAliasCache.clear();
+                for (com.am.marketdata.common.model.SymbolAlias alias : aliases) {
+                    if (alias.getId() == null || alias.getTarget() == null) {
+                        continue;
+                    }
+                    if ("ISIN".equalsIgnoreCase(alias.getType())) {
+                        isinRemapCache.put(alias.getId().trim().toUpperCase(), alias.getTarget().trim().toUpperCase());
+                    } else {
+                        symbolAliasCache.put(alias.getId().trim().toUpperCase(), alias.getTarget().trim().toUpperCase());
+                    }
+                }
+                log.info("UpstoxSymbolResolver", "Loaded " + isinRemapCache.size() + " ISIN remaps and " + symbolAliasCache.size() + " symbol aliases from DB");
+            }
+        } catch (Exception e) {
+            log.warn("UpstoxSymbolResolver", "Could not load symbol aliases from DB: " + e.getMessage());
+        }
     }
 
     @Override
@@ -377,17 +419,13 @@ public class UpstoxSymbolResolver implements SymbolResolver {
      * Upstox hist SDK requires {@code SEGMENT|ISIN} keys. Dig/local docs sometimes store
      * bare tickers as instrument_key — rebuild from segment + ISIN when possible.
      */
-    private static final Map<String, String> STALE_ISIN_REMAP = Map.of(
-            "INE237A01028", "INE237A01036"
-    );
-
-    private static com.am.marketdata.common.model.UpstoxInstrument normalizeInstrumentKey(
+    private com.am.marketdata.common.model.UpstoxInstrument normalizeInstrumentKey(
             com.am.marketdata.common.model.UpstoxInstrument inst) {
         if (inst == null) {
             return null;
         }
-        if (inst.getIsin() != null && STALE_ISIN_REMAP.containsKey(inst.getIsin().trim().toUpperCase())) {
-            String activeIsin = STALE_ISIN_REMAP.get(inst.getIsin().trim().toUpperCase());
+        if (inst.getIsin() != null && isinRemapCache.containsKey(inst.getIsin().trim().toUpperCase())) {
+            String activeIsin = isinRemapCache.get(inst.getIsin().trim().toUpperCase());
             inst.setIsin(activeIsin);
             if (inst.getInstrumentKey() != null && inst.getInstrumentKey().contains("|")) {
                 String seg = inst.getInstrumentKey().substring(0, inst.getInstrumentKey().indexOf('|'));
@@ -395,7 +433,7 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             }
         }
         if (inst.getInstrumentKey() != null) {
-            for (Map.Entry<String, String> staleEntry : STALE_ISIN_REMAP.entrySet()) {
+            for (Map.Entry<String, String> staleEntry : isinRemapCache.entrySet()) {
                 if (inst.getInstrumentKey().endsWith("|" + staleEntry.getKey())) {
                     String seg = inst.getInstrumentKey().substring(0, inst.getInstrumentKey().indexOf('|'));
                     inst.setInstrumentKey(seg + "|" + staleEntry.getValue());
@@ -421,12 +459,6 @@ public class UpstoxSymbolResolver implements SymbolResolver {
         return inst;
     }
 
-    /** Broker / portfolio aliases → Upstox NSE_EQ trading_symbol. */
-    private static final Map<String, String> TRADING_SYMBOL_ALIASES = Map.of(
-            "VODAFONEIDEA", "IDEA",
-            "VODAFONE-IDEA", "IDEA",
-            "VODAFONE_IDEA", "IDEA");
-
     private String normalizeTradingSymbol(String symbol) {
         /*
          * Old watchlists may still publish NSE:NSE:IDEA. Upstox stores IDEA as
@@ -441,7 +473,7 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             }
             cleaned = cleaned.substring(delimiter + 1).trim();
         }
-        return TRADING_SYMBOL_ALIASES.getOrDefault(cleaned, cleaned);
+        return symbolAliasCache.getOrDefault(cleaned, cleaned);
     }
 
     @Override

@@ -88,6 +88,48 @@ class UpstoxMarketDataProviderTest {
         assertEquals("TECHM", context.getSymbol("NSE_EQ|INE669C01036"));
     }
 
+    @Test
+    void resolverDynamicallyResolvesAliasesFromRepository() {
+        InstrumentDataProvider instruments = mock(InstrumentDataProvider.class);
+        UpstoxIndexIdentifier indexIdentifier = mock(UpstoxIndexIdentifier.class);
+        when(indexIdentifier.resolveIndices(anyList())).thenReturn(Map.of());
+
+        com.am.marketdata.provider.upstox.repo.SymbolAliasRepository aliasRepo =
+                mock(com.am.marketdata.provider.upstox.repo.SymbolAliasRepository.class);
+        when(aliasRepo.findAll()).thenReturn(List.of(
+                new com.am.marketdata.common.model.SymbolAlias("VODAFONEIDEA", "IDEA", "SYMBOL"),
+                new com.am.marketdata.common.model.SymbolAlias("INE237A01028", "INE237A01036", "ISIN")
+        ));
+
+        UpstoxInstrument ideaInst = new UpstoxInstrument();
+        ideaInst.setInstrumentKey("NSE_EQ|INE669E01016");
+        ideaInst.setTradingSymbol("IDEA");
+        ideaInst.setExchange("NSE");
+        ideaInst.setSegment("NSE_EQ");
+        ideaInst.setIsin("INE669E01016");
+
+        doReturn(List.of(ideaInst)).when(instruments).searchInstruments(any());
+
+        UpstoxSymbolResolver resolver = new UpstoxSymbolResolver(instruments, indexIdentifier, aliasRepo);
+
+        // 1. Test external symbol alias VODAFONEIDEA -> resolves to IDEA instrument
+        InstrumentContext context = resolver.resolveContext(List.of("NSE:VODAFONEIDEA"));
+        assertTrue(context.getInstrumentKeys().contains("NSE_EQ|INE669E01016"));
+        assertEquals("NSE:VODAFONEIDEA", context.getSymbol("NSE_EQ|INE669E01016"));
+
+        // 2. Test stale ISIN normalization
+        UpstoxInstrument kotakStale = new UpstoxInstrument();
+        kotakStale.setInstrumentKey("NSE_EQ|INE237A01028");
+        kotakStale.setTradingSymbol("KOTAKBANK");
+        kotakStale.setIsin("INE237A01028");
+        kotakStale.setExchange("NSE");
+        kotakStale.setSegment("NSE_EQ");
+
+        doReturn(List.of(kotakStale)).when(instruments).searchInstruments(any());
+        InstrumentContext kotakContext = resolver.resolveContext(List.of("KOTAKBANK"));
+        assertTrue(kotakContext.getInstrumentKeys().contains("NSE_EQ|INE237A01036"));
+    }
+
     /**
      * Verifies that StockQuote dynamically derives previousClose = lastPrice - change
      * when upstream Upstox does not provide an explicit 'previous_close' field.
