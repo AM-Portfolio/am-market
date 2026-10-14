@@ -130,6 +130,37 @@
             },
             "description": "Fetches current quotes for multiple symbols."
           },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('quote response keeps the existing envelope', function () {",
+                "  const body = pm.response.json();",
+                "  pm.expect(body).to.have.property('quotes');",
+                "  pm.expect(body.quotes).to.be.an('object');",
+                "});",
+                "pm.test('optional depth uses AM buy/sell levels when present', function () {",
+                "  const body = pm.response.json();",
+                "  Object.values(body.quotes || {}).forEach(function (quote) {",
+                "    if (quote.marketDepth) {",
+                "      pm.expect(quote.marketDepth.buy).to.be.an('array');",
+                "      pm.expect(quote.marketDepth.sell).to.be.an('array');",
+                "      [...quote.marketDepth.buy, ...quote.marketDepth.sell].forEach(function (level) {",
+                "        pm.expect(level.price).to.be.a('number').and.above(0);",
+                "        pm.expect(level.quantity).to.be.a('number').and.at.least(0);",
+                "      });",
+                "    }",
+                "    ['oi', 'oiDayHigh', 'oiDayLow'].forEach(function (field) {",
+                "      if (quote[field] !== undefined) pm.expect(quote[field]).to.be.a('number');",
+                "    });",
+                "  });",
+                "});"
+              ]
+            }
+          }
+        ],
           "response": []
         },
         {
@@ -159,6 +190,37 @@
             },
             "description": "POST version to retrieve quotes for a batch of symbols."
           },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('quote response keeps the existing envelope', function () {",
+                "  const body = pm.response.json();",
+                "  pm.expect(body).to.have.property('quotes');",
+                "  pm.expect(body.quotes).to.be.an('object');",
+                "});",
+                "pm.test('optional depth uses AM buy/sell levels when present', function () {",
+                "  const body = pm.response.json();",
+                "  Object.values(body.quotes || {}).forEach(function (quote) {",
+                "    if (quote.marketDepth) {",
+                "      pm.expect(quote.marketDepth.buy).to.be.an('array');",
+                "      pm.expect(quote.marketDepth.sell).to.be.an('array');",
+                "      [...quote.marketDepth.buy, ...quote.marketDepth.sell].forEach(function (level) {",
+                "        pm.expect(level.price).to.be.a('number').and.above(0);",
+                "        pm.expect(level.quantity).to.be.a('number').and.at.least(0);",
+                "      });",
+                "    }",
+                "    ['oi', 'oiDayHigh', 'oiDayLow'].forEach(function (field) {",
+                "      if (quote[field] !== undefined) pm.expect(quote[field]).to.be.a('number');",
+                "    });",
+                "  });",
+                "});"
+              ]
+            }
+          }
+        ],
           "response": []
         },
         {

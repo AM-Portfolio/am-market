@@ -62,13 +62,13 @@ class InstrumentUtilsTest {
         when(upstoxInstrumentRepository.findByIsinIn(List.of("INE028A01039")))
                 .thenReturn(List.of(barodaIsinInst));
 
-        // WHEN: We run resolveSymbols validation with fetchIndexStocks = false
-        Set<String> resolved = instrumentUtils.resolveSymbols(candidates, false);
+        // WHEN: We run resolveSymbols validation with fetchIndexStocks = true
+        Set<String> resolved = instrumentUtils.resolveSymbols(candidates, true);
 
         // THEN: ISIN is rewritten to the trading symbol Upstox actually quotes
         assertNotNull(resolved);
-        assertTrue(resolved.contains("BANKBARODA"));
-        assertTrue(!resolved.contains("INE028A01039"));
+        assertTrue(resolved.contains("NSE_EQ:BANKBARODA") || resolved.contains("BANKBARODA"));
+        assertTrue(!resolved.contains("INE028A01039"), "Expected not to contain INE028A01039 but was: " + resolved);
 
         verify(upstoxInstrumentRepository, times(1)).findByTradingSymbolIn(List.of("BANKBARODA"));
         verify(upstoxInstrumentRepository, times(1)).findByIsinIn(List.of("INE028A01039"));

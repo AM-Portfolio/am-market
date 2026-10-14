@@ -11,6 +11,7 @@ import com.am.marketdata.common.model.analysis.CalendarHeatmapResponse;
 import com.am.marketdata.common.model.analysis.SeasonalityResponse;
 import com.am.marketdata.common.model.analysis.TechnicalAnalysisResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -18,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import com.am.marketdata.analysis.dto.StockMoverDTO;
+import com.am.marketdata.analysis.dto.TopMoversResponse;
 import com.am.marketdata.analysis.dto.SectorPerformanceDTO;
 import java.util.List;
 import java.util.Map;
@@ -172,14 +174,15 @@ public class AnalysisController {
                     return ResponseEntity.badRequest().body(Map.of("error", "Invalid timeframe", "message", e.getMessage()));
                 }
 
-                Object result;
                 if ("all".equalsIgnoreCase(type)) {
-                    result = marketAnalyticsService.getMoversUnified(limit, index, tf, expandIndices);
+                    TopMoversResponse result = marketAnalyticsService.getMoversUnified(limit, index, tf, expandIndices);
+                    flowLogger.complete(span);
+                    return ResponseEntity.ok(result);
                 } else {
-                    result = marketAnalyticsService.getMovers(limit, type, index, tf, expandIndices);
+                    List<StockMoverDTO> result = marketAnalyticsService.getMovers(limit, type, index, tf, expandIndices);
+                    flowLogger.complete(span);
+                    return ResponseEntity.ok(result);
                 }
-                flowLogger.complete(span);
-                return ResponseEntity.ok(result);
             } catch (Exception e) {
                 // Fixed SLF4J pattern: was log.error("methodName", "msg", e)
                 log.error("Error fetching movers index={} type={}", index, type, e);
@@ -228,10 +231,11 @@ public class AnalysisController {
     public ResponseEntity<HistoricalDataResponseV1> getHistoricalCharts(
             @RequestParam String symbols,
             @RequestParam(defaultValue = "1D") String range,
-            @RequestParam(defaultValue = "true") boolean isIndexSymbol) {
+            @Parameter(description = "Optional. When omitted, AM resolves known securities as equities and known index documents as indices.")
+            @RequestParam(required = false) Boolean isIndexSymbol) {
 
         try (FlowSpan span = flowLogger.start("analysis.historical.charts", "symbols", symbols, "range", range,
-                "isIndex", isIndexSymbol)) {
+                "isIndex", isIndexSymbol != null ? isIndexSymbol : "auto")) {
             try {
                 HistoricalDataResponseV1 response = marketAnalyticsService.getHistoricalCharts(symbols, range,
                         isIndexSymbol);
@@ -253,7 +257,8 @@ public class AnalysisController {
     public ResponseEntity<HistoricalDataResponseV1> getHistoricalChartsLegacy(
             @PathVariable String symbol,
             @RequestParam(defaultValue = "1D") String range,
-            @RequestParam(defaultValue = "true") boolean isIndexSymbol) {
+            @Parameter(description = "Optional. When omitted, AM resolves known securities as equities and known index documents as indices.")
+            @RequestParam(required = false) Boolean isIndexSymbol) {
         return getHistoricalCharts(symbol, range, isIndexSymbol);
     }
 

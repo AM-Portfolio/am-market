@@ -189,8 +189,10 @@ public class InstrumentUtils {
         Set<String> resolvedSymbols = new HashSet<>();
         List<String> unresolvedSymbols = new ArrayList<>();
 
-        // Whitelist of valid index constituent symbols that may be missing from the local Upstox instruments table
-        java.util.Set<String> whitelist = java.util.Set.of("TATAMOTORS", "MOTHERSON", "BIRLACORPN", "NUVAMA", "GSPL", "MCX", "ANGELONE");
+        // Whitelist: index constituents + known NSE cash tickers that dig may miss from a thin instruments table
+        java.util.Set<String> whitelist = java.util.Set.of(
+                "TATAMOTORS", "MOTHERSON", "BIRLACORPN", "NUVAMA", "GSPL", "MCX", "ANGELONE",
+                "PWL", "IDEA", "VODAFONEIDEA", "VIKRAMSOLR", "TATAGOLD");
 
         for (String sym : candidateSymbols) {
             String upper = sym.toUpperCase();

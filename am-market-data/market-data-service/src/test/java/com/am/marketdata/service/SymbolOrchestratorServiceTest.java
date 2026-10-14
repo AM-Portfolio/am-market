@@ -15,7 +15,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,7 +39,7 @@ class SymbolOrchestratorServiceTest {
         service.setCacheTtlSeconds(900);
         service.setActiveSetRedisKey("market:active-symbols");
         when(parserApiClient.getAllEtfSymbols()).thenReturn(List.of("NIFTYBEES"));
-        when(stockIndicesMarketDataService.findByIndexSymbol(anyString())).thenReturn(null);
+        when(stockIndicesMarketDataService.findByIndexSymbols(anySet())).thenReturn(List.of());
     }
 
     @Test

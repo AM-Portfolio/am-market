@@ -1,10 +1,13 @@
 import os
+import shutil
 import subprocess
+from pathlib import Path
 
-env_file = r'c:\Users\ASUS\Desktop\AM-PORTFOLIO\am-market\am-market-data\.env'
+ROOT = Path(__file__).resolve().parent
+env_file = ROOT / ".env"
 env = os.environ.copy()
 
-if os.path.exists(env_file):
+if env_file.exists():
     with open(env_file, 'r') as f:
         for line in f:
             line = line.strip()
@@ -12,5 +15,17 @@ if os.path.exists(env_file):
                 k, v = line.split('=', 1)
                 env[k.strip()] = v.strip()
 
-cwd = r'c:\Users\ASUS\Desktop\AM-PORTFOLIO\am-market\am-market-data\market-data-app'
-subprocess.run(['mvn.cmd', 'spring-boot:run'], cwd=cwd, env=env)
+if 'REDIS_FORCE_ENABLED' not in env:
+    env['REDIS_FORCE_ENABLED'] = 'true'
+
+wrapper = ROOT / ('mvnw.cmd' if os.name == 'nt' else 'mvnw')
+maven = str(wrapper) if wrapper.exists() else (shutil.which('mvn') or shutil.which('mvn.cmd'))
+if not maven:
+    raise SystemExit('Maven was not found. Install Maven or add the Maven wrapper to this repository.')
+
+command = [maven, '-pl', 'market-data-app', 'spring-boot:run']
+if env.get('AM_MAVEN_OFFLINE', '').strip().lower() in {'1', 'true', 'yes'}:
+    command.insert(1, '-o')
+
+result = subprocess.run(command, cwd=str(ROOT), env=env)
+raise SystemExit(result.returncode)

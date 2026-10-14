@@ -11,6 +11,7 @@ import com.zerodhatech.models.Instrument;
 import com.zerodhatech.models.LTPQuote;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
+import com.am.marketdata.common.model.InstrumentIdentity;
 
 /**
  * Common interface for market data providers (Zerodha, Upstox, etc.)
@@ -67,6 +68,18 @@ public interface MarketDataProvider {
      * @return Map of symbol to OHLC data
      */
     Map<String, OHLCQuote> getOHLC(List<String> symbols, TimeFrame timeFrame);
+
+    /** Resolve and fetch OHLC quotes when callers already hold stable identifiers. */
+    default Map<String, OHLCQuote> getOHLCForIdentities(List<InstrumentIdentity> instruments, TimeFrame timeFrame) {
+        if (instruments == null || instruments.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return getOHLC(instruments.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(InstrumentIdentity::symbol)
+                .filter(symbol -> !symbol.isBlank())
+                .toList(), timeFrame);
+    }
 
     /**
      * Get last traded price for symbols

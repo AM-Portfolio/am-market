@@ -8,6 +8,7 @@ import java.util.Map;
 
 @Data
 @Slf4j
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class OHLCResponse {
     private String status;
     private Map<String, OHLCData> data;

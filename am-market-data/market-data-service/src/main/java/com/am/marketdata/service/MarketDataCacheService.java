@@ -5,6 +5,7 @@ import com.am.common.investment.model.historical.OHLCVTPoint;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.common.util.ApplicationContextProvider;
+import com.am.marketdata.common.util.MarketDepthFreshness;
 import com.am.marketdata.redis.model.OHLCV;
 import com.am.marketdata.redis.model.StockBars;
 import com.am.marketdata.redis.service.StockCacheService;
@@ -15,6 +16,7 @@ import com.am.marketdata.common.log.AppLogger;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.am.marketdata.service.model.PreviousCloseDocument;
 import com.am.marketdata.service.repo.PreviousCloseRepository;
+import com.am.marketdata.service.calendar.MarketCalendarService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,7 +25,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executor;
 import java.util.concurrent.CompletableFuture;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Optional;
 
 import java.util.Set;
@@ -52,6 +56,13 @@ public class MarketDataCacheService {
     private final RedisTemplate<String, String> redisTemplate;
     private final PreviousCloseRepository previousCloseRepository;
     private final MarketHoursService marketHoursService;
+    private final MarketCalendarService marketCalendarService;
+
+    @Value("${market.data.depth.max.age.seconds:60}")
+    private long marketDepthMaxAgeSeconds = 60;
+
+    @Value("${market.data.max.age.minutes:15}")
+    private long marketQuoteMaxAgeMinutes = 15;
 
     // Dedicated thread pool for non-blocking background cache backfilling
     @Autowired(required = false)
@@ -62,16 +73,27 @@ public class MarketDataCacheService {
     @Value("${market.cache.async-backfill.enabled:true}")
     private boolean asyncBackfillEnabled = true;
 
+    @Autowired
     public MarketDataCacheService(StockCacheService stockCacheService,
                                   ObjectMapper objectMapper,
                                   RedisTemplate<String, String> redisTemplate,
                                   @Autowired(required = false) PreviousCloseRepository previousCloseRepository,
-                                  @Autowired(required = false) MarketHoursService marketHoursService) {
+                                  @Autowired(required = false) MarketHoursService marketHoursService,
+                                  @Autowired(required = false) MarketCalendarService marketCalendarService) {
         this.stockCacheService = stockCacheService;
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
         this.previousCloseRepository = previousCloseRepository;
         this.marketHoursService = marketHoursService;
+        this.marketCalendarService = marketCalendarService;
+    }
+
+    public MarketDataCacheService(StockCacheService stockCacheService,
+                                  ObjectMapper objectMapper,
+                                  RedisTemplate<String, String> redisTemplate,
+                                  PreviousCloseRepository previousCloseRepository,
+                                  MarketHoursService marketHoursService) {
+        this(stockCacheService, objectMapper, redisTemplate, previousCloseRepository, marketHoursService, null);
     }
 
 
@@ -99,28 +121,45 @@ public class MarketDataCacheService {
         if (normalizedSymbol == null) {
             return null;
         }
+        String exchange = symbol.contains(":") ? symbol.substring(0, symbol.indexOf(':'))
+                : (symbol.contains("|") ? symbol.substring(0, symbol.indexOf('|')) : "NSE");
+        LocalDate expectedQuoteDate = expectedQuoteSessionDate(exchange);
         try {
-            // 1. Redis fast path
-            String redisKey = "market:prev-close:" + normalizedSymbol;
-            String value = redisTemplate.opsForValue().get(redisKey);
-            if (value != null) {
-                return Double.parseDouble(value);
+            List<String> closeMetadata = redisTemplate.opsForValue().multiGet(List.of(
+                    "market:prev-close:" + normalizedSymbol,
+                    "market:prev-close-date:" + normalizedSymbol));
+            String closeValue = closeMetadata != null && !closeMetadata.isEmpty() ? closeMetadata.get(0) : null;
+            String closeDateValue = closeMetadata != null && closeMetadata.size() > 1 ? closeMetadata.get(1) : null;
+            if (closeValue != null && expectedQuoteDate != null && expectedQuoteDate.toString().equals(closeDateValue)) {
+                double parsed = Double.parseDouble(closeValue);
+                if (Double.isFinite(parsed) && parsed > 0.0) return parsed;
+            }
+
+            // Fall back to the dated quote snapshot when scalar metadata is absent.
+            String snapshot = redisTemplate.opsForValue().get("market:latest-price:" + normalizedSymbol);
+            if (snapshot != null) {
+                Map<?, ?> values = objectMapper.readValue(snapshot, Map.class);
+                Double previousClose = readPositiveNumber(values.get("previousClose"));
+                LocalDate quoteDate = readDate(values.get("quoteTradeDate"));
+                long updatedAt = readLong(values.get("updatedAt"));
+                boolean sessionMatches = quoteDate != null && expectedQuoteDate != null && quoteDate.equals(expectedQuoteDate);
+                boolean recentUndatedSnapshot = quoteDate == null && isRecent(updatedAt, marketQuoteMaxAgeMinutes);
+                if (previousClose != null && (sessionMatches || recentUndatedSnapshot)) {
+                    return previousClose;
+                }
             }
         } catch (Exception e) {
-            log.warn("getPreviousClose", "Failed to get previous close from Redis for symbol: " + symbol + ", trying MongoDB", e);
+            log.warn("getPreviousClose", "Could not read a dated Redis quote snapshot for symbol: " + symbol, e);
         }
 
         // 2. Fallback to MongoDB persistence
         if (previousCloseRepository != null) {
             try {
                 Optional<PreviousCloseDocument> docOpt = previousCloseRepository.findById(normalizedSymbol);
-                if (docOpt.isPresent() && docOpt.get().getPreviousClose() != null && docOpt.get().getPreviousClose() > 0) {
+                if (expectedQuoteDate != null && docOpt.isPresent() && docOpt.get().getPreviousClose() != null
+                        && docOpt.get().getPreviousClose() > 0
+                        && expectedQuoteDate.toString().equals(docOpt.get().getTradeDate())) {
                     Double dbValue = docOpt.get().getPreviousClose();
-                    // Optionally backfill Redis
-                    try {
-                        String redisKey = "market:prev-close:" + normalizedSymbol;
-                        redisTemplate.opsForValue().set(redisKey, String.valueOf(dbValue), 26, TimeUnit.HOURS);
-                    } catch (Exception ignore) {}
                     return dbValue;
                 }
             } catch (Exception mongoEx) {
@@ -128,6 +167,63 @@ public class MarketDataCacheService {
             }
         }
         return null;
+    }
+
+    private LocalDate expectedQuoteSessionDate(String exchange) {
+        ZoneId zone = ZoneId.of("Asia/Kolkata");
+        LocalDate today = LocalDate.now(zone);
+        if (marketCalendarService == null) {
+            return today;
+        }
+        try {
+            // Walk calendar sessions, not weekdays: holidays and special closures matter.
+            for (int daysBack = 0; daysBack <= 10; daysBack++) {
+                LocalDate candidate = today.minusDays(daysBack);
+                MarketCalendarService.SessionTiming timing = marketCalendarService.getTimings(exchange, candidate);
+                if (timing != null && timing.open()) {
+                    if (daysBack == 0 && timing.sessionStart() != null
+                            && ZonedDateTime.now(zone).toLocalTime().isBefore(timing.sessionStart())) {
+                        continue;
+                    }
+                    return candidate;
+                }
+            }
+        } catch (Exception calendarException) {
+            log.warn("expectedQuoteSessionDate", "Calendar lookup failed exchange={} date={}; rejecting dated close lookup", exchange, today);
+            return null;
+        }
+        log.warn("expectedQuoteSessionDate", "No open session found exchange={} around date={}", exchange, today);
+        return null;
+    }
+
+    private static Double readPositiveNumber(Object value) {
+        if (value instanceof Number number && Double.isFinite(number.doubleValue()) && number.doubleValue() > 0.0) {
+            return number.doubleValue();
+        }
+        return null;
+    }
+
+    private static LocalDate readDate(Object value) {
+        try {
+            return value instanceof String text && !text.isBlank() ? LocalDate.parse(text) : null;
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private static long readLong(Object value) {
+        return value instanceof Number number ? number.longValue() : 0L;
+    }
+
+    private static boolean isRecent(long updatedAtMillis, long maxAgeMinutes) {
+        if (updatedAtMillis <= 0 || maxAgeMinutes <= 0) return false;
+        return isRecentMillis(updatedAtMillis, TimeUnit.MINUTES.toMillis(maxAgeMinutes));
+    }
+
+    private static boolean isRecentMillis(long timestampMillis, long maxAgeMillis) {
+        if (timestampMillis <= 0 || maxAgeMillis <= 0) return false;
+        long ageMillis = System.currentTimeMillis() - timestampMillis;
+        return ageMillis >= 0 && ageMillis <= maxAgeMillis;
     }
 
     public void setPreviousClose(String symbol, double previousClose) {
@@ -138,10 +234,20 @@ public class MarketDataCacheService {
         if (normalizedSymbol == null) {
             return;
         }
+        String exchange = symbol.contains(":") ? symbol.substring(0, symbol.indexOf(':'))
+                : (symbol.contains("|") ? symbol.substring(0, symbol.indexOf('|')) : "NSE");
+        LocalDate quoteSessionDate = expectedQuoteSessionDate(exchange);
+        if (quoteSessionDate == null) {
+            log.warn("setPreviousClose", "Skipping previous-close cache write without a verified session date symbol={} exchange={}",
+                    symbol, exchange);
+            return;
+        }
         // 1. Cache to Redis
         try {
             String redisKey = "market:prev-close:" + normalizedSymbol;
             redisTemplate.opsForValue().set(redisKey, String.valueOf(previousClose), 26, TimeUnit.HOURS);
+            redisTemplate.opsForValue().set("market:prev-close-date:" + normalizedSymbol,
+                    quoteSessionDate.toString(), 26, TimeUnit.HOURS);
         } catch (Exception e) {
             log.warn("setPreviousClose", "Failed to set previous close in Redis for symbol: " + symbol, e);
         }
@@ -152,7 +258,7 @@ public class MarketDataCacheService {
                 PreviousCloseDocument doc = PreviousCloseDocument.builder()
                         .symbol(normalizedSymbol)
                         .previousClose(previousClose)
-                        .tradeDate(LocalDate.now(ZoneId.of("Asia/Kolkata")).toString())
+                        .tradeDate(quoteSessionDate.toString())
                         .updatedAt(Instant.now())
                         .build();
                 previousCloseRepository.save(doc);
@@ -440,7 +546,7 @@ public class MarketDataCacheService {
         List<Map.Entry<String, OHLCQuote>> entries = new ArrayList<>(result.entrySet());
         List<String> primaryKeys = new ArrayList<>(entries.size());
         List<String> fallbackKeys = new ArrayList<>(entries.size());
-        List<String> prevCloseKeys = new ArrayList<>(entries.size());
+        List<String> exchanges = new ArrayList<>(entries.size());
 
         for (Map.Entry<String, OHLCQuote> entry : entries) {
             String raw = entry.getKey();
@@ -458,45 +564,32 @@ public class MarketDataCacheService {
             }
             cleanSymbol = cleanSymbol.toUpperCase().trim();
             exchange = exchange.toUpperCase().trim();
+            exchanges.add(exchange);
 
             // Primary: market:latest-price:EXCHANGE:SYMBOL
             primaryKeys.add("market:latest-price:" + exchange + ":" + cleanSymbol);
             // Fallback: market:latest-price:SYMBOL (for backward compatibility)
             fallbackKeys.add("market:latest-price:" + cleanSymbol);
-            // Previous Close: market:prev-close:SYMBOL
-            prevCloseKeys.add("market:prev-close:" + cleanSymbol);
         }
 
         try {
-            // SINGLE BATCH REDIS MGET: Combine primaryKeys, prevCloseKeys, and fallbackKeys into 1 single bulk multiGet call.
-            // This drops 3 sequential Redis network roundtrips down to 1 single TCP roundtrip.
-            List<String> combinedKeys = new ArrayList<>(primaryKeys.size() * 3);
+            // Fetch qualified and legacy quote snapshots in one batch. The legacy scalar
+            // previous-close key is excluded because it has no date and can be stale.
+            List<String> combinedKeys = new ArrayList<>(primaryKeys.size() * 2);
             combinedKeys.addAll(primaryKeys);
-            combinedKeys.addAll(prevCloseKeys);
             combinedKeys.addAll(fallbackKeys);
 
             List<String> allValues = redisTemplate.opsForValue().multiGet(combinedKeys);
             
             int n = entries.size();
             List<String> jsonList = (allValues != null && allValues.size() >= n) ? allValues.subList(0, n) : null;
-            List<String> prevCloseValues = (allValues != null && allValues.size() >= 2 * n) ? allValues.subList(n, 2 * n) : null;
-            List<String> fallbackJsonList = (allValues != null && allValues.size() >= 3 * n) ? allValues.subList(2 * n, 3 * n) : null;
-            if (jsonList != null || fallbackJsonList != null || prevCloseValues != null) {
+            List<String> fallbackJsonList = (allValues != null && allValues.size() >= 2 * n) ? allValues.subList(n, 2 * n) : null;
+            if (jsonList != null || fallbackJsonList != null) {
                 for (int i = 0; i < entries.size(); i++) {
                     OHLCQuote quote = entries.get(i).getValue();
                     if (quote == null) continue;
 
-                    // 1. First populate previousClose from market:prev-close key if available
-                    if (prevCloseValues != null && i < prevCloseValues.size() && prevCloseValues.get(i) != null) {
-                        try {
-                            double pc = Double.parseDouble(prevCloseValues.get(i));
-                            if (pc > 0) {
-                                quote.setPreviousClose(pc);
-                            }
-                        } catch (Exception ignore) {}
-                    }
-
-                    // 2. Populate lastPrice and previousClose from latest-price JSON
+                    // Populate only a quote snapshot that belongs to the expected session.
                     String json = (jsonList != null && i < jsonList.size()) ? jsonList.get(i) : null;
                     if (json == null && fallbackJsonList != null && i < fallbackJsonList.size()) {
                         json = fallbackJsonList.get(i);
@@ -507,9 +600,85 @@ public class MarketDataCacheService {
                             Map<String, Object> latestData = objectMapper.readValue(json, Map.class);
                             double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
                             double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
+                            LocalDate quoteDate = readDate(latestData.get("quoteTradeDate"));
+                            long updatedAt = readLong(latestData.get("updatedAt"));
+                            LocalDate expectedDate = expectedQuoteSessionDate(exchanges.get(i));
+                            boolean sessionMatches = quoteDate != null && quoteDate.equals(expectedDate);
+                            boolean isMarketOpen = isLiveTickOverlayAllowed();
+                            boolean recentUndatedSnapshot = quoteDate == null && (!isMarketOpen || isRecent(updatedAt, marketQuoteMaxAgeMinutes));
+                            if (!sessionMatches && !recentUndatedSnapshot) {
+                                log.info("overlayLatestPrices", "Ignoring stale quote snapshot symbol={} quoteDate={} expectedDate={}",
+                                        entries.get(i).getKey(), quoteDate, expectedDate);
+                                continue;
+                            }
 
-                            if (prevClose > 0 && quote.getPreviousClose() == 0.0) {
+                            // The latest-price record is written from the same quote
+                            // snapshot and is newer than the legacy scalar prev-close key.
+                            if (prevClose > 0 && Double.isFinite(prevClose)) {
                                 quote.setPreviousClose(prevClose);
+                            }
+                            Object change = latestData.get("change");
+                            if (change instanceof Number number && Double.isFinite(number.doubleValue())) {
+                                quote.setChange(number.doubleValue());
+                            }
+                            Object changePercent = latestData.get("changePercent");
+                            if (changePercent instanceof Number number && Double.isFinite(number.doubleValue())) {
+                                quote.setChangePercent(number.doubleValue());
+                            }
+                            Object volume = latestData.get("volume");
+                            if (volume instanceof Number number && number.longValue() >= 0) {
+                                quote.setVolume(number.longValue());
+                            }
+                            Object oi = latestData.get("oi");
+                            if (oi instanceof Number number && number.longValue() >= 0) {
+                                quote.setOi(number.longValue());
+                            }
+                            Object oiDayHigh = latestData.get("oiDayHigh");
+                            if (oiDayHigh instanceof Number number && number.longValue() >= 0) {
+                                quote.setOiDayHigh(number.longValue());
+                            }
+                            Object oiDayLow = latestData.get("oiDayLow");
+                            if (oiDayLow instanceof Number number && number.longValue() >= 0) {
+                                quote.setOiDayLow(number.longValue());
+                            }
+                            Object averagePrice = latestData.get("averagePrice");
+                            if (averagePrice instanceof Number number && Double.isFinite(number.doubleValue())) {
+                                quote.setAveragePrice(number.doubleValue());
+                            }
+                            Object totalBuyQuantity = latestData.get("totalBuyQuantity");
+                            if (totalBuyQuantity instanceof Number number && Double.isFinite(number.doubleValue())) {
+                                quote.setTotalBuyQuantity(number.doubleValue());
+                            }
+                            Object totalSellQuantity = latestData.get("totalSellQuantity");
+                            if (totalSellQuantity instanceof Number number && Double.isFinite(number.doubleValue())) {
+                                quote.setTotalSellQuantity(number.doubleValue());
+                            }
+                            Object lowerCircuitLimit = latestData.get("lowerCircuitLimit");
+                            if (lowerCircuitLimit instanceof Number number && Double.isFinite(number.doubleValue())) {
+                                quote.setLowerCircuitLimit(number.doubleValue());
+                            }
+                            Object upperCircuitLimit = latestData.get("upperCircuitLimit");
+                            if (upperCircuitLimit instanceof Number number && Double.isFinite(number.doubleValue())) {
+                                quote.setUpperCircuitLimit(number.doubleValue());
+                            }
+                            Object depth = latestData.get("marketDepth");
+                            Instant quoteInstant = null;
+                            Object quoteTimestamp = latestData.get("quoteTimestamp");
+                            if (quoteTimestamp instanceof String timestamp && !timestamp.isBlank()) {
+                                try { quoteInstant = Instant.parse(timestamp); } catch (RuntimeException ignored) { }
+                            }
+                            if (depth instanceof Map<?, ?>) {
+                                quote.setMarketDepth(objectMapper.convertValue(depth,
+                                        com.am.marketdata.common.model.QuoteDepth.class));
+                            }
+                            if (quoteInstant != null) {
+                                quote.setQuoteTimestamp(quoteInstant);
+                            }
+                            if (quoteDate != null) {
+                                quote.setQuoteTradeDate(quoteDate);
+                            }
+                            if (quote.getMarketDepth() != null && !isFreshMarketDepth(quote, entries.get(i).getKey())) {
+                                quote.setMarketDepth(null);
                             }
                             if (latestPrice > 0) {
                                 if (overlayLiveLastPrice || quote.getLastPrice() == 0.0) {
@@ -542,7 +711,7 @@ public class MarketDataCacheService {
             log.warn("overlayLatestPrices", "Batch overlay failed for {} symbols: {}", primaryKeys.size(), ex.getMessage(), ex);
         }
 
-        // FALLBACK: Query MongoDB for any symbols where previousClose is still 0.0
+        // Mongo snapshots are useful only when they match the expected quote session.
         if (previousCloseRepository != null) {
             List<String> missingSymbols = new ArrayList<>();
             for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
@@ -558,17 +727,22 @@ public class MarketDataCacheService {
                 try {
                     List<PreviousCloseDocument> mongoDocs = previousCloseRepository.findBySymbolIn(missingSymbols);
                     if (mongoDocs != null && !mongoDocs.isEmpty()) {
-                        Map<String, Double> dbCloseMap = mongoDocs.stream()
+                        Map<String, PreviousCloseDocument> dbCloseMap = mongoDocs.stream()
                                 .filter(d -> d.getPreviousClose() != null && d.getPreviousClose() > 0)
-                                .collect(Collectors.toMap(PreviousCloseDocument::getSymbol, PreviousCloseDocument::getPreviousClose, (v1, v2) -> v1));
+                                .collect(Collectors.toMap(PreviousCloseDocument::getSymbol, d -> d, (v1, v2) -> v1));
 
                         for (Map.Entry<String, OHLCQuote> entry : result.entrySet()) {
                             OHLCQuote quote = entry.getValue();
                             if (quote != null && quote.getPreviousClose() == 0.0) {
                                 String norm = normalizeSymbol(entry.getKey());
-                                Double dbClose = dbCloseMap.get(norm);
-                                if (dbClose != null && dbClose > 0) {
-                                    quote.setPreviousClose(dbClose);
+                                PreviousCloseDocument document = dbCloseMap.get(norm);
+                                String rawSymbol = entry.getKey();
+                                String exchange = rawSymbol.contains(":") ? rawSymbol.substring(0, rawSymbol.indexOf(':'))
+                                        : (rawSymbol.contains("|") ? rawSymbol.substring(0, rawSymbol.indexOf('|')) : "NSE");
+                                LocalDate expectedDate = expectedQuoteSessionDate(exchange);
+                                if (document != null && expectedDate != null
+                                        && expectedDate.toString().equals(document.getTradeDate())) {
+                                    quote.setPreviousClose(document.getPreviousClose());
                                 }
                             }
                         }
@@ -1011,10 +1185,11 @@ public class MarketDataCacheService {
             if (!forceRefresh) {
                 Map<String, OHLCQuote> cachedData = getOHLCFromCache(symbolList, timeFrame);
                 if (!cachedData.isEmpty()) {
+                    // The bar cache holds historical OHLC only. Overlay the latest Redis quote
+                    // snapshot so fresh price details and order-book depth reach API consumers.
+                    overlayLatestPrices(cachedData);
                     log.info("getQuotes", String.format("Retrieved quotes from cache for %d symbols with timeFrame: %s",
                             cachedData.size(), timeFrame.getApiValue()));
-
-                    // Format the response
                     Map<String, Object> response = new HashMap<>();
                     response.put("quotes", cachedData);
                     response.put("source", "cache");
@@ -1022,15 +1197,12 @@ public class MarketDataCacheService {
                 }
             }
 
-            // If we get here, we need to fetch from the provider
             log.info("getQuotes", String.format("Fetching quotes from provider for %d symbols with timeFrame: %s",
                     symbols.size(), timeFrame.getApiValue()));
-
-            // Call the MarketDataService to get quotes from provider
             MarketDataService marketDataService = ApplicationContextProvider.getBean(MarketDataService.class);
             Map<String, OHLCQuote> providerData = marketDataService.getOHLC(symbolList, timeFrame, true, null);
 
-            if (providerData.isEmpty()) {
+            if (providerData == null || providerData.isEmpty()) {
                 log.warn("getQuotes",
                         "No quotes data returned from provider for timeFrame: " + timeFrame.getApiValue());
                 Map<String, Object> errorResponse = new HashMap<>();
@@ -1040,10 +1212,8 @@ public class MarketDataCacheService {
                 return errorResponse;
             }
 
-            // Cache the data for future use
             cacheOHLCData(providerData, timeFrame);
 
-            // Format the response
             Map<String, Object> response = new HashMap<>();
             response.put("quotes", providerData);
             response.put("source", "provider");
@@ -1061,6 +1231,19 @@ public class MarketDataCacheService {
                     "message", e.getMessage()));
             return errorResponse;
         }
+    }
+
+    private boolean isFreshMarketDepth(OHLCQuote quote, String symbol) {
+        if (quote == null || quote.getMarketDepth() == null || quote.getQuoteTimestamp() == null
+                || marketDepthMaxAgeSeconds <= 0) return false;
+        // Market closure alone does not make a recent exchange snapshot stale.
+        // The timestamp check prevents an old order book from being shown as current.
+        long maxAgeMillis = TimeUnit.SECONDS.toMillis(marketDepthMaxAgeSeconds);
+        boolean fresh = MarketDepthFreshness.isFresh(quote.getQuoteTimestamp(), maxAgeMillis);
+        if (!fresh) {
+            log.debug("getQuotes", "Omitted market depth because its quote timestamp is stale symbol={}", symbol);
+        }
+        return fresh;
     }
 
     public void setActiveProvider(String providerName) {
@@ -1084,6 +1267,7 @@ public class MarketDataCacheService {
             // Step 1: Pre-normalize all symbols and build lookup keys to check Redis
             List<String> normalizedSymbols = new ArrayList<>();
             List<String> redisPrevCloseKeys = new ArrayList<>();
+            List<String> redisPrevCloseDateKeys = new ArrayList<>();
             Map<String, String> normalizedToRaw = new HashMap<>();
 
             for (String rawSymbol : quotes.keySet()) {
@@ -1097,23 +1281,33 @@ public class MarketDataCacheService {
                 symbol = symbol.toUpperCase().trim();
                 normalizedSymbols.add(symbol);
                 redisPrevCloseKeys.add("market:prev-close:" + symbol);
+                redisPrevCloseDateKeys.add("market:prev-close-date:" + symbol);
                 normalizedToRaw.put(symbol, rawSymbol);
             }
 
             // Step 2: Bulk multiGet to check which prev-close keys are already in Redis
-            List<String> existingPrevCloses = Collections.emptyList();
+            List<String> existingCloseMetadata = Collections.emptyList();
+            List<String> closeLookupKeys = new ArrayList<>(redisPrevCloseKeys.size() * 2);
+            closeLookupKeys.addAll(redisPrevCloseKeys);
+            closeLookupKeys.addAll(redisPrevCloseDateKeys);
             try {
-                existingPrevCloses = redisTemplate.opsForValue().multiGet(redisPrevCloseKeys);
+                existingCloseMetadata = redisTemplate.opsForValue().multiGet(closeLookupKeys);
             } catch (Exception redisCheckEx) {
-                log.warn("cacheLatestPrices", "Failed to check existing previous closes in Redis, defaulting to write everything", redisCheckEx);
+                log.warn("cacheLatestPrices", "Failed to check previous-close cache metadata, refreshing dated values", redisCheckEx);
             }
 
             // Map each symbol to whether it already has a previous close cached
-            Map<String, Boolean> isCachedMap = new HashMap<>();
+            Map<String, String> existingPrevCloseBySymbol = new HashMap<>();
+            Map<String, String> existingPrevCloseDateBySymbol = new HashMap<>();
             for (int i = 0; i < normalizedSymbols.size(); i++) {
                 String symbol = normalizedSymbols.get(i);
-                boolean exists = existingPrevCloses != null && i < existingPrevCloses.size() && existingPrevCloses.get(i) != null;
-                isCachedMap.put(symbol, exists);
+                String existingValue = existingCloseMetadata != null && i < existingCloseMetadata.size()
+                        ? existingCloseMetadata.get(i) : null;
+                existingPrevCloseBySymbol.put(symbol, existingValue);
+                int dateIndex = normalizedSymbols.size() + i;
+                String existingDate = existingCloseMetadata != null && dateIndex < existingCloseMetadata.size()
+                        ? existingCloseMetadata.get(dateIndex) : null;
+                existingPrevCloseDateBySymbol.put(symbol, existingDate);
             }
 
             // Step 3: Accumulate Redis pipeline commands and MongoDB documents
@@ -1133,26 +1327,43 @@ public class MarketDataCacheService {
                 double high = quote.getOhlc() != null ? quote.getOhlc().getHigh() : 0.0;
                 double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
                 double previousClose = quote.getPreviousClose();
+                LocalDate quoteTradeDate = quote.getQuoteTradeDate();
+                if (quoteTradeDate == null && quote.getQuoteTimestamp() != null) {
+                    quoteTradeDate = quote.getQuoteTimestamp().atZone(ZoneId.of("Asia/Kolkata")).toLocalDate();
+                }
+                if (quoteTradeDate == null && isLiveTickOverlayAllowed()) {
+                    quoteTradeDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+                }
 
-                // If previous close is not cached in Redis, we write it to both Redis and MongoDB (cold start)
-                if (previousClose > 0.0 && !isCachedMap.getOrDefault(symbol, false)) {
-                    // Cache key: market:prev-close:SYMBOL
+                // Refresh a changed previous close. The old scalar key has no date, so
+                // leaving yesterday's value in place can override a newer quote snapshot.
+                String existingPrevClose = existingPrevCloseBySymbol.get(symbol);
+                boolean previousCloseChanged = existingPrevClose == null;
+                if (existingPrevClose != null) {
+                    try {
+                        previousCloseChanged = Math.abs(Double.parseDouble(existingPrevClose) - previousClose) >= 0.005;
+                    } catch (NumberFormatException ignored) {
+                        previousCloseChanged = true;
+                    }
+                }
+                boolean previousCloseSessionChanged = quoteTradeDate != null
+                        && !quoteTradeDate.toString().equals(existingPrevCloseDateBySymbol.get(symbol));
+                if (previousClose > 0.0 && (previousCloseChanged || previousCloseSessionChanged)) {
                     prevCloseRedisWrites.put("market:prev-close:" + symbol, String.valueOf(previousClose));
-                    
-                    // MongoDB document mapping
-                    if (previousCloseRepository != null) {
+                    if (quoteTradeDate != null) {
+                        prevCloseRedisWrites.put("market:prev-close-date:" + symbol, quoteTradeDate.toString());
+                    }
+
+                    if (previousCloseRepository != null && quoteTradeDate != null) {
                         PreviousCloseDocument doc = PreviousCloseDocument.builder()
                                 .symbol(symbol)
                                 .previousClose(previousClose)
-                                .tradeDate(LocalDate.now(ZoneId.of("Asia/Kolkata")).toString())
+                                .tradeDate(quoteTradeDate.toString())
                                 .updatedAt(Instant.now())
                                 .build();
                         mongoPrevCloseDocs.add(doc);
                     }
                 }
-
-                double change = lastPrice - previousClose;
-                double changePercent = previousClose != 0 ? (change / previousClose) * 100.0 : 0.0;
 
                 Map<String, Object> cacheData = new HashMap<>();
                 cacheData.put("symbol", symbol);
@@ -1160,11 +1371,30 @@ public class MarketDataCacheService {
                 cacheData.put("open", open);
                 cacheData.put("high", high);
                 cacheData.put("low", low);
-                cacheData.put("previousClose", previousClose);
-                cacheData.put("change", change);
-                cacheData.put("changePercent", changePercent);
+                if (Double.isFinite(previousClose) && previousClose > 0.0) {
+                    double change = lastPrice - previousClose;
+                    cacheData.put("previousClose", previousClose);
+                    cacheData.put("change", change);
+                    cacheData.put("changePercent", change / previousClose * 100.0);
+                }
                 cacheData.put("updatedAt", System.currentTimeMillis());
                 cacheData.put("source", "UPSTOX_WS");
+                if (quote.getQuoteTimestamp() != null) {
+                    cacheData.put("quoteTimestamp", quote.getQuoteTimestamp().toString());
+                }
+                if (quoteTradeDate != null) {
+                    cacheData.put("quoteTradeDate", quoteTradeDate.toString());
+                }
+                if (quote.getVolume() != null) cacheData.put("volume", quote.getVolume());
+                if (quote.getOi() != null) cacheData.put("oi", quote.getOi());
+                if (quote.getOiDayHigh() != null) cacheData.put("oiDayHigh", quote.getOiDayHigh());
+                if (quote.getOiDayLow() != null) cacheData.put("oiDayLow", quote.getOiDayLow());
+                if (quote.getAveragePrice() != null) cacheData.put("averagePrice", quote.getAveragePrice());
+                if (quote.getTotalBuyQuantity() != null) cacheData.put("totalBuyQuantity", quote.getTotalBuyQuantity());
+                if (quote.getTotalSellQuantity() != null) cacheData.put("totalSellQuantity", quote.getTotalSellQuantity());
+                if (quote.getLowerCircuitLimit() != null) cacheData.put("lowerCircuitLimit", quote.getLowerCircuitLimit());
+                if (quote.getUpperCircuitLimit() != null) cacheData.put("upperCircuitLimit", quote.getUpperCircuitLimit());
+                if (quote.getMarketDepth() != null) cacheData.put("marketDepth", quote.getMarketDepth());
 
                 String json = objectMapper.writeValueAsString(cacheData);
                 // 1. Write standard plain key for backward compatibility
@@ -1193,7 +1423,7 @@ public class MarketDataCacheService {
                 });
             }
 
-            // Step 5: Execute bulk Redis pipelined write for new previous closes (26 hours TTL)
+            // Step 5: Save previous close and its session date together for safe reads.
             if (!prevCloseRedisWrites.isEmpty()) {
                 redisTemplate.executePipelined((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
                     for (Map.Entry<String, String> e : prevCloseRedisWrites.entrySet()) {
@@ -1247,19 +1477,42 @@ public class MarketDataCacheService {
 
         Map<String, OHLCQuote> result = new HashMap<>();
         try {
-            for (String symbol : symbols) {
-                String cleanSymbol = symbol;
-                if (cleanSymbol.contains("|")) {
-                    cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf("|") + 1);
+            List<String> requestedSymbols = new ArrayList<>(symbols);
+            // Use MGET in bounded chunks. A NIFTY 500 request must not make 500
+            // sequential Redis round trips or build an unbounded command payload.
+            for (int start = 0; start < requestedSymbols.size(); start += 500) {
+                List<String> chunk = requestedSymbols.subList(start, Math.min(start + 500, requestedSymbols.size()));
+                List<String> primaryKeys = new ArrayList<>(chunk.size());
+                List<String> fallbackKeys = new ArrayList<>(chunk.size());
+                for (String symbol : chunk) {
+                    String raw = symbol == null ? "" : symbol.trim().toUpperCase();
+                    String exchange = "NSE";
+                    if (raw.contains("|")) {
+                        String[] parts = raw.split("\\|", 2);
+                        exchange = parts[0];
+                        raw = parts[1];
+                    } else if (raw.contains(":")) {
+                        String[] parts = raw.split(":", 2);
+                        exchange = parts[0];
+                        raw = parts[1];
+                    }
+                    String cleanSymbol = raw.trim().toUpperCase();
+                    primaryKeys.add("market:latest-price:" + exchange.trim().toUpperCase() + ":" + cleanSymbol);
+                    fallbackKeys.add("market:latest-price:" + cleanSymbol);
                 }
-                if (cleanSymbol.contains(":")) {
-                    cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf(":") + 1);
-                }
-                cleanSymbol = cleanSymbol.toUpperCase().trim();
+                List<String> keys = new ArrayList<>(chunk.size() * 2);
+                keys.addAll(primaryKeys);
+                keys.addAll(fallbackKeys);
+                List<String> values = redisTemplate.opsForValue().multiGet(keys);
 
-                String key = "market:latest-price:" + cleanSymbol;
-                String json = redisTemplate.opsForValue().get(key);
-                if (json != null) {
+                for (int index = 0; index < chunk.size(); index++) {
+                    String symbol = chunk.get(index);
+                    String cleanSymbol = canonicalTicker(symbol);
+                    String json = values != null && index < values.size() ? values.get(index) : null;
+                    if (json == null && values != null && index + chunk.size() < values.size()) {
+                        json = values.get(index + chunk.size());
+                    }
+                    if (json != null) {
                     Map<String, Object> map = objectMapper.readValue(json, Map.class);
 
                     // Only ignore Redis prices as stale during active market hours.
@@ -1289,13 +1542,29 @@ public class MarketDataCacheService {
                     quote.setOhlc(ohlc);
                     quote.setPreviousClose(previousClose);
 
-                    result.put(symbol, quote);
+                    if (Double.isFinite(lastPrice) && lastPrice > 0.0) {
+                        result.put(symbol, quote);
+                    } else {
+                        log.warn("getLatestPrices", "Ignoring non-positive cached last price for {}", cleanSymbol);
+                    }
                 }
+            }
             }
         } catch (Exception e) {
             log.error("getLatestPrices", "Error fetching latest prices from Redis", e);
         }
         return result;
+    }
+
+    private String canonicalTicker(String symbol) {
+        String cleanSymbol = symbol == null ? "" : symbol.trim().toUpperCase();
+        if (cleanSymbol.contains("|")) {
+            cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf("|") + 1);
+        }
+        if (cleanSymbol.contains(":")) {
+            cleanSymbol = cleanSymbol.substring(cleanSymbol.indexOf(":") + 1);
+        }
+        return cleanSymbol.trim();
     }
 
     /**

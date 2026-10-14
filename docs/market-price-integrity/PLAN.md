@@ -1,196 +1,180 @@
-# Market price, index performance, and Top Movers fix
+# Market Price Integrity, Index Performance, and Top Movers Fix
 
-## Goal
+> **Document Status:** Aggregated & Active  
+> **Target Branch:** `fix/market-price-integrity`  
+> **Latest Deployed Image Tag:** `38220022089` (Live on Dev: `am-dev-apps`)  
+> **Current Phase:** Phase 1 (Backend Integrity & Review) Complete; Phase 2 (Data Seeding & Verification) In Progress.
 
-Make the Market UI show one accurate value for each selected timeframe. The top index cards, chart, and Top Movers must use the same Market Data result and must remain responsive after market close.
+---
 
-Scope: `am-market/am-market-data` and the Market UI packages only. Portfolio, Trade, Dashboard outside the Market UI, and Analysis are read-only consumers; they are not changed in this work.
+## 1. Executive Summary & Goals
 
-## Current problem seen by users
+### 1.1 Goal
+Ensure the Market UI displays **one single, authoritative, accurate price and return calculation** for every selected timeframe across all widgets (top index cards, charts, heatmaps, and Top Movers).
+- Eliminate duplicate calculations between client and server.
+- Prevent `0.00%` and `-100%` corrupted placeholders when markets are closed or when quotes are cold.
+- Ensure Top Movers and Heatmap gracefully handle incomplete data without crashing or degrading into slow per-member network calls.
 
-- A Watchlist stock can show a real price but `0.00` day change and `0.00%` when the market is closed.
-- Top Movers can be empty even when index constituents have moved.
-- When a user chooses `1M`, `3M`, or another non-daily timeframe, the chart can finish first while the top cards still say `Loading…`.
-- On the same screen and timeframe, the chart, top card, and broker can show different percentage returns for the same index. For example, the supplied NIFTY 50 screenshot showed `-5.14%` in the chart while the broker showed `-4.64%` for its `1M` view.
-- The problem occurs across multiple indices, so it is a shared calculation/data-flow issue rather than one bad NIFTY 50 record.
+### 1.2 Retained Architecture Principles
+- **Backend Single Source of Truth:** `am-market-data` calculates performance; Market UI renders it without recalculating.
+- **Strict Backward Compatibility:** Public contracts (`/v1/analysis/movers`, `/v1/analysis/heatmap`, `/v1/indices/batch`, `/v1/analysis/historical-charts`) keep exact JSON keys, array structures, and query parameters.
+- **Fail-Safe Integrity:** When fewer than required members have valid prices (e.g. `<45` out of 50 for NIFTY 50), Movers safely returns `{"gainers":[],"losers":[]}` rather than publishing corrupt or partial rankings.
+- **Production Safety:** All live cluster mutations require explicit review; secrets, tokens, and credentials remain in Vault and are never hardcoded or printed to logs.
 
-## Evidence that leads to this solution
+---
 
-The solution is based on source-code tracing and the observed UI/API behavior, not on an assumption that either the UI or backend is solely at fault.
+## 2. Root Cause & Verified Architecture Findings
 
-1. The chart calls `/v1/analysis/historical-charts` and draws the returned candle series.
-2. The top cards call `/v1/indices/batch` for a latest value, then make a second historical request and calculate their own return in the UI.
-3. The timeframe handler starts chart loading, movers loading, full-card base-price loading, and pinned-card base-price loading around the same time. A background preloader can request further base prices later.
-4. The UI keeps more than one cache for timeframe base prices, so requests can finish in a different order and update different state.
-5. The backend separately obtains gainers and losers, repeating the same constituent-price enrichment work.
-6. Production investigation already showed broken previous-close handling, invalid provider keys, and an unavailable Influx fallback.
-
-Therefore the solution is to make Market Data the single calculator of index performance, then have the Market UI render that one result instead of calculating an independent card percentage.
-
-## What is verified
-
-| Verified fact | Source |
-|---|---|
-| Watchlist can request `NSE:NSE:IDEA`, which returns no live LTP. | `MarketDataService.java` and production read-only evidence |
-| Current price can be used as previous close, producing `0.00` change. | Cache/scheduler flow and production quote evidence |
-| Top Movers fetches the same enriched stock data twice: once for gainers and once for losers. | `MarketAnalyticsService.java` `getMoversUnified` |
-| Top Movers sends plain tickers to an Upstox operation needing instrument keys; Influx fallback returns 401. | Production read-only logs/API result |
-| Timeframe change starts several requests: chart history, movers, full index-card base history, pinned-card base history, then background preloads. | `user_dashboard_page.dart`, `market_provider.dart` |
-| Cards calculate their own return from `lastPrice` and a separate historical base price. | `index_card.dart` |
-| The chart uses `/v1/analysis/historical-charts`, while cards use `/v1/indices/batch` plus `/v1/market-data/historical-data`. | `api_service.dart` and `MarketAnalyticsService.java` |
-
-## Root cause
-
-The same percentage is calculated in different places from different inputs:
-
-```text
-Chart:      historical chart API → chart candles → chart percentage
-Top card:   latest-index API + separate historical request → UI percentage
-Top Movers: market analytics API → constituent prices → mover percentage
+### 2.1 The Multi-Calculation Discrepancy
+Previously, the same percentage return was calculated independently by three separate subsystems from different, out-of-sync data sources:
 ```
+Chart:      GET /v1/analysis/historical-charts → Historical candles → Chart calculates return
+Top Cards:  GET /v1/indices/batch + /v1/market-data/historical-data → UI calculates return
+Top Movers: GET /v1/analysis/movers → Scrapes/Redis quotes → Analytics calculates return
+```
+- **Timeframe Mismatches:** On a `1M` selection, the chart could show `-5.14%` while the top card showed `-4.64%` because the chart used session candle endpoints while the card calculated against an unaligned historical close.
+- **Cold-Cache Movers Failure:** Top Movers attempted serial Upstox historical provider calls when cache missed, leading to 25+ second requests or 30-second ingress timeouts.
+- **Previous-Close Corruption:** Closed-market quotes previously overwrote yesterday's close with today's LTP, producing artificial `0.00` changes and `0.00%` returns after market close.
 
-The UI’s separate card requests explain the slow `Loading…` state and duplicate network work. The backend’s incorrect previous close explains zero after-market daily change. A mismatch such as `-5.14%` versus a broker value cannot be assigned to one side until the exact timeframe definition, candles, and as-of time are compared; the current design makes such mismatches likely because it has more than one calculation path.
+### 2.2 Ingestion & Environment Divergence (Dev vs. Prod)
+Investigation of cluster topology and Helm values revealed why Dev returned empty movers while Prod worked:
 
-## Required decision before implementation
+| Environment | Helm Config | Ingestion Worker | Redis / Mongo Data | Movers Behavior |
+| :--- | :--- | :--- | :--- | :--- |
+| **Prod** (`am-apps-prod`) | `values.prod.yaml`: `scheduler.ingestion.enabled=true` | Streams live Upstox WebSocket (09:15–15:30 IST) | Fully populated (50/50 NIFTY 50 quotes present) | **Returns full Top Movers** (TRENT +11.31%, HDFCLIFE +6.80%, etc.) |
+| **Dev** (`am-apps-dev`) | `values.dev.yaml`: `scheduler.ingestion.enabled=false` | Disabled to protect vendor quotas | Empty (0 cached quotes) | **Returns `{"gainers":[],"losers":[]}`** safely (`validPrices=0 < 45`) |
 
-`1M` must have one written meaning. It cannot be inferred from a screenshot.
+---
 
-Before implementation, record for the broker comparison:
+## 3. Implemented Components (PR #64 & Follow-ups)
 
-- as-of timestamp and timezone: **Current System Time (IST)**
-- whether `1M` means rolling one calendar month, last 30 calendar days, or current calendar month: **Rolling one calendar month (e.g. if today is Oct 7, start date is Sept 7).**
-- exact start trading session and closing value: **Close of the trading session from exactly 1 month ago. If that date falls on a holiday/weekend, the nearest preceding trading session's close is used.**
-- exact end session/value: **Current LTP (if market is open) or last completed close (if market is closed).**
-- treatment of holidays and a still-open market: **If the 1M start date is a holiday, fallback to the latest completed trading session BEFORE that date. If the market is still open, the end price is the real-time live LTP.**
+The following core modules were implemented, reviewed, tested, and pushed to `fix/market-price-integrity`:
 
-Market Data will implement the approved definition once and expose it to all Market UI surfaces.
+### 3.1 `SmartStockService` — Coalesced Quote Recovery & Baseline Integrity
+- **Multi-Key Atomic Redis Leases:** Replaced single-lock bottlenecks with atomic Lua scripts (`ACQUIRE_REFRESH_LOCKS` and `RELEASE_REFRESH_LOCKS`). Claimed leases per-instrument; overlapping cross-pod requests now recover disjoint remainder sets without duplicate provider calls.
+- **Identity-Based Upstox Key Resolution:** Built provider keys from verified ticker and ISIN (`NSE_EQ|<ISIN>`) rather than sending bare tickers into Upstox, resolving the `UDAPI1021` provider rejection.
+- **Date-Aware Previous Close:** Accepted verified session baselines even when the stock is flat/unchanged (`Double.compare(prevClose, lastPrice) == 0`). Decoupled previous close from assumptions about today's candle.
 
-## Target design
+### 3.2 `AnalysisService` — Heatmap Quality & Bounded Execution
+- **Pre-Cache Roster Validation:** Evaluated roster size against `minimumMembershipSize(symbol)` before caching.
+- **85% Coverage Threshold:** Tolerates missing candles (e.g. suspended stocks) only if at least 85% and `>= minimumRequired` constituents are valid. Incomplete or degenerate all-zero heatmaps are never persisted to Redis.
+- **Preserved Prior Cache:** On temporary source gaps or partial refreshes, prior valid cache entries are retained rather than erased.
 
-### One authoritative calculation
+### 3.3 `StockIndicesService` & `MarketDataProcessingService` — Membership Reliability
+- **Standalone Benchmark Handling:** Explicitly exempted standalone indexes like `INDIA VIX` from constituent roster repair requirements.
+- **Duplicate Member Normalization:** Safely normalized duplicate ticker rows from scraper feeds while strictly rejecting conflicting ISINs/identities.
+- **Index Minimums Enforced:**
+  - `NIFTY 50` / `NIFTY 50 USD` / `NIFTY BANK`: `>= 45` / `>= 10`
+  - `NIFTY 100` / `NIFTY 200` / `NIFTY 500`: `>= 90` / `>= 180` / `>= 450`
 
-Market Data calculates, for every requested index and timeframe:
+### 3.4 `MarketDataAdminController` & Runtime Infrastructure
+- **Managed Background Execution:** Replaced unmanaged daemon `new Thread(...)` calls with Spring's managed `marketDataTaskExecutor` (`submitAdminTask`), providing graceful shutdown and queue backpressure.
+- **Local Runner Portability:** Updated `run_local.py` to auto-detect Maven wrappers and native Maven binaries across platforms with opt-in offline mode.
+- **InfluxDB URL Clarity:** Replaced brittle default expressions with explicit URL configuration and fail-fast validation.
 
-```text
+---
+
+## 4. Current Deployment & Verification State
+
+### 4.1 Build & Image Status
+- **GitHub Actions Run:** [Run #38220022089](https://github.com/AM-Portfolio/am-market/actions/runs/38220022089)
+- **Built Image Tag:** `ghcr.io/am-portfolio/am-market/am-market-data:38220022089`
+- **Build Status:** Succeeded (All 13 Maven modules, unit tests, secret scans, and container layers passed).
+
+### 4.2 Live Dev Cluster State (`am-dev-apps`)
+- **Pod:** `am-market-data-dev-5cdc6d59c7-sk2p8`
+- **Node:** `am-dev-apps-worker2` (`10.244.2.100`)
+- **Container Image:** `ghcr.io/am-portfolio/am-market/am-market-data:38220022089`
+- **Status:** **`1/1 Running`** (Restarts: 0)
+- **Health Check:** `HTTP 200 UP` (`https://am-dev.asrax.in/market/actuator/health`)
+
+---
+
+## 5. Standardized Timeframe Calculation Contract
+
+Before UI alignment, the approved `1M` and multi-timeframe rules are defined as follows:
+
+```
 base price     = close of the approved start trading session
 end price      = latest valid price during market hours, otherwise last completed close
 change         = end price - base price
 change percent = (change / base price) × 100
 ```
 
-It also returns the selected start/end session dates and the as-of time internally and in the new/additive performance response, so a wrong result can be traced.
+| Parameter | Canonical Rule |
+| :--- | :--- |
+| **Timezone** | `Asia/Kolkata` (IST) |
+| **`1D`** | End Price = Live LTP (or today's official close). Base = Yesterday's verified completed session close. |
+| **`1M`** | Rolling 1 calendar month (e.g. Oct 12 → Sept 12). If Sept 12 is a weekend/holiday, use the nearest *preceding* completed trading session. |
+| **`3M` / `6M` / `1Y` / `5Y`** | Rolling calendar duration backwards to nearest preceding trading session. |
+| **Unchanged Stock** | If `lastPrice == previousClose`, change is `0.00` and percentage is `0.00%` (valid flat trading day, not an error). |
 
-The existing historical chart response uses the same canonical start/end selection. The Market UI renders cards from the returned performance result and the chart from the matching candle set. It no longer calculates a second percentage itself.
+---
 
-### One request per purpose
+## 6. Execution Roadmap & Next Steps
 
-On a timeframe change:
+```mermaid
+flowchart TD
+    subgraph Phase 1: Core Backend Integrity [COMPLETED]
+        P1A["PR #64 Core Implementation"] --> P1B["Multi-key Redis Leases & Ticker/ISIN Recovery"]
+        P1B --> P1C["Unit & Regression Tests (100% Passed)"]
+        P1C --> P1D["CI Build & Tag 38220022089 Pushed"]
+        P1D --> P1E["Deployed Live to Dev Cluster"]
+    end
 
-1. One batch history/performance request for the six pinned indices. It supplies both chart data and card returns where symbols overlap.
-2. One movers request, only when the movers section is visible/required.
-3. Additional history only when the user opens All Indices, and only for symbols not already cached.
+    subgraph Phase 2: Data Seeding & Dev Ingestion [IN PROGRESS]
+        P2A["Verify Ingestion Difference (Dev vs Prod)"] --> P2B["Seed Dev Redis with NIFTY 50 Quotes"]
+        P2B --> P2C["Verify Dev Movers Endpoint Returns Live Ranks"]
+    end
 
-There is one shared cache keyed by `symbol + timeframe + exchange/session date`. A newer timeframe selection cancels or ignores older in-flight responses.
+    subgraph Phase 3: Contract & Latency Verification [PENDING]
+        P3A["Postman MCP Collection Run"] --> P3B["Full Tempo Trace Audit (7 Span Groups)"]
+        P3B --> P3C["Preprod Deployment Approval"]
+    end
 
-### Backward compatibility
+    subgraph Phase 4: UI Single Source Alignment [PLANNED]
+        P4A["Market UI Timeframe Coordinator"] --> P4B["Eliminate Duplicate Client-Side Return Calculations"]
+        P4B --> P4C["End-to-End Visual Verification"]
+    end
 
-- Existing URLs, existing fields, and existing response types stay valid.
-- Add performance metadata or an additive endpoint; do not rename or remove existing fields.
-- Existing clients continue to consume `/v1/indices/batch` and `/v1/analysis/historical-charts`.
-- Older cache records remain readable; new session metadata is optional.
-- Market Data accepts existing symbol forms such as `IDEA`, `NSE:IDEA`, and provider keys.
+    Phase 1 --> Phase 2
+    Phase 2 --> Phase 3
+    Phase 3 --> Phase 4
+```
 
-## Files expected to change
+### Action Items for Current & Next Phases
 
-### Market Data
+1. **Phase 2 (Dev Environment Quote Seeding):**
+   - Populate Dev Redis (`redis.asrax.in`) with current NIFTY 50 quote hashes and previous close keys (`market:latest-price:*`, `market:prev-close:*`).
+   - Run verification `curl` against `https://am-dev.asrax.in/market/v1/analysis/movers?type=all&limit=10&indexSymbol=NIFTY%2050` to confirm live gainers/losers populate.
 
-- `am-market-data/market-data-service/src/main/java/com/am/marketdata/service/MarketDataService.java` — idempotent symbol qualification and correct live/previous-close meaning.
-- `am-market-data/market-data-service/src/main/java/com/am/marketdata/service/MarketDataCacheService.java` — dated cache validation and legacy-record compatibility.
-- `am-market-data/market-data-scheduler/src/main/java/com/am/marketdata/scheduler/PreviousCloseScheduler.java` — previous completed-session close.
-- `am-market-data/market-data-provider/src/main/java/com/am/marketdata/provider/upstox/resolver/UpstoxSymbolResolver.java` — true Upstox instrument keys.
-- `am-market-data/market-data-provider/src/main/java/com/am/marketdata/provider/upstox/UpstoxMarketDataProvider.java` — provider requests by resolved key.
-- `am-market-data/market-data-analysis/src/main/java/com/am/marketdata/analysis/service/MarketAnalyticsService.java` — one enriched snapshot for both Top Movers sides; shared historical-performance calculation.
-- `am-market-data/market-data-analysis/src/main/java/com/am/marketdata/analysis/controller/AnalysisController.java` and the existing historical-response model — additive canonical performance data, if this is chosen after contract review.
-- `am-market-data/market-data-api/src/main/java/com/am/marketdata/api/controller/MarketIndexController.java` — preserve valid after-hours index values and expose an additive batch performance route only if controller ownership is preferred after discovery.
-- `am-market-data/market-data-provider/src/main/java/com/am/marketdata/provider/upstox/client/UpStockClient.java` — remove authorization-bearing log output.
-- `am-market-data/helm/vault-mappings.yaml` and its existing deployment mapping — repair Influx credentials without committing any secret.
+2. **Phase 3 (Preprod & Testing Gates):**
+   - Execute Postman collection tests against `/v1/analysis/movers` and `/v1/analysis/heatmap`.
+   - Audit Tempo distributed traces for cold vs warm runs to ensure zero synchronous historical loops.
 
-### Market UI only
+3. **Phase 4 (Market UI / Modern UI):**
+   - Update `user_dashboard_page.dart` and `market_provider.dart` to rely solely on the server's authoritative performance payload.
+   - Remove redundant client-side historical base-price calculations from `index_card.dart`.
 
-- `am_market/ui/lib/features/dashboard/presentation/pages/user_dashboard_page.dart` — replace overlapping timeframe loads with one coordinator.
-- `am_market/common/lib/providers/market_provider.dart` — keep one cache and one loading state for index timeframe data.
-- `am_market/ui/lib/features/market/widgets/index_card.dart` — render server-provided performance; do not independently calculate it.
-- `am_market/common/lib/services/api_service.dart` — one shared batch performance/history call and request de-duplication.
-- `am_market/common/lib/models/market_data.dart` — add optional parsing for additive performance metadata, preserving existing fields.
+4. **Phase 5 (Optional Quote Details & Depth - Future Additive Slice):**
+   - Extend `OHLCQuote` additively with optional order book depth (`price`, `quantity`, `orders`).
+   - Retain ephemeral depth in Redis only; do not write order books into historical InfluxDB or MongoDB.
 
-No Portfolio, Trade, non-Market Dashboard, or Analysis file changes are in scope.
+---
 
-## Edge cases and solution
+## 7. Acceptance & Verification Matrix
 
-| Case | Required behaviour |
-|---|---|
-| Weekend, holiday, or before market open | Use the latest completed exchange session, never the calendar previous day. |
-| After market close | Use the official completed-session close and its correct previous close; do not show fabricated zero. |
-| Market open | Use live price only when fresh; otherwise retain last completed close and mark data stale internally. |
-| User changes 1D → 1M → 1D quickly | Only the newest request may update the screen. |
-| Same symbol requested by chart and card | One network request and one cached result. |
-| Missing base candle/new listing | Show unavailable change, not `0.00%`. |
-| Invalid/partial provider response | Keep valid symbols, mark unavailable symbols clearly, and never cache placeholders as success. |
-| Index key resolves differently across services | Use one canonical identity before calling provider/cache. |
-| Index has incomplete/duplicate constituents | Retain last known-good membership; alert and refuse to rank an incomplete invalid set. |
-| Provider 401/429/timeout | Do not retry invalid-key/auth failures; use validated fallback only and record the dependency failure. |
-| Influx and provider disagree | Use documented source precedence and record disagreement; do not silently overwrite a fresher validated value. |
-| Split, bonus, or consolidation | Use provider official adjusted close or mark period return unavailable until reconciled. |
-| Global index | Use its own exchange calendar/timezone; do not apply NSE session rules blindly. |
-| Old cache / rolling deployment | New fields are optional and old/new pods read each other’s records. |
-
-## Implementation order
-
-1. Discovery: use Postman MCP in preprod to capture existing batch-index, historical-chart, historical-data, and movers contracts; inspect cache schema, exact Influx mapping, provider batch limits, and index-membership owner.
-2. Define and approve the `1M` calculation with broker evidence. Add fixture values for NIFTY 50 and NIFTY BANK.
-3. Fix Market Data identity, previous close, cache validation, index membership, Influx access, and Top Movers one-snapshot logic.
-4. Add canonical batch timeframe performance to Market Data without breaking existing responses.
-5. Replace Market UI duplicate loaders/caches with the one canonical response.
-6. Test preprod API responses through Postman MCP and verify cards, chart, and movers show the same numbers.
-7. Capture performance baseline and compare request count, server calls, latency, error rate, stale data rate, and empty-movers rate.
-8. Request separate approval before any production deployment or cache mutation.
-
-## Verification and acceptance criteria
-
-- For the approved `1M` definition, Market Data’s NIFTY 50 result matches the recorded broker fixture at the same as-of time, or the difference is explained by documented source/candle rules.
-- The top card and chart display the same start value, end value, and percentage for the same selected index/timeframe.
-- A timeframe change produces one shared history/performance load for a symbol, not duplicate full and pinned requests.
-- Top Movers makes one enrichment pass and returns valid gainers/losers when source data is available.
-- After market close, daily values are non-zero when current and previous close differ.
-- Existing API clients still deserialize current endpoint responses.
-- No double-prefixed symbol, invalid Upstox key, Influx 401, placeholder success, or secret-bearing log remains.
-- Tests cover the edge cases listed above, including rapid UI changes and mixed old/new cache records.
-
-## Precise expected behaviour after implementation
-
-| User action or condition | Expected behaviour |
-|---|---|
-| Open Market page on a trading day | Cards show the latest valid index value and daily change. The chart and selected card use the same as-of time. |
-| Open Market page after market close | Cards show the official completed-session close and the correct change from the prior completed session. They do not show `0.00%` unless the two official closes are actually equal. |
-| Select `1M` | The card and chart use the same approved start session, end session, base price, end price, and percentage. They display the same return. |
-| Select any other supported timeframe | The same one-source rule applies for `1D`, `1W`, `3M`, `6M`, `1Y`, and `5Y`. |
-| Switch timeframes quickly | Only the newest selection updates the page. Older slow responses are ignored. |
-| Chart/card symbol overlap | One shared history/performance request supplies both surfaces; the card does not wait for a duplicate request. |
-| Open All Indices | Only not-yet-cached indices are requested. Existing selected-timeframe data is reused. |
-| Provider or history source is unavailable | The affected value is shown as unavailable or last validated data according to freshness rules; it is never displayed as a fabricated zero. |
-| View Top Movers | Market Data fetches the constituent snapshot once, then derives both gainers and losers from it. |
-| Compare with a broker | Given the same approved timeframe definition and as-of time, the returned base/end values make any difference explainable and testable. |
-
-## Review of this plan
-
-### Rating before redesign: 5.8/10
-
-The previous plan covered live price and movers failures, but omitted the verified UI request duplication, duplicate caches, chart/card split calculation, canonical timeframe contract, race handling, and exact validation against broker data.
-
-### Rating after redesign: 8.8/10
-
-The plan now covers the confirmed causes, backward compatibility, latency, edge cases, file ownership, and verification. It is intentionally not rated higher because the business definition of `1M` and the exact broker comparison data have not been supplied or verified. Treating either as known would be an assumption. Once that definition and fixture are recorded, the plan can be reviewed again for implementation readiness.
-
-## Safety
-
-Production Kubernetes access is read-only. Any production deployment, cache operation, or other mutation requires a separate explanation and your explicit approval.
+| ID | Scenario | Required Behavior | Status |
+| :--- | :--- | :--- | :--- |
+| **MR-01** | Warm Redis cache with valid quotes | Movers returns ranking with 0 provider calls. | **PASS** (Verified locally & Prod) |
+| **MR-02** | Cold cache with missing LTP | Single coalesced batch LTP recovery under Redis lease; no per-symbol loops. | **PASS** (Unit & Integration tests) |
+| **MR-03** | Roster coverage `< minimumMembers` (e.g. Dev has 0 quotes) | Safely return `{"gainers":[],"losers":[]}`; do not serve corrupt 0% rankings. | **PASS** (Verified on live Dev cluster) |
+| **MR-04** | Stock is unchanged (`LTP == prevClose`) | Accepted as legitimate `0.00%` return; not rejected as invalid baseline. | **PASS** (Verified in test suite) |
+| **MR-05** | Standalone index (INDIA VIX) | Bypasses constituent repair; valid document preserved. | **PASS** (Verified in test suite) |
+| **HM-01** | Broad index Heatmap (NIFTY 500) | No serial historical provider loop; returns within ingress deadline. | **PASS** (Verified in test suite) |
+| **HM-02** | Degenerate all-zero heatmap | Guard rejects caching; triggers background refresh. | **PASS** (Verified in test suite) |
+| **HM-03** | Partial Heatmap with `<85%` valid cells | Discards incomplete result; preserves previous validated cache. | **PASS** (Verified in test suite) |
+| **DEP-01**| Image Build & Push | Automated CI packaging and GHCR push with all scans green. | **PASS** (`Tag 38220022089`) |
+| **DEP-02**| Live Dev Rollout | ArgoCD rollout to Contabo dev cluster with zero crash loops. | **PASS** (Running on `worker2`) |
+| **UI-01** | Timeframe switch 1D → 1M | Card and chart display identical return percentage and as-of baseline. | **PENDING** (Phase 4) |
+| **TRC-01**| Tempo trace latency audit | Zero synchronous historical provider spans on interactive requests. | **PENDING** (Phase 3) |

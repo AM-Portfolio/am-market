@@ -5,6 +5,7 @@ import com.am.common.investment.model.equity.Instrument;
 import com.am.common.investment.model.historical.HistoricalData;
 import com.am.common.investment.service.instrument.InstrumentService;
 import com.am.marketdata.common.model.OHLCQuote;
+import com.am.marketdata.common.model.InstrumentIdentity;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.mapper.InstrumentMapper;
 import com.am.marketdata.mapper.MarketDataGenericMapper;
@@ -15,13 +16,13 @@ import com.am.marketdata.service.util.DataRetrievalStrategyUtil;
 import com.am.marketdata.service.util.HistoricalDataRetriever;
 import com.am.marketdata.service.util.MarketDataRetrievalUtil;
 import com.am.marketdata.service.util.OHLCDataRetriever;
-import com.am.marketdata.service.util.OfficialClosePolicy;
 import com.marketdata.common.MarketDataProvider;
 import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import com.zerodhatech.models.LTPQuote;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -32,13 +33,14 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -73,13 +75,14 @@ public class MarketDataService {
     private final MarketHoursService marketHoursService;
     private final MarketDataCacheService cacheService;
 
+    @Autowired
     public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
             MeterRegistry meterRegistry, InstrumentMapper instrumentMapper,
             MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
             MarketDataRetrievalUtil marketDataRetrievalUtil,
             java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
             com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
-            FlowLogger flowLogger,
+            java.util.Optional<FlowLogger> flowLogger,
             java.util.Optional<MarketHoursService> marketHoursService,
             @org.springframework.beans.factory.annotation.Qualifier("serviceModuleMarketDataCacheService") MarketDataCacheService cacheService) {
         this.providerFactory = providerFactory;
@@ -89,22 +92,25 @@ public class MarketDataService {
         this.genericMapper = genericMapper;
         this.persistenceService = persistenceService;
         this.marketDataRetrievalUtil = marketDataRetrievalUtil;
-        this.producer = producer.orElse(null);
+        this.producer = producer != null ? producer.orElse(null) : null;
         this.stockIndicesService = stockIndicesService;
-        this.flowLogger = flowLogger;
-        this.marketHoursService = marketHoursService.orElse(null);
+        this.flowLogger = flowLogger != null ? flowLogger.orElse(null) : null;
+        this.marketHoursService = marketHoursService != null ? marketHoursService.orElse(null) : null;
         this.cacheService = cacheService;
     }
 
-    private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh) {
-        return OHLCDataRetriever.builder()
-                .persistenceService(persistenceService)
-                .providerFactory(providerFactory)
-                .retrievalOrder(DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh))
-                .cacheResults(true)
-                .targetProviderName(providerName)
-                .producer(producer)
-                .build();
+    public MarketDataService(MarketDataProviderFactory providerFactory, InstrumentService instrumentService,
+            MeterRegistry meterRegistry, InstrumentMapper instrumentMapper,
+            MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
+            MarketDataRetrievalUtil marketDataRetrievalUtil,
+            java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
+            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
+            FlowLogger flowLogger,
+            java.util.Optional<MarketHoursService> marketHoursService,
+            MarketDataCacheService cacheService) {
+        this(providerFactory, instrumentService, meterRegistry, instrumentMapper, genericMapper,
+             persistenceService, marketDataRetrievalUtil, producer, stockIndicesService,
+             java.util.Optional.ofNullable(flowLogger), marketHoursService, cacheService);
     }
 
     private String resolveProviderName(String providerName) {
@@ -190,18 +196,28 @@ public class MarketDataService {
 
     public Map<String, OHLCQuote> getOHLC(List<String> tradingSymbols, TimeFrame timeFrame, boolean forceRefresh,
             String providerName) {
+        return getOHLC(tradingSymbols, timeFrame, forceRefresh, providerName, true);
+    }
+
+    /**
+     * Read OHLC data with an optional provider fallback. Internal analytics can
+     * use cache/database-only reads when a historical miss must not create a
+     * slow provider request for every constituent.
+     */
+    public Map<String, OHLCQuote> getOHLC(List<String> tradingSymbols, TimeFrame timeFrame, boolean forceRefresh,
+            String providerName, boolean allowProviderFallback) {
         if (tradingSymbols == null || tradingSymbols.isEmpty()) {
             return Collections.emptyMap();
         }
         String tfValue = timeFrame != null ? timeFrame.getApiValue() : "default";
         Timer.Sample timer = Timer.start(meterRegistry);
         
-        try (FlowSpan span = flowLogger.start("service.market.ohlc", 
-                "symbolsCount", tradingSymbols.size(), "timeFrame", tfValue, "forceRefresh", forceRefresh)) {
+        try (FlowSpan span = flowLogger != null ? flowLogger.start("service.market.ohlc", 
+                "symbolsCount", tradingSymbols.size(), "timeFrame", tfValue, "forceRefresh", forceRefresh) : null) {
             try {
                 providerName = resolveProviderName(providerName);
 
-                OHLCDataRetriever retriever = createOHLCDataRetriever(providerName, forceRefresh);
+                OHLCDataRetriever retriever = createOHLCDataRetriever(providerName, forceRefresh, allowProviderFallback);
                 Map<String, OHLCQuote> result = retriever.retrieveData(tradingSymbols, timeFrame, forceRefresh);
 
                 if (result != null && !result.isEmpty()) {
@@ -210,12 +226,16 @@ public class MarketDataService {
                 }
 
                 meterRegistry.counter("market.data.success.count", "operation", "getOHLC", "timeFrame", tfValue).increment();
-                flowLogger.complete(span, "provider", providerName, "resultCount", result != null ? result.size() : 0);
+                if (flowLogger != null && span != null) {
+                    flowLogger.complete(span, "provider", providerName, "resultCount", result != null ? result.size() : 0);
+                }
                 return result;
             } catch (Exception e) {
                 log.error("Error getting OHLC data for symbolsCount={} timeFrame={}", tradingSymbols.size(), tfValue, e);
                 meterRegistry.counter("market.data.failure.count", "operation", "getOHLC", "timeFrame", tfValue).increment();
-                flowLogger.fail(span, e);
+                if (flowLogger != null && span != null) {
+                    flowLogger.fail(span, e);
+                }
                 throw new RuntimeException("Failed to get OHLC data for timeFrame " + tfValue, e);
             } finally {
                 timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getOHLC", "timeFrame", tfValue));
@@ -223,17 +243,33 @@ public class MarketDataService {
         }
     }
 
+    private OHLCDataRetriever createOHLCDataRetriever(String providerName, boolean forceRefresh,
+            boolean allowProviderFallback) {
+        List<DataSourceType> retrievalOrder = allowProviderFallback
+                ? DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh)
+                : Arrays.asList(DataSourceType.CACHE, DataSourceType.DATABASE);
+        return OHLCDataRetriever.builder()
+                .persistenceService(persistenceService)
+                .providerFactory(providerFactory)
+                .retrievalOrder(retrievalOrder)
+                .cacheResults(true)
+                .targetProviderName(providerName)
+                .producer(producer)
+                .build();
+    }
+
     /**
-     * After NSE close, Upstox live OHLC {@code lastPrice} is last trade, not official close.
-     * Liquid names look fine (last trade ≈ close). Thin ETFs/SGB do not.
+     * Preserves a valid provider quote after the market closes.
      *
-     * <p>Reuse {@link #getHistoricalDataBatch} daily candles (same source as previous-close
-     * backfill). Prefer today's candle. On weekend/holiday there is no today candle — use
-     * the latest session close in the window (last trading day). On a trading day after
-     * 15:30, if today's candle is not published yet, leave lastPrice unchanged so we do
-     * not paint yesterday as today.
+     * <p>{@code previousClose} belongs to the prior session and is only the
+     * baseline for calculating today's change. It must never replace today's
+     * {@code lastPrice} or OHLC close. Doing that made every after-hours quote
+     * look unchanged and displayed yesterday's price as today's close.</p>
      *
-     * <p>No-op while the market is open, and if hours cannot be resolved (fail-open).
+     * <p>A future verified session-close snapshot may be applied by the
+     * ingestion path once it carries the same trade date and identity. This
+     * request path deliberately keeps the positive quote it already has rather
+     * than issuing background history calls or guessing a close.</p>
      */
     private void applyOfficialDailyCloseWhenMarketClosed(Map<String, OHLCQuote> quotes) {
         if (quotes == null || quotes.isEmpty()) {
@@ -247,121 +283,20 @@ public class MarketDataService {
                 return;
             }
         } catch (Exception e) {
-            log.warn("Could not resolve market hours; skipping official-close overlay: {}", e.getMessage());
+            // Keep the provider quote when calendar data is unavailable. It
+            // is safer than replacing it with a prior-session value.
+            log.warn("Could not resolve market hours; preserving provider OHLC quote: {}", e.getMessage());
             return;
         }
 
-        // LATENCY OPTIMIZATION: Redis Fast-Path
-        // -----------------------------------------------------------------------------------------
-        // WHAT PROBLEM IT SOLVES:
-        // Previously, this method unconditionally called getHistoricalDataBatch() for ALL symbols when the
-        // market was closed. That triggered 5-50 sequential InfluxDB HTTP queries, causing a 2-second delay.
-        //
-        // HOW IT WORKS:
-        // Check if Redis already provided a valid previousClose (> 0.0) during overlayLatestPrices().
-        // If yes, update lastPrice and close price directly in 0ms without touching InfluxDB.
-        // We only fetch historical candles for symbols that are genuinely missing from Redis.
-        List<String> missingSymbols = new ArrayList<>();
-        int updatedCount = 0;
+        long preservedQuotes = quotes.values().stream()
+                .filter(quote -> quote != null && quote.getLastPrice() > 0.0)
+                .count();
+        long missingQuotes = quotes.size() - preservedQuotes;
 
-        for (Map.Entry<String, OHLCQuote> entry : quotes.entrySet()) {
-            OHLCQuote quote = entry.getValue();
-            if (quote != null) {
-                if (quote.getPreviousClose() > 0.0) {
-                    // Fast path: Use Redis-cached previousClose as the official close
-                    quote.setLastPrice(quote.getPreviousClose());
-                    if (quote.getOhlc() != null) {
-                        quote.getOhlc().setClose(quote.getPreviousClose());
-                    }
-                    updatedCount++;
-                } else {
-                    // Missing from Redis: Needs InfluxDB fallback lookup
-                    missingSymbols.add(entry.getKey());
-                }
-            }
-        }
-
-        if (missingSymbols.isEmpty()) {
-            log.info("Applied official daily close via Redis fast-path for {}/{} symbols in 0ms",
-                    updatedCount, quotes.size());
-            return;
-        }
-
-        log.info("Redis missed official close for {}/{} symbols. Triggering non-blocking background DB backfill...",
-                missingSymbols.size(), quotes.size());
-
-        java.time.ZoneId ist = java.time.ZoneId.of("Asia/Kolkata");
-        java.time.LocalDate today = java.time.LocalDate.now(ist);
-        boolean sessionDay = true;
-        try {
-            sessionDay = marketHoursService.isCashSessionDay();
-        } catch (Exception e) {
-            log.warn("Could not resolve session day; requiring today's candle: {}", e.getMessage());
-        }
-        final boolean isSessionDay = sessionDay;
-        Date fromDate = Date.from(today.minusDays(7).atStartOfDay(ist).toInstant());
-        Date toDate = Date.from(today.plusDays(1).atStartOfDay(ist).toInstant());
-
-        // LATENCY OPTIMIZATION: Execute DB lookup in background so HTTP response is returned immediately
-        CompletableFuture.runAsync(() -> {
-            try {
-                Map<String, HistoricalData> history = getHistoricalDataBatch(
-                        missingSymbols,
-                        fromDate,
-                        toDate,
-                        TimeFrame.DAY,
-                        false,
-                        null,
-                        null,
-                        false,
-                        false,
-                        false /* allowProviderFallback = false */);
-
-                int updated = 0;
-                List<String> stillMissingSymbols = new ArrayList<>();
-
-                if (history != null && !history.isEmpty()) {
-                    for (String symbol : missingSymbols) {
-                        HistoricalData data = history.get(symbol);
-                        if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
-                            stillMissingSymbols.add(symbol);
-                            continue;
-                        }
-                        Double officialClose = OfficialClosePolicy.pickSessionClose(
-                                data.getDataPoints(), today, isSessionDay);
-                        if (officialClose == null) {
-                            stillMissingSymbols.add(symbol);
-                            continue;
-                        }
-                        OHLCQuote quote = quotes.get(symbol);
-                        if (quote != null) {
-                            quote.setLastPrice(officialClose);
-                            if (quote.getOhlc() != null) {
-                                quote.getOhlc().setClose(officialClose);
-                            }
-                            quote.setPreviousClose(officialClose);
-                            updated++;
-                        }
-                    }
-                } else {
-                    stillMissingSymbols.addAll(missingSymbols);
-                }
-
-                if (updated > 0) {
-                    log.info("Applied official daily close via background DB fallback for {}/{} missing symbols",
-                            updated, missingSymbols.size());
-                }
-
-                if (!stillMissingSymbols.isEmpty()) {
-                    log.info("Non-blocking hybrid strategy: {} symbols missing from local DB. Triggering async background seed.", stillMissingSymbols.size());
-                    final String pName = defaultProvider;
-                    getHistoricalDataBatch(stillMissingSymbols, fromDate, toDate, TimeFrame.DAY, false, null, pName, false, true, true);
-                    log.info("Async background seed completed for {} missing symbols", stillMissingSymbols.size());
-                }
-            } catch (Exception e) {
-                log.warn("Official daily close background overlay failed: {}", e.getMessage());
-            }
-        });
+        log.info("Closed-market OHLC kept {} current quote(s); {} quote(s) still need ingestion recovery. "
+                        + "Previous close remains a comparison base.",
+                preservedQuotes, missingQuotes);
     }
 
     public HistoricalData getHistoricalData(String symbol, Date fromDate, Date toDate, TimeFrame interval,
@@ -454,8 +389,8 @@ public class MarketDataService {
         Timer.Sample timer = Timer.start(meterRegistry);
         String tfValue = interval != null ? interval.getApiValue() : "null";
         
-        try (FlowSpan span = flowLogger.start("service.market.historical.batch", 
-                "symbolsCount", symbols.size(), "interval", tfValue, "forceRefresh", forceRefresh)) {
+        try (FlowSpan span = flowLogger != null ? flowLogger.start("service.market.historical.batch", 
+                "symbolsCount", symbols.size(), "interval", tfValue, "forceRefresh", forceRefresh) : null) {
             try {
                 providerName = resolveProviderName(providerName);
 
@@ -485,12 +420,16 @@ public class MarketDataService {
                         .sum();
 
                 meterRegistry.counter("market.data.success.count", "operation", "getHistoricalDataBatch", "timeFrame", tfValue).increment();
-                flowLogger.complete(span, "provider", providerName, "resultCount", result.size(), "totalPoints", totalDataPoints);
+                if (flowLogger != null && span != null) {
+                    flowLogger.complete(span, "provider", providerName, "resultCount", result.size(), "totalPoints", totalDataPoints);
+                }
                 return result;
             } catch (Exception e) {
                 log.error("Error getting batch historical data for symbolsCount={} interval={}", symbols.size(), tfValue, e);
                 meterRegistry.counter("market.data.failure.count", "operation", "getHistoricalDataBatch").increment();
-                flowLogger.fail(span, e);
+                if (flowLogger != null && span != null) {
+                    flowLogger.fail(span, e);
+                }
                 throw new RuntimeException("Failed to get batch historical data", e);
             } finally {
                 timer.stop(meterRegistry.timer("market.data.operation.time", "operation", "getHistoricalDataBatch",
@@ -661,9 +600,11 @@ public class MarketDataService {
 
         log.info("Fetching live prices for {} instruments", tradingSymbols.size());
 
-        // Convert instrument IDs to string array for provider API
         String[] symbols = tradingSymbols.stream()
-                .map(id -> "NSE:" + id.toString())
+                .map(id -> {
+                    String str = id.toString();
+                    return (str.startsWith("NSE:") || str.startsWith("BSE:") || str.contains("|")) ? str : "NSE:" + str;
+                })
                 .toArray(String[]::new);
 
         // Get OHLC data from provider with retry mechanism
@@ -717,7 +658,8 @@ public class MarketDataService {
             }
 
             if (cachedData != null && !cachedData.isEmpty()) {
-                log.info("[CACHE] Found {} live prices in cache", cachedData.size());
+                log.info("[CACHE] Found {} candidate live prices in cache", cachedData.size());
+                Map<String, OHLCQuote> validCachedData = new HashMap<>();
 
                 // Map OHLC cache → EquityPrice (lastPrice + ohlcv). Day change for
                 // live-ltp uses ohlcv.close as previousClose baseline — do not call
@@ -725,15 +667,17 @@ public class MarketDataService {
                 for (Map.Entry<String, OHLCQuote> entry : cachedData.entrySet()) {
                     String key = entry.getKey();
                     OHLCQuote quote = entry.getValue();
-                    if (quote == null) {
+                    if (quote == null || quote.getLastPrice() <= 0.0) {
+                        // A zero cache entry is an ingestion/cache failure, not a quote.
+                        // Keep this symbol pending so the provider fallback can recover it.
+                        log.warn("[CACHE] Rejecting unusable latest-price cache entry symbol={} lastPrice={}",
+                                key, quote != null ? quote.getLastPrice() : null);
                         continue;
                     }
                     String[] exchangeAndSymbol = resolveExchangeAndSymbol(key, tradingSymbols);
                     String exchange = exchangeAndSymbol[0];
                     String symbol = exchangeAndSymbol[1];
-                    Double last = quote.getLastPrice() > 0
-                            ? quote.getLastPrice()
-                            : (quote.getOhlc() != null ? quote.getOhlc().getClose() : null);
+                    Double last = quote.getLastPrice();
                     EquityPrice price = new EquityPrice();
                     price.setSymbol(symbol);
                     price.setExchange(exchange);
@@ -751,12 +695,16 @@ public class MarketDataService {
                                 .build());
                     }
                     result.add(price);
+                    validCachedData.put(key, quote);
                 }
 
                 // FO/BSE-safe remaining removal (never substring-replace "NSE:" — corrupts NSE_FO:)
-                removeCachedHitsFromRemaining(remainingSymbols, cachedData.keySet());
+                // Only a positive LTP satisfies this request. Removing a zero cache entry
+                // here previously prevented the provider recovery attempt.
+                removeCachedHitsFromRemaining(remainingSymbols, validCachedData.keySet());
 
-                log.info("[CACHE] {} symbols remaining after cache lookup", remainingSymbols.size());
+                log.info("[CACHE] {} valid prices; {} symbols require provider recovery",
+                        validCachedData.size(), remainingSymbols.size());
             } else {
                 log.info("[CACHE] No live prices found in cache");
             }
@@ -782,6 +730,55 @@ public class MarketDataService {
         } finally {
             timer.stop(meterRegistry.timer("market.data.request.time", "operation", "getLivePrices"));
         }
+    }
+
+    /**
+     * Fetch a provider quote batch when cache/database reads have already missed.
+     * The ticker is retained as the response identity while its ISIN helps the
+     * provider resolve the correct instrument without changing public endpoints.
+     */
+    public Map<String, OHLCQuote> getOHLCForIdentities(List<InstrumentIdentity> instruments,
+            String providerName) {
+        if (instruments == null || instruments.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String resolvedProviderName = resolveProviderName(providerName);
+        MarketDataProvider provider = providerFactory.getProvider(resolvedProviderName);
+        Map<String, OHLCQuote> providerQuotes = provider.getOHLCForIdentities(instruments, TimeFrame.DAY);
+        if (providerQuotes == null || providerQuotes.isEmpty()) {
+            log.warn("No provider OHLC quotes returned for {} resolved member identities", instruments.size());
+            return Collections.emptyMap();
+        }
+
+        Map<String, InstrumentIdentity> identitiesBySymbol = instruments.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(InstrumentIdentity::symbol, identity -> identity, (first, ignored) -> first));
+        Map<String, OHLCQuote> quotes = new LinkedHashMap<>();
+        providerQuotes.forEach((symbol, quote) -> {
+            String cleanSymbol = canonicalTradingSymbol(symbol);
+            InstrumentIdentity identity = identitiesBySymbol.get(cleanSymbol);
+            if (identity == null || quote == null || !Double.isFinite(quote.getLastPrice())
+                    || quote.getLastPrice() <= 0.0) {
+                log.warn("Skipping provider OHLC with invalid price or unrequested identity symbol={}", symbol);
+                return;
+            }
+            quotes.put(identity.symbol(), quote);
+        });
+        log.info("Identity-aware provider batch returned {}/{} valid quotes",
+                quotes.size(), instruments.size());
+        return quotes;
+    }
+
+    private String canonicalTradingSymbol(String value) {
+        String symbol = value == null ? "" : value.trim().toUpperCase(java.util.Locale.ROOT);
+        while (symbol.contains(":")) {
+            String prefix = symbol.substring(0, symbol.indexOf(':'));
+            if (!Set.of("NSE", "BSE", "NSE_EQ", "BSE_EQ").contains(prefix)) {
+                break;
+            }
+            symbol = symbol.substring(symbol.indexOf(':') + 1).trim();
+        }
+        return symbol;
     }
 
     /** Segment prefixes for equity, F&O, and other Indian venues (prefix-anchored only). */
@@ -1035,4 +1032,3 @@ public class MarketDataService {
         }
     }
 }
-

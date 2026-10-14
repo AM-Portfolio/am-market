@@ -15,10 +15,13 @@ import com.am.observability.flow.FlowSpan;
 import lombok.extern.slf4j.Slf4j;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
+import com.am.marketdata.common.util.MarketDepthFreshness;
 import com.am.marketdata.service.MarketDataService;
 import com.am.marketdata.service.MarketHoursService;
 import com.am.marketdata.service.calendar.MarketCalendarService;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -39,18 +42,33 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     private final MarketHoursService marketHoursService;
     private final MarketCalendarService marketCalendarService;
 
-    public MarketDataFetchServiceImpl(FlowLogger flowLogger,
+    @Value("${market.data.depth.max.age.seconds:60}")
+    private long marketDepthMaxAgeSeconds = 60;
+
+    @Autowired
+    public MarketDataFetchServiceImpl(
+            java.util.Optional<FlowLogger> flowLogger,
             MarketDataService marketDataService,
             StockIndicesMarketDataService stockIndicesMarketDataService,
             InstrumentUtils instrumentUtils,
             MarketHoursService marketHoursService,
             MarketCalendarService marketCalendarService) {
-        this.flowLogger = flowLogger;
+        this.flowLogger = flowLogger != null ? flowLogger.orElse(null) : null;
         this.marketDataService = marketDataService;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.instrumentUtils = instrumentUtils;
         this.marketHoursService = marketHoursService;
         this.marketCalendarService = marketCalendarService;
+    }
+
+    public MarketDataFetchServiceImpl(
+            FlowLogger flowLogger,
+            MarketDataService marketDataService,
+            StockIndicesMarketDataService stockIndicesMarketDataService,
+            InstrumentUtils instrumentUtils,
+            MarketHoursService marketHoursService,
+            MarketCalendarService marketCalendarService) {
+        this(java.util.Optional.ofNullable(flowLogger), marketDataService, stockIndicesMarketDataService, instrumentUtils, marketHoursService, marketCalendarService);
     }
 
     @Override
@@ -84,9 +102,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             return new HashMap<>();
         }
 
-        try (FlowSpan span = flowLogger.start("market.fetch.quotes",
+        try (FlowSpan span = flowLogger != null ? flowLogger.start("market.fetch.quotes",
                 "symbolsCount", tradingSymbols.size(), "isIndex", isIndexSymbol, "timeFrame", timeFrame.getApiValue(),
-                "forceRefresh", forceRefresh)) {
+                "forceRefresh", forceRefresh) : null) {
 
             boolean fetchIndexStocks = !isIndexSymbol;
             Set<String> symbols = instrumentUtils.resolveSymbols(new ArrayList<>(tradingSymbols), fetchIndexStocks);
@@ -106,33 +124,67 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 Map<String, OHLCQuote> sanitizedQuotes = new HashMap<>();
                 for (String requestedSym : tradingSymbols) {
                     if (ohlcData.containsKey(requestedSym)) {
-                        sanitizedQuotes.put(requestedSym, ohlcData.get(requestedSym));
+                        OHLCQuote quote = ohlcData.get(requestedSym);
+                        if (quote != null && quote.getLastPrice() > 0.0) {
+                            sanitizedQuotes.put(requestedSym, quote);
+                        } else {
+                            log.warn("Skipping unusable quote symbol={} lastPrice={}", requestedSym,
+                                    quote != null ? quote.getLastPrice() : null);
+                        }
                     } else {
                         // Fallback lookup: match clean symbol if requested symbol had exchange prefix or vice versa
                         String cleanReq = requestedSym.contains(":") ? requestedSym.substring(requestedSym.indexOf(":") + 1).trim() : requestedSym;
                         if (ohlcData.containsKey(cleanReq)) {
-                            sanitizedQuotes.put(requestedSym, ohlcData.get(cleanReq));
+                            OHLCQuote quote = ohlcData.get(cleanReq);
+                            if (quote != null && quote.getLastPrice() > 0.0) {
+                                sanitizedQuotes.put(requestedSym, quote);
+                            } else {
+                                log.warn("Skipping unusable quote symbol={} lastPrice={}", requestedSym,
+                                        quote != null ? quote.getLastPrice() : null);
+                            }
                         }
                     }
                 }
-                if (!sanitizedQuotes.isEmpty()) {
-                    ohlcData = sanitizedQuotes;
-                }
+                ohlcData = sanitizedQuotes;
+                removeStaleMarketDepth(ohlcData);
             } else {
                 ohlcData = new HashMap<>();
             }
 
+            final Map<String, OHLCQuote> returnedQuotes = ohlcData;
             Map<String, Object> response = new HashMap<>();
-            response.put("quotes", ohlcData);
-            response.put("count", ohlcData.size());
+            response.put("quotes", returnedQuotes);
+            response.put("count", returnedQuotes.size());
             response.put("cached", !forceRefresh);
             response.put("timestamp", System.currentTimeMillis());
             response.put("timeFrame", timeFrame.getApiValue());
             response.put("source", forceRefresh ? "provider" : "cache");
+            response.put("unavailableSymbols", tradingSymbols.stream()
+                    .filter(symbol -> !returnedQuotes.containsKey(symbol))
+                    .toList());
 
-            flowLogger.complete(span, "resultCount", ohlcData.size());
+            if (flowLogger != null && span != null) {
+                flowLogger.complete(span, "resultCount", returnedQuotes.size());
+            }
             return response;
         }
+    }
+
+    private void removeStaleMarketDepth(Map<String, OHLCQuote> quotes) {
+        quotes.forEach((symbol, quote) -> {
+            if (quote == null || quote.getMarketDepth() == null) return;
+            long ageMillis = quote.getQuoteTimestamp() == null
+                    ? Long.MAX_VALUE
+                    : System.currentTimeMillis() - quote.getQuoteTimestamp().toEpochMilli();
+            boolean freshTimestamp = MarketDepthFreshness.isFresh(quote.getQuoteTimestamp(),
+                    java.util.concurrent.TimeUnit.SECONDS.toMillis(marketDepthMaxAgeSeconds));
+            // A closed session may still return a fresh exchange snapshot. Keep it when its
+            // provider timestamp is recent, and omit it once that snapshot ages out.
+            if (!freshTimestamp || marketDepthMaxAgeSeconds <= 0) {
+                quote.setMarketDepth(null);
+                log.debug("Omitted stale market depth symbol={} ageMillis={}", symbol, ageMillis);
+            }
+        });
     }
 
     @Override
@@ -163,52 +215,62 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             tf = TimeFrame.DAY;
         }
 
-        // Single cache/provider read. Day change uses previousClose on EquityPrice
-        // (populated from Redis OHLC cache) — avoid a second sequential getOHLC.
-        Map<String, Object> livePrices = getLivePrices(symbols, indexSymbol, forceRefresh);
+        // Retrieve full OHLCQuote objects via getQuotes rather than getLivePrices.
+        // getQuotes populates the validated session baseline (previousClose), day OHLC,
+        // and lastPrice from the provider/cache snapshot, ensuring /live-ltp returns
+        // accurate non-zero daily change and changePercent for the active trading session.
+        // The timeframe parameter describes the caller's chart selection. Day change
+        // always needs the current session quote and previous-session close.
+        Map<String, Object> quotesResponse = getQuotes(symbols, indexSymbol, TimeFrame.DAY, forceRefresh);
 
         Map<String, Map<String, Object>> result = new HashMap<>();
-        Object pricesObj = livePrices.get("prices");
-        if (pricesObj instanceof List) {
+        Object quotesObj = quotesResponse.get("quotes");
+        if (quotesObj instanceof Map) {
             @SuppressWarnings("unchecked")
-            List<com.am.common.investment.model.equity.EquityPrice> pricesList =
-                    (List<com.am.common.investment.model.equity.EquityPrice>) pricesObj;
+            Map<String, OHLCQuote> quotesMap = (Map<String, OHLCQuote>) quotesObj;
 
-            for (com.am.common.investment.model.equity.EquityPrice priceData : pricesList) {
-                String symbol = priceData.getSymbol();
-                if (symbol == null) {
+            for (Map.Entry<String, OHLCQuote> entry : quotesMap.entrySet()) {
+                String fullKey = entry.getKey();
+                OHLCQuote quote = entry.getValue();
+                if (quote == null) {
                     continue;
                 }
 
-                Double currentPrice = priceData.getLastPrice();
-                if (currentPrice == null) {
+                Double currentPrice = quote.getLastPrice();
+                if (currentPrice == null || currentPrice <= 0.0) {
+                    log.warn("Skipping unusable live LTP symbol={} lastPrice={}", fullKey, currentPrice);
                     continue;
                 }
 
-                double previousClose = 0.0;
-                if (priceData.getOhlcv() != null && priceData.getOhlcv().getClose() > 0) {
-                    previousClose = priceData.getOhlcv().getClose();
+                // Calculate daily change against validated session previous close:
+                double previousClose = quote.getPreviousClose();
+                boolean hasValidPreviousClose = Double.isFinite(previousClose) && previousClose > 0.0;
+                double change = 0.0;
+                double changePercent = 0.0;
+                if (hasValidPreviousClose) {
+                    change = Math.round((currentPrice - previousClose) * 100.0) / 100.0;
+                    changePercent = Math.round((change / previousClose) * 10000.0) / 100.0;
                 }
 
-                double change = previousClose > 0 ? (currentPrice - previousClose) : 0.0;
-                double changePercent = previousClose != 0 ? (change / previousClose) * 100 : 0.0;
-
-                String priceExchange = priceData.getExchange();
-                if (priceExchange == null || priceExchange.isBlank()) {
-                    priceExchange = exchange;
+                String parsedExchange = exchange;
+                String symbol = fullKey;
+                if (fullKey.contains(":")) {
+                    String[] parts = fullKey.split(":", 2);
+                    parsedExchange = parts[0];
+                    symbol = parts[1];
                 }
 
                 Map<String, Object> ltpData = new HashMap<>();
                 ltpData.put("symbol", symbol);
-                ltpData.put("exchange", priceExchange);
+                ltpData.put("exchange", parsedExchange);
                 ltpData.put("lastPrice", currentPrice);
                 ltpData.put("previousClose", previousClose);
                 ltpData.put("change", change);
                 ltpData.put("changePercent", changePercent);
                 ltpData.put("timeframe", tf.getApiValue());
 
-                String resultKey = (priceExchange != null && !priceExchange.isBlank())
-                        ? priceExchange + ":" + symbol
+                String resultKey = (parsedExchange != null && !parsedExchange.isBlank())
+                        ? parsedExchange + ":" + symbol
                         : symbol;
                 result.put(resultKey, ltpData);
             }
@@ -236,9 +298,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                     .build();
         }
 
-        try (FlowSpan span = flowLogger.start("market.fetch.historical.batch",
+        try (FlowSpan span = flowLogger != null ? flowLogger.start("market.fetch.historical.batch",
                 "symbolsCount", symbols.size(), "interval", interval.getApiValue(), "fetchIndexStocks",
-                fetchIndexStocks, "forceRefresh", forceRefresh)) {
+                fetchIndexStocks, "forceRefresh", forceRefresh) : null) {
             try {
                 Map<String, HistoricalData> symbolsData = new HashMap<>();
 
@@ -327,11 +389,13 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         .filtered(filterParams.isFiltered())
                         .filterType(filterParams.getFilterType())
                         .filterFrequency(filterParams.isFiltered() ? filterParams.getFilterFrequency() : null)
-                        .processingTimeMs(span.elapsedMillis())
+                        .processingTimeMs(span != null ? span.elapsedMillis() : 0)
                         .source(forceRefresh ? "provider" : "cache")
                         .build();
 
-                flowLogger.complete(span, "successfulSymbols", successCount, "totalPoints", totalFilteredDataPoints);
+                if (flowLogger != null && span != null) {
+                    flowLogger.complete(span, "successfulSymbols", successCount, "totalPoints", totalFilteredDataPoints);
+                }
                 return HistoricalDataResponseV1.builder()
                         .data(symbolsData)
                         .metadata(metadata)
@@ -339,7 +403,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             } catch (Exception e) {
                 // Fixed SLF4J pattern: was log.error("methodName", "msg", e)
                 log.error("Error in batch historical data retrieval", e);
-                flowLogger.fail(span, e);
+                if (flowLogger != null && span != null) {
+                    flowLogger.fail(span, e);
+                }
                 return HistoricalDataResponseV1.builder()
                         .error("Failed to retrieve batch historical data")
                         .message(e.getMessage())

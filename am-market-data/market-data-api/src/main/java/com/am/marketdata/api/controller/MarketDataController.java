@@ -12,6 +12,7 @@ import java.util.TimeZone;
 import com.am.marketdata.api.dto.HistoricalDataRequest;
 import com.am.marketdata.api.model.OHLCRequest;
 import com.am.marketdata.api.model.QuotesRequest;
+import com.am.marketdata.api.model.QuotesResponse;
 import com.am.marketdata.api.model.HistoricalDataResponseV1;
 import com.am.marketdata.api.service.MarketDataFetchService;
 import com.am.marketdata.api.util.SymbolParseUtils;
@@ -152,11 +153,12 @@ public class MarketDataController {
     @GetMapping(value = "/quotes", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get quotes for multiple symbols", description = "Retrieves latest quotes for multiple symbols with support for different timeframes")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Quotes retrieved successfully"),
+            @ApiResponse(responseCode = "200", description = "Quotes retrieved successfully",
+                    content = @Content(schema = @Schema(implementation = QuotesResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
             @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<Map<String, Object>> getQuotes(
+    public ResponseEntity<QuotesResponse> getQuotes(
             @RequestParam("symbols") String symbols,
             @RequestParam(name = "exchange", required = false, defaultValue = "NSE") String exchange,
             @RequestParam(name = "timeFrame", defaultValue = "5m") String timeFrameStr,
@@ -172,29 +174,24 @@ public class MarketDataController {
 
                 if (quotesResponse.containsKey("ERROR")) {
                     log.warn("Quotes fetch returned error branch symbolsCount={}", symbolList.size());
-                    Map<String, Object> errorResponse = new HashMap<>();
                     @SuppressWarnings("unchecked")
                     Map<String, Object> errorDetails = (Map<String, Object>) quotesResponse.get("ERROR");
-                    errorResponse.put("error", errorDetails.get("error"));
-                    errorResponse.put("message", errorDetails.get("message"));
                     flowLogger.fail(span, new Exception(String.valueOf(errorDetails.get("message"))));
-                    return ResponseEntity.internalServerError().body(errorResponse);
+                    return ResponseEntity.internalServerError().body(QuotesResponse.error(
+                            String.valueOf(errorDetails.get("error")), String.valueOf(errorDetails.get("message"))));
                 }
 
                 flowLogger.complete(span, "resultCount", quotesResponse.size());
-                return ResponseEntity.ok(quotesResponse);
+                return ResponseEntity.ok(QuotesResponse.fromResult(quotesResponse));
             } catch (IllegalArgumentException e) {
                 log.warn("Invalid timeframe requested symbolsCount={} timeFrame={}", symbolList.size(), timeFrameStr);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "INVALID_PARAMETER");
-                errorResponse.put("message", "Invalid timeFrame parameter: " + e.getMessage());
+                QuotesResponse errorResponse = QuotesResponse.error("INVALID_PARAMETER",
+                        "Invalid timeFrame parameter: " + e.getMessage());
                 log.warn("Invalid timeframe: {}", e.getMessage());
                 return ResponseEntity.badRequest().body(errorResponse);
             } catch (Exception e) {
                 log.error("Error processing quotes request symbolsCount={}", symbolList.size(), e);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "INTERNAL_ERROR");
-                errorResponse.put("message", e.getMessage());
+                QuotesResponse errorResponse = QuotesResponse.error("INTERNAL_ERROR", e.getMessage());
                 flowLogger.fail(span, e);
                 return ResponseEntity.internalServerError().body(errorResponse);
             }
@@ -210,11 +207,12 @@ public class MarketDataController {
     @PostMapping(value = "/quotes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get quotes for multiple symbols (POST)", description = "Retrieves latest quotes for multiple symbols with support for different timeframes using POST request")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Quotes retrieved successfully"),
+            @ApiResponse(responseCode = "200", description = "Quotes retrieved successfully",
+                    content = @Content(schema = @Schema(implementation = QuotesResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
             @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<Map<String, Object>> getQuotesPost(
+    public ResponseEntity<QuotesResponse> getQuotesPost(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Quotes request payload containing symbols, timeframe, and options",
                     required = true,
@@ -240,22 +238,18 @@ public class MarketDataController {
 
                 if (quotesResponse.containsKey("ERROR")) {
                     log.warn("Quotes fetch post returned error branch symbolsCount={}", symbolList.size());
-                    Map<String, Object> errorResponse = new HashMap<>();
                     @SuppressWarnings("unchecked")
                     Map<String, Object> errorDetails = (Map<String, Object>) quotesResponse.get("ERROR");
-                    errorResponse.put("error", errorDetails.get("error"));
-                    errorResponse.put("message", errorDetails.get("message"));
                     flowLogger.fail(span, new Exception(String.valueOf(errorDetails.get("message"))));
-                    return ResponseEntity.internalServerError().body(errorResponse);
+                    return ResponseEntity.internalServerError().body(QuotesResponse.error(
+                            String.valueOf(errorDetails.get("error")), String.valueOf(errorDetails.get("message"))));
                 }
 
                 flowLogger.complete(span, "resultCount", quotesResponse.size());
-                return ResponseEntity.ok(quotesResponse);
+                return ResponseEntity.ok(QuotesResponse.fromResult(quotesResponse));
             } catch (Exception e) {
                 log.error("Error processing quotes post request symbolsCount={}", symbolList.size(), e);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "INTERNAL_ERROR");
-                errorResponse.put("message", e.getMessage());
+                QuotesResponse errorResponse = QuotesResponse.error("INTERNAL_ERROR", e.getMessage());
                 flowLogger.fail(span, e);
                 return ResponseEntity.internalServerError().body(errorResponse);
             }

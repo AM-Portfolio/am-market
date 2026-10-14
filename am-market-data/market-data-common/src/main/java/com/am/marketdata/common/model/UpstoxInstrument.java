@@ -19,8 +19,22 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 public class UpstoxInstrument {
 
     @Id
+    @JsonProperty("_id")
+    private String id;
+
+    @Field("instrument_key")
     @JsonProperty("instrument_key")
     private String instrumentKey;
+
+    public String getInstrumentKey() {
+        if (instrumentKey != null && instrumentKey.contains("|")) {
+            return instrumentKey;
+        }
+        if (id != null && id.contains("|")) {
+            return id;
+        }
+        return instrumentKey != null ? instrumentKey : id;
+    }
 
     @JsonProperty("isin")
     private String isin;

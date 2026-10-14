@@ -53,12 +53,24 @@ public class StockQuote {
     
     // Volume Information
     private Long volume;
+
+    // Open interest is meaningful for derivatives; Upstox may return zero for cash equities.
+    @JsonProperty("oi")
+    private Long oi;
+
+    @JsonProperty("oi_day_high")
+    private Long oiDayHigh;
+
+    @JsonProperty("oi_day_low")
+    private Long oiDayLow;
     
     @JsonProperty("average_price")
     private Double averagePrice;
     
     // Market Depth
+    @JsonProperty("total_buy_quantity")
     private Double totalBuyQuantity;
+    @JsonProperty("total_sell_quantity")
     private Double totalSellQuantity;
     
     // Circuit Limits
@@ -69,10 +81,13 @@ public class StockQuote {
     private Double lowerCircuitLimit;
     
     // Timestamps
+    @JsonProperty("timestamp")
     private ZonedDateTime lastUpdateTime;
-    private ZonedDateTime lastTradeTime;
+    @JsonProperty("last_trade_time")
+    private String lastTradeTime;
     
     // Market Depth Details
+    @JsonProperty("depth")
     private MarketDepth marketDepth;
     
     // Closing Prices for Different Timeframes
@@ -109,4 +124,57 @@ public class StockQuote {
     public Double getClosePrice() {
         return ohlc != null ? ohlc.getClose() : closePrice;
     }
-} 
+
+    /**
+     * Upstox V2 Quote API (GET /v2/market-quote/quotes) does not provide a direct
+     * 'previous_close' field; it returns 'last_price' and 'net_change' (mapped to change).
+     * If previousClose was not explicitly set or deserialized from upstream, dynamically
+     * derive it from the same trading session snapshot: previousClose = lastPrice - change.
+     * This avoids falling back to stale historical database records and ensures downstream
+     * price enrichers (e.g., StockDataEnricher, Movers, Heatmap) have a valid baseline.
+     */
+    public Double getPreviousClose() {
+        if (lastPrice != null && lastPrice > 0.0 && change != null) {
+            double pc = lastPrice - change;
+            if (Double.isFinite(pc) && pc > 0.0) {
+                // Upstox net_change and last_price belong to the same quote snapshot.
+                return Math.round(pc * 100.0) / 100.0;
+            }
+        }
+        if (previousClose != null && Double.isFinite(previousClose) && previousClose > 0.0) {
+            return previousClose;
+        }
+        return previousClose != null ? previousClose : 0.0;
+    }
+
+    /**
+     * Returns net price change for the current session. If not explicitly provided,
+     * derives it from lastPrice and the validated previousClose baseline.
+     */
+    public Double getChange() {
+        if (change != null) {
+            return change;
+        }
+        Double pc = getPreviousClose();
+        if (pc != null && pc > 0.0 && lastPrice != null) {
+            return Math.round((lastPrice - pc) * 100.0) / 100.0;
+        }
+        return null;
+    }
+
+    /**
+     * Returns percentage change for the current session. If not explicitly provided,
+     * derives it from change and the validated previousClose baseline: (change / previousClose) * 100.
+     */
+    public Double getChangePercent() {
+        if (changePercent != null) {
+            return changePercent;
+        }
+        Double pc = getPreviousClose();
+        Double chg = getChange();
+        if (pc != null && pc > 0.0 && chg != null) {
+            return Math.round((chg / pc) * 10000.0) / 100.0;
+        }
+        return null;
+    }
+}
