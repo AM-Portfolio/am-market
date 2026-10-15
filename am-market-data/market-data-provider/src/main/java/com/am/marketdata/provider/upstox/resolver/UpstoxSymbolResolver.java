@@ -38,6 +38,7 @@ public class UpstoxSymbolResolver implements SymbolResolver {
     private final Map<String, String> isinRemapCache = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, String> symbolAliasCache = new java.util.concurrent.ConcurrentHashMap<>();
 
+    @org.springframework.beans.factory.annotation.Autowired
     public UpstoxSymbolResolver(
             @Qualifier("upstoxInstrumentService") InstrumentDataProvider instrumentDataProvider,
             UpstoxIndexIdentifier indexIdentifier,
