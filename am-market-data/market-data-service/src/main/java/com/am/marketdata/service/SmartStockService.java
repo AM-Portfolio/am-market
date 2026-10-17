@@ -251,10 +251,7 @@ public class SmartStockService {
                                     .filter(point -> point != null && point.getTime() != null
                                             && !point.getTime().toLocalDate().isAfter(from))
                                     .max(Comparator.comparing(point -> point.getTime().toLocalDate()))
-                                    .orElseGet(() -> points.stream()
-                                            .filter(point -> point != null && point.getTime() != null)
-                                            .min(Comparator.comparing(point -> point.getTime().toLocalDate()))
-                                            .orElse(null));
+                                    .orElse(null);
                             if (refPoint == null) {
                                 return;
                             }

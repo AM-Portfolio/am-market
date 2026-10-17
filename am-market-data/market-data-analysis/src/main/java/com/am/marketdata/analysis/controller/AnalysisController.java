@@ -168,7 +168,7 @@ public class AnalysisController {
             try {
                 TimeFrame tf;
                 try {
-                    tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
+                    tf = parsePerformanceTimeFrame(timeFrame);
                 } catch (IllegalArgumentException e) {
                     log.warn("Invalid timeframe requested: {}", timeFrame);
                     return ResponseEntity.badRequest().body(Map.of("error", "Invalid timeframe", "message", e.getMessage()));
@@ -218,7 +218,7 @@ public class AnalysisController {
             @RequestParam(required = false) String timeFrame) {
 
         String index = indexSymbol != null ? indexSymbol : "NIFTY 50";
-        TimeFrame tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
+        TimeFrame tf = parsePerformanceTimeFrame(timeFrame);
 
         return ResponseEntity.ok(marketAnalyticsService.getIndexPerformance(index, tf));
     }
@@ -260,6 +260,14 @@ public class AnalysisController {
             @Parameter(description = "Optional. When omitted, AM resolves known securities as equities and known index documents as indices.")
             @RequestParam(required = false) Boolean isIndexSymbol) {
         return getHistoricalCharts(symbol, range, isIndexSymbol);
+    }
+
+    // Dashboard performance ranges use uppercase M for months; lowercase m
+    // retains the shared parser's existing minute interpretation.
+    static TimeFrame parsePerformanceTimeFrame(String value) {
+        if ("1M".equals(value)) return TimeFrame.MONTH;
+        if ("3M".equals(value)) return TimeFrame.THREE_MONTH;
+        return value != null ? TimeFrame.fromApiValue(value) : null;
     }
 
     private TimeFrame parseTimeFrame(String tf) {

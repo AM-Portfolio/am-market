@@ -35,7 +35,7 @@ public class AnalysisService {
             return cached;
         }
 
-        LocalDate to = LocalDate.now();
+        LocalDate to = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         LocalDate from = to.minusYears(5);
         HistoricalData data = marketDataService.getHistoricalData(symbol, java.sql.Date.valueOf(from),
                 java.sql.Date.valueOf(to), interval, true, null, null);
@@ -780,24 +780,17 @@ public class AnalysisService {
     }
 
     private Double findClosestPrice(List<OHLCVTPoint> points, LocalDate targetDate) {
-        Double closestPrice = null;
-        long minDiff = Long.MAX_VALUE;
-
-        for (OHLCVTPoint p : points) {
-            if (p.getTime() == null)
-                continue;
-            LocalDate pointDate = p.getTime().toLocalDate();
-            long diff = Math.abs(java.time.temporal.ChronoUnit.DAYS.between(targetDate, pointDate));
-
-            if (diff < minDiff) {
-                minDiff = diff;
-                closestPrice = p.getClose();
-            }
-        }
-        // If the closest point is too far away (e.g. > 10 days for short timeframes),
-        // maybe valid?
-        // For now, accept best effort.
-        return closestPrice;
+        // A timeframe return must never use a future candle as its baseline. For
+        // weekends and exchange holidays, the preceding completed session is the
+        // authoritative base; if it is absent, omit the member instead of creating
+        // an artificial return.
+        return points.stream()
+                .filter(point -> point != null && point.getTime() != null
+                        && !point.getTime().toLocalDate().isAfter(targetDate)
+                        && isValidPrice(point.getClose()))
+                .max(Comparator.comparing(point -> point.getTime().toLocalDate()))
+                .map(OHLCVTPoint::getClose)
+                .orElse(null);
     }
     // --- Indices Historical Performance ---
 

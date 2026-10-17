@@ -56,6 +56,8 @@ class MarketAnalyticsServiceMoversTest {
 
         assertEquals(List.of("STOCK0"), result.getGainers().stream().map(StockMoverDTO::getSymbol).toList());
         assertEquals(List.of("STOCK1"), result.getLosers().stream().map(StockMoverDTO::getSymbol).toList());
+        assertEquals(10.0, result.getGainers().get(0).getPercentChange(), 0.000001);
+        assertEquals(-10.0, result.getLosers().get(0).getPChange(), 0.000001);
 
         List<StockMoverDTO> gainersOnly = service.getMovers(10, "gainers", "NIFTY 50", TimeFrame.DAY, false);
         assertEquals(List.of("STOCK0"), gainersOnly.stream().map(StockMoverDTO::getSymbol).toList());
