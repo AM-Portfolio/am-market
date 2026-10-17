@@ -203,7 +203,7 @@ public class AnalysisController {
             @RequestParam(defaultValue = "false") boolean expandIndices) {
 
         String index = indexSymbol != null ? indexSymbol : "NIFTY 50";
-        TimeFrame tf = timeFrame != null ? TimeFrame.fromApiValue(timeFrame) : null;
+        TimeFrame tf = parsePerformanceTimeFrame(timeFrame);
 
         return ResponseEntity.ok(marketAnalyticsService.getSectorPerformance(index, tf, expandIndices));
     }
