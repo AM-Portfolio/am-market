@@ -476,6 +476,51 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
     }
 
     /**
+     * Bulk historical-store read used after the existing Redis batch lookup.
+     * Existing single-symbol APIs remain unchanged for all other callers.
+     */
+    public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, TimeFrame interval,
+            String fromDate, String toDate, boolean isIndexSymbol) {
+        if (symbols == null || symbols.isEmpty() || interval == null) return Collections.emptyMap();
+        try {
+            LocalDate from = LocalDate.parse(fromDate, DateTimeFormatter.ISO_LOCAL_DATE);
+            LocalDate to = LocalDate.parse(toDate, DateTimeFormatter.ISO_LOCAL_DATE);
+            Instant fromInstant = from.atStartOfDay(ZoneId.systemDefault()).toInstant();
+            Instant toInstant = to.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
+
+            Map<String, String> originalByCleanSymbol = new HashMap<>();
+            for (String symbol : symbols) {
+                if (symbol == null || symbol.isBlank()) continue;
+                String cleanSymbol = symbol.replaceAll(
+                        "(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "")
+                        .trim().toUpperCase(java.util.Locale.ROOT);
+                originalByCleanSymbol.putIfAbsent(cleanSymbol, symbol);
+            }
+            if (originalByCleanSymbol.isEmpty()) return Collections.emptyMap();
+
+            Map<String, HistoricalData> storedData = historicalDataService.getHistoricalDataBatch(
+                    new java.util.ArrayList<>(originalByCleanSymbol.keySet()), fromInstant, toInstant,
+                    interval.getApiValue(), isIndexSymbol);
+            if (storedData == null || storedData.isEmpty()) return Collections.emptyMap();
+
+            Map<String, HistoricalData> result = new HashMap<>();
+            storedData.forEach((cleanSymbol, data) -> {
+                String requestedSymbol = cleanSymbol == null ? null
+                        : originalByCleanSymbol.get(cleanSymbol.toUpperCase(java.util.Locale.ROOT));
+                if (requestedSymbol != null && data != null && data.getDataPoints() != null
+                        && !data.getDataPoints().isEmpty()) {
+                    result.put(requestedSymbol, data);
+                }
+            });
+            return result;
+        } catch (Exception e) {
+            log.error("Error retrieving batch historical data for {} symbols interval={}: {}",
+                    symbols.size(), interval.getApiValue(), e.getMessage(), e);
+            return Collections.emptyMap();
+        }
+    }
+
+    /**
      * Verifies if the cached historical data covers the requested date range within a tolerance window
      */
     private boolean validateDateRangeCoverage(HistoricalData data, LocalDate requiredStart, LocalDate requiredEnd) {

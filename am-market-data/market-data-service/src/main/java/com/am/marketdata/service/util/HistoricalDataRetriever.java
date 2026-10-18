@@ -234,86 +234,57 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         String fromDateStr = dateFormat.format(fromDate);
         String toDateStr = dateFormat.format(toDate);
 
-        for (String symbol : new ArrayList<>(remainingSymbols)) {
+        Map<String, HistoricalData> batchData = persistenceService.getHistoricalDataBatch(
+                new ArrayList<>(remainingSymbols), interval, fromDateStr, toDateStr, isIndexSymbol);
+        if (batchData == null || batchData.isEmpty()) {
+            log.info("[DATABASE] No historical rows returned for requested batch");
+            return result;
+        }
+
+        for (Map.Entry<String, HistoricalData> entry : batchData.entrySet()) {
+            String symbol = entry.getKey();
+            HistoricalData data = entry.getValue();
             try {
-                // Force database lookup by setting forceRefresh to true in the persistence
-                // service
-                HistoricalData data = persistenceService.getHistoricalData(symbol, interval, fromDateStr, toDateStr, isIndexSymbol);
-                if (data != null && data.getDataPoints() != null && !data.getDataPoints().isEmpty()) {
-                    List<com.am.common.investment.model.historical.OHLCVTPoint> points = data.getDataPoints();
-                    
-                    // VALIDATION: Strict Date Range Check
-                    // Filter out database data that does not cover the full requested range
-                    // This prevents partial database hits (e.g., finding only 1 point)
-                    long requiredStartMs = fromDate.getTime();
-                    long requiredEndMs = toDate.getTime();
-                    
-                    // [Intraday validation threshold fix]
-                    // Strict 30-minute tolerance check for intraday candles to discard incomplete
-                    // daily scheduler snapshots and fallback to the provider.
-                    // Tolerance is only used for daily/weekly/monthly intervals.
-                    // For intraday (5m, 1H), we use date-based comparison instead (see below).
-                    long toleranceMs;
-                    String val = interval.getApiValue().toLowerCase();
-                    boolean isIntraday = val.contains("m") || val.contains("h");
-                    if (!isIntraday) {
-                        toleranceMs = 7L * 24 * 60 * 60 * 1000; // 7 days for daily/weekly/monthly charts
-                    } else {
-                        toleranceMs = 0; // Not used for intraday - date comparison is used instead
-                    }
+                if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) continue;
+                List<com.am.common.investment.model.historical.OHLCVTPoint> points = data.getDataPoints().stream()
+                        .filter(point -> point != null && point.getTime() != null)
+                        .sorted(Comparator.comparing(com.am.common.investment.model.historical.OHLCVTPoint::getTime))
+                        .collect(java.util.stream.Collectors.toList());
+                if (points.isEmpty()) continue;
+                java.time.LocalDateTime firstPointTime = points.get(0).getTime();
+                java.time.LocalDateTime lastPointTime = points.get(points.size() - 1).getTime();
+                if (firstPointTime == null || lastPointTime == null) continue;
 
-                    java.time.LocalDateTime firstPointTime = points.get(0).getTime();
-                    java.time.LocalDateTime lastPointTime = points.get(points.size() - 1).getTime();
+                long requiredStartMs = fromDate.getTime();
+                long requiredEndMs = toDate.getTime();
+                String val = interval.getApiValue().toLowerCase();
+                boolean isIntraday = val.contains("m") || val.contains("h");
+                long toleranceMs = isIntraday ? 0 : 7L * 24 * 60 * 60 * 1000;
+                long dataStartMs = firstPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+                long dataEndMs = lastPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+                long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
+                long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
+                boolean missingEarlyData = !isIntraday && dataStartMs > validationStartMs + toleranceMs;
+                boolean missingRecentData;
+                if (isIntraday) {
+                    java.time.LocalDate validationEndDate = java.time.Instant.ofEpochMilli(validationEndMs)
+                            .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
+                    missingRecentData = lastPointTime.toLocalDate().isBefore(validationEndDate);
+                } else {
+                    missingRecentData = dataEndMs < validationEndMs - toleranceMs;
+                }
 
-                    long dataStartMs = firstPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
-                    long dataEndMs = lastPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
-
-                    long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
-                    long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
-                    
-                    // [Flexible Start Check - Intraday]
-                    // We disable start-time checks for intraday intervals to show whatever data exists,
-                    // preventing discards if the ingestion starts slightly late.
-                    // For daily/weekly/monthly charts, we keep the original tolerance check.
-                    boolean missingEarlyData;
-                    if (isIntraday) {
-                        missingEarlyData = false;
-                    } else {
-                        missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
-                    }
-
-                    // [Intraday Recent-Data Check - Date Comparison]
-                    // The DB scheduler saves only 1-2 candles per day (morning snapshot).
-                    // So the last 5m or 1H candle may be at 09:38 AM even though market closes at 15:30.
-                    // Comparing raw timestamps would flag this as missing (gap = 5h52m > any small tolerance).
-                    // Fix: for intraday intervals, check only the DATE of the last candle vs the validation target date.
-                    //   - Last candle from correct trading date -> valid, no matter what time -> accept.
-                    //   - Last candle from a previous date -> genuinely stale -> reject, fallback to Upstox.
-                    boolean missingRecentData;
-                    if (isIntraday) {
-                        java.time.LocalDate lastCandleDate = lastPointTime.toLocalDate();
-                        java.time.LocalDate validationEndDate = java.time.Instant.ofEpochMilli(validationEndMs)
-                                .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
-                        missingRecentData = lastCandleDate.isBefore(validationEndDate);
-                    } else {
-                        // For daily/weekly/monthly candles: use 7-day tolerance timestamp comparison
-                        missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
-                    }
-
-                    // Return whatever data points exist locally in DB immediately to prevent empty payloads & 41s latencies
-                    result.put(symbol, data);
-                    remainingSymbols.remove(symbol);
-
-                    if (missingEarlyData || missingRecentData) {
-                        log.info("[DATABASE_PARTIAL_HIT] Partial database data found for symbol: {}. Returning {} points immediately to client (< 20ms). Triggering background Single-Flight backfill.",
-                                symbol, points.size());
-                        triggerSingleFlightBackfill(symbol, fromDateStr, toDateStr);
-                    } else {
-                        log.debug("[DATABASE] Found complete historical data for symbol: {}", symbol);
-                    }
+                // Preserve the existing partial-hit behavior: return real stored
+                // points and schedule single-flight repair, never synthesize values.
+                result.put(symbol, data);
+                remainingSymbols.remove(symbol);
+                if (missingEarlyData || missingRecentData) {
+                    log.info("[DATABASE_PARTIAL_HIT] Partial history for {} ({} points); scheduling single-flight backfill",
+                            symbol, points.size());
+                    triggerSingleFlightBackfill(symbol, fromDateStr, toDateStr);
                 }
             } catch (Exception e) {
-                log.warn("[DATABASE] Error retrieving historical data for symbol {}: {}", symbol, e.getMessage());
+                log.warn("[DATABASE] Error validating batch history for {}: {}", symbol, e.getMessage());
             }
         }
 

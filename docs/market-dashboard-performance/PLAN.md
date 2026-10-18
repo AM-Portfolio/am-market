@@ -4,7 +4,14 @@
 **Lead service:** `am-market-data`  
 **Target environment:** preprod  
 **Branch:** `fix/market-dashboard-performance`  
-**Status:** proposed — awaiting owner approval
+**Original plan status:** proposed — superseded by the current implementation status below.
+
+**Status:** implementation in progress; owner authorized local code changes.
+Production remains read-only and is not being changed or deployed.
+
+**October 18 revision:** The production-connectivity and design decisions in
+the final section below supersede conflicting earlier statements. Existing
+ratings are historical, not evidence that the revised plan is verified.
 
 ## Goal
 
@@ -16,7 +23,7 @@ response type.
 
 Source: local reproduction on `http://127.0.0.1:8092`, October 2026. The local
 Actuator reports Mongo and Redis `UP`; Influx health responds successfully.
-This is not a database-availability issue.
+This local observation does not establish production database availability.
 
 - `AnalysisController` exposes the existing Heatmap route; `AnalysisService`
   calculates `1D` from current OHLC and longer timeframes from history.
@@ -96,7 +103,8 @@ No new resolver class, service, endpoint, DTO, or database table is introduced.
 3. If Redis is unavailable, the service treats it as a cache miss and uses the
    bounded Mongo/Influx path. Redis must never make a valid response empty.
 4. If a snapshot is missing or stale, one bounded single-flight refresh runs in
-   the scheduler. Visitors receive the last validated snapshot when available.
+   the scheduler. A prior snapshot is served only if it still satisfies the
+   freshness and session rules; otherwise do not display it as current.
 5. The calculator selects a calendar-valid base close and valid end close. A
    missing, non-finite, non-positive, or inconsistent result is omitted.
    For every emitted Mover: `change = end - base` and
@@ -175,6 +183,151 @@ No controller, DTO, OpenAPI, gateway, schema, or public-market file changes.
 ## Scorecard
 
 Delivery: 10/10. Design: 10/10. Agent score: 9.6/10.  
-Adversarial review: no contract, security, or data-store mutation is required;
+Adversarial review (original pass): no contract or security change is required;
 Redis loss, cold cache, provider failure, partial history, and cache stampede
 are handled. Agent satisfied: yes. User approval is still required before code.
+
+## Revision: production connectivity, recovery and all-index coverage
+
+**Status: design review only; no production change authorized.** This revision
+supersedes the old evidence, design claims and score above. Kind: fix; lead
+`am-market/am-market-data`; UI `am-modern-ui` only if existing presentation
+cannot safely handle missing results. Target preprod; production is a separate,
+explicit approval. Source: this conversation's dashboard-performance plan and
+the user's October 18 production diagnostic. Catalog: Market domain, existing
+service in `am-market`, existing Flutter UI in `am-modern-ui`; analysis is
+local, not a direct audit of production. Context read: both repository READMEs,
+`am-market-data/README.md`, its `.am.yaml`, and UI `ARCHITECTURE.md`.
+Coverage of the prior plan: **partial**; it omitted prod drift, true batched
+Influx retrieval, all-index coverage, and the quote-map failure distinction.
+
+### Evidence and unresolved checks
+
+- User-reported production pod DNS resolves the Influx host internally;
+  HTTPS 443 is refused and HTTP 8086 reports healthy. Deployed URL reportedly
+  points to 443; `am-market-data/helm/values.prod.yaml` currently sets
+  HTTP 8086. This is strong evidence of runtime config drift, not a verified
+  authoritative deployment source. Trace source of the override, precedence,
+  image SHA, namespace, service endpoint, org/bucket and access rights first.
+- HTTP 8086 is plaintext. Its use needs explicit security review for the actual
+  network path and Influx token; prefer approved TLS/service endpoint where
+  required. Do not assume a healthy unauthenticated endpoint proves queries,
+  bucket contents, freshness or permission to transmit credentials securely.
+- User trace reports local batch 43,218 ms of 43,815 ms. In
+  `market-data-service/.../util/HistoricalDataRetriever.java` the database
+  loop reads each remaining symbol sequentially. A per-symbol latency,
+  cause of an empty query, and production behavior are not yet established.
+  Obtain full traces across HTTP, auth, service, Redis, Influx, metadata and
+  provider spans; report counts and critical-path durations without double count.
+- `SmartStockService.applyTimeFrameBase` disables request-time provider
+  fallback and rejects missing baselines; `StockDataEnricher` logs “No price
+  data” for absent quote objects. Confirm which stage drops quotes. Preserve
+  fail-closed comparison validation and the existing source/provider limits.
+- Existing local controller-specific 1M/3M enum disambiguation must be matched
+  to the production image before assuming it is deployed. Do not alter shared
+  parser semantics or other consumers without a separate compatibility audit.
+
+### Revised solution and decisions
+
+1. **Separate restore from code:** inspect configuration sources and secure
+   in-cluster access read-only; verify exact effective config and authenticated
+   read of representative candle windows without exposing tokens. Propose a
+   durable GitOps/Helm fix at the actual source of drift. The user's suggested
+   8086 setting is a candidate, not an approved production change.
+2. **Timeframe semantics:** for each supported dashboard interval `1D, 1W,
+   1M, 3M, 6M, 1Y, 5Y`, select the exchange-calendar reference session on
+   or before the requested boundary and an eligible end price, with matching
+   corporate-action adjustment basis. Define and test live/session-close
+   behavior and market-holiday boundaries against authoritative fixtures before
+   sharing calculations. Never fall back from month to day, synthesize zeros or
+   silently relabel old data as current.
+3. **All indices:** use the verified current roster, canonical exchange
+   identity and established index-specific thresholds, not a fixed 45 for all.
+   Explicitly test small sectoral and large 500-member indices, membership
+   changes, newly listed stocks and incomplete histories. If trustworthy
+   coverage is insufficient, do not publish a misleading ranking.
+4. **Bounded retrieval:** first inspect and reuse existing batch persistence
+   operations. If absent, add an internal batched historical read with bounded
+   chunk size, concurrency and deadlines; preserve symbol/exchange/range/interval
+   and existing public contracts. Benchmark query count, p50/p95 and warm/cold
+   paths; do not promise an unmeasured latency.
+5. **Recovery:** distinguish Redis miss, DB outage, valid empty data, quote
+   lookup failure and provider failure. Reuse the existing scheduler/provider
+   path for missing eligible candles, with cross-pod single-flight, bounded
+   concurrency, quotas, timeout and idempotent validated persistence.
+   Never use unbounded per-request provider fallback. If a recovery cannot
+   finish within the bounded wait, UI may show neutral loading/retry, but must
+   eventually expose a truthful failure instead of spinning forever. No stale
+   snapshot or fabricated value presented as current.
+6. **Consistency:** trace Heatmap and Movers source/date/price and reconcile
+   their differences before unifying calculation; a percent-only Heatmap cache
+   is insufficient to construct Movers' existing price and baseline fields.
+   Preserve legitimate zero changes and valid large moves. Existing cache keys,
+   TTL, membership identity and requested limit must not cross-contaminate
+   consumers; invalidate only demonstrably bad entries with separate approval.
+7. **Failures:** retain existing API paths, request and response types. No
+   assumption that correct complete data can be guaranteed during provider and
+   datastore outages. Record operational failure/coverage reason internally;
+   avoid confusing a failure with a legitimate empty ranking.
+
+### Implementation file map
+
+| File | Purpose / boundary |
+|---|---|
+| `am-market-data/helm/values.prod.yaml`, actual deployment/GitOps source | Inspect precedence; repo value already differs from reported deployment. Change only authoritative source if needed, with production approval. |
+| `market-data-service/.../util/HistoricalDataRetriever.java` and `.../MarketDataPersistenceService.java` | Batched bounded read; verify other callers and existing persistence semantics. |
+| `am-common-investment-data/.../EquityPriceMeasurementRepository{,Impl}.java`, `EquityService{,Impl}.java`, `HistoricalDataService{,Impl}.java` | Add an internal multi-symbol range read in bounded chunks; additive defaults preserve existing shared callers. |
+| `am-market-data/pom.xml` | Consume the in-workspace shared library version containing the additive methods. |
+| `market-data-service/.../SmartStockService.java` | Reference-session, quote-map diagnosis and controlled repair integration. |
+| `market-data-analysis/.../AnalysisService.java`, `.../MarketAnalyticsService.java`, `.../util/StockDataEnricher.java` | Shared verified calculations, coverage and quote diagnostics only where needed. |
+| `market-data-scheduler/.../MarketAnalysisSchedulerService.java`, `market-data-redis/.../AnalysisRedisCache.java` | Reuse existing scheduler/cache if needed for safe repair and freshness; no parallel service. |
+| `am-modern-ui/am_market/common/lib/providers/market_provider.dart`, dashboard widget | Conditional only if UI misrepresents omitted values, errors or request races. |
+| Existing corresponding backend/UI tests and Postman collection | Compatibility, accuracy, failure and all-index/timeframe coverage. |
+
+### Corner cases and test matrix
+
+| Case | Expected | Coverage |
+|---|---|---|
+| 1m/3m versus 1M/3M; all periods | Exact existing meanings; no shared parser regression | unit + endpoint contract |
+| All configured indices, including 10/50/500 members | Index-specific roster and limits; no hard-coded 45 | parameterized service + preprod matrix |
+| Missing quote versus missing candle | Distinct diagnostics; no fake baseline | unit + full-trace test |
+| Holiday, weekend, exchange timezone, market open/close | Correct session boundary/end, consistent 1D and longer | clock/calendar fixtures |
+| New listing, delisting, split, dividend, index rebalance | No fabricated five-year value; adjustment/membership rules verified | fixture + integration |
+| Redis unavailable, Influx unavailable, partial batch, 401/429, provider timeout | Bounded retries; no stale/fabricated result; accurate failure | dependency fault tests |
+| Cold cache, concurrent requests, lease expiry/owner crash | Bounded single-flight recovery and eventual retry | multi-instance test |
+| Fresh cache, old/as-of cache, cache-key/limit isolation | Correct freshness and no cross-index/timeframe leakage | cache integration |
+| Zero moves, fewer than five gainers/losers, extreme valid moves | Correct ranking without invented rows or blanket rejection | unit |
+| Rapid UI changes, gateway/session/client contract | No old selection overwrite; response format/security unchanged | UI + Postman contract |
+| Mixed environments, HTTP credential transport, prod drift | No local writes to prod; confirm source, secure route and explicit approval | ops review |
+
+### Review, trade-offs and rollout
+
+First-pass rating **6/10**: strong production connection evidence, but prior plan
+assumed healthy production, combined incompatible stale/loading behavior, and
+did not prove quote loss, provider data, full spans or source-of-truth config.
+Revised design: batch reads improve scale but add query complexity; background
+repair limits provider load but can make the first cold request wait; strict
+freshness/coverage avoids wrong answers but cannot guarantee results during
+outages; exact month parsing fixes local paths but preserves shared ambiguity.
+
+Revised rating **8/10 (provisional)**: safer and actionable, but cannot honestly
+claim a fully verified design while production config ownership, transport
+security, complete trace and same-price-basis fixtures remain unverified.
+Agent satisfied: **no**; prior 9.6 rating is superseded. Review plan, TODO and
+diagram; investigate remaining items read-only before claiming completion.
+
+Preprod: run unit, integration, Postman contract and browser matrix; compare
+prices to independent timestamped candles; measure warm/cold traces. Then ask
+separately for production approval including exact authoritative change,
+deployment target, expected rolling effect, security exposure, validation and
+rollback. Never patch production directly or assume a rollout is approved.
+
+### Implementation progress
+
+The first code slice replaces sequential equity historical-store reads with an
+Influx range query using bounded 50-symbol chunks. It keeps the Redis batch
+lookup first, preserves the existing per-symbol API and index-specific path,
+and adds default shared-service methods so other callers remain compatible.
+No endpoint, DTO, response, schema, credential, or production setting changes.
+The existing production runtime URL discrepancy is not fixed by this code and
+must be resolved at its authoritative, security-reviewed configuration source.
