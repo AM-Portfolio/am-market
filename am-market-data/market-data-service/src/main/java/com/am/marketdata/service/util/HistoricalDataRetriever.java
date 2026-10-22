@@ -387,7 +387,14 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                 producer.sendHistoricalData(data, this.interval, targetProviderName);
                 log.info("[PROVIDER_ASYNC] Successfully sent ingestion event to Kafka");
             } else {
-                log.warn("[PROVIDER_ASYNC] Skipping Kafka ingestion (Kafka disabled/Producer null)");
+                log.warn("[PROVIDER_ASYNC] Kafka producer null/disabled; persisting directly to InfluxDB and Redis");
+                data.forEach((symbol, histData) -> {
+                    try {
+                        persistenceService.saveHistoricalData(symbol, this.interval, histData);
+                    } catch (Exception ex) {
+                        log.error("[PROVIDER_ASYNC] Error in direct persistence for symbol {}: {}", symbol, ex.getMessage(), ex);
+                    }
+                });
             }
         } catch (Exception e) {
             log.error("[PROVIDER_ASYNC] FAILED to send historical data to KAFKA: " + e.getMessage(), e);

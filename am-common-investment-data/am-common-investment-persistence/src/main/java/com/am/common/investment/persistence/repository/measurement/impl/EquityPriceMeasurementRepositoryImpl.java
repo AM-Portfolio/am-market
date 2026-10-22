@@ -246,7 +246,16 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
         final int chunkSize = 50;
         for (int offset = 0; offset < symbols.size(); offset += chunkSize) {
             List<String> chunk = symbols.subList(offset, Math.min(offset + chunkSize, symbols.size()));
-            String symbolSet = chunk.stream()
+            java.util.Set<String> expandedSymbols = new java.util.LinkedHashSet<>();
+            for (String s : chunk) {
+                if (s == null || s.isBlank()) continue;
+                String clean = s.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "").trim();
+                expandedSymbols.add(s);
+                expandedSymbols.add(clean);
+                expandedSymbols.add("NSE_EQ:" + clean);
+                expandedSymbols.add("NSE_EQ|" + clean);
+            }
+            String symbolSet = expandedSymbols.stream()
                     .filter(java.util.Objects::nonNull)
                     .map(String::trim)
                     .filter(symbol -> !symbol.isEmpty())

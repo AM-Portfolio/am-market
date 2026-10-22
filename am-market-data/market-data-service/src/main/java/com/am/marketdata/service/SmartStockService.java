@@ -253,6 +253,14 @@ public class SmartStockService {
                                     .max(Comparator.comparing(point -> point.getTime().toLocalDate()))
                                     .orElse(null);
                             if (refPoint == null) {
+                                // If no trading session existed strictly on or before 'from' (e.g. weekend/holiday boundary
+                                // or the provider's earliest candle in window is slightly after 'from'), fallback to the earliest point in the buffer.
+                                refPoint = points.stream()
+                                        .filter(point -> point != null && point.getTime() != null)
+                                        .min(Comparator.comparing(point -> point.getTime().toLocalDate()))
+                                        .orElse(null);
+                            }
+                            if (refPoint == null) {
                                 return;
                             }
 

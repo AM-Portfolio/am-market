@@ -177,7 +177,8 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         Map<String, List<EquityPrice>> bySymbol = new HashMap<>();
         for (EquityPrice price : prices) {
             if (price == null || price.getSymbol() == null || price.getTime() == null || price.getOhlcv() == null) continue;
-            bySymbol.computeIfAbsent(price.getSymbol(), ignored -> new ArrayList<>()).add(price);
+            String cleanSym = price.getSymbol().replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "").trim();
+            bySymbol.computeIfAbsent(cleanSym, ignored -> new ArrayList<>()).add(price);
         }
 
         Map<String, HistoricalData> result = new HashMap<>();
