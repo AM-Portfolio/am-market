@@ -243,7 +243,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
 
         // Keep the Flux predicate bounded; an index may contain hundreds of names.
         List<EquityPriceMeasurement> allResults = new java.util.ArrayList<>();
-        final int chunkSize = 50;
+        final int chunkSize = 25;
         for (int offset = 0; offset < symbols.size(); offset += chunkSize) {
             List<String> chunk = symbols.subList(offset, Math.min(offset + chunkSize, symbols.size()));
             java.util.Set<String> expandedSymbols = new java.util.LinkedHashSet<>();
