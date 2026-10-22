@@ -3,11 +3,12 @@
 **Kind:** bug fix  
 **Lead service:** `am-market-data`  
 **Target environment:** preprod  
-**Branch:** `fix/market-dashboard-performance`  
+**Current checkout branch:** `hotfix/hypercare-R6` (kept; no branch switch requested)
 **Original plan status:** proposed — superseded by the current implementation status below.
 
-**Status:** implementation in progress; owner authorized local code changes.
-Production remains read-only and is not being changed or deployed.
+**Status:** prior batch-query slice exists; the October 22 code slice below is
+awaiting owner review of its scoped plan. Production remains read-only and is
+not being changed or deployed.
 
 **October 18 revision:** The production-connectivity and design decisions in
 the final section below supersede conflicting earlier statements. Existing
@@ -331,3 +332,120 @@ and adds default shared-service methods so other callers remain compatible.
 No endpoint, DTO, response, schema, credential, or production setting changes.
 The existing production runtime URL discrepancy is not fixed by this code and
 must be resolved at its authoritative, security-reviewed configuration source.
+
+### October 22 implementation slice — requested for owner review
+
+**Source-plan pointer:** user's attached production/dev findings report
+(`57b276ad-dee6-4f9a-94e4-e8674f248191`) and follow-up request to implement the
+safe batching, candle-window, baseline, and diagnostic-log changes. Do not copy
+the attachment into the repository.
+
+**Catalog/context:** `am-market` is the Market domain repo; `am-market-data` is
+the existing backend service. Analysis source is local. Read the repo and
+nested service READMEs, nested `.am.yaml`, existing Market Dashboard plan/TODO,
+and current `AnalysisService`, `SmartStockService`, cache service, and tests.
+The repo root has no `.am.yaml`; no new service is proposed.
+
+**Coverage verdict: partial.** The report correctly identifies repeated
+single-symbol cache persistence calls and Heatmap's wide daily history range.
+Its “baseline-only 15-day query” is incomplete: current non-1D Heatmap uses the
+last returned candle as its end price, so narrowing only around the start would
+silently change results. The current quote-cache path normalizes exchange
+prefixes, so the reported Redis key mismatch is not included without a
+reproducible miss on the exact history-cache path.
+
+**Current system (verified):**
+
+- `SmartStockService.applyTimeFrameBase` requests a small daily window around
+  the timeframe boundary; it chooses the latest candle on/before that boundary,
+  but falls forward to the earliest later candle if none exists.
+- Smart quote recovery calls `MarketDataCacheService.cacheLatestPrices` once
+  per validated recovered symbol. That method already accepts a map and batches
+  Redis writes and Mongo `saveAll` within each invocation.
+- The daily previous-close recovery has additional per-symbol calls to the same
+  batch-capable cache method; batching only the quote-recovery loop would leave
+  those paths unchanged.
+- `AnalysisService.getHeatmap` fetches daily history from the start-boundary
+  buffer through `to`, then uses the latest valid point at/before the start
+  boundary and the last returned point as the end price. The `1D` live-OHLC
+  path remains distinct and is out of this optimization slice.
+- Existing service/cache paths, response DTOs, enum values, and public routes
+  are retained. Current evidence is from source and the user's report; exact
+  speedup is not guaranteed until measured with warm/cold traces.
+
+**Scoped change:**
+
+1. Accumulate only already-validated, deduplicated quotes in each existing
+   SmartStock recovery path and call `cacheLatestPrices` once per batch. Keep
+   the current validation, normalized identities, cache/Mongo write semantics,
+   and response assembly unchanged.
+2. For non-1D Heatmap, preserve the exact baseline/end selection rule while
+   replacing the full-window read with bounded reads for (a) the baseline
+   boundary and (b) the end boundary. Reuse the existing batch-history service;
+   combine overlapping windows where safe. Resolve both values only from
+   candles on/before their respective boundaries. Do not use future candles.
+   Leave `1D`, public API, DTOs, response keys, and result-cache behavior as-is.
+3. In `SmartStockService`, remove only the future-candle fallback. If a valid
+   prior baseline is absent within the existing bounded lookback, leave that
+   symbol unranked through the existing validation path rather than calculating
+   a misleading return.
+4. Add one aggregate structured log per batch/Heatmap request: timeframe or
+   operation, index, requested symbol count, query windows, returned symbol and
+   candle counts, resolved baseline/end counts, omitted count, cache-write
+   batch size/call count, and elapsed milliseconds. Do not log prices, tokens,
+   or per-symbol info lines. Keep existing low-level error logs intact.
+
+**Compatibility and safety boundaries:** no public contract, shared timeframe
+parser, data schema, Redis key format, provider fallback policy, scheduler,
+production configuration, or full Movers response cache changes. `1D` behavior
+is unchanged. Missing/invalid history remains fail-closed; cache or Mongo write
+failure must not invalidate a valid in-memory calculation or turn a successful
+request into fabricated data.
+
+**Regression checks before code:**
+
+- SmartStock batches multiple quotes in one cache call; empty/invalid/duplicate
+  inputs do not create extra writes; cache failure remains non-fatal.
+- Heatmap values before/after optimization match for the same fixtures across
+  supported timeframes; query ranges are bounded and include both needed ends.
+- Exact boundary, weekend/holiday, no-prior-candle, only-future-candle,
+  missing-end-candle, invalid price, and overlapping-window cases are covered.
+- `1D`, existing cache hit, coverage threshold, index normalization, API JSON,
+  and response ordering remain unchanged.
+- Logs prove one batch write and show candle counts/windows/duration without
+  exposing market prices or secrets. Compare cold and warm query duration and
+  candle counts; report measured values, not predicted speedup.
+
+**Corner-case matrix:**
+
+| Case | Trigger | Expected | Test coverage |
+|---|---|---|---|
+| Weekend/holiday baseline | Target date has no candle | Use latest valid candle on/before target | SmartStock + Heatmap boundary unit tests |
+| Future-only candle | Lookback has no prior candle | Omit symbol; never use future close | SmartStock regression test |
+| Missing end candle | End window has no valid point | Omit symbol; do not fabricate an end price | Heatmap regression test |
+| Overlapping boundary windows | Short timeframe windows overlap | Merge/dedupe points and preserve same calculation | Heatmap unit test |
+| Duplicate prefixed symbol | Same instrument arrives in two formats | One canonical write; preserve response keys | SmartStock/cache unit test |
+| Redis/Mongo cache write failure | Persistence errors after quote validation | Keep valid in-memory response; log failure | Cache failure test |
+| Existing cache hit / `1D` request | Optimized path is bypassed | Existing result and query behavior unchanged | Existing Heatmap + mover tests |
+| Invalid/non-positive close | Bad source candle | Omit symbol; do not cache a misleading result | Heatmap/SmartStock unit tests |
+
+**Latency and consistency:** Movers continue to use the current validated quote
+as the end price and a prior daily close as the timeframe base. Heatmap preserves
+its existing daily-history end-price semantics; this slice changes only how the
+two required boundary values are retrieved. No provider fallback or added wait
+is introduced. Measure cold/warm calls and returned candle counts; no hard p95
+target or speedup is assumed.
+
+**Scoped scorecard (pre-implementation):** Delivery 10/10; Design 10/10; Product 9/10; Architecture
+9/10; Data/contracts 10/10; Calculation correctness 10/10; Reliability 9/10;
+Security 10/10; Observability 10/10; Testability 10/10; Operability 9/10;
+TODO implementability 10/10. Overall 9.6/10. Adversarial review: no blocker or
+major remains in this local-only slice; cache failures, weekend/holiday,
+future-only and missing-end windows are covered. Agent satisfied: yes for this
+scoped slice; the user approved implementation on October 22.
+
+**Execution status:** scoped code changes and local regression checks are
+complete. Focused SmartStock/Heatmap tests passed after final edits, and the
+market-data service/analysis reactor passed. Runtime cold/warm timings remain
+pending; no speedup is claimed. Production remains read-only and was not part of
+this implementation.

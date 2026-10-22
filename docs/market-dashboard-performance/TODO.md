@@ -1,5 +1,29 @@
 # Market dashboard performance TODO
 
+## October 22 requested code slice — implementation approved
+
+- [x] Owner reviews the October 22 scoped plan and candle-boundary diagram
+  before code execution.
+- [x] Batch validated SmartStock quote-cache persistence once per existing
+  recovery batch, including the daily previous-close recovery paths.
+- [x] Narrow non-1D Heatmap history reads to the required baseline and ending
+  windows while preserving both selected candle values and current `1D` path.
+- [x] Remove the future-candle baseline fallback; omit symbols without a valid
+  candle on/before the target boundary.
+- [x] Add one aggregate, price/secret-free log per operation with batch sizes,
+  returned candle counts, resolved/omitted counts, windows, and elapsed time.
+- [x] Add focused service tests for one-batch persistence, unchanged Heatmap
+  calculations, weekends/holidays, missing/future-only candles, and cache errors.
+- [x] Run focused Maven tests, then the market-data analysis/service reactor;
+  verify API response JSON remains unchanged (no response types or DTOs changed).
+- [ ] Compare cold/warm timings and returned candle counts; record actual
+  measurements without an assumed speedup. No production mutation/deploy.
+
+Implementation verification: focused SmartStock, Heatmap, and Movers tests
+passed after the final edits; the full market-data service/analysis reactor also
+passed. Runtime cold/warm measurements remain pending; no performance claim is
+made from unit-test timings.
+
 ## October 18 review — implementation in progress, production not approved
 
 - [ ] Verify deployed image SHA, authoritative Influx URL/port configuration,

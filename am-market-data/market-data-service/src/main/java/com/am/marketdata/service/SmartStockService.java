@@ -204,7 +204,8 @@ public class SmartStockService {
             return currentQuotes; // Default behavior
         }
 
-        log.info("getSmartQuotes", "Calculating quotes for TimeFrame: " + timeFrame);
+        long startedAt = System.nanoTime();
+        log.info("getSmartQuotes", "Resolving historical baseline timeframe={} symbols={}", timeFrame, symbols.size());
 
         // 2. Fetch Historical Data for Previous Reference Point
         ZoneId exchangeZone = ZoneId.of("Asia/Kolkata");
@@ -235,53 +236,46 @@ public class SmartStockService {
                             false // Keep this historical lookup local to cache/database
                     );
 
-            if (historyMap != null) {
-                currentQuotes.forEach((symbol, quote) -> {
-                    // Clear the daily base first: if the requested timeframe has no
-                    // historical reference, never leave a misleading 1D base behind.
-                    quote.setPreviousClose(0.0);
-                    var history = findHistory(historyMap, symbol);
-                    if (history != null) {
-                        if (history.getDataPoints() != null && !history.getDataPoints().isEmpty()) {
-                            var points = history.getDataPoints();
-                            // Use the latest session on/before the timeframe boundary. The
-                            // last array item may be several days after the boundary and
-                            // would make the displayed period return too small or too large.
-                            var refPoint = points.stream()
-                                    .filter(point -> point != null && point.getTime() != null
-                                            && !point.getTime().toLocalDate().isAfter(from))
-                                    .max(Comparator.comparing(point -> point.getTime().toLocalDate()))
-                                    .orElse(null);
-                            if (refPoint == null) {
-                                // If no trading session existed strictly on or before 'from' (e.g. weekend/holiday boundary
-                                // or the provider's earliest candle in window is slightly after 'from'), fallback to the earliest point in the buffer.
-                                refPoint = points.stream()
-                                        .filter(point -> point != null && point.getTime() != null)
-                                        .min(Comparator.comparing(point -> point.getTime().toLocalDate()))
-                                        .orElse(null);
-                            }
-                            if (refPoint == null) {
-                                return;
-                            }
-
-                            Double pastClose = refPoint.getClose();
-                            if (pastClose != null && Double.isFinite(pastClose) && pastClose > 0.0) {
-                                quote.setPreviousClose(pastClose);
-                            } else {
-                                log.warn("getSmartQuotes", "No valid {} comparison close for {}", timeFrame, symbol);
-                            }
-
-                            // Recalculate Change & PChange logic is usually in EnrichedStockData or
-                            // implicitly in UI.
-                            // But OHLCQuote object itself doesn't hold 'change'/'pChange' fields explicitly
-                            // standardly?
-                            // Wait, StockDataEnricher calculates change = lastPrice - previousClose.
-                            // So by updating previousClose here, we effectively update the change
-                            // calculation!
-                        }
-                    }
-                });
+            int symbolsWithBaseline = 0;
+            int symbolsWithoutBaseline = 0;
+            int historicalCandles = historyMap == null ? 0 : historyMap.values().stream()
+                    .filter(Objects::nonNull)
+                    .filter(history -> history.getDataPoints() != null)
+                    .mapToInt(history -> history.getDataPoints().size())
+                    .sum();
+            for (Map.Entry<String, OHLCQuote> entry : currentQuotes.entrySet()) {
+                String symbol = entry.getKey();
+                OHLCQuote quote = entry.getValue();
+                if (quote == null) {
+                    symbolsWithoutBaseline++;
+                    continue;
+                }
+                // Clear the daily base first so a missing timeframe reference can
+                // never silently become a different (usually 1D) return.
+                quote.setPreviousClose(0.0);
+                var history = historyMap == null ? null : findHistory(historyMap, symbol);
+                var points = history == null ? null : history.getDataPoints();
+                var refPoint = points == null ? null : points.stream()
+                        .filter(point -> point != null && point.getTime() != null
+                                && !point.getTime().toLocalDate().isAfter(from)
+                                && point.getClose() != null && Double.isFinite(point.getClose())
+                                && point.getClose() > 0.0)
+                        .max(Comparator.comparing(point -> point.getTime().toLocalDate()))
+                        .orElse(null);
+                if (refPoint == null) {
+                    // Never use a future candle as the baseline. Without an on-or-
+                    // before candle this symbol remains invalid under existing validation.
+                    symbolsWithoutBaseline++;
+                    continue;
+                }
+                quote.setPreviousClose(refPoint.getClose());
+                symbolsWithBaseline++;
             }
+            log.info("getSmartQuotes",
+                    "Historical baseline resolved timeframe={} requested={} historySymbols={} candles={} resolved={} omitted={} window={}..{} durationMs={}",
+                    timeFrame, symbols.size(), historyMap == null ? 0 : historyMap.size(), historicalCandles,
+                    symbolsWithBaseline, symbolsWithoutBaseline, from.minusDays(10), from.plusDays(5),
+                    (System.nanoTime() - startedAt) / 1_000_000);
 
         } catch (Exception e) {
             log.error("getSmartQuotes", "Error fetching historical reference for timeframe: " + timeFrame, e);
@@ -495,6 +489,7 @@ public class SmartStockService {
             int recoveredCount = 0;
             Set<String> ownedSymbols = ownedIdentities.stream().map(InstrumentIdentity::symbol)
                     .collect(Collectors.toSet());
+            Map<String, OHLCQuote> verifiedQuotesToCache = new LinkedHashMap<>();
             for (Map.Entry<String, OHLCQuote> entry : recoveredQuotes.entrySet()) {
                 OHLCQuote quote = entry.getValue();
                 if (quote == null || entry.getKey() == null || !Double.isFinite(quote.getLastPrice())
@@ -516,12 +511,16 @@ public class SmartStockService {
 
                 // Persist only verified positive LTPs; a later mover request and
                 // overlapping index can reuse this shared cache entry.
-                if (marketDataCacheService != null) {
-                    marketDataCacheService.cacheLatestPrices(Map.of(requestedSymbol, quote));
-                }
+                verifiedQuotesToCache.put(requestedSymbol, quote);
             }
-            log.info("getSmartQuotes", "Batched OHLC recovery returned valid prices for {}/{} leased symbols",
-                    recoveredCount, ownedIdentities.size());
+            int cacheWriteCalls = 0;
+            if (marketDataCacheService != null && !verifiedQuotesToCache.isEmpty()) {
+                marketDataCacheService.cacheLatestPrices(verifiedQuotesToCache);
+                cacheWriteCalls = 1;
+            }
+            log.info("getSmartQuotes",
+                    "Batched OHLC recovery completed requested={} recovered={} cacheSymbols={} cacheWriteCalls={}",
+                    ownedIdentities.size(), recoveredCount, verifiedQuotesToCache.size(), cacheWriteCalls);
         } catch (Exception e) {
             log.warn("getSmartQuotes", "Batched OHLC recovery failed for {} leased symbols",
                     ownedIdentities.size(), e);
@@ -639,6 +638,7 @@ public class SmartStockService {
         LocalDate expectedTradeDate = resolveCurrentMarketTradeDate();
 
         // First attempt: use only a snapshot verified for the current market session.
+        Map<String, OHLCQuote> quotesToCache = new LinkedHashMap<>();
         if (previousCloseRepository != null && expectedTradeDate != null) {
             try {
                 List<String> cleanSymbols = symbolsNeedingPrevClose.stream()
@@ -666,12 +666,8 @@ public class SmartStockService {
                             // right session baseline; equality with LTP is a valid flat day.
                             if (prevClose != null && Double.isFinite(prevClose) && prevClose > 0) {
                                 quote.setPreviousClose(prevClose);
-                                try {
-                                    if (marketDataCacheService != null && quote.getLastPrice() > 0) {
-                                        marketDataCacheService.cacheLatestPrices(Map.of(symbol, quote));
-                                    }
-                                } catch (Exception cacheEx) {
-                                    log.warn("backfillPreviousCloseForDay", "Failed to cache snapshot previousClose for " + symbol, cacheEx);
+                                if (Double.isFinite(quote.getLastPrice()) && quote.getLastPrice() > 0) {
+                                    quotesToCache.put(symbol, quote);
                                 }
                             }
                         }
@@ -690,6 +686,7 @@ public class SmartStockService {
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList());
         if (stillNeeding.isEmpty()) {
+            cacheLatestPricesBatch(quotesToCache, "snapshot");
             return;
         }
 
@@ -745,14 +742,10 @@ public class SmartStockService {
 
                             if (Double.isFinite(prevClose) && prevClose > 0) {
                                 quote.setPreviousClose(prevClose);
-                                try {
-                                    if (marketDataCacheService != null && quote.getLastPrice() > 0) {
-                                        marketDataCacheService.cacheLatestPrices(Map.of(symbol, quote));
-                                    }
-                                } catch (Exception cacheEx) {
-                                    log.warn("backfillPreviousCloseForDay", "Failed to cache backfilled quote for " + symbol, cacheEx);
+                                if (Double.isFinite(quote.getLastPrice()) && quote.getLastPrice() > 0) {
+                                    quotesToCache.put(symbol, quote);
                                 }
-                                log.debug("backfillPreviousCloseForDay", "Backfilled previousClose for " + symbol + ": " + prevClose);
+                                log.debug("backfillPreviousCloseForDay", "Resolved historical previousClose symbol={}", symbol);
                             }
                         }
                     }
@@ -760,6 +753,25 @@ public class SmartStockService {
             }
         } catch (Exception e) {
             log.error("backfillPreviousCloseForDay", "Error backfilling previousClose", e);
+        } finally {
+            cacheLatestPricesBatch(quotesToCache, "snapshot-and-history");
+        }
+    }
+
+    private void cacheLatestPricesBatch(Map<String, OHLCQuote> quotesToCache, String source) {
+        if (marketDataCacheService == null || quotesToCache == null || quotesToCache.isEmpty()) {
+            return;
+        }
+        long startedAt = System.nanoTime();
+        try {
+            marketDataCacheService.cacheLatestPrices(quotesToCache);
+            log.info("backfillPreviousCloseForDay",
+                    "Cached verified daily quote batch source={} symbols={} cacheWriteCalls=1 durationMs={}",
+                    source, quotesToCache.size(), (System.nanoTime() - startedAt) / 1_000_000);
+        } catch (Exception cacheEx) {
+            log.warn("backfillPreviousCloseForDay",
+                    "Failed to cache verified daily quote batch source={} symbols={} cacheWriteCalls=1",
+                    source, quotesToCache.size(), cacheEx);
         }
     }
 

@@ -562,7 +562,7 @@ public class AnalysisService {
         }
 
         // 2. Parse Timeframe & Determine Dates
-        LocalDate to = LocalDate.now();
+        LocalDate to = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         LocalDate from;
 
         // Custom logic for duration
@@ -598,6 +598,7 @@ public class AnalysisService {
 
         // 3. Fetch Data & Calculate Returns
         Map<String, Double> heatmap = new HashMap<>();
+        LocalDate targetStartDate = CalculateTargetDate(to, tfUpper);
 
         if (tfUpper.equals("1D")) {
             // For 1D timeframe: Use live session OHLC quotes directly via marketDataService.getOHLC.
@@ -629,73 +630,78 @@ public class AnalysisService {
         List<String> symbolsNeedingHistory = symbols.stream()
                 .filter(candidate -> !availableSymbols.contains(candidate)).toList();
         if (!symbolsNeedingHistory.isEmpty()) {
-            Map<String, HistoricalData> batchData = marketDataService.getHistoricalDataBatch(
-                    symbolsNeedingHistory,
-                    java.sql.Date.valueOf(from.minusDays(10)), // Buffer
-                    java.sql.Date.valueOf(to),
-                    interval,
-                    true,
-                    null,
-                    null,
-                    isIndexBatch, // isIndex
-                    bypassCache, // forceRefresh
-                    // HTTP requests pass false and stay cache/database-only. The existing
-                    // scheduler passes true, so it remains the asynchronous repair path.
-                    bypassCache
-            );
+            long historyStartedAt = System.nanoTime();
+            Map<String, HistoricalData> startData;
+            Map<String, HistoricalData> endData;
+            int batchCalls;
+            int lookbackDays = interval == TimeFrame.WEEK ? 42 : 10;
+            LocalDate startWindowFrom = targetStartDate.minusDays(lookbackDays);
+            LocalDate startWindowTo = targetStartDate.plusDays(1);
+            LocalDate endWindowFrom = to.minusDays(lookbackDays);
+            LocalDate endWindowTo = to.plusDays(1);
 
-            // Target Date Logic
-            LocalDate targetStartDate = CalculateTargetDate(to, tfUpper);
+            if ("1D".equals(tfUpper)) {
+                // Preserve the existing 1D recovery behavior exactly.
+                Map<String, HistoricalData> batchData = fetchHeatmapHistory(
+                        symbolsNeedingHistory, from.minusDays(10), to.plusDays(1), interval,
+                        isIndexBatch, bypassCache);
+                startData = batchData;
+                endData = batchData;
+                batchCalls = 1;
+            } else if (!startWindowFrom.isAfter(endWindowTo) && !endWindowFrom.isAfter(startWindowTo)) {
+                // Nearby boundaries (notably 1W) can be served by one compact query.
+                Map<String, HistoricalData> batchData = fetchHeatmapHistory(
+                        symbolsNeedingHistory,
+                        startWindowFrom.isBefore(endWindowFrom) ? startWindowFrom : endWindowFrom,
+                        startWindowTo.isAfter(endWindowTo) ? startWindowTo : endWindowTo,
+                        interval, isIndexBatch, bypassCache);
+                startData = batchData;
+                endData = batchData;
+                batchCalls = 1;
+            } else {
+                // Long windows only need two verified boundaries: the last candle on
+                // or before the baseline date and the latest candle on or before today.
+                // Fetching the intervening months/years adds payload without changing
+                // either value used by the existing return calculation.
+                startData = fetchHeatmapHistory(symbolsNeedingHistory, startWindowFrom,
+                        startWindowTo, interval, isIndexBatch, bypassCache);
+                endData = fetchHeatmapHistory(symbolsNeedingHistory, endWindowFrom,
+                        endWindowTo, interval, isIndexBatch, bypassCache);
+                batchCalls = 2;
+            }
 
+            int resolved = 0;
+            int omitted = 0;
+            int candleCount = countCandles(startData);
+            if (endData != startData) {
+                candleCount += countCandles(endData);
+            }
             for (String sym : symbolsNeedingHistory) {
-                HistoricalData hd = batchData != null ? batchData.get(sym) : null;
-                if (hd == null && batchData != null) {
-                    if (sym.contains(":")) {
-                        hd = batchData.get(sym.substring(sym.indexOf(":") + 1));
-                    }
-                    if (hd == null) {
-                        hd = batchData.get("NSE_EQ:" + sym);
-                    }
-                    if (hd == null) {
-                        hd = batchData.get("NSE:" + sym);
-                    }
-                }
-                if (hd == null || hd.getDataPoints() == null || hd.getDataPoints().isEmpty()) {
-                    log.warn("Skipping unavailable Heatmap point symbol={} timeframe={}", sym, tfNorm);
-                    continue;
-                }
-
-                // Historical sources may expose immutable lists. Sort a local copy so
-                // calculating a Heatmap never mutates cached data or fails at runtime.
-                List<OHLCVTPoint> points = new ArrayList<>(hd.getDataPoints());
-                points.sort(Comparator.comparing(OHLCVTPoint::getTime));
-
-                // Find End Price (Latest)
-                OHLCVTPoint lastPoint = points.get(points.size() - 1);
-                Double endPrice = lastPoint.getClose();
-
-                // Find Start Price
-                // For 1D: Prev Close relative to Last Point
+                HistoricalData baselineHistory = findHeatmapHistory(startData, sym);
+                HistoricalData endingHistory = findHeatmapHistory(endData, sym);
                 Double startPrice = null;
-
                 if (tfUpper.equals("1D")) {
-                    // Find point before last point
+                    List<OHLCVTPoint> points = sortedValidPoints(baselineHistory);
                     if (points.size() >= 2) {
                         startPrice = points.get(points.size() - 2).getClose();
                     }
                 } else {
-                    // Find point closest to targetStartDate
-                    startPrice = findClosestPrice(points, targetStartDate);
+                    startPrice = findClosestPrice(sortedValidPoints(baselineHistory), targetStartDate);
                 }
+                Double endPrice = latestCloseOnOrBefore(sortedValidPoints(endingHistory), to);
 
                 if (isValidPrice(endPrice) && isValidPrice(startPrice)) {
                     double change = (endPrice - startPrice) / startPrice * 100.0;
                     heatmap.put(sym, round2(change));
+                    resolved++;
                 } else {
-                    log.warn("Skipping invalid Heatmap price symbol={} timeframe={} start={} end={}",
-                            sym, tfNorm, startPrice, endPrice);
+                    omitted++;
                 }
             }
+            log.info("Heatmap history boundary resolution symbol={} timeframe={} requested={} resolved={} omitted={} candles={} batchCalls={} baselineWindow={}..{} endWindow={}..{} durationMs={}",
+                    symbol, tfNorm, symbolsNeedingHistory.size(), resolved, omitted, candleCount, batchCalls,
+                    startWindowFrom, startWindowTo, endWindowFrom, endWindowTo,
+                    (System.nanoTime() - historyStartedAt) / 1_000_000);
         }
 
         // Sort by change desc?
@@ -791,6 +797,69 @@ public class AnalysisService {
                 .max(Comparator.comparing(point -> point.getTime().toLocalDate()))
                 .map(OHLCVTPoint::getClose)
                 .orElse(null);
+    }
+
+    private Map<String, HistoricalData> fetchHeatmapHistory(List<String> symbols, LocalDate from, LocalDate to,
+            TimeFrame interval, boolean isIndexBatch, boolean bypassCache) {
+        return marketDataService.getHistoricalDataBatch(
+                symbols,
+                java.sql.Date.valueOf(from),
+                java.sql.Date.valueOf(to),
+                interval,
+                true,
+                null,
+                null,
+                isIndexBatch,
+                bypassCache,
+                // HTTP requests remain cache/database-only; scheduler bypass keeps its
+                // current provider-backed repair behavior.
+                bypassCache);
+    }
+
+    private HistoricalData findHeatmapHistory(Map<String, HistoricalData> data, String symbol) {
+        if (data == null) {
+            return null;
+        }
+        HistoricalData history = data.get(symbol);
+        if (history == null && symbol.contains(":")) {
+            history = data.get(symbol.substring(symbol.indexOf(":") + 1));
+        }
+        if (history == null) {
+            history = data.get("NSE_EQ:" + symbol);
+        }
+        if (history == null) {
+            history = data.get("NSE:" + symbol);
+        }
+        return history;
+    }
+
+    private List<OHLCVTPoint> sortedValidPoints(HistoricalData history) {
+        if (history == null || history.getDataPoints() == null) {
+            return Collections.emptyList();
+        }
+        return history.getDataPoints().stream()
+                .filter(point -> point != null && point.getTime() != null && isValidPrice(point.getClose()))
+                .sorted(Comparator.comparing(OHLCVTPoint::getTime))
+                .toList();
+    }
+
+    private Double latestCloseOnOrBefore(List<OHLCVTPoint> points, LocalDate targetDate) {
+        return points.stream()
+                .filter(point -> !point.getTime().toLocalDate().isAfter(targetDate))
+                .max(Comparator.comparing(point -> point.getTime().toLocalDate()))
+                .map(OHLCVTPoint::getClose)
+                .orElse(null);
+    }
+
+    private int countCandles(Map<String, HistoricalData> data) {
+        if (data == null) {
+            return 0;
+        }
+        return data.values().stream()
+                .filter(Objects::nonNull)
+                .filter(history -> history.getDataPoints() != null)
+                .mapToInt(history -> history.getDataPoints().size())
+                .sum();
     }
     // --- Indices Historical Performance ---
 
