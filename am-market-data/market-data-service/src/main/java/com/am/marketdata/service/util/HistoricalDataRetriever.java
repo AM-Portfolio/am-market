@@ -414,12 +414,10 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         }
 
         try {
-            for (Map.Entry<String, HistoricalData> entry : data.entrySet()) {
-                // Use the MarketDataCacheService directly to update only the cache
-                persistenceService.getMarketDataCacheService().cacheHistoricalData(
-                        entry.getKey(), interval, entry.getValue());
-            }
-            log.debug("Updated cache with historical data for {} symbols", data.size());
+            // Submit this already-fetched response as one multi-symbol pipeline;
+            // this remains cache-only and never writes to the primary database.
+            persistenceService.getMarketDataCacheService().cacheHistoricalDataBatch(data, interval);
+            log.debug("Submitted historical cache batch for {} symbols at interval {}", data.size(), interval);
         } catch (Exception e) {
             log.error("Error updating cache with historical data: {}", e.getMessage(), e);
         }

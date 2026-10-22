@@ -126,6 +126,23 @@ test_search_edge_cases.py
 !market-data-api/src/test/java/com/
 !market-data-api/src/test/java/com/am/
 !market-data-api/src/test/java/com/am/marketdata/
+
+# Keep the large-index heatmap latency regression tests under version control.
+!market-data-service/src/test/
+!market-data-service/src/test/java/
+!market-data-service/src/test/java/com/
+!market-data-service/src/test/java/com/am/
+!market-data-service/src/test/java/com/am/marketdata/
+!market-data-service/src/test/java/com/am/marketdata/service/
+!market-data-service/src/test/java/com/am/marketdata/service/MarketDataCacheServiceHistoricalBatchTest.java
+!market-data-scheduler/src/test/
+!market-data-scheduler/src/test/java/
+!market-data-scheduler/src/test/java/com/
+!market-data-scheduler/src/test/java/com/am/
+!market-data-scheduler/src/test/java/com/am/marketdata/
+!market-data-scheduler/src/test/java/com/am/marketdata/scheduler/
+!market-data-scheduler/src/test/java/com/am/marketdata/scheduler/service/
+!market-data-scheduler/src/test/java/com/am/marketdata/scheduler/service/MarketAnalysisSchedulerLargeIndexHeatmapTest.java
 !market-data-api/src/test/java/com/am/marketdata/api/
 !market-data-api/src/test/java/com/am/marketdata/api/MarketInfoSymbolMapTest.java
 !market-data-api/src/test/java/com/am/marketdata/api/MarketInfoDtoParseTest.java

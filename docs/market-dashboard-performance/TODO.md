@@ -1,5 +1,33 @@
 # Market dashboard performance TODO
 
+## October 22 large-index cold-cache latency slice — owner-approved scope
+
+- [x] Keep InfluxDB 25-symbol sequential chunking unchanged (explicitly
+  deferred; this is source-plan fix 1).
+- [x] Convert one fetched history batch into `StockBars` for all symbols and
+  pass it through bounded 50-symbol batches of the existing Redis
+  historical-bar pipeline; preserve the current symbol/interval/date keys,
+  TTL, and best-effort cache semantics.
+- [x] Extend the existing daily analysis job to read all index names from the
+  shared `nseindices.yml` registry, load each roster in one batched membership
+  lookup, and warm indexes above the configurable minimum constituent count.
+- [x] Use the loaded `application.yml` as the single scheduler settings source
+  for the constituent threshold, warming toggle, and nine supported analysis
+  windows (`1D`, `5D`, `1W`, `1M`, `3M`, `6M`, `1Y`, `3Y`, `5Y`).
+- [x] Log roster size, timeframe, result coverage, and elapsed time for each
+  scheduled large-index warm; do not cache incomplete results or invent values.
+- [x] Add focused tests for multi-symbol cache pipelining inputs, empty/partial
+  history, large-index roster gating, and scheduler failures; run relevant
+  service/scheduler test reactors and verify the existing API response contract.
+- [x] Confirm the cold request can still time out while scheduled warming is
+  pending; no latency guarantee is made until the deferred Influx query work is
+  separately approved and measured.
+
+Verification: focused Maven reactor for `market-data-service` and
+`market-data-scheduler` plus dependencies passed after the review correction
+(2026-10-22); 12 focused service/scheduler/cache tests passed. No production
+deployment or database mutation.
+
 ## October 22 requested code slice — implementation approved
 
 - [x] Owner reviews the October 22 scoped plan and candle-boundary diagram

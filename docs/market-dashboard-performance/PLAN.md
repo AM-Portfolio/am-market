@@ -6,13 +6,37 @@
 **Current checkout branch:** `hotfix/hypercare-R6` (kept; no branch switch requested)
 **Original plan status:** proposed — superseded by the current implementation status below.
 
-**Status:** prior batch-query slice exists; the October 22 code slice below is
-awaiting owner review of its scoped plan. Production remains read-only and is
-not being changed or deployed.
+**Status:** owner-approved local implementation complete for the October 22
+large-index latency slice below. Production remains read-only and is not being
+changed or deployed.
 
 **October 18 revision:** The production-connectivity and design decisions in
 the final section below supersede conflicting earlier statements. Existing
 ratings are historical, not evidence that the revised plan is verified.
+
+**October 22 heatmap latency implementation scope:** The owner approved the
+Redis multi-symbol pipeline and large-index heatmap warming only. The proposed
+Influx parallel-query change (source-plan fix 1) is explicitly deferred. No API,
+DTO, response shape, query strategy, or production configuration is changed.
+
+**October 22 review correction:** The first warmer implementation was too narrow:
+it named two NSE indexes, selected three windows, and embedded a 100-member gate
+in Java. The scheduler now reads index names from the existing `nseindices.yml`
+registry, fetches their memberships in one batch, and uses loaded application
+configuration for the minimum roster size and the heatmap windows already
+supported by the analysis path (`1D`, `5D`, `1W`, `1M`, `3M`, `6M`, `1Y`, `3Y`,
+and `5Y`). `5D` is retained as the API's existing alias for the one-week window.
+`application-scheduler.yml` is not imported by the runtime app; these settings
+belong in the loaded `application.yml`. This broadens warmed coverage without
+changing any API. The cache warmer still cannot restore history that is absent
+from Redis, InfluxDB, and provider results, and the first cold request can still
+wait on the unchanged sequential Influx path.
+
+The default minimum is 100 constituents to cap daily batch work. Lower it to
+`0` to warm every configured NSE index with a non-empty roster; indexes below
+the threshold remain directly queryable but will not be prewarmed. Warming every
+index costs more scheduled history queries, so the threshold is intentionally
+an operator-controlled trade-off.
 
 ## Goal
 
@@ -65,6 +89,24 @@ Out of scope:
 - New API routes, DTOs, response fields, database schemas, or database seeding.
 - Gateway/authentication/public-market work.
 - Broker, Paper Trading, portfolio, or unrelated chart UI changes.
+
+For the October 22 latency slice, additionally in scope are only (a) writing
+the already-fetched historical bars for all returned symbols through the
+existing Redis pipeline in bounded groups of at most 50 symbols and (b)
+extending the existing daily analysis scheduler to refresh heatmaps for every
+index in the configured NSE registry whose valid roster exceeds a configurable
+minimum. Index membership is read in one batched lookup; the threshold and shared
+heatmap timeframe list are loaded from `application.yml`. The
+25-symbol sequential Influx reads remain unchanged. Thus this reduces Redis
+write round trips and makes subsequent requests cache hits, but does not promise
+that the first cold request will complete before its gateway timeout.
+
+The daily analysis scheduler already runs under the existing tracked/distributed
+lock and now runs the large-index warm first, before its existing per-symbol
+workload. It caches only results passing the current Heatmap coverage checks;
+if source history is absent or incomplete, the cache remains unwarmed and a
+request can still be slow. This slice adds no cache, worker, endpoint, or data
+source.
 
 ## Design
 

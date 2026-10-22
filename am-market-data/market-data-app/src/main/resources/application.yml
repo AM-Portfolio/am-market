@@ -169,6 +169,7 @@ market-data:
   nse:
     cookies:
       ttl-minutes: ${NSE_COOKIES_TTL_MINUTES:60}
+
 # Logging Configuration
 logging:
   # NOTE: logging.file.name and logging.pattern.* are intentionally NOT set.
@@ -217,6 +218,14 @@ server:
     min-response-size: 1024
 
 market:
+  # Shared timeframe list for scheduled heatmap refreshes. Index names are
+  # sourced from the existing nseindices.yml registry.
+  analysis:
+    heatmap:
+      timeframes: ${MARKET_ANALYSIS_HEATMAP_TIMEFRAMES:1D,5D,1W,1M,3M,6M,1Y,3Y,5Y}
+      warming:
+        enabled: ${MARKET_ANALYSIS_INDEX_HEATMAP_WARMING_ENABLED:true}
+        minimum-constituents: ${MARKET_ANALYSIS_HEATMAP_MINIMUM_CONSTITUENTS:100}
   cache:
     async-backfill:
       enabled: ${MARKET_CACHE_ASYNC_ENABLED:true}
