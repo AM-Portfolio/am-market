@@ -80,7 +80,7 @@ public class GlobalIndexInfluxRepository {
     /**
      * Bulk-inserts a list of historical data points during the admin backfill sync.
      *
-     * <p>Called by {@code GlobalHistoricalSyncService} when processing candles from the
+     * <p>Called by {@code GlobalIndexHistoricalSyncService} when processing candles from the
      * Upstox Historical Candle API (1 year daily + 30 days 1-minute bars per instrument).
      *
      * <p>Uses a larger batch size for efficiency during bulk writes.
@@ -143,16 +143,8 @@ public class GlobalIndexInfluxRepository {
         //   boundary from UTC midnight to the exchange's session open time.
         // - `createEmpty: false` prevents null rows in thin-volume periods.
         // - `pivot` flattens field columns so the Java client can map to the POJO.
-        String query = String.format(
-            "from(bucket: \"%s\") " +
-            "|> range(start: %s, stop: %s) " +
-            "|> filter(fn: (r) => r._measurement == \"%s\") " +
-            "|> filter(fn: (r) => r.instrumentKey == \"%s\") " +
-            "|> aggregateWindow(every: %s, offset: %s, fn: mean, createEmpty: false) " +
-            "|> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")",
-            bucket, startTime, endTime, MEASUREMENT_NAME, instrumentKey,
-            aggregateWindowEvery, aggregateOffset
-        );
+        String query = buildOhlcAggregationQuery(bucket, MEASUREMENT_NAME, instrumentKey,
+                startTime, endTime, aggregateWindowEvery, aggregateOffset);
 
         logger.debug("Executing historical query for global index: instrumentKey={}, start={}, end={}, every={}, offset={}",
                 instrumentKey, startTime, endTime, aggregateWindowEvery, aggregateOffset);
@@ -166,6 +158,31 @@ public class GlobalIndexInfluxRepository {
         results.forEach(m -> m.setInstrumentKey(instrumentKey));
 
         return results;
+    }
+
+    static String buildOhlcAggregationQuery(String bucket, String measurement, String instrumentKey,
+            Instant startTime, Instant endTime, String aggregateWindowEvery, String aggregateOffset) {
+        String safeInstrumentKey = escapeFluxString(instrumentKey);
+        return String.format(
+            "base = from(bucket: \"%s\") " +
+            "|> range(start: %s, stop: %s) " +
+            "|> filter(fn: (r) => r._measurement == \"%s\") " +
+            "|> filter(fn: (r) => r.instrumentKey == \"%s\") " +
+            "|> group(columns: [])\n" +
+            "opens = base |> filter(fn: (r) => r._field == \"open\") |> aggregateWindow(every: %s, offset: %s, fn: first, createEmpty: false)\n" +
+            "highs = base |> filter(fn: (r) => r._field == \"high\") |> aggregateWindow(every: %s, offset: %s, fn: max, createEmpty: false)\n" +
+            "lows = base |> filter(fn: (r) => r._field == \"low\") |> aggregateWindow(every: %s, offset: %s, fn: min, createEmpty: false)\n" +
+            "closes = base |> filter(fn: (r) => r._field == \"close\") |> aggregateWindow(every: %s, offset: %s, fn: last, createEmpty: false)\n" +
+            "union(tables: [opens, highs, lows, closes])\n" +
+            "|> group(columns: [])\n" +
+            "|> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n" +
+            "|> sort(columns: [\"_time\"])",
+            bucket, startTime, endTime, measurement, safeInstrumentKey,
+            aggregateWindowEvery, aggregateOffset,
+            aggregateWindowEvery, aggregateOffset,
+            aggregateWindowEvery, aggregateOffset,
+            aggregateWindowEvery, aggregateOffset
+        );
     }
 
     /**
@@ -208,16 +225,20 @@ public class GlobalIndexInfluxRepository {
      * @return the InfluxDB write point
      */
     private Point buildPoint(GlobalIndexMeasurement m) {
-        return Point.measurement(MEASUREMENT_NAME)
+        Point point = Point.measurement(MEASUREMENT_NAME)
                 .addTag("instrumentKey", m.getInstrumentKey())
                 .addTag("name", m.getName())
-                .addTag("segment", m.getSegment())
-                .addField("open", m.getOpen())
-                .addField("high", m.getHigh())
-                .addField("low", m.getLow())
-                .addField("close", m.getClose())
-                .addField("previous_close", m.getPreviousClose())
-                .addField("change_percent", m.getChangePercent())
-                .time(m.getTime(), WritePrecision.NS);
+                .addTag("segment", m.getSegment());
+        if (m.getOpen() != null) point.addField("open", m.getOpen());
+        if (m.getHigh() != null) point.addField("high", m.getHigh());
+        if (m.getLow() != null) point.addField("low", m.getLow());
+        if (m.getClose() != null) point.addField("close", m.getClose());
+        if (m.getPreviousClose() != null) point.addField("previous_close", m.getPreviousClose());
+        if (m.getChangePercent() != null) point.addField("change_percent", m.getChangePercent());
+        return point.time(m.getTime(), WritePrecision.NS);
+    }
+
+    private static String escapeFluxString(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

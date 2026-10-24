@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.time.Instant;
 
 /**
  * Converter to transform Upstox V3 messages to organization-level common model
@@ -86,6 +87,12 @@ public class UpstoxV3FeedConverter {
                         double ltp = ltpc.getLtp();
                         if (ltp > 0) {
                             quote.setLastPrice(ltp);
+                        }
+
+                        // Upstox LTPC carries source event time in epoch milliseconds.
+                        // Receipt time is not a safe substitute for quote freshness.
+                        if (ltpc.getLtt() > 0) {
+                            quote.setQuoteTimestamp(Instant.ofEpochMilli(ltpc.getLtt()));
                         }
 
                         // Extract previous close

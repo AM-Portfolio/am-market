@@ -793,6 +793,11 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
 
         try {
             SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            boolean isGlobalIndex = instrumentKey != null && instrumentKey.startsWith("GLOBAL_INDEX|");
+            if (isGlobalIndex) {
+                // Date-only V3 path parameters must not shift when the backend host timezone differs.
+                dateFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            }
             String fromDateStr = dateFormat.format(from);
             String toDateStr = dateFormat.format(to);
 
@@ -866,12 +871,20 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                             // Using Instant parser for ISO 8601 strings
                             java.time.Instant instant = java.time.Instant
                                     .parse(timestamp.replace("+0530", "+05:30"));
-                            point.setTime(java.time.LocalDateTime.ofInstant(instant, java.time.ZoneId.systemDefault()));
+                            point.setTime(java.time.LocalDateTime.ofInstant(instant,
+                                    isGlobalIndex ? java.time.ZoneOffset.UTC : java.time.ZoneId.systemDefault()));
                         } else {
+                            if (isGlobalIndex) {
+                                log.warn("getHistoricalData", "Skipping global candle without provider timestamp for key: " + instrumentKey);
+                                continue;
+                            }
                             point.setTime(java.time.LocalDateTime.now());
                         }
                     } catch (Exception e) {
                         log.warn("getHistoricalData", "Error parsing candle timestamp: " + e.getMessage());
+                        if (isGlobalIndex) {
+                            continue;
+                        }
                         point.setTime(java.time.LocalDateTime.now());
                     }
 

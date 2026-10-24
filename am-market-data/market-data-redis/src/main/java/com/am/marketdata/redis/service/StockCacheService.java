@@ -105,6 +105,17 @@ public class StockCacheService {
     }
 
     /**
+     * Cache historical bars for multiple symbols in one Redis pipeline.
+     * The caller is responsible for bounding the input batch.
+     */
+    public boolean cacheHistoricalDataBatch(List<StockBars> stockBarsList) {
+        if (stockBarsList == null || stockBarsList.isEmpty()) {
+            return false;
+        }
+        return historicalService.cacheHistoricalBar(stockBarsList);
+    }
+
+    /**
      * Get bars for a symbol with cache statistics tracking
      */
     public StockBars getBarsWithStats(String symbol, String interval, String date) {

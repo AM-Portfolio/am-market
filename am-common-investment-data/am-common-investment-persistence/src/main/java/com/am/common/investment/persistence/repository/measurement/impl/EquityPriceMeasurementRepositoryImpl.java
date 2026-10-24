@@ -234,6 +234,66 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
         return results;
     }
 
+    @Override
+    public List<EquityPriceMeasurement> findBySymbolsAndTimeBetween(List<String> symbols, Instant startTime,
+            Instant endTime, String windowInterval) {
+        if (symbols == null || symbols.isEmpty()) {
+            return List.of();
+        }
+
+        // Keep the Flux predicate bounded; an index may contain hundreds of names.
+        List<EquityPriceMeasurement> allResults = new java.util.ArrayList<>();
+        final int chunkSize = 25;
+        for (int offset = 0; offset < symbols.size(); offset += chunkSize) {
+            List<String> chunk = symbols.subList(offset, Math.min(offset + chunkSize, symbols.size()));
+            java.util.Set<String> expandedSymbols = new java.util.LinkedHashSet<>();
+            for (String s : chunk) {
+                if (s == null || s.isBlank()) continue;
+                String clean = s.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "").trim();
+                expandedSymbols.add(s);
+                expandedSymbols.add(clean);
+                expandedSymbols.add("NSE_EQ:" + clean);
+                expandedSymbols.add("NSE_EQ|" + clean);
+            }
+            String symbolSet = expandedSymbols.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .map(String::trim)
+                    .filter(symbol -> !symbol.isEmpty())
+                    .map(this::fluxString)
+                    .collect(Collectors.joining(", ", "[", "]"));
+            if ("[]".equals(symbolSet)) {
+                continue;
+            }
+
+            String fluxInterval = normalizeWindowInterval(windowInterval);
+            String windowClause = fluxInterval == null || fluxInterval.isEmpty()
+                    ? ""
+                    : String.format("|> aggregateWindow(every: %s, fn: last, createEmpty: false) ", fluxInterval);
+            String query = String.format(
+                    "from(bucket: \"%s\") "
+                    + "|> range(start: %s, stop: %s) "
+                    + "|> filter(fn: (r) => r._measurement == \"equity\") "
+                    + "|> filter(fn: (r) => contains(value: r.symbol, set: %s)) "
+                    + "%s"
+                    + "|> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")",
+                    influxDBConfig.getBucket(), startTime, endTime, symbolSet, windowClause);
+            long startedAt = System.currentTimeMillis();
+            List<EquityPriceMeasurement> chunkResults = influxDBClient.getQueryApi()
+                    .query(query, EquityPriceMeasurement.class);
+            logger.info("Historical multi-symbol Influx query returned {} rows for {}/{} symbols in {}ms",
+                    chunkResults != null ? chunkResults.size() : 0, chunk.size(), symbols.size(),
+                    System.currentTimeMillis() - startedAt);
+            if (chunkResults != null) {
+                allResults.addAll(chunkResults);
+            }
+        }
+        return allResults;
+    }
+
+    private String fluxString(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
     private String normalizeWindowInterval(String interval) {
         if (interval == null || interval.trim().isEmpty()) {
             return null;

@@ -11,6 +11,12 @@ env:
   SCHEDULER_INGESTION_POLL_ENABLED: "false"
   SCHEDULER_INGESTION_POLL_HISTORICAL: "false"
   SCHEDULER_INGESTION_USE_WEBSOCKET: "true"
+  # TODO: Deploy a dedicated InfluxDB instance for dev.
+  # Currently dev shares the prod InfluxDB (influxdb.asrax.in:8086).
+  # INFLUXDB_URL is no longer hardcoded here. It is composed at runtime from
+  # INFLUXDB_HOST and INFLUXDB_PORT, which are injected by the Vault CSI driver
+  # from the secret path: apps/data/dev/infra/influxdb (keys: host, port).
+  # As long as dev Vault mirrors prod influxdb host/port, this points to the same instance.
 
 environment: dev
 replicaCount: 1
@@ -131,6 +137,7 @@ monitoring:
 hostAliases:
   - ip: "203.174.22.129"
     hostnames:
+      - "influxdb.asrax.in"
       - "redis.asrax.in"
       - "mongodb.asrax.in"
       - "kafka.asrax.in"
