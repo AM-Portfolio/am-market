@@ -28,7 +28,7 @@ import java.time.Instant;
  * This prevents US/European candles from being split across two calendar days in UTC.
  *
  * <p><b>Written by:</b> {@code GlobalIndexCacheWriter} (live ticks via WebSocket)
- * and {@code GlobalHistoricalSyncService} (historical backfill via admin sync).
+ * and {@code GlobalIndexHistoricalSyncService} (historical backfill via admin sync).
  */
 @Data
 @Measurement(name = "global_market_index")

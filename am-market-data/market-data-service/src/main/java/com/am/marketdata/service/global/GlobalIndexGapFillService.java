@@ -39,6 +39,10 @@ public class GlobalIndexGapFillService implements ApplicationRunner {
 
             for (GlobalIndexConfigDocument config : configs) {
                 String instrumentKey = config.getInstrumentKey();
+                if (instrumentKey == null || instrumentKey.isBlank()) {
+                    log.info("Skipping global history gap-fill for {}: no verified provider instrument is configured.", config.getSymbol());
+                    continue;
+                }
                 Optional<Instant> lastTimestampOpt = influxRepository.findLastTimestamp(instrumentKey);
 
                 if (lastTimestampOpt.isEmpty()) {

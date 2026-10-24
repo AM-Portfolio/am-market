@@ -5,6 +5,7 @@ import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.persistence.document.global.GlobalIndexConfigDocument;
 import com.am.common.investment.persistence.document.global.GlobalIndexConfigRepository;
 import com.am.marketdata.api.service.MarketDataFetchService;
+import com.am.marketdata.service.global.GlobalMarketScheduleService;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,6 +23,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.UUID;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 /**
  * Service responsible for fetching the latest prices of global market indices.
@@ -88,18 +91,19 @@ public class GlobalIndexService {
     private static final String GLOBAL_LOCK_PREFIX = "market:lock:global:";
 
     /**
-     * Cache staleness threshold in milliseconds (5 minutes).
-     * If the last global tick timestamp is older than this, trigger the REST fallback.
-     * Only applies when the global market schedule indicates the exchange should be open.
-     */
-    private static final long STALE_THRESHOLD_MS = 5 * 60 * 1000L;
-
-    /**
      * TTL for the distributed lock in seconds.
      * Short enough to recover quickly if a lock holder crashes mid-fetch.
      */
     private static final long LOCK_TTL_SECONDS = 10L;
     private static final long MONGO_SAVE_COOLDOWN_MS = 5 * 60 * 1000L; // 5 minutes
+    private static final DefaultRedisScript<Long> RELEASE_LOCK_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+            Long.class);
+    private static final DefaultRedisScript<Long> WRITE_NEWER_QUOTE_SCRIPT = new DefaultRedisScript<>(
+            "local old=redis.call('get', KEYS[2]); " +
+                    "if old and tonumber(old) and tonumber(old) >= tonumber(ARGV[1]) then return 0 end; " +
+                    "redis.call('set', KEYS[1], ARGV[2]); redis.call('set', KEYS[2], ARGV[1]); return 1",
+            Long.class);
 
     private final java.util.concurrent.ConcurrentHashMap<String, Long> lastMongoSaveTimeMap = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -107,6 +111,7 @@ public class GlobalIndexService {
     private final GlobalIndexConfigRepository globalIndexConfigRepository;
     private final ObjectMapper objectMapper;
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
+    private final GlobalMarketScheduleService globalMarketScheduleService;
 
     /**
      * Used for the REST fallback when Redis cache is empty or stale.
@@ -171,20 +176,28 @@ public class GlobalIndexService {
         }
         GlobalIndexConfigDocument config = configOpt.get();
         String instrumentKey = config.getInstrumentKey();
+        GlobalMarketScheduleService.MarketEntry schedule = globalMarketScheduleService.getMarkets().stream()
+                .filter(entry -> symbol.equals(entry.symbol()))
+                .findFirst()
+                .orElse(null);
+        if (instrumentKey == null || instrumentKey.isBlank() || schedule == null || !schedule.hasInstrument()
+                || !instrumentKey.equals(schedule.instrumentKey())) {
+            log.warn("[GlobalIndexService] No verified provider instrument for symbol={}; refusing unverified price data.", symbol);
+            return buildFallbackResponse(symbol, true);
+        }
 
         // Step 2: Try Redis cache first (fastest path — populated by WebSocket ticks)
         String cachedJson = redisTemplate.opsForValue().get(GLOBAL_LATEST_PREFIX + instrumentKey);
-        String cachedTimestamp = redisTemplate.opsForValue().get(GLOBAL_TIMESTAMP_PREFIX + instrumentKey);
-
-        boolean isStale = isCacheStale(cachedTimestamp);
+        boolean isStale = !isUsableQuote(cachedJson, schedule, Instant.now());
 
         // Step 3: If stale, acquire a distributed lock and trigger a REST fallback
         // The lock prevents multiple concurrent requests (e.g., 20 users loading the dashboard
         // simultaneously on cold start) from all calling the Upstox API at once.
         if ((cachedJson == null || isStale)) {
             String lockKey = GLOBAL_LOCK_PREFIX + instrumentKey;
+            String lockToken = UUID.randomUUID().toString();
             Boolean lockAcquired = redisTemplate.opsForValue()
-                    .setIfAbsent(lockKey, "LOCKED", LOCK_TTL_SECONDS, TimeUnit.SECONDS);
+                    .setIfAbsent(lockKey, lockToken, LOCK_TTL_SECONDS, TimeUnit.SECONDS);
 
             if (Boolean.TRUE.equals(lockAcquired)) {
                 // We won the distributed lock — fetch from Upstox REST API.
@@ -198,17 +211,20 @@ public class GlobalIndexService {
                     Map<String, OHLCQuote> ohlcResult = marketDataFetchService.getOHLC(
                             Set.of(instrumentKey), true, TimeFrame.DAY, true);
 
-                    if (ohlcResult != null && ohlcResult.containsKey(instrumentKey) && ohlcResult.get(instrumentKey).getLastPrice() > 0.0) {
+                    if (ohlcResult != null && ohlcResult.containsKey(instrumentKey)
+                            && GlobalIndexQuoteValidator.isUsable(ohlcResult.get(instrumentKey), schedule,
+                            globalMarketScheduleService, Instant.now())) {
                         OHLCQuote freshQuote = ohlcResult.get(instrumentKey);
                         // Serialize and write to the two dedicated global Redis keys.
                         // These are read ONLY by this service — not mixed with Indian market:latest-price:* keys.
                         String freshJson = objectMapper.writeValueAsString(freshQuote);
-                        redisTemplate.opsForValue().set(GLOBAL_LATEST_PREFIX + instrumentKey, freshJson);
-                        redisTemplate.opsForValue().set(
-                                GLOBAL_TIMESTAMP_PREFIX + instrumentKey,
-                                String.valueOf(System.currentTimeMillis()));
-                        // Use the freshly fetched data for the response below
-                        cachedJson = freshJson;
+                        Long stored = redisTemplate.execute(WRITE_NEWER_QUOTE_SCRIPT,
+                                List.of(GLOBAL_LATEST_PREFIX + instrumentKey, GLOBAL_TIMESTAMP_PREFIX + instrumentKey),
+                                String.valueOf(freshQuote.getQuoteTimestamp().toEpochMilli()), freshJson);
+                        // A WebSocket tick may have arrived while REST was in flight; read the newest winner.
+                        cachedJson = stored != null && stored == 1L
+                                ? freshJson
+                                : redisTemplate.opsForValue().get(GLOBAL_LATEST_PREFIX + instrumentKey);
                         log.info("[GlobalIndexService] REST fallback succeeded for instrumentKey={}. lastPrice={}",
                                 instrumentKey, freshQuote.getLastPrice());
                     } else {
@@ -219,12 +235,11 @@ public class GlobalIndexService {
                 } finally {
                     // Always release the lock — even if the fetch threw an exception.
                     // A short TTL (LOCK_TTL_SECONDS) is the safety net if the JVM crashes before this line.
-                    redisTemplate.delete(lockKey);
+                    redisTemplate.execute(RELEASE_LOCK_SCRIPT, List.of(lockKey), lockToken);
                 }
             } else {
-                // Another thread/pod is already fetching — serve whatever stale data exists rather than blocking.
-                // The caller will get fresh data on the next request once the lock holder completes.
-                log.debug("[GlobalIndexService] Lock held by another instance for instrumentKey={}. Serving cached data.", instrumentKey);
+                // Never serve stale or unverifiable data while another pod is refreshing.
+                log.debug("[GlobalIndexService] Refresh lock held for instrumentKey={}; using validated cache only.", instrumentKey);
             }
         }
 
@@ -233,26 +248,14 @@ public class GlobalIndexService {
                 redisTemplate.opsForValue().get(GLOBAL_SUSPENDED_PREFIX + instrumentKey));
 
         // Step 5: Map Redis cache to StockIndicesMarketData DTO
-        if (cachedJson != null) {
-            StockIndicesMarketData data = buildResponse(symbol, config, cachedJson, isSuspended);
+        if (isUsableQuote(cachedJson, schedule, Instant.now())) {
+            boolean closedOrDelayed = isSuspended || !globalMarketScheduleService.isMarketCurrentlyOpen(schedule, Instant.now())
+                    || isProviderDelayed(cachedJson, schedule, Instant.now());
+            StockIndicesMarketData data = buildResponse(symbol, config, cachedJson, closedOrDelayed);
             saveToMongoAsync(data, instrumentKey);
             return data;
         }
-
-        // Fallback: If no Redis cache, check MongoDB database for last-known values
-        try {
-            StockIndicesMarketData lastKnown = stockIndicesMarketDataService.findByIndexSymbol(instrumentKey);
-            if (lastKnown != null) {
-                log.info("[GlobalIndexService] Serving last available database values for symbol={} (key={})", symbol, instrumentKey);
-                lastKnown.setIndexSymbol(symbol);
-                return lastKnown;
-            }
-        } catch (Exception e) {
-            log.error("[GlobalIndexService] Failed to load last-known data from MongoDB for symbol={} (key={})", symbol, instrumentKey, e);
-        }
-
-        // No data at all — return a suspended fallback response
-        log.warn("[GlobalIndexService] No data available for symbol={}. Returning suspended fallback.", symbol);
+        log.warn("[GlobalIndexService] No source-time-validated quote available for symbol={}; stale Mongo/Redis snapshots are not served.", symbol);
         return buildFallbackResponse(symbol, true);
     }
 
@@ -300,12 +303,22 @@ public class GlobalIndexService {
      * @param cachedTimestamp epoch millisecond string from Redis, or null if absent
      * @return true if the cache is stale or missing
      */
-    private boolean isCacheStale(String cachedTimestamp) {
-        if (cachedTimestamp == null) return true;
+    private boolean isUsableQuote(String json, GlobalMarketScheduleService.MarketEntry schedule, Instant now) {
+        if (json == null || json.isBlank()) return false;
         try {
-            long lastTickMs = Long.parseLong(cachedTimestamp);
-            return (System.currentTimeMillis() - lastTickMs) > STALE_THRESHOLD_MS;
-        } catch (NumberFormatException e) {
+            return GlobalIndexQuoteValidator.isUsable(objectMapper.readValue(json, OHLCQuote.class), schedule,
+                    globalMarketScheduleService, now);
+        } catch (Exception e) {
+            log.warn("[GlobalIndexService] Rejecting unreadable global quote for symbol={}", schedule.symbol());
+            return false;
+        }
+    }
+
+    private boolean isProviderDelayed(String json, GlobalMarketScheduleService.MarketEntry schedule, Instant now) {
+        try {
+            OHLCQuote quote = objectMapper.readValue(json, OHLCQuote.class);
+            return GlobalIndexQuoteValidator.isProviderDelayed(quote, schedule, globalMarketScheduleService, now);
+        } catch (Exception ignored) {
             return true;
         }
     }
@@ -347,6 +360,7 @@ public class GlobalIndexService {
             metadata.setLow(low);
             metadata.setPreviousClose(prevClose);
             metadata.setLast(lastPrice);
+            metadata.setChange(lastPrice - prevClose);
             metadata.setPercChange(changePercent);
             metadata.setSegment("GLOBAL"); // identifies this as a foreign market index
             if (isSuspended) {

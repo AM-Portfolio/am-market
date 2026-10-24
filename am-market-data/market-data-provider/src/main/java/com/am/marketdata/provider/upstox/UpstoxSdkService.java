@@ -398,29 +398,8 @@ public class UpstoxSdkService {
             String encodedKey = java.net.URLEncoder.encode(decodedKey, java.nio.charset.StandardCharsets.UTF_8.toString())
                     .replace("+", "%20");
 
-            String urlStr;
-            if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
-                urlStr = String.format("https://api.upstox.com/v2/historical-candle/intraday/%s/1minute", encodedKey);
-            } else {
-                String tf;
-                if ("day".equalsIgnoreCase(unit) || "days".equalsIgnoreCase(unit)) {
-                    tf = "day";
-                } else if ("week".equalsIgnoreCase(unit) || "weeks".equalsIgnoreCase(unit)) {
-                    tf = "week";
-                } else if ("month".equalsIgnoreCase(unit) || "months".equalsIgnoreCase(unit)) {
-                    tf = "month";
-                } else {
-                    String singularUnit = unit != null && unit.endsWith("s")
-                            ? unit.substring(0, unit.length() - 1)
-                            : unit;
-                    tf = interval + singularUnit; // e.g. 1minute, 30minute, day
-                }
-                if (fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate)) {
-                    urlStr = String.format("https://api.upstox.com/v2/historical-candle/%s/%s/%s/%s", encodedKey, tf, toDate, fromDate);
-                } else {
-                    urlStr = String.format("https://api.upstox.com/v2/historical-candle/%s/%s/%s", encodedKey, tf, toDate);
-                }
-            }
+            String urlStr = buildHistoricalCandleUrl(
+                    encodedKey, normalizedKey, unit, interval, toDate, fromDate, isQueryingToday);
 
             log.info("Directly fetching historical data from URL: {}", urlStr);
 
@@ -492,6 +471,50 @@ public class UpstoxSdkService {
         }
     }
 
+
+    /**
+     * Builds the historical URL while keeping existing V2 behavior for all non-global
+     * instruments. Upstox documents global-index daily/weekly/monthly history on V3.
+     */
+    static String buildHistoricalCandleUrl(String encodedKey, String instrumentKey, String unit,
+            Integer interval, String toDate, String fromDate, boolean isQueryingToday) {
+        boolean isGlobalIndex = instrumentKey != null && instrumentKey.startsWith("GLOBAL_INDEX|");
+        boolean globalV3Unit = "days".equalsIgnoreCase(unit)
+                || "weeks".equalsIgnoreCase(unit)
+                || "months".equalsIgnoreCase(unit);
+
+        if (isGlobalIndex && globalV3Unit) {
+            String v3Path = String.format("https://api.upstox.com/v3/historical-candle/%s/%s/%s/%s",
+                    encodedKey, unit.toLowerCase(java.util.Locale.ROOT), interval, toDate);
+            return fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate)
+                    ? v3Path + "/" + fromDate
+                    : v3Path;
+        }
+
+        if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
+            return String.format("https://api.upstox.com/v2/historical-candle/intraday/%s/1minute", encodedKey);
+        }
+
+        String timeframe;
+        if ("day".equalsIgnoreCase(unit) || "days".equalsIgnoreCase(unit)) {
+            timeframe = "day";
+        } else if ("week".equalsIgnoreCase(unit) || "weeks".equalsIgnoreCase(unit)) {
+            timeframe = "week";
+        } else if ("month".equalsIgnoreCase(unit) || "months".equalsIgnoreCase(unit)) {
+            timeframe = "month";
+        } else {
+            String singularUnit = unit != null && unit.endsWith("s")
+                    ? unit.substring(0, unit.length() - 1)
+                    : unit;
+            timeframe = interval + singularUnit;
+        }
+        if (fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate)) {
+            return String.format("https://api.upstox.com/v2/historical-candle/%s/%s/%s/%s",
+                    encodedKey, timeframe, toDate, fromDate);
+        }
+        return String.format("https://api.upstox.com/v2/historical-candle/%s/%s/%s",
+                encodedKey, timeframe, toDate);
+    }
 
     private com.am.marketdata.provider.upstox.model.HistoricalDataResponse mapToHistoricalDataResponse(
             GetHistoricalCandleResponse sdkResponse) {
