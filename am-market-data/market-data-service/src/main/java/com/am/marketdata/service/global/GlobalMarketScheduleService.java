@@ -15,6 +15,7 @@ import jakarta.annotation.PostConstruct;
 import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -97,10 +99,14 @@ public class GlobalMarketScheduleService {
                 MarketEntry entry = new MarketEntry(
                         (String) m.get("symbol"),
                         (String) m.get("name"),
+                        (String) m.get("instrumentKey"),
+                        (String) m.get("exchange"),
                         (String) m.get("timezone"),
                         (String) m.get("marketOpen"),
                         (String) m.get("marketClose"),
-                        (String) m.get("jollidayCountry")
+                        (String) m.get("jollidayCountry"),
+                        (String) m.get("influxAggregateOffset"),
+                        m.get("quoteMaxAgeSeconds") instanceof Number n ? n.longValue() : 0L
                 );
                 markets.add(entry);
             }
@@ -132,7 +138,9 @@ public class GlobalMarketScheduleService {
             return;
         }
 
-        boolean anyMarketOpen = markets.stream().anyMatch(this::isMarketCurrentlyOpen);
+        boolean anyMarketOpen = markets.stream()
+                .filter(MarketEntry::hasInstrument)
+                .anyMatch(this::isMarketCurrentlyOpen);
 
         if (anyMarketOpen) {
             logger.info("[GlobalSchedule] At least one global market is open. Setting vote:global = true.");
@@ -155,33 +163,33 @@ public class GlobalMarketScheduleService {
      * @return true if the market is currently within its open/close window and not on holiday
      */
     public boolean isMarketCurrentlyOpen(MarketEntry market) {
+        return isMarketCurrentlyOpen(market, Instant.now());
+    }
+
+    public boolean isMarketCurrentlyOpen(MarketEntry market, Instant instant) {
         try {
             ZoneId exchangeZone = ZoneId.of(market.timezone());
-            // Convert current UTC time to the exchange's local timezone — this is DST-safe
-            ZonedDateTime now = ZonedDateTime.now(exchangeZone);
+            ZonedDateTime now = instant.atZone(exchangeZone);
             LocalDate today = now.toLocalDate();
             LocalTime currentTime = now.toLocalTime();
-
-            // Weekend check (most global exchanges are Mon-Fri)
-            switch (now.getDayOfWeek()) {
-                case SATURDAY, SUNDAY -> {
-                    logger.debug("[GlobalSchedule] {} is closed: weekend in {}", market.symbol(), market.timezone());
-                    return false;
-                }
-                default -> { /* weekday, continue */ }
+            LocalTime open = LocalTime.parse(market.marketOpen(), TIME_FORMATTER);
+            LocalTime close = LocalTime.parse(market.marketClose(), TIME_FORMATTER);
+            boolean isOvernight = !close.isAfter(open);
+            LocalDate sessionDate = isOvernight && currentTime.isBefore(close) ? today.minusDays(1) : today;
+            java.time.DayOfWeek sessionDay = sessionDate.getDayOfWeek();
+            if (sessionDay == java.time.DayOfWeek.SATURDAY || sessionDay == java.time.DayOfWeek.SUNDAY) {
+                logger.debug("[GlobalSchedule] {} is closed: session date {} falls on a weekend", market.symbol(), sessionDate);
+                return false;
             }
-
-            // Holiday check via Jollyday library
-            if (isHoliday(market.jollidayCountry(), today)) {
+            if (isHoliday(market.jollidayCountry(), sessionDate)) {
                 logger.info("[GlobalSchedule] {} is closed: public holiday in {} on {}",
-                        market.symbol(), market.jollidayCountry(), today);
+                        market.symbol(), market.jollidayCountry(), sessionDate);
                 return false;
             }
 
-            // Time range check using the exchange's local open/close times
-            LocalTime open = LocalTime.parse(market.marketOpen(), TIME_FORMATTER);
-            LocalTime close = LocalTime.parse(market.marketClose(), TIME_FORMATTER);
-            boolean isOpen = !currentTime.isBefore(open) && currentTime.isBefore(close);
+            boolean isOpen = isOvernight
+                    ? !currentTime.isBefore(open) || currentTime.isBefore(close)
+                    : !currentTime.isBefore(open) && currentTime.isBefore(close);
 
             logger.debug("[GlobalSchedule] {} ({}) - local time: {}, open: {}, close: {}, isOpen: {}",
                     market.symbol(), market.timezone(), currentTime, open, close, isOpen);
@@ -192,6 +200,74 @@ public class GlobalMarketScheduleService {
             logger.error("[GlobalSchedule] Error evaluating market hours for {}: {}", market.symbol(), e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Finds the most recent completed exchange session date, using the venue timezone,
+     * configured session window, weekday rule and Jollyday calendar. A missing calendar
+     * day beyond the bounded lookback returns empty rather than blessing an old quote.
+     */
+    public Optional<LocalDate> latestCompletedSessionDate(MarketEntry market, Instant instant) {
+        try {
+            ZonedDateTime localNow = instant.atZone(ZoneId.of(market.timezone()));
+            LocalDate today = localNow.toLocalDate();
+            LocalTime time = localNow.toLocalTime();
+            LocalTime open = LocalTime.parse(market.marketOpen(), TIME_FORMATTER);
+            LocalTime close = LocalTime.parse(market.marketClose(), TIME_FORMATTER);
+            boolean overnight = !close.isAfter(open);
+            LocalDate cursor;
+            if (!overnight) {
+                cursor = today;
+                if (time.isBefore(close) || !isBusinessDay(market, today)) cursor = today.minusDays(1);
+            } else if (!time.isBefore(open)) {
+                cursor = today.minusDays(1); // today's overnight session is still in progress
+            } else if (time.isBefore(close)) {
+                cursor = today.minusDays(2); // previous day's overnight session is still in progress
+            } else {
+                cursor = today.minusDays(1); // overnight session closed earlier today
+            }
+            for (int attempts = 0; attempts < 15; attempts++, cursor = cursor.minusDays(1)) {
+                if (isBusinessDay(market, cursor)) return Optional.of(cursor);
+            }
+        } catch (Exception e) {
+            logger.warn("[GlobalSchedule] Unable to determine latest completed session for {}: {}",
+                    market.symbol(), e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    /** True only when the provider event belongs to the latest completed venue session. */
+    public boolean quoteBelongsToLatestCompletedSession(MarketEntry market, Instant quoteTime, Instant now) {
+        try {
+            ZonedDateTime event = quoteTime.atZone(ZoneId.of(market.timezone()));
+            LocalTime eventTime = event.toLocalTime();
+            LocalTime open = LocalTime.parse(market.marketOpen(), TIME_FORMATTER);
+            LocalTime close = LocalTime.parse(market.marketClose(), TIME_FORMATTER);
+            boolean overnight = !close.isAfter(open);
+            LocalDate eventSessionDate;
+            if (!overnight) {
+                if (eventTime.isBefore(open) || eventTime.isAfter(close)) return false;
+                eventSessionDate = event.toLocalDate();
+            } else if (!eventTime.isBefore(open)) {
+                eventSessionDate = event.toLocalDate();
+            } else if (eventTime.isBefore(close)) {
+                eventSessionDate = event.toLocalDate().minusDays(1);
+            } else {
+                return false;
+            }
+            return latestCompletedSessionDate(market, now)
+                    .map(eventSessionDate::equals)
+                    .orElse(false);
+        } catch (Exception e) {
+            logger.warn("[GlobalSchedule] Unable to validate quote session for {}: {}", market.symbol(), e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean isBusinessDay(MarketEntry market, LocalDate date) {
+        java.time.DayOfWeek day = date.getDayOfWeek();
+        return day != java.time.DayOfWeek.SATURDAY && day != java.time.DayOfWeek.SUNDAY
+                && !isHoliday(market.jollidayCountry(), date);
     }
 
     /**
@@ -266,9 +342,17 @@ public class GlobalMarketScheduleService {
     public record MarketEntry(
             String symbol,
             String name,
+            String instrumentKey,
+            String exchange,
             String timezone,
             String marketOpen,
             String marketClose,
-            String jollidayCountry
-    ) {}
+            String jollidayCountry,
+            String influxAggregateOffset,
+            long quoteMaxAgeSeconds
+    ) {
+        public boolean hasInstrument() {
+            return instrumentKey != null && !instrumentKey.isBlank() && quoteMaxAgeSeconds > 0;
+        }
+    }
 }

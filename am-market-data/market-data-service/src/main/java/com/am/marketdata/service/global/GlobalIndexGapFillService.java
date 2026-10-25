@@ -7,8 +7,8 @@ import com.am.common.investment.persistence.repository.measurement.impl.GlobalIn
 import com.am.common.investment.model.historical.HistoricalData;
 import com.am.common.investment.model.historical.OHLCVTPoint;
 import com.am.marketdata.common.model.TimeFrame;
-import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import com.marketdata.common.MarketDataProvider;
+import com.am.marketdata.provider.common.MarketDataProviderFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
@@ -31,7 +32,12 @@ public class GlobalIndexGapFillService implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        log.info("Starting Global Index Intraday Gap-Fill Service...");
+        log.info("Triggering Global Index Intraday Gap-Fill Service asynchronously...");
+        CompletableFuture.runAsync(this::fillGaps);
+    }
+
+    public void fillGaps() {
+        log.info("Starting Global Index Intraday Gap-Fill background execution...");
         
         try {
             List<GlobalIndexConfigDocument> configs = configRepository.findAll();
@@ -39,14 +45,20 @@ public class GlobalIndexGapFillService implements ApplicationRunner {
 
             for (GlobalIndexConfigDocument config : configs) {
                 String instrumentKey = config.getInstrumentKey();
-                Optional<Instant> lastTimestampOpt = influxRepository.findLastTimestamp(instrumentKey);
+                if (instrumentKey == null || instrumentKey.isBlank()) {
+                    log.info("Skipping global history gap-fill for {}: no verified provider instrument is configured.", config.getSymbol());
+                    continue;
+                }
+                Optional<GlobalIndexMeasurement> lastMeasurementOpt = influxRepository.findLastMeasurement(instrumentKey);
 
-                if (lastTimestampOpt.isEmpty()) {
+                if (lastMeasurementOpt.isEmpty() || lastMeasurementOpt.get().getTime() == null) {
                     log.info("No previous InfluxDB data found for {}. Gap fill skipped.", config.getSymbol());
                     continue;
                 }
 
-                Instant lastTime = lastTimestampOpt.get();
+                GlobalIndexMeasurement lastMeasurement = lastMeasurementOpt.get();
+                Instant lastTime = lastMeasurement.getTime();
+                Double sessionBaseline = lastMeasurement.getPreviousClose();
                 Instant now = Instant.now();
                 Duration gap = Duration.between(lastTime, now);
 
@@ -96,19 +108,18 @@ public class GlobalIndexGapFillService implements ApplicationRunner {
                             // Sort by time ascending
                             measurements.sort(Comparator.comparing(GlobalIndexMeasurement::getTime));
 
-                            // Populate previous close and change percent sequentially
-                            double lastClose = 0.0;
-                            // Attempt to get last close from Influx or first point open
-                            lastClose = measurements.get(0).getOpen();
+                            // Use session baseline previousClose from last confirmed point or first candle open
+                            double baseline = (sessionBaseline != null && sessionBaseline > 0)
+                                    ? sessionBaseline
+                                    : measurements.get(0).getOpen();
 
                             for (GlobalIndexMeasurement m : measurements) {
-                                m.setPreviousClose(lastClose);
-                                if (lastClose > 0) {
-                                    m.setChangePercent(((m.getClose() - lastClose) / lastClose) * 100.0);
+                                m.setPreviousClose(baseline);
+                                if (baseline > 0) {
+                                    m.setChangePercent(((m.getClose() - baseline) / baseline) * 100.0);
                                 } else {
                                     m.setChangePercent(0.0);
                                 }
-                                lastClose = m.getClose();
                             }
 
                             influxRepository.saveAll(measurements);

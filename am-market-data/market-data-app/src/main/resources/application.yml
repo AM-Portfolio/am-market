@@ -9,12 +9,14 @@ MONGODB_DATABASE_NAME: ${MONGODB_DATABASE:market_data}
 MONGODB_USERNAME_INTERNAL: ${MONGODB_USERNAME:admin}
 MONGODB_PASSWORD_INTERNAL: ${MONGODB_PASSWORD:}
 
-# InfluxDB configuration is injected by Vault. Keep every value empty when it
-# is absent so InfluxConfigurationValidator can stop an unsafe startup.
+# InfluxDB configuration is injected by Vault (apps/data/{env}/infra/influxdb).
+# INFLUXDB_HOST and INFLUXDB_PORT are injected by the CSI Vault driver via vault-mappings.yaml.
+# INFLUXDB_URL is composed from those injected values; no hardcoded URL is needed in helm values.
+# Keep every value empty when absent so InfluxConfigurationValidator can stop an unsafe startup.
 INFLUXDB_TOKEN_INTERNAL: ${INFLUXDB_TOKEN:}
 INFLUXDB_ORG_INTERNAL: ${INFLUXDB_ORG:}
 INFLUXDB_BUCKET_INTERNAL: ${INFLUXDB_BUCKET:}
-INFLUXDB_URL_INTERNAL: ${INFLUXDB_URL:${SPRING_INFLUX_URL:}}
+INFLUXDB_URL_INTERNAL: ${INFLUXDB_URL:http://${INFLUXDB_HOST:localhost}:${INFLUXDB_PORT:8086}}
 
 # Redis Configuration
 REDIS_HOSTNAME: ${INFRA_HOST}
