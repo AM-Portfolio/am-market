@@ -49,16 +49,14 @@ public class GlobalIndexGapFillService implements ApplicationRunner {
                     log.info("Skipping global history gap-fill for {}: no verified provider instrument is configured.", config.getSymbol());
                     continue;
                 }
-                Optional<GlobalIndexMeasurement> lastMeasurementOpt = influxRepository.findLastMeasurement(instrumentKey);
+                Optional<Instant> lastTimestampOpt = influxRepository.findLastTimestamp(instrumentKey);
 
-                if (lastMeasurementOpt.isEmpty() || lastMeasurementOpt.get().getTime() == null) {
+                if (lastTimestampOpt.isEmpty()) {
                     log.info("No previous InfluxDB data found for {}. Gap fill skipped.", config.getSymbol());
                     continue;
                 }
 
-                GlobalIndexMeasurement lastMeasurement = lastMeasurementOpt.get();
-                Instant lastTime = lastMeasurement.getTime();
-                Double sessionBaseline = lastMeasurement.getPreviousClose();
+                Instant lastTime = lastTimestampOpt.get();
                 Instant now = Instant.now();
                 Duration gap = Duration.between(lastTime, now);
 
@@ -108,10 +106,8 @@ public class GlobalIndexGapFillService implements ApplicationRunner {
                             // Sort by time ascending
                             measurements.sort(Comparator.comparing(GlobalIndexMeasurement::getTime));
 
-                            // Use session baseline previousClose from last confirmed point or first candle open
-                            double baseline = (sessionBaseline != null && sessionBaseline > 0)
-                                    ? sessionBaseline
-                                    : measurements.get(0).getOpen();
+                            // Use first candle open as baseline for the gap fill series
+                            double baseline = measurements.get(0).getOpen();
 
                             for (GlobalIndexMeasurement m : measurements) {
                                 m.setPreviousClose(baseline);

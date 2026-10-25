@@ -42,6 +42,9 @@ class GlobalIndexGapFillServiceTest {
     private MarketDataProviderFactory providerFactory;
 
     @Mock
+    private GlobalMarketScheduleService scheduleService;
+
+    @Mock
     private MarketDataProvider provider;
 
     @InjectMocks
@@ -76,7 +79,7 @@ class GlobalIndexGapFillServiceTest {
 
         gapFillService.fillGaps();
 
-        verify(influxRepository, never()).findLastMeasurement(any());
+        verify(influxRepository, never()).findLastTimestamp(any());
         verify(influxRepository, never()).saveAll(any());
     }
 
@@ -84,7 +87,7 @@ class GlobalIndexGapFillServiceTest {
     void fillGaps_whenNoPriorData_shouldSkip() {
         when(configRepository.findAll()).thenReturn(List.of(config));
         when(providerFactory.getProvider("upstox")).thenReturn(provider);
-        when(influxRepository.findLastMeasurement(INSTRUMENT_KEY)).thenReturn(Optional.empty());
+        when(influxRepository.findLastTimestamp(INSTRUMENT_KEY)).thenReturn(Optional.empty());
 
         gapFillService.fillGaps();
 
@@ -97,10 +100,8 @@ class GlobalIndexGapFillServiceTest {
         when(configRepository.findAll()).thenReturn(List.of(config));
         when(providerFactory.getProvider("upstox")).thenReturn(provider);
 
-        GlobalIndexMeasurement m = new GlobalIndexMeasurement();
-        m.setTime(Instant.now().minusSeconds(180)); // 3 mins ago
-        m.setPreviousClose(50000.0);
-        when(influxRepository.findLastMeasurement(INSTRUMENT_KEY)).thenReturn(Optional.of(m));
+        Instant recent = Instant.now().minusSeconds(180); // 3 mins ago
+        when(influxRepository.findLastTimestamp(INSTRUMENT_KEY)).thenReturn(Optional.of(recent));
 
         gapFillService.fillGaps();
 
@@ -109,23 +110,20 @@ class GlobalIndexGapFillServiceTest {
     }
 
     @Test
-    void fillGaps_whenGapDetected_shouldFetchAndCalculateAgainstSessionBaseline() {
+    void fillGaps_whenGapDetected_shouldFetchAndCalculateAgainstBaseline() {
         when(configRepository.findAll()).thenReturn(List.of(config));
         when(providerFactory.getProvider("upstox")).thenReturn(provider);
 
         Instant lastTime = Instant.now().minusSeconds(1800); // 30 mins ago
-        GlobalIndexMeasurement lastMeasurement = new GlobalIndexMeasurement();
-        lastMeasurement.setTime(lastTime);
-        lastMeasurement.setPreviousClose(50000.0); // Session baseline
-        when(influxRepository.findLastMeasurement(INSTRUMENT_KEY)).thenReturn(Optional.of(lastMeasurement));
+        when(influxRepository.findLastTimestamp(INSTRUMENT_KEY)).thenReturn(Optional.of(lastTime));
 
         // Mock historical data points returned
         LocalDateTime ptTime = LocalDateTime.ofInstant(lastTime.plusSeconds(600), ZoneOffset.UTC);
         OHLCVTPoint pt = OHLCVTPoint.builder()
                 .time(ptTime)
-                .open(50500.0)
+                .open(50000.0)
                 .high(50600.0)
-                .low(50400.0)
+                .low(49900.0)
                 .close(50500.0)
                 .volume(100L)
                 .build();
@@ -143,7 +141,7 @@ class GlobalIndexGapFillServiceTest {
         List<GlobalIndexMeasurement> saved = captor.getValue();
         assertEquals(1, saved.size());
         assertEquals(50500.0, saved.get(0).getClose());
-        assertEquals(50000.0, saved.get(0).getPreviousClose()); // Session baseline preserved!
+        assertEquals(50000.0, saved.get(0).getPreviousClose()); // First candle open as baseline
         assertEquals(1.0, saved.get(0).getChangePercent(), 0.001); // ((50500 - 50000) / 50000) * 100 = 1.0%
     }
 
@@ -153,10 +151,7 @@ class GlobalIndexGapFillServiceTest {
         when(providerFactory.getProvider("upstox")).thenReturn(provider);
 
         Instant lastTime = Instant.now().minusSeconds(1800);
-        GlobalIndexMeasurement lastMeasurement = new GlobalIndexMeasurement();
-        lastMeasurement.setTime(lastTime);
-        lastMeasurement.setPreviousClose(50000.0);
-        when(influxRepository.findLastMeasurement(INSTRUMENT_KEY)).thenReturn(Optional.of(lastMeasurement));
+        when(influxRepository.findLastTimestamp(INSTRUMENT_KEY)).thenReturn(Optional.of(lastTime));
 
         HistoricalData emptyData = new HistoricalData();
         emptyData.setDataPoints(Collections.emptyList());
