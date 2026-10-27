@@ -1,5 +1,6 @@
 package com.am.marketdata.service.redis;
 
+import com.am.marketdata.common.model.ipo.AsraxIpoCalendarMonthDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoCountsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoDetailsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoSummaryDto;
@@ -31,6 +32,7 @@ public class UpstoxIpoCacheService {
     private static final String CACHE_PREFIX_LIST = "ipo:upstox:list:";
     private static final String CACHE_PREFIX_DETAIL = "ipo:upstox:detail:";
     private static final String CACHE_KEY_COUNTS = "ipo:upstox:counts";
+    private static final String CACHE_PREFIX_CALENDAR = "ipo:calendar:v1:";
 
     /**
      * Attempts to read cached IPO summary counts from Redis.
@@ -141,6 +143,68 @@ public class UpstoxIpoCacheService {
         } catch (Throwable e) {
             log.warn("Redis write exception for detail key '{}': {}", key, e.getMessage());
         }
+    }
+
+    /**
+     * Attempts to read cached IPO calendar month from Redis.
+     */
+    public Optional<AsraxIpoCalendarMonthDto> getCachedCalendarMonth(int year, int month) {
+        String key = buildCalendarKey(year, month);
+        try {
+            String json = stringRedisTemplate.opsForValue().get(key);
+            if (json != null && !json.trim().isEmpty()) {
+                AsraxIpoCalendarMonthDto dto = objectMapper.readValue(json, AsraxIpoCalendarMonthDto.class);
+                log.debug("Redis HIT for calendar key: {}", key);
+                return Optional.of(dto);
+            }
+        } catch (Throwable e) {
+            log.warn("Redis read exception for calendar key '{}': {}. Falling back to DB.", key, e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Stores IPO calendar month into Redis cache with 24h TTL.
+     */
+    public void cacheCalendarMonth(int year, int month, AsraxIpoCalendarMonthDto data) {
+        if (data == null) {
+            return;
+        }
+        String key = buildCalendarKey(year, month);
+        try {
+            String json = objectMapper.writeValueAsString(data);
+            stringRedisTemplate.opsForValue().set(key, json, Duration.ofHours(24));
+            log.debug("Redis SET calendar key: {} with TTL: 24h", key);
+        } catch (Throwable e) {
+            log.warn("Redis write exception for calendar key '{}': {}", key, e.getMessage());
+        }
+    }
+
+    /**
+     * Invalidates cached IPO calendar month keys in Redis.
+     */
+    public void invalidateCalendarMonths(java.util.Collection<String> yearMonths) {
+        if (yearMonths == null || yearMonths.isEmpty()) {
+            return;
+        }
+        try {
+            List<String> keys = yearMonths.stream()
+                    .map(ym -> CACHE_PREFIX_CALENDAR + ym)
+                    .toList();
+            stringRedisTemplate.delete(keys);
+            log.debug("Redis invalidated calendar keys: {}", keys);
+        } catch (Throwable e) {
+            log.warn("Redis invalidation exception for calendar keys: {}", e.getMessage());
+        }
+    }
+
+    public void invalidateCalendarMonth(int year, int month) {
+        String ym = String.format("%04d-%02d", year, month);
+        invalidateCalendarMonths(java.util.Collections.singletonList(ym));
+    }
+
+    private String buildCalendarKey(int year, int month) {
+        return CACHE_PREFIX_CALENDAR + String.format("%04d-%02d", year, month);
     }
 
     private String buildListKey(String status, String issueType, Integer page, Integer records) {

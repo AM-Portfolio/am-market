@@ -201,3 +201,10 @@ test_search_edge_cases.py
 
 
 !market-data-service/src/test/java/com/am/marketdata/service/global/GlobalIndexGapFillServiceTest.java
+
+# Keep IPO calendar regression tests under version control.
+!market-data-service/src/test/java/com/am/marketdata/service/ipo/
+!market-data-service/src/test/java/com/am/marketdata/service/ipo/UpstoxIpoServiceCalendarTest.java
+!market-data-service/src/test/java/com/am/marketdata/service/ipo/IpoSyncServiceTest.java
+!market-data-api/src/test/java/com/am/marketdata/api/controller/
+!market-data-api/src/test/java/com/am/marketdata/api/controller/UpstoxIpoControllerTest.java

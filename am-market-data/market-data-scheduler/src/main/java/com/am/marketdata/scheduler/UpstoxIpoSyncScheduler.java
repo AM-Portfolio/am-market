@@ -58,9 +58,8 @@ public class UpstoxIpoSyncScheduler {
         }
         new Thread(() -> {
             try {
-                log.info("Triggering initial startup sync for open and upcoming Upstox IPOs...");
-                upstoxIpoService.syncUpstoxIpos("open");
-                upstoxIpoService.syncUpstoxIpos("upcoming");
+                log.info("Triggering initial startup sync for all Upstox IPOs...");
+                upstoxIpoService.syncUpstoxIpos("all");
             } catch (Exception e) {
                 log.warn("Startup Upstox IPO sync encounter error: {}", e.getMessage());
             }
