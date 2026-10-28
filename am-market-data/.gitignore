@@ -70,6 +70,7 @@ Thumbs.db
 
 # Spring Boot
 spring-boot-*.pid
+.backend.pid
 
 # Test reports
 /test-output/
@@ -179,6 +180,8 @@ test_search_edge_cases.py
 !market-data-common/src/test/java/com/am/marketdata/common/
 !market-data-common/src/test/java/com/am/marketdata/common/util/
 !market-data-common/src/test/java/com/am/marketdata/common/util/IndexMembershipUtilsTest.java
+!market-data-common/src/test/java/com/am/marketdata/common/model/
+!market-data-common/src/test/java/com/am/marketdata/common/model/TimeFrameTest.java
 
 # Keep focused global-history regression tests under version control.
 !market-data-provider/src/test/
