@@ -7,6 +7,8 @@ replicaCount: 1
 env:
   SPRING_PROFILES_ACTIVE: "prod,security"
   JAVA_OPTS: "-Xms512m -Xmx768m -Dspring.profiles.active=prod,security"
+  # Instantiate the Kafka producers for live market-price and previous-close events.
+  MARKET_DATA_KAFKA_ENABLED: "true"
   # Chrome/Selenium needs a writable HOME (pod runs non-root with empty home otherwise)
   HOME: "/tmp"
   XDG_CONFIG_HOME: "/tmp/.config"

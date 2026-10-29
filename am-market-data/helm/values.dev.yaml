@@ -2,6 +2,8 @@ env:
   SPRING_PROFILES_ACTIVE: "dev,security"
   JAVA_OPTS: "-Xms256m -Xmx512m -Dspring.profiles.active=dev,security"
   JAVA_TOOL_OPTIONS: "-Xms512m -Xmx768m"
+  # Instantiate the Kafka producers for live market-price and previous-close events.
+  MARKET_DATA_KAFKA_ENABLED: "true"
   # Micro-chunking: controls maximum number of stock symbols flushed per pipelined Redis write batch
   REDIS_CACHE_INTRADAY_BATCH_CHUNK_SIZE: "50"
   # Internal Kubernetes DNS endpoint for GrowthBook (bypasses Cloudflare HTTP 400 blocking)
