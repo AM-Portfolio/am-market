@@ -240,7 +240,7 @@ public class UpStockClient {
         }
 
         curl.append("'")
-                .append(" -H 'Authorization: Bearer ").append(getAccessToken()).append("'")
+                .append(" -H 'Authorization: Bearer [REDACTED]'")
                 .append(" -H 'Api-Version: 2.0'")
                 .append(" -H 'Content-Type: application/json'");
 

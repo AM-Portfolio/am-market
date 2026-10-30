@@ -185,6 +185,22 @@ public class IsolatedRepoConfig {
     }
 
     @Bean
+    public com.am.marketdata.provider.upstox.repo.SymbolAliasRepository symbolAliasRepository() {
+        return (com.am.marketdata.provider.upstox.repo.SymbolAliasRepository) Proxy.newProxyInstance(
+                com.am.marketdata.provider.upstox.repo.SymbolAliasRepository.class.getClassLoader(),
+                new Class[] { com.am.marketdata.provider.upstox.repo.SymbolAliasRepository.class },
+                (proxy, method, args) -> {
+                    if (method.getName().equals("equals"))
+                        return false;
+                    if (method.getName().equals("hashCode"))
+                        return 0;
+                    if (method.getName().equals("toString"))
+                        return "MockSymbolAliasRepository";
+                    return null;
+                });
+    }
+
+    @Bean
     public com.am.marketdata.provider.zerodha.repo.ZerodhaInstrumentRepository zerodhaInstrumentRepository() {
         return (com.am.marketdata.provider.zerodha.repo.ZerodhaInstrumentRepository) Proxy.newProxyInstance(
                 com.am.marketdata.provider.zerodha.repo.ZerodhaInstrumentRepository.class.getClassLoader(),

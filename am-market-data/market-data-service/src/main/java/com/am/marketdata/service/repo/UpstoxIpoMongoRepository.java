@@ -38,5 +38,11 @@ public interface UpstoxIpoMongoRepository extends MongoRepository<UpstoxIpoDocum
      * Counts documents by status and bidding end date.
      */
     long countByStatusAndBiddingEndDate(String status, String biddingEndDate);
+
+    /**
+     * Finds documents where timeline.listingDate is between startDate and endDate (inclusive).
+     */
+    @org.springframework.data.mongodb.repository.Query("{'timeline.listingDate': { $gte: ?0, $lte: ?1 }}")
+    List<UpstoxIpoDocument> findByTimelineListingDateBetween(String startDate, String endDate);
 }
 

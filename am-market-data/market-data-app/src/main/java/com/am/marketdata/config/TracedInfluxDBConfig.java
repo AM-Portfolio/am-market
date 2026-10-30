@@ -63,7 +63,10 @@ public class TracedInfluxDBConfig {
             ObjectProvider<ObservationRegistry> observationRegistryProvider,
             ObjectProvider<Tracer> tracerProvider) {
 
-        okhttp3.OkHttpClient.Builder okHttpClientBuilder = new okhttp3.OkHttpClient.Builder();
+        okhttp3.OkHttpClient.Builder okHttpClientBuilder = new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(java.time.Duration.ofSeconds(30))
+                .readTimeout(java.time.Duration.ofSeconds(60))
+                .writeTimeout(java.time.Duration.ofSeconds(60));
 
         Tracer tracer = tracerProvider.getIfAvailable();
         ObservationRegistry registry = observationRegistryProvider.getIfAvailable();

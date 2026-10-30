@@ -32,17 +32,24 @@ public class GlobalIndexCacheWriter {
     public void writeTick(String instrumentKey, OHLCQuote quote) {
         try {
             String name = nameCache.computeIfAbsent(instrumentKey, key -> {
-                String symbol = key.replace("GLOBAL_INDEX|", "");
-                return configRepository.findBySymbol(symbol)
+                return configRepository.findAll().stream()
+                        .filter(config -> key.equals(config.getInstrumentKey()))
                         .map(GlobalIndexConfigDocument::getName)
+                        .findFirst()
                         .orElse(key);
             });
+
+            if (quote == null || quote.getQuoteTimestamp() == null || !Double.isFinite(quote.getLastPrice())
+                    || quote.getLastPrice() <= 0) {
+                log.warn("Rejecting global tick without a positive price and provider event time; key={}", instrumentKey);
+                return;
+            }
 
             GlobalIndexMeasurement measurement = new GlobalIndexMeasurement();
             measurement.setInstrumentKey(instrumentKey);
             measurement.setName(name);
             measurement.setSegment("GLOBAL");
-            measurement.setTime(Instant.now());
+            measurement.setTime(quote.getQuoteTimestamp());
             
             if (quote.getOhlc() != null) {
                 measurement.setOpen(quote.getOhlc().getOpen());

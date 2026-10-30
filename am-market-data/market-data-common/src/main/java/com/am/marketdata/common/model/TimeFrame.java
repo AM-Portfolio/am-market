@@ -126,17 +126,32 @@ public enum TimeFrame {
             throw new IllegalArgumentException("API value cannot be null");
         }
 
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("API value cannot be empty");
+        }
+
+        // 1. Exact case-sensitive match (distinguishes '1m' minute from '1M' month, '3m' from '3M')
         for (TimeFrame timeFrame : TimeFrame.values()) {
-            if (timeFrame.getApiValue().equalsIgnoreCase(value)) {
+            if (timeFrame.getApiValue().equals(trimmed)) {
                 return timeFrame;
             }
         }
 
-        // Support aliases if needed (e.g. I1, I30)
-        if ("I1".equalsIgnoreCase(value))
+        // 2. Case-insensitive fallback for non-ambiguous representations (e.g., '1d' -> '1D', '1h' -> '1H')
+        for (TimeFrame timeFrame : TimeFrame.values()) {
+            if (timeFrame.getApiValue().equalsIgnoreCase(trimmed)) {
+                return timeFrame;
+            }
+        }
+
+        // Support aliases if needed (e.g. I1, I30, 5D)
+        if ("I1".equalsIgnoreCase(trimmed))
             return MINUTE;
-        if ("I30".equalsIgnoreCase(value))
+        if ("I30".equalsIgnoreCase(trimmed))
             return THIRTY_MINUTE;
+        if ("5D".equalsIgnoreCase(trimmed))
+            return WEEK;
 
         throw new IllegalArgumentException("No TimeFrame found for API value: " + value);
     }
@@ -157,12 +172,24 @@ public enum TimeFrame {
             throw new IllegalArgumentException("TimeFrame value cannot be null");
         }
 
-        // First, try to match as enum name (DAY, HOUR, MINUTE, etc.)
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("TimeFrame value cannot be empty");
+        }
+
+        // 1. First, check exact API value match (preserves '1m' vs '1M', '3m' vs '3M')
+        for (TimeFrame timeFrame : TimeFrame.values()) {
+            if (timeFrame.getApiValue().equals(trimmed)) {
+                return timeFrame;
+            }
+        }
+
+        // 2. Match as enum name (DAY, HOUR, MINUTE, MONTH, etc.)
         try {
-            return TimeFrame.valueOf(value.toUpperCase());
+            return TimeFrame.valueOf(trimmed.toUpperCase());
         } catch (IllegalArgumentException e) {
-            // Not an enum name, try API value (1D, 1H, 5m, etc.)
-            return fromApiValue(value);
+            // Not an enum name, try API value fallback
+            return fromApiValue(trimmed);
         }
     }
 

@@ -118,6 +118,22 @@ public class EquityServiceImpl implements EquityService {
     }
 
     @Override
+    public List<EquityPrice> getPriceHistoryBySymbols(List<String> symbols, Instant startTime, Instant endTime,
+            String interval) {
+        if (symbols == null || symbols.isEmpty()) return List.of();
+        long queryStartTime = System.currentTimeMillis();
+        List<EquityPrice> prices = priceRepository.findBySymbolsAndTimeBetween(symbols, startTime, endTime, interval)
+                .stream()
+                .map(mapper::toModel)
+                .filter(price -> price.getSymbol() != null && price.getTime() != null)
+                .collect(Collectors.toList());
+        logger.info("Retrieved {} historical price points for {}/{} symbols in {}ms",
+                prices.size(), prices.stream().map(EquityPrice::getSymbol).distinct().count(), symbols.size(),
+                System.currentTimeMillis() - queryStartTime);
+        return prices;
+    }
+
+    @Override
     public List<EquityPrice> getPricesByExchange(String exchange) {
         logger.debug("Fetching prices for exchange: {}", exchange);
         long queryStartTime = System.currentTimeMillis();

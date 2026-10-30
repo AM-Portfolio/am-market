@@ -7,7 +7,7 @@ import com.am.marketdata.common.model.TimeFrame;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import com.am.marketdata.common.log.AppLogger;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -22,7 +22,7 @@ import java.util.Collections;
 public class AnalysisRedisCache {
 
     private final AppLogger log = AppLogger.getLogger();
-    private final RedisTemplate<String, String> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper redisObjectMapper;
 
     @Value("${redis.cache.ttl.analysis:86400}") // Default 24h

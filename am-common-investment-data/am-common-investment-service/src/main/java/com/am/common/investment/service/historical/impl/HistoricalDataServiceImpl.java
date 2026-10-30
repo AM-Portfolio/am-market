@@ -158,6 +158,40 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         
         return Optional.of(historicalData);
     }
+
+    @Override
+    public Map<String, HistoricalData> getHistoricalDataBatch(List<String> tradingSymbols, Instant fromDate,
+            Instant toDate, String interval, boolean isIndexSymbol) {
+        if (tradingSymbols == null || tradingSymbols.isEmpty()) return Collections.emptyMap();
+        if (isIndexSymbol) {
+            // Index history uses separate sources and identity rules. Preserve its
+            // established path until those stores expose a compatible batch query.
+            return HistoricalDataService.super.getHistoricalDataBatch(
+                    tradingSymbols, fromDate, toDate, interval, true);
+        }
+
+        List<EquityPrice> prices = equityService.getPriceHistoryBySymbols(
+                tradingSymbols, fromDate, toDate, interval);
+        if (prices == null || prices.isEmpty()) return Collections.emptyMap();
+
+        Map<String, List<EquityPrice>> bySymbol = new HashMap<>();
+        for (EquityPrice price : prices) {
+            if (price == null || price.getSymbol() == null || price.getTime() == null || price.getOhlcv() == null) continue;
+            String cleanSym = price.getSymbol().replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "").trim();
+            bySymbol.computeIfAbsent(cleanSym, ignored -> new ArrayList<>()).add(price);
+        }
+
+        Map<String, HistoricalData> result = new HashMap<>();
+        for (Map.Entry<String, List<EquityPrice>> entry : bySymbol.entrySet()) {
+            List<EquityPrice> symbolPrices = entry.getValue();
+            symbolPrices.sort(java.util.Comparator.comparing(EquityPrice::getTime));
+            List<OHLCVTPoint> dataPoints = OHLCVTMapper.toOHLCVTPoints(symbolPrices);
+            if (dataPoints == null || dataPoints.isEmpty()) continue;
+            result.put(entry.getKey(), buildHistoricalData(entry.getKey(), fromDate, toDate,
+                    interval, dataPoints, symbolPrices.get(0)));
+        }
+        return result;
+    }
     
     @Override
     public Optional<HistoricalData> getRecentHistoricalData(String tradingSymbol, int lookbackPeriod, String interval) {

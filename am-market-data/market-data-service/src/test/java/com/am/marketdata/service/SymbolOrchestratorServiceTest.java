@@ -1,6 +1,8 @@
 package com.am.marketdata.service;
 
 import com.am.common.investment.service.StockIndicesMarketDataService;
+import com.am.common.investment.model.stockindice.StockData;
+import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.marketdata.service.client.ParserApiClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,12 +13,15 @@ import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class SymbolOrchestratorServiceTest {
@@ -38,8 +43,7 @@ class SymbolOrchestratorServiceTest {
         service.setDefaultSymbols("RELIANCE");
         service.setCacheTtlSeconds(900);
         service.setActiveSetRedisKey("market:active-symbols");
-        when(parserApiClient.getAllEtfSymbols()).thenReturn(List.of("NIFTYBEES"));
-        when(stockIndicesMarketDataService.findByIndexSymbols(anySet())).thenReturn(List.of());
+        lenient().when(parserApiClient.getAllEtfSymbols()).thenReturn(List.of("NIFTYBEES"));
     }
 
     @Test
@@ -77,6 +81,29 @@ class SymbolOrchestratorServiceTest {
 
         assertTrue(symbols.contains("RELIANCE"));
         assertFalse(symbols.contains("GROWWDEFNC"));
+    }
+
+    @Test
+    void configuredIndexConstituentCountsAreLoadedInOneBatchAndDeduplicated() {
+        when(stockIndicesMarketDataService.findByIndexSymbols(anySet())).thenReturn(List.of(
+                StockIndicesMarketData.builder()
+                        .indexSymbol("NIFTY 500")
+                        .data(java.util.Arrays.asList(
+                                StockData.builder().symbol("reliance").build(),
+                                StockData.builder().symbol("RELIANCE").build(),
+                                StockData.builder().symbol("TCS").build(),
+                                StockData.builder().symbol(" ").build(),
+                                null))
+                        .build()));
+
+        Map<String, Integer> counts = service.getIndexConstituentCounts(Set.of("NIFTY 500", "NIFTY 50"));
+
+        assertTrue(counts.containsKey("NIFTY 500"));
+        assertEquals(2, counts.get("NIFTY 500"));
+        assertTrue(counts.containsKey("NIFTY 50"));
+        assertEquals(0, counts.get("NIFTY 50"));
+        org.mockito.Mockito.verify(stockIndicesMarketDataService, org.mockito.Mockito.times(1))
+                .findByIndexSymbols(anySet());
     }
 
     @Test

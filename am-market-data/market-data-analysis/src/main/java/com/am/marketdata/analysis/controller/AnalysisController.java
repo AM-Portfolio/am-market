@@ -262,6 +262,10 @@ public class AnalysisController {
         return getHistoricalCharts(symbol, range, isIndexSymbol);
     }
 
+    static TimeFrame parsePerformanceTimeFrame(String value) {
+        return value != null ? TimeFrame.fromApiValue(value) : null;
+    }
+
     private TimeFrame parseTimeFrame(String tf) {
         try {
             return TimeFrame.valueOf(tf.toUpperCase());

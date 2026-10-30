@@ -369,4 +369,101 @@
       </root>
     </mxGraphModel>
   </diagram>
+  <diagram id="global-containers" name="Global-Containers">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800">
+      <root>
+        <mxCell id="gc0"/><mxCell id="gc1" parent="gc0"/>
+        <mxCell id="gct" value="GLOBAL INDEX INTEGRITY | Containers" style="rounded=0;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontSize=20;fontStyle=1;" vertex="1" parent="gc1"><mxGeometry x="20" y="20" width="1150" height="48" as="geometry"/></mxCell>
+        <mxCell id="gcp" value="Purpose: keep ten public benchmark identities exact while separating verified source-time prices from old cache/database values." style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gc1"><mxGeometry x="20" y="75" width="1150" height="36" as="geometry"/></mxCell>
+        <mxCell id="gcu" value="Market visitor" style="rounded=1;fillColor=#08427B;strokeColor=#08427B;fontColor=#FFFFFF;" vertex="1" parent="gc1"><mxGeometry x="30" y="250" width="125" height="65" as="geometry"/></mxCell>
+        <mxCell id="gcui" value="Modern UI&#xa;index cards" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="gc1"><mxGeometry x="195" y="250" width="135" height="65" as="geometry"/></mxCell>
+        <mxCell id="gcapi" value="am-market-data&#xa;GlobalIndexService" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="gc1"><mxGeometry x="375" y="250" width="170" height="65" as="geometry"/></mxCell>
+        <mxCell id="gcr" value="Redis&#xa;quote + source time" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="gc1"><mxGeometry x="620" y="140" width="150" height="70" as="geometry"/></mxCell>
+        <mxCell id="gcm" value="Mongo&#xa;config + verified close" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="gc1"><mxGeometry x="620" y="260" width="150" height="70" as="geometry"/></mxCell>
+        <mxCell id="gci" value="InfluxDB&#xa;provenance + candles" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="gc1"><mxGeometry x="620" y="385" width="150" height="70" as="geometry"/></mxCell>
+        <mxCell id="gcup" value="Upstox&#xa;8 exact candidates" style="rounded=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gc1"><mxGeometry x="900" y="195" width="165" height="75" as="geometry"/></mxCell>
+        <mxCell id="gca" value="Approved vendor&#xa;IXIC + SSEC; pending" style="rounded=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gc1"><mxGeometry x="900" y="325" width="165" height="75" as="geometry"/></mxCell>
+        <mxCell id="gce1" value="view dashboard" edge="1" parent="gc1" source="gcu" target="gcui" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gce2" value="GET /v1/indices/batch" edge="1" parent="gc1" source="gcui" target="gcapi" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gce3" value="read validated quote" edge="1" parent="gc1" source="gcapi" target="gcr" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gce4" value="read symbol mapping / close" edge="1" parent="gc1" source="gcapi" target="gcm" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gce5" value="background historical candles" edge="1" parent="gc1" source="gcapi" target="gci" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#D79B00;dashed=1;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gce6" value="REST / V3 feed: exact keys" edge="1" parent="gc1" source="gcapi" target="gcup" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gce7" value="approved quote + candles" edge="1" parent="gc1" source="gcapi" target="gca" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gcl" value="Legend: blue=AM component; green=store; gray dashed=external provider; green edge=verified read; amber dashed=background; red dashed=unapproved source boundary." style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gc1"><mxGeometry x="20" y="705" width="1150" height="40" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="global-sequence" name="Global-Sequence">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800">
+      <root>
+        <mxCell id="gs0"/><mxCell id="gs1" parent="gs0"/>
+        <mxCell id="gst" value="GLOBAL INDEX INTEGRITY | Sequence" style="rounded=0;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontSize=20;fontStyle=1;" vertex="1" parent="gs1"><mxGeometry x="20" y="20" width="1150" height="48" as="geometry"/></mxCell>
+        <mxCell id="gsp" value="Purpose: validate quote identity and provider event time before a public card can show a price." style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gs1"><mxGeometry x="20" y="75" width="1150" height="36" as="geometry"/></mxCell>
+        <mxCell id="gsui" value="Market UI" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="gs1"><mxGeometry x="65" y="130" width="130" height="50" as="geometry"/></mxCell>
+        <mxCell id="gsapi" value="GlobalIndexService" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="gs1"><mxGeometry x="310" y="130" width="150" height="50" as="geometry"/></mxCell>
+        <mxCell id="gscache" value="Redis / Mongo" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="gs1"><mxGeometry x="575" y="130" width="130" height="50" as="geometry"/></mxCell>
+        <mxCell id="gsprovider" value="Exact approved provider" style="rounded=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gs1"><mxGeometry x="820" y="130" width="185" height="50" as="geometry"/></mxCell>
+        <mxCell id="gsl1" edge="1" parent="gs1" source="gsui" target="gsui" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#666666;dashed=1;endArrow=none;"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="655" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="gsl2" edge="1" parent="gs1" source="gsapi" target="gsapi" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#666666;dashed=1;endArrow=none;"><mxGeometry relative="1" as="geometry"><mxPoint x="385" y="655" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="gsl3" edge="1" parent="gs1" source="gscache" target="gscache" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#666666;dashed=1;endArrow=none;"><mxGeometry relative="1" as="geometry"><mxPoint x="640" y="655" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="gsl4" edge="1" parent="gs1" source="gsprovider" target="gsprovider" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#666666;dashed=1;endArrow=none;"><mxGeometry relative="1" as="geometry"><mxPoint x="915" y="655" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="gsm1" value="1. GET /v1/indices/batch" edge="1" parent="gs1" source="gsui" target="gsapi" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="230" as="sourcePoint"/><mxPoint x="385" y="230" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="gsm2" value="2. resolve stable symbol / cached source time" edge="1" parent="gs1" source="gsapi" target="gscache" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"><mxPoint x="385" y="295" as="sourcePoint"/><mxPoint x="640" y="295" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="gsm3" value="3. bounded REST on cold or invalid quote" edge="1" parent="gs1" source="gsapi" target="gsprovider" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"><mxPoint x="385" y="365" as="sourcePoint"/><mxPoint x="915" y="365" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="gsm4" value="4. quote + actual source timestamp + prior close" edge="1" parent="gs1" source="gsprovider" target="gsapi" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"><mxPoint x="915" y="430" as="sourcePoint"/><mxPoint x="385" y="430" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="gsm5" value="5. validated snapshot / provenance" edge="1" parent="gs1" source="gsapi" target="gscache" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"><mxPoint x="385" y="500" as="sourcePoint"/><mxPoint x="640" y="500" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="gsm6" value="6. verified price or explicitly non-live/pending" edge="1" parent="gs1" source="gsapi" target="gsui" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;"><mxGeometry relative="1" as="geometry"><mxPoint x="385" y="565" as="sourcePoint"/><mxPoint x="130" y="565" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="gsreject" value="Reject: wrong benchmark, invalid price, old/future event time, absent entitlement or prior close → never label as live" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#333333;" vertex="1" parent="gs1"><mxGeometry x="280" y="610" width="760" height="38" as="geometry"/></mxCell>
+        <mxCell id="gsl" value="Legend: numbered green arrows=happy path; red box=reject/degrade; vertical dashed lifelines=participants. Alternate source is conditional on approval." style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gs1"><mxGeometry x="20" y="705" width="1150" height="40" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="global-failures" name="Global-Failures">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800">
+      <root>
+        <mxCell id="gf0"/><mxCell id="gf1" parent="gf0"/>
+        <mxCell id="gft" value="GLOBAL INDEX INTEGRITY | Failures" style="rounded=0;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontSize=20;fontStyle=1;" vertex="1" parent="gf1"><mxGeometry x="20" y="20" width="1150" height="48" as="geometry"/></mxCell>
+        <mxCell id="gfp" value="Purpose: every invalid or absent source has a truthful user outcome, not a current-looking stale or artificial number." style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gf1"><mxGeometry x="20" y="75" width="1150" height="36" as="geometry"/></mxCell>
+        <mxCell id="gftr1" value="Wrong / absent IXIC or SSEC source" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="gf1"><mxGeometry x="40" y="155" width="255" height="65" as="geometry"/></mxCell>
+        <mxCell id="gfsy1" value="Reject substitute key; source approval gate" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="gf1"><mxGeometry x="430" y="155" width="290" height="65" as="geometry"/></mxCell>
+        <mxCell id="gfus1" value="Pending; no invented benchmark" style="rounded=1;fillColor=#08427B;strokeColor=#08427B;fontColor=#FFFFFF;" vertex="1" parent="gf1"><mxGeometry x="855" y="155" width="260" height="65" as="geometry"/></mxCell>
+        <mxCell id="gftr2" value="2024 quote reinserted today" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="gf1"><mxGeometry x="40" y="300" width="255" height="65" as="geometry"/></mxCell>
+        <mxCell id="gfsy2" value="Check provider event time and last completed session" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="gf1"><mxGeometry x="430" y="300" width="290" height="65" as="geometry"/></mxCell>
+        <mxCell id="gfus2" value="Verified last close or pending, never live" style="rounded=1;fillColor=#08427B;strokeColor=#08427B;fontColor=#FFFFFF;" vertex="1" parent="gf1"><mxGeometry x="855" y="300" width="260" height="65" as="geometry"/></mxCell>
+        <mxCell id="gftr3" value="Cold startup / provider timeout" style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="gf1"><mxGeometry x="40" y="445" width="255" height="65" as="geometry"/></mxCell>
+        <mxCell id="gfsy3" value="Refresh subscriptions; one bounded retry" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="gf1"><mxGeometry x="430" y="445" width="290" height="65" as="geometry"/></mxCell>
+        <mxCell id="gfus3" value="Warm verified snapshot or pending" style="rounded=1;fillColor=#08427B;strokeColor=#08427B;fontColor=#FFFFFF;" vertex="1" parent="gf1"><mxGeometry x="855" y="445" width="260" height="65" as="geometry"/></mxCell>
+        <mxCell id="gfe1" value="reject" edge="1" parent="gf1" source="gftr1" target="gfsy1" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gfe2" value="render" edge="1" parent="gf1" source="gfsy1" target="gfus1" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gfe3" value="validate" edge="1" parent="gf1" source="gftr2" target="gfsy2" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gfe4" value="render" edge="1" parent="gf1" source="gfsy2" target="gfus2" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gfe5" value="recover" edge="1" parent="gf1" source="gftr3" target="gfsy3" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gfe6" value="render" edge="1" parent="gf1" source="gfsy3" target="gfus3" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#B85450;dashed=1;endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="gfl" value="Legend: pink=trigger; blue=existing AM handling; dark blue=user outcome; dashed red=reject/recovery path. Every row is trigger → system → user." style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gf1"><mxGeometry x="20" y="705" width="1150" height="40" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="global-history-backfill" name="Global-History-Backfill">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800">
+      <root>
+        <mxCell id="gh0"/><mxCell id="gh1" parent="gh0"/>
+        <mxCell id="ght" value="GLOBAL INDEX HISTORY | Opt-in Backfill" style="rounded=0;fillColor=#1A1A2E;strokeColor=#1A1A2E;fontColor=#FFFFFF;fontSize=20;fontStyle=1;" vertex="1" parent="gh1"><mxGeometry x="20" y="20" width="1150" height="48" as="geometry"/></mxCell>
+        <mxCell id="ghp" value="Purpose: seed real daily candles for configured exact Upstox global keys without changing public API contracts or erasing existing history." style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gh1"><mxGeometry x="20" y="75" width="1150" height="36" as="geometry"/></mxCell>
+        <mxCell id="gha" value="Operator&#xa;existing admin sync" style="rounded=1;fillColor=#08427B;strokeColor=#08427B;fontColor=#FFFFFF;" vertex="1" parent="gh1"><mxGeometry x="35" y="220" width="150" height="68" as="geometry"/></mxCell>
+        <mxCell id="ghs" value="GlobalIndexHistoricalSyncService&#xa;pending or force=true&#xa;configured records only" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="gh1"><mxGeometry x="260" y="205" width="220" height="95" as="geometry"/></mxCell>
+        <mxCell id="ghcfg" value="Mongo global_index_config&#xa;symbol → exact instrumentKey&#xa;blank key = skip" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="gh1"><mxGeometry x="260" y="390" width="220" height="95" as="geometry"/></mxCell>
+        <mxCell id="ghup" value="Upstox History V3&#xa;days / interval 1&#xa;bearer token server-side" style="rounded=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gh1"><mxGeometry x="585" y="205" width="200" height="95" as="geometry"/></mxCell>
+        <mxCell id="ghv" value="Validate, sort, dedupe&#xa;preserve source instant&#xa;reject invalid OHLC" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="gh1"><mxGeometry x="585" y="390" width="200" height="95" as="geometry"/></mxCell>
+        <mxCell id="ghi" value="InfluxDB&#xa;existing global_market_index&#xa;exact key + candle time" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="gh1"><mxGeometry x="900" y="300" width="220" height="95" as="geometry"/></mxCell>
+        <mxCell id="ghe1" value="POST /v1/admin/sync/global?force=true" edge="1" parent="gh1" source="gha" target="ghs" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;" ><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ghe2" value="load configured keys" edge="1" parent="gh1" source="ghs" target="ghcfg" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;" ><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ghe3" value="V3 range request, sequential and bounded" edge="1" parent="gh1" source="ghs" target="ghup" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;" ><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ghe4" value="candle rows" edge="1" parent="gh1" source="ghup" target="ghv" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82B366;endArrow=block;" ><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ghe5" value="saveAll; no delete / same identity upsert" edge="1" parent="gh1" source="ghv" target="ghi" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#D79B00;dashed=1;endArrow=block;" ><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ghf" value="No exact key / empty response / provider or Influx failure → skip or keep pending/failed; preserve existing candles; never report COMPLETE on an empty or failed write." style="rounded=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#333333;" vertex="1" parent="gh1"><mxGeometry x="260" y="555" width="860" height="58" as="geometry"/></mxCell>
+        <mxCell id="ghl" value="Legend: dark blue=operator; blue=existing AM service; green=catalog/store; dashed gray=vendor; green edge=read/request; amber dashed=background write; red=fail-safe outcome." style="rounded=0;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="gh1"><mxGeometry x="20" y="705" width="1150" height="40" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
 </mxfile>

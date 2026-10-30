@@ -28,6 +28,10 @@ public class KafkaProducerService {
         private final KafkaProperties kafkaProperties;
 
         public void sendEquityPriceUpdates(List<EquityPrice> equityPrices) {
+                if (equityPrices == null || equityPrices.isEmpty()) {
+                        log.debug("Skipping empty equity price update event");
+                        return;
+                }
                 var event = EquityPriceUpdateEvent.builder()
                                 .eventType("EQUITY_PRICE_UPDATE")
                                 .timestamp(LocalDateTime.now())

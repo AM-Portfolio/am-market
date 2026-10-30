@@ -124,6 +124,73 @@ class SmartStockPreviousCloseSnapshotTest {
                 anyBoolean(), anyBoolean(), anyBoolean());
     }
 
+    @Test
+    void cachesMultipleVerifiedSnapshotsWithOneBatchWrite() {
+        LocalDate sessionDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        Map<String, OHLCQuote> quotes = new HashMap<>();
+        quotes.put("TCS", quote(2500.0, 0.0));
+        quotes.put("INFY", quote(1500.0, 0.0));
+        when(marketCalendarService.getTimings("NSE", sessionDate)).thenReturn(openSession(sessionDate));
+        when(marketDataService.getOHLC(eq(List.of("TCS", "INFY")), eq(TimeFrame.DAY), eq(false), isNull(), eq(false)))
+                .thenReturn(quotes);
+        when(previousCloseRepository.findBySymbolIn(List.of("TCS", "INFY"))).thenReturn(List.of(
+                PreviousCloseDocument.builder().symbol("TCS").previousClose(2490.0)
+                        .tradeDate(sessionDate.toString()).build(),
+                PreviousCloseDocument.builder().symbol("INFY").previousClose(1490.0)
+                        .tradeDate(sessionDate.toString()).build()));
+
+        Map<String, OHLCQuote> result = smartStockService.getSmartQuotes(List.of("TCS", "INFY"), TimeFrame.DAY);
+
+        assertEquals(2490.0, result.get("TCS").getPreviousClose(), 0.001);
+        assertEquals(1490.0, result.get("INFY").getPreviousClose(), 0.001);
+        verify(marketDataCacheService, times(1)).cacheLatestPrices(argThat(batch ->
+                batch.size() == 2 && batch.containsKey("TCS") && batch.containsKey("INFY")));
+        verify(marketDataService, never()).getHistoricalDataBatch(
+                anyList(), any(Date.class), any(Date.class), any(), anyBoolean(), any(), any(),
+                anyBoolean(), anyBoolean(), anyBoolean());
+    }
+
+    @Test
+    void cacheWriteFailureDoesNotDiscardVerifiedDailyQuote() {
+        LocalDate sessionDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        when(marketCalendarService.getTimings("NSE", sessionDate)).thenReturn(openSession(sessionDate));
+        when(marketDataService.getOHLC(eq(List.of("TCS")), eq(TimeFrame.DAY), eq(false), isNull(), eq(false)))
+                .thenReturn(new HashMap<>(Map.of("TCS", quote(2500.0, 0.0))));
+        when(previousCloseRepository.findBySymbolIn(List.of("TCS"))).thenReturn(List.of(
+                PreviousCloseDocument.builder().symbol("TCS").previousClose(2490.0)
+                        .tradeDate(sessionDate.toString()).build()));
+        doThrow(new IllegalStateException("cache unavailable"))
+                .when(marketDataCacheService).cacheLatestPrices(anyMap());
+
+        Map<String, OHLCQuote> result = smartStockService.getSmartQuotes(List.of("TCS"), TimeFrame.DAY);
+
+        assertEquals(2490.0, result.get("TCS").getPreviousClose(), 0.001);
+    }
+
+    @Test
+    void choosesLatestAvailableCandleOnOrBeforeBoundaryAndNeverFutureCandle() {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        LocalDate boundary = today.minusMonths(1);
+        when(marketDataCacheService.getLatestPrices(anySet())).thenReturn(Map.of(
+                "TCS", quote(120.0, 99.0),
+                "INFY", quote(120.0, 99.0)));
+        when(marketDataService.getOHLC(eq(List.of("TCS", "INFY")), eq(TimeFrame.DAY), eq(false), isNull(), eq(false)))
+                .thenReturn(Map.of());
+        when(marketDataService.getHistoricalDataBatch(
+                eq(List.of("TCS", "INFY")), any(Date.class), any(Date.class), eq(TimeFrame.DAY),
+                eq(false), isNull(), isNull(), eq(false), eq(false), eq(false)))
+                .thenReturn(Map.of(
+                        "TCS", HistoricalData.builder().dataPoints(List.of(
+                                candle(boundary.minusDays(3), 100.0), candle(boundary.plusDays(2), 111.0))).build(),
+                        "INFY", HistoricalData.builder().dataPoints(List.of(
+                                candle(boundary.plusDays(2), 110.0))).build()));
+
+        Map<String, OHLCQuote> result = smartStockService.getSmartQuotes(List.of("TCS", "INFY"), TimeFrame.MONTH);
+
+        assertEquals(100.0, result.get("TCS").getPreviousClose(), 0.001);
+        assertEquals(0.0, result.get("INFY").getPreviousClose(), 0.001);
+    }
+
     private static OHLCQuote quote(double lastPrice, double previousClose) {
         return OHLCQuote.builder().lastPrice(lastPrice).previousClose(previousClose).build();
     }

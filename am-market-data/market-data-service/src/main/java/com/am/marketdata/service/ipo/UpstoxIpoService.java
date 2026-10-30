@@ -1,6 +1,22 @@
 package com.am.marketdata.service.ipo;
 
+import com.am.marketdata.common.model.ipo.AsraxIpoCalendarEntryDto;
+import com.am.marketdata.common.model.ipo.AsraxIpoCalendarMonthDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoCountsDto;
+import com.am.marketdata.common.model.ipo.AsraxIpoTimelineDto;
+import com.am.marketdata.common.model.ipo.IpoCalendarDataFreshness;
+import com.am.marketdata.common.model.ipo.IpoCalendarDisplayStatus;
+import com.am.marketdata.service.model.IpoSyncMetaDocument;
+import com.am.marketdata.service.repo.IpoSyncMetaRepository;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.YearMonth;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
 import com.am.marketdata.common.model.ipo.AsraxIpoDetailsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoSummaryDto;
 import com.am.marketdata.common.provider.IpoDataProvider;
@@ -38,14 +54,33 @@ public class UpstoxIpoService {
     private final IpoDataProvider ipoDataProvider;
     private final UpstoxIpoMongoRepository mongoRepository;
     private final UpstoxIpoCacheService cacheService;
+    private final IpoSyncMetaRepository ipoSyncMetaRepository;
+    private final Clock clock;
 
+    private static final String UPSTOX_ALL_SYNC_ID = "UPSTOX_ALL";
+    private static final String UPSTOX_SOURCE = "UPSTOX";
+    private static final int MAX_PAGE_LIMIT = 50;
+    private static final int PAGE_SIZE = 30;
+
+    @org.springframework.beans.factory.annotation.Autowired
     public UpstoxIpoService(
             @Qualifier("upstoxIpoProvider") IpoDataProvider ipoDataProvider,
             UpstoxIpoMongoRepository mongoRepository,
-            UpstoxIpoCacheService cacheService) {
+            UpstoxIpoCacheService cacheService,
+            @org.springframework.lang.Nullable IpoSyncMetaRepository ipoSyncMetaRepository,
+            @Qualifier("marketCalendarClock") @org.springframework.lang.Nullable Clock clock) {
         this.ipoDataProvider = ipoDataProvider;
         this.mongoRepository = mongoRepository;
         this.cacheService = cacheService;
+        this.ipoSyncMetaRepository = ipoSyncMetaRepository;
+        this.clock = clock != null ? clock : Clock.system(ZoneId.of("Asia/Kolkata"));
+    }
+
+    public UpstoxIpoService(
+            IpoDataProvider ipoDataProvider,
+            UpstoxIpoMongoRepository mongoRepository,
+            UpstoxIpoCacheService cacheService) {
+        this(ipoDataProvider, mongoRepository, cacheService, null, Clock.system(ZoneId.of("Asia/Kolkata")));
     }
 
     /**
@@ -150,8 +185,9 @@ public class UpstoxIpoService {
      * @return Number of IPOs successfully synchronized.
      */
     public int syncUpstoxIpos(String targetStatus) {
+        boolean isAllSync = "all".equalsIgnoreCase(targetStatus);
         List<String> statusesToSync = new ArrayList<>();
-        if ("all".equalsIgnoreCase(targetStatus)) {
+        if (isAllSync) {
             statusesToSync.add("open");
             statusesToSync.add("upcoming");
             statusesToSync.add("closed");
@@ -163,67 +199,160 @@ public class UpstoxIpoService {
             statusesToSync.add("upcoming");
         }
 
-        log.info("Starting Smart Delta Upstox IPO Sync for statuses: {}", statusesToSync);
+        log.info("Starting Upstox IPO Sync for statuses: {}", statusesToSync);
         int totalSynced = 0;
         int newIposCount = 0;
         int updatedIposCount = 0;
+        boolean hasSyncErrors = false;
+        String syncErrorMessage = null;
+        Set<String> affectedYearMonths = new HashSet<>();
 
-        Semaphore semaphore = new Semaphore(3); // Rate-limiting semaphore
+        // 1. Paginate and gather all summaries across requested statuses
+        Map<String, AsraxIpoSummaryDto> deduplicatedSummaries = new LinkedHashMap<>();
 
         for (String st : statusesToSync) {
-            // 1 Single REST call per status returns ALL active IPOs!
-            List<AsraxIpoSummaryDto> summaries = ipoDataProvider.getIpos(st, null, 1, 30);
-            log.info("Single listing query returned {} IPO summaries for status='{}'", summaries.size(), st);
+            int page = 1;
+            boolean hasMorePages = true;
 
-            for (AsraxIpoSummaryDto summary : summaries) {
+            while (hasMorePages && page <= MAX_PAGE_LIMIT) {
                 try {
-                    Optional<UpstoxIpoDocument> existingDoc = mongoRepository.findById(summary.getId());
+                    log.debug("Fetching Upstox IPO page {} (size {}) for status='{}'", page, PAGE_SIZE, st);
+                    List<AsraxIpoSummaryDto> pageSummaries = ipoDataProvider.getIpos(st, null, page, PAGE_SIZE);
 
-                    semaphore.acquire();
-                    Optional<AsraxIpoDetailsDto> detailsOpt = ipoDataProvider.getIpoDetails(summary.getId());
-                    if (detailsOpt.isPresent()) {
-                        AsraxIpoDetailsDto details = detailsOpt.get();
-                        saveDocToMongo(details);
-                        cacheService.cacheDetails(details.getId(), details);
-                        if (existingDoc.isPresent()) {
-                            updatedIposCount++;
-                        } else {
-                            newIposCount++;
+                    if (pageSummaries == null || pageSummaries.isEmpty()) {
+                        hasMorePages = false;
+                        log.debug("No more IPOs for status='{}' at page {}", st, page);
+                    } else {
+                        for (AsraxIpoSummaryDto s : pageSummaries) {
+                            if (s != null && s.getId() != null && !s.getId().trim().isEmpty()) {
+                                deduplicatedSummaries.putIfAbsent(s.getId().trim().toLowerCase(), s);
+                            }
                         }
-                        totalSynced++;
-                        log.info("Full detail sync: Updated MongoDB & Redis for IPO id='{}'", details.getId());
-                    } else if (existingDoc.isPresent()) {
-                        // Fallback if detail call fails: update dynamic fields from summary
-                        UpstoxIpoDocument doc = existingDoc.get();
-                        doc.setStatus(summary.getStatus());
-                        doc.setTotalSubscription(summary.getTotalSubscription());
-                        doc.setBiddingEndDate(summary.getBiddingEndDate());
-                        doc.setEligibleInvestors(summary.getEligibleInvestors());
-                        doc.setUpdatedAt(Instant.now());
-
-                        mongoRepository.save(doc);
-                        AsraxIpoDetailsDto updatedDetails = toDetailsFromDoc(doc);
-                        cacheService.cacheDetails(doc.getId(), updatedDetails);
-                        updatedIposCount++;
-                        totalSynced++;
-                        log.debug("Summary fallback update for existing IPO id='{}'", summary.getId());
+                        if (pageSummaries.size() < PAGE_SIZE) {
+                            hasMorePages = false;
+                        } else {
+                            page++;
+                        }
                     }
-                    Thread.sleep(100L); // 100ms micro-pause for rate limit safety
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
                 } catch (Exception e) {
-                    log.warn("Error during smart sync for IPO id='{}': {}", summary.getId(), e.getMessage());
-                } finally {
-                    semaphore.release();
+                    hasSyncErrors = true;
+                    syncErrorMessage = String.format("Failed fetching IPO summaries for status='%s' page=%d: %s", st, page, e.getMessage());
+                    log.error(syncErrorMessage, e);
+                    hasMorePages = false; // Stop further pagination for this status on upstream failure
                 }
+            }
+
+            if (page > MAX_PAGE_LIMIT) {
+                log.warn("Safety cap of {} pages reached for status='{}'. Halting pagination.", MAX_PAGE_LIMIT, st);
+                hasSyncErrors = true;
+                syncErrorMessage = "Safety cap reached for status: " + st;
             }
         }
 
-        log.info("Smart Delta Upstox IPO Sync Completed: Total {} IPOs processed (New: {}, Updated: {}). Single query efficiency achieved!",
-                totalSynced, newIposCount, updatedIposCount);
+        log.info("Discovered {} unique IPOs across statuses {}", deduplicatedSummaries.size(), statusesToSync);
 
-        // Auto-recalculate and cache summary counts right after sync completes
+        // 2. Fetch details for each discovered IPO and persist to MongoDB idempotently
+        Semaphore semaphore = new Semaphore(3);
+
+        for (AsraxIpoSummaryDto summary : deduplicatedSummaries.values()) {
+            try {
+                semaphore.acquire();
+                Optional<UpstoxIpoDocument> existingDocOpt = mongoRepository.findById(summary.getId());
+                String oldListingMonth = existingDocOpt
+                        .map(UpstoxIpoDocument::getTimeline)
+                        .map(AsraxIpoTimelineDto::getListingDate)
+                        .filter(d -> d != null && d.length() >= 7)
+                        .map(d -> d.substring(0, 7))
+                        .orElse(null);
+
+                Optional<AsraxIpoDetailsDto> detailsOpt = ipoDataProvider.getIpoDetails(summary.getId());
+                if (detailsOpt.isPresent()) {
+                    AsraxIpoDetailsDto details = detailsOpt.get();
+                    saveDocToMongo(details);
+                    cacheService.cacheDetails(details.getId(), details);
+
+                    if (existingDocOpt.isPresent()) {
+                        updatedIposCount++;
+                    } else {
+                        newIposCount++;
+                    }
+                    totalSynced++;
+
+                    String newListingMonth = Optional.ofNullable(details.getTimeline())
+                            .map(AsraxIpoTimelineDto::getListingDate)
+                            .filter(d -> d != null && d.length() >= 7)
+                            .map(d -> d.substring(0, 7))
+                            .orElse(null);
+
+                    if (oldListingMonth != null) affectedYearMonths.add(oldListingMonth);
+                    if (newListingMonth != null) affectedYearMonths.add(newListingMonth);
+                } else if (existingDocOpt.isPresent()) {
+                    // Fallback: update dynamic fields from summary
+                    UpstoxIpoDocument doc = existingDocOpt.get();
+                    doc.setStatus(summary.getStatus());
+                    doc.setTotalSubscription(summary.getTotalSubscription());
+                    doc.setBiddingEndDate(summary.getBiddingEndDate());
+                    doc.setEligibleInvestors(summary.getEligibleInvestors());
+                    doc.setUpdatedAt(Instant.now());
+
+                    mongoRepository.save(doc);
+                    AsraxIpoDetailsDto updatedDetails = toDetailsFromDoc(doc);
+                    cacheService.cacheDetails(doc.getId(), updatedDetails);
+                    updatedIposCount++;
+                    totalSynced++;
+                    if (oldListingMonth != null) affectedYearMonths.add(oldListingMonth);
+                }
+                Thread.sleep(100L); // micro-pause
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                hasSyncErrors = true;
+                syncErrorMessage = "Sync interrupted: " + e.getMessage();
+                break;
+            } catch (Exception e) {
+                log.warn("Error syncing IPO details for id='{}': {}", summary.getId(), e.getMessage());
+            } finally {
+                semaphore.release();
+            }
+        }
+
+        log.info("Upstox IPO Sync Completed: Processed {} IPOs (New: {}, Updated: {}). Errors: {}",
+                totalSynced, newIposCount, updatedIposCount, hasSyncErrors);
+
+        // 3. Update Sync Metadata (only for complete 'all' runs with zero pagination failures)
+        if (ipoSyncMetaRepository != null) {
+            try {
+                Optional<IpoSyncMetaDocument> existingMeta = ipoSyncMetaRepository.findById(UPSTOX_ALL_SYNC_ID);
+                IpoSyncMetaDocument meta = existingMeta.orElseGet(() -> IpoSyncMetaDocument.builder()
+                        .id(UPSTOX_ALL_SYNC_ID)
+                        .source(UPSTOX_SOURCE)
+                        .build());
+
+                meta.setLastTrigger(targetStatus);
+                meta.setLastCount(totalSynced);
+
+                if (isAllSync && !hasSyncErrors) {
+                    meta.setLastFullSyncAt(Instant.now(clock));
+                    meta.setLastError(null);
+                } else if (hasSyncErrors) {
+                    meta.setLastError(syncErrorMessage != null ? syncErrorMessage : "Sync completed with errors");
+                }
+                ipoSyncMetaRepository.save(meta);
+            } catch (Exception e) {
+                log.warn("Failed to record sync metadata in MongoDB: {}", e.getMessage());
+            }
+        }
+
+        // 4. Invalidate affected calendar months in Redis
+        try {
+            LocalDate todayInKolkata = LocalDate.now(clock.withZone(ZoneId.of("Asia/Kolkata")));
+            affectedYearMonths.add(YearMonth.from(todayInKolkata).toString());
+            affectedYearMonths.add(YearMonth.from(todayInKolkata).plusMonths(1).toString());
+            cacheService.invalidateCalendarMonths(affectedYearMonths);
+        } catch (Exception e) {
+            log.warn("Failed to invalidate calendar cache post-sync: {}", e.getMessage());
+        }
+
+        // 5. Auto-recalculate summary counts
         try {
             recalculateAndCacheCounts();
         } catch (Exception e) {
@@ -231,6 +360,160 @@ public class UpstoxIpoService {
         }
 
         return totalSynced;
+    }
+
+    /**
+     * Retrieves monthly calendar of IPO listing events for the current or immediately following month in Asia/Kolkata.
+     */
+    public AsraxIpoCalendarMonthDto getIpoCalendarMonth(int year, int month) {
+        if (month < 1 || month > 12) {
+            throw new IllegalArgumentException("Month must be between 1 and 12, but was " + month);
+        }
+
+        LocalDate todayInKolkata = LocalDate.now(clock.withZone(ZoneId.of("Asia/Kolkata")));
+        YearMonth currentYm = YearMonth.from(todayInKolkata);
+        YearMonth nextYm = currentYm.plusMonths(1);
+        YearMonth requestedYm = YearMonth.of(year, month);
+
+        if (!requestedYm.equals(currentYm) && !requestedYm.equals(nextYm)) {
+            throw new IllegalArgumentException(String.format(
+                    "Calendar month %s is outside the allowed range. Only current month (%s) and immediately following month (%s) in Asia/Kolkata are permitted.",
+                    requestedYm, currentYm, nextYm));
+        }
+
+        // 1. Try Redis cache first
+        Optional<AsraxIpoCalendarMonthDto> cached = cacheService.getCachedCalendarMonth(year, month);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        // 2. Determine data freshness from ipo_sync_meta
+        IpoCalendarDataFreshness freshness = IpoCalendarDataFreshness.UNAVAILABLE;
+        String lastSuccessfulSyncStr = null;
+
+        if (ipoSyncMetaRepository != null) {
+            try {
+                Optional<IpoSyncMetaDocument> metaOpt = ipoSyncMetaRepository.findById(UPSTOX_ALL_SYNC_ID);
+                if (metaOpt.isPresent() && metaOpt.get().getLastFullSyncAt() != null) {
+                    Instant lastSync = metaOpt.get().getLastFullSyncAt();
+                    lastSuccessfulSyncStr = lastSync.toString();
+                    Duration age = Duration.between(lastSync, Instant.now(clock));
+                    if (age.toHours() <= 24) {
+                        freshness = IpoCalendarDataFreshness.FRESH;
+                    } else {
+                        freshness = IpoCalendarDataFreshness.STALE;
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed reading sync metadata: {}", e.getMessage());
+            }
+        }
+
+        // If no complete sync has ever succeeded, return UNAVAILABLE with empty entries
+        if (freshness == IpoCalendarDataFreshness.UNAVAILABLE) {
+            return AsraxIpoCalendarMonthDto.builder()
+                    .year(year)
+                    .month(month)
+                    .entries(Collections.emptyList())
+                    .dataFreshness(IpoCalendarDataFreshness.UNAVAILABLE)
+                    .lastSuccessfulSyncAt(null)
+                    .build();
+        }
+
+        // 3. Query MongoDB for issues with timeline.listingDate in requested month
+        String startDateStr = requestedYm.atDay(1).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        String endDateStr = requestedYm.atEndOfMonth().format(DateTimeFormatter.ISO_LOCAL_DATE);
+
+        List<UpstoxIpoDocument> docs;
+        try {
+            docs = mongoRepository.findByTimelineListingDateBetween(startDateStr, endDateStr);
+        } catch (Exception e) {
+            log.error("Failed querying MongoDB for IPO calendar month {}: {}", requestedYm, e.getMessage(), e);
+            docs = Collections.emptyList();
+        }
+
+        // 4. Map documents to calendar entries according to domain business rules
+        List<AsraxIpoCalendarEntryDto> entries = new ArrayList<>();
+
+        for (UpstoxIpoDocument doc : docs) {
+            if (doc == null || doc.getId() == null || doc.getId().trim().isEmpty()) {
+                continue;
+            }
+
+            // Company name check: skip and flag if null/blank
+            if (doc.getCompanyName() == null || doc.getCompanyName().trim().isEmpty()) {
+                log.warn("Data quality warning: IPO id='{}' has null/blank companyName. Omitted from calendar.", doc.getId());
+                continue;
+            }
+
+            // Timeline and listingDate check
+            if (doc.getTimeline() == null || doc.getTimeline().getListingDate() == null || doc.getTimeline().getListingDate().trim().isEmpty()) {
+                continue;
+            }
+
+            String listingDateStr = doc.getTimeline().getListingDate().trim();
+            LocalDate listingDate;
+            try {
+                listingDate = LocalDate.parse(listingDateStr, DateTimeFormatter.ISO_LOCAL_DATE);
+            } catch (Exception e) {
+                log.warn("Data quality warning: IPO id='{}' has invalid listingDate '{}'. Omitted.", doc.getId(), listingDateStr);
+                continue;
+            }
+
+            // Must fall strictly within requested month
+            if (YearMonth.from(listingDate).compareTo(requestedYm) != 0) {
+                continue;
+            }
+
+            // Status normalization & validation
+            String rawStatus = doc.getStatus() != null ? doc.getStatus().trim().toLowerCase() : "";
+            IpoCalendarDisplayStatus displayStatus;
+
+            if ("listed".equals(rawStatus)) {
+                displayStatus = IpoCalendarDisplayStatus.LISTED;
+                if (listingDate.isAfter(todayInKolkata)) {
+                    log.warn("Data inconsistency: IPO id='{}' is marked 'listed' with future listingDate '{}'",
+                            doc.getId(), listingDateStr);
+                }
+            } else if ("open".equals(rawStatus) || "upcoming".equals(rawStatus) || "closed".equals(rawStatus)) {
+                if (listingDate.isBefore(todayInKolkata)) {
+                    log.warn("Data quality warning: IPO id='{}' has status '{}' but listingDate '{}' is in the past. Omitted.",
+                            doc.getId(), rawStatus, listingDateStr);
+                    continue;
+                }
+                displayStatus = IpoCalendarDisplayStatus.UPCOMING;
+            } else {
+                log.warn("Data quality warning: IPO id='{}' has unknown/null status '{}'. Omitted from calendar.",
+                        doc.getId(), doc.getStatus());
+                continue;
+            }
+
+            entries.add(AsraxIpoCalendarEntryDto.builder()
+                    .id(doc.getId().trim())
+                    .companyName(doc.getCompanyName().trim())
+                    .status(displayStatus)
+                    .listingDate(listingDateStr)
+                    .listingPrice(doc.getListingPrice())
+                    .listingExchange(doc.getListingExchange())
+                    .build());
+        }
+
+        // 5. Sort deterministically by listingDate ascending, then stable id ascending
+        entries.sort(Comparator
+                .comparing(AsraxIpoCalendarEntryDto::getListingDate)
+                .thenComparing(AsraxIpoCalendarEntryDto::getId));
+
+        AsraxIpoCalendarMonthDto monthDto = AsraxIpoCalendarMonthDto.builder()
+                .year(year)
+                .month(month)
+                .entries(entries)
+                .dataFreshness(freshness)
+                .lastSuccessfulSyncAt(lastSuccessfulSyncStr)
+                .build();
+
+        // 6. Cache and return
+        cacheService.cacheCalendarMonth(year, month, monthDto);
+        return monthDto;
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.am.marketdata.api.controller;
 
+import com.am.marketdata.common.model.ipo.AsraxIpoCalendarMonthDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoCountsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoDetailsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoSummaryDto;
@@ -158,5 +159,49 @@ public class UpstoxIpoController {
         AsraxIpoCountsDto counts = upstoxIpoService.getIpoCounts();
         return ResponseEntity.ok(counts);
     }
-}
 
+    /**
+     * Endpoint 5: GET /v1/market-data/ipo/calendar
+     * Purpose: Retrieves monthly calendar of IPO listing events for current or next month in Asia/Kolkata.
+     */
+    @GetMapping(value = "/calendar", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+            summary = "Get Monthly IPO Calendar",
+            description = "Retrieves IPO listing events occurring in a target calendar month (current or immediately following month in Asia/Kolkata), "
+                    + "including listing dates, issue status (UPCOMING or LISTED), listing price, and listing exchange. "
+                    + "Populates date markers and anchored popups on the IPO calendar."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "IPO calendar month retrieved successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = AsraxIpoCalendarMonthDto.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid month or year parameter, or month outside allowed range"
+            )
+    })
+    public ResponseEntity<AsraxIpoCalendarMonthDto> getIpoCalendarMonth(
+            @Parameter(description = "Target calendar year (e.g., 2026)", example = "2026", required = true)
+            @RequestParam int year,
+
+            @Parameter(description = "Target calendar month (1-12)", example = "10", required = true)
+            @RequestParam int month
+    ) {
+        if (month < 1 || month > 12) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "Month must be between 1 and 12");
+        }
+        try {
+            AsraxIpoCalendarMonthDto result = upstoxIpoService.getIpoCalendarMonth(year, month);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+}

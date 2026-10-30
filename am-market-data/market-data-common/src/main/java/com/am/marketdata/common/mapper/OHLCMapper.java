@@ -76,7 +76,7 @@ public class OHLCMapper {
     }
 
     public EquityPrice toEquityPrice(String symbol, OHLCQuote ohlcQuote, String exchange) {
-        if (ohlcQuote == null || ohlcQuote.getOhlc() == null) {
+        if (ohlcQuote == null || ohlcQuote.getLastPrice() <= 0) {
             return null;
         }
         
@@ -96,11 +96,21 @@ public class OHLCMapper {
             changePercent = Math.round(changePercent * 100.0) / 100.0;
         }
         
+        OHLCVTPoint ohlcv = null;
+        if (ohlcQuote.getOhlc() != null) {
+            ohlcv = OHLCVTPoint.builder()
+                .open(ohlcQuote.getOhlc().getOpen())
+                .high(ohlcQuote.getOhlc().getHigh())
+                .low(ohlcQuote.getOhlc().getLow())
+                .close(ohlcQuote.getOhlc().getClose())
+                .build();
+        }
+
         return EquityPrice.builder()
             .symbol(cleanSymbol)
             .lastPrice(lastPrice)
-            .ohlcv(OHLCVTPoint.builder().open(ohlcQuote.getOhlc().getOpen()).high(ohlcQuote.getOhlc().getHigh()).low(ohlcQuote.getOhlc().getLow()).close(ohlcQuote.getOhlc().getClose()).build())
-            .time(ZonedDateTime.now().toInstant())
+            .ohlcv(ohlcv)
+            .time(ohlcQuote.getQuoteTimestamp() != null ? ohlcQuote.getQuoteTimestamp() : ZonedDateTime.now().toInstant())
             .exchange(exchange)
             .previousClose(prevClose > 0 ? prevClose : null)
             .change(prevClose > 0 ? change : null)
