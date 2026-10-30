@@ -109,3 +109,11 @@ am-parser/docs/feature-basket/postman/newman-prod-report.json
 *Test.java
 *Tests.java
 **/src/test/
+
+# Scratch and search artifacts
+scratch/
+**/scratch/
+search/
+**/search/
+*search*.py
+!am-market-sdk/**
