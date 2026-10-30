@@ -55,3 +55,15 @@ __pycache__/
 .flutter-plugins-dependencies
 .packages
 pubspec.lock
+
+# Scratch, search, and one-off Python scripts
+scratch/
+**/scratch/
+search/
+**/search/
+*search*.py
+test_search_edge_cases.py
+**/test_search_edge_cases.py
+trigger_prev_close_now.py
+check_pod_env.py
+curl_batch*.py

@@ -106,20 +106,14 @@ spt/
 am-parser/docs/feature-basket/postman/newman-prod-report.json
 
 **/test_search_edge_cases.py
+*Test.java
+*Tests.java
+**/src/test/
 
-# Scratch and local test scripts
+# Scratch and search artifacts
 scratch/
 **/scratch/
-
-# Keep the focused Influx OHLC aggregation regression test under version control.
-!am-common-investment-data/am-common-investment-persistence/src/test/
-!am-common-investment-data/am-common-investment-persistence/src/test/java/
-!am-common-investment-data/am-common-investment-persistence/src/test/java/com/
-!am-common-investment-data/am-common-investment-persistence/src/test/java/com/am/
-!am-common-investment-data/am-common-investment-persistence/src/test/java/com/am/common/
-!am-common-investment-data/am-common-investment-persistence/src/test/java/com/am/common/investment/
-!am-common-investment-data/am-common-investment-persistence/src/test/java/com/am/common/investment/persistence/
-!am-common-investment-data/am-common-investment-persistence/src/test/java/com/am/common/investment/persistence/repository/
-!am-common-investment-data/am-common-investment-persistence/src/test/java/com/am/common/investment/persistence/repository/measurement/
-!am-common-investment-data/am-common-investment-persistence/src/test/java/com/am/common/investment/persistence/repository/measurement/impl/
-!am-common-investment-data/am-common-investment-persistence/src/test/java/com/am/common/investment/persistence/repository/measurement/impl/GlobalIndexInfluxRepositoryQueryTest.java
+search/
+**/search/
+*search*.py
+!am-market-sdk/**
