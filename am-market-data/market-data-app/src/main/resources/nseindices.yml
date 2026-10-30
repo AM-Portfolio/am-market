@@ -32,4 +32,12 @@ nse:
     - "NIFTY FIN SERVICES"
     - "NIFTY ENERGY"
     - "NIFTY PHARMACEUTICALS"
-    
+
+  # Provider aliases used by market-data requests. Keep these in configuration
+  # so index classification does not require a Java hardcoded symbol list.
+  index-aliases:
+    - "NIFTY"
+    - "BANKNIFTY"
+    - "FINNIFTY"
+    - "MIDCPNIFTY"
+    - "SENSEX"

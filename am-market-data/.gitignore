@@ -151,7 +151,6 @@ search/
 !market-data-scheduler/src/test/java/com/am/marketdata/scheduler/service/MarketAnalysisSchedulerLargeIndexHeatmapTest.java
 !market-data-api/src/test/java/com/am/marketdata/api/
 !market-data-api/src/test/java/com/am/marketdata/api/service/
-!market-data-api/src/test/java/com/am/marketdata/api/service/impl/MarketDataFetchServiceRoutingTest.java
 !market-data-api/src/test/java/com/am/marketdata/api/MarketInfoSymbolMapTest.java
 !market-data-api/src/test/java/com/am/marketdata/api/MarketInfoDtoParseTest.java
 
@@ -170,8 +169,14 @@ search/
 !market-data-service/src/test/java/com/am/
 !market-data-service/src/test/java/com/am/marketdata/
 !market-data-service/src/test/java/com/am/marketdata/service/
-!market-data-service/src/test/java/com/am/marketdata/service/MarketDataPersistenceServiceRoutingTest.java
 !market-data-service/src/test/java/com/am/marketdata/service/SmartStockPreviousCloseSnapshotTest.java
+
+# Local-only tests for index routing cleanup. Keep them available for local validation,
+# but do not publish them or their fixture to the repository.
+market-data-api/src/test/java/com/am/marketdata/api/service/impl/MarketDataFetchServiceRoutingTest.java
+market-data-service/src/test/java/com/am/marketdata/service/MarketDataPersistenceServiceRoutingTest.java
+market-data-service/src/test/java/com/am/marketdata/service/IndexSymbolRegistryTest.java
+market-data-service/src/test/resources/nseindices.yml
 !market-data-analysis/src/test/
 !market-data-analysis/src/test/java/
 !market-data-analysis/src/test/java/com/

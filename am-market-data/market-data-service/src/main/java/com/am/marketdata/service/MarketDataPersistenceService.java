@@ -15,6 +15,7 @@ import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.service.global.GlobalIndexCacheWriter;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
@@ -24,7 +25,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -32,7 +32,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Locale;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -53,18 +52,12 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
     private final MarketIndexIndicesService marketIndexIndicesService;
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final GlobalIndexCacheWriter globalIndexCacheWriter;
-    private final Map<String, Boolean> indexClassificationCache = new ConcurrentHashMap<>();
+    private final IndexSymbolRegistry indexSymbolRegistry;
 
-    private static final Set<String> KNOWN_INDEX_SYMBOLS = Set.of(
-            "INDIA VIX", "NIFTY 50", "NIFTY NEXT 50", "NIFTY 100", "NIFTY 200",
-            "NIFTY 500", "NIFTY MIDCAP 50", "NIFTY MIDCAP 100", "NIFTY SMLCAP 100",
-            "NIFTY MIDCAP 150", "NIFTY SMLCAP 50", "NIFTY SMLCAP 250", "NIFTY SMLCAP 500",
-            "NIFTY BANK", "NIFTY AUTO", "NIFTY FMCG", "NIFTY MEDIA", "NIFTY METAL",
-            "NIFTY PHARMA", "NIFTY PSU BANK", "NIFTY PVT BANK", "NIFTY REALTY",
-            "NIFTY HEALTHCARE", "NIFTY CONSR DURABLE", "NIFTY OIL AND GAS", "NIFTY MIDSML HLTH",
-            "NIFTY IT", "NIFTY FIN SERVICES", "NIFTY ENERGY", "NIFTY PHARMACEUTICALS",
-            "SENSEX", "NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY");
-
+    /**
+     * Backward-compatible constructor for existing tests and callers that do not
+     * need to provide the registry explicitly.
+     */
     public MarketDataPersistenceService(
             HistoricalDataService historicalDataService,
             MarketDataCacheService marketDataCacheService,
@@ -75,6 +68,23 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             StockIndicesMarketDataService stockIndicesMarketDataService,
             GlobalIndexCacheWriter globalIndexCacheWriter,
             @Qualifier("marketDataPersistenceExecutor") ThreadPoolTaskExecutor taskExecutor) {
+        this(historicalDataService, marketDataCacheService, equityService, equityLatestPriceService,
+                ohlcMapper, marketIndexIndicesService, stockIndicesMarketDataService,
+                globalIndexCacheWriter, new IndexSymbolRegistry(stockIndicesMarketDataService), taskExecutor);
+    }
+
+    @Autowired
+    public MarketDataPersistenceService(
+            HistoricalDataService historicalDataService,
+            MarketDataCacheService marketDataCacheService,
+            EquityService equityService,
+            com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService,
+            OHLCMapper ohlcMapper,
+            MarketIndexIndicesService marketIndexIndicesService,
+            StockIndicesMarketDataService stockIndicesMarketDataService,
+            GlobalIndexCacheWriter globalIndexCacheWriter,
+            IndexSymbolRegistry indexSymbolRegistry,
+            @Qualifier("marketDataPersistenceExecutor") ThreadPoolTaskExecutor taskExecutor) {
         this.historicalDataService = historicalDataService;
         this.marketDataCacheService = marketDataCacheService;
         this.equityService = equityService;
@@ -83,6 +93,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         this.marketIndexIndicesService = marketIndexIndicesService;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.globalIndexCacheWriter = globalIndexCacheWriter;
+        this.indexSymbolRegistry = indexSymbolRegistry;
         this.taskExecutor = taskExecutor;
     }
 
@@ -224,42 +235,17 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
     private Map<String, OHLCQuote> extractIndexQuotes(Map<String, OHLCQuote> ohlcData) {
         Map<String, OHLCQuote> indexQuotes = new HashMap<>();
-        Set<String> unresolvedSymbols = new HashSet<>();
-
-        for (String rawSymbol : ohlcData.keySet()) {
-            String normalized = normalizeSymbol(rawSymbol);
-            if (isExplicitIndexKey(rawSymbol) || KNOWN_INDEX_SYMBOLS.contains(normalized)) {
-                indexClassificationCache.put(normalized, true);
-            } else if (!indexClassificationCache.containsKey(normalized)) {
-                unresolvedSymbols.add(normalized);
-            }
-        }
-
-        if (!unresolvedSymbols.isEmpty()) {
-            try {
-                List<StockIndicesMarketData> knownIndices = stockIndicesMarketDataService
-                        .findByIndexSymbols(unresolvedSymbols);
-                Set<String> resolvedIndexSymbols = knownIndices == null
-                        ? Collections.emptySet()
-                        : knownIndices.stream()
-                                .map(StockIndicesMarketData::getIndexSymbol)
-                                .filter(symbol -> symbol != null && !symbol.isBlank())
-                                .map(this::normalizeSymbol)
-                                .collect(Collectors.toSet());
-
-                unresolvedSymbols.forEach(symbol ->
-                        indexClassificationCache.put(symbol, resolvedIndexSymbols.contains(symbol)));
-            } catch (Exception e) {
-                // The explicit key prefix and known-index checks remain authoritative. Do not
-                // block equity persistence if the metadata lookup is temporarily unavailable.
-                log.warn("Unable to resolve index symbols from metadata; using known classifications: {}",
-                        e.getMessage());
-            }
-        }
+        Set<String> candidateSymbols = ohlcData.keySet().stream()
+                .filter(rawSymbol -> !isGlobalKey(rawSymbol))
+                .map(indexSymbolRegistry::normalizeSymbol)
+                .filter(symbol -> !symbol.isBlank())
+                .collect(Collectors.toSet());
+        Set<String> resolvedIndexSymbols = indexSymbolRegistry.resolveKnownIndexNames(candidateSymbols);
 
         for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
             String normalized = normalizeSymbol(entry.getKey());
-            if (Boolean.TRUE.equals(indexClassificationCache.get(normalized))) {
+            if (indexSymbolRegistry.isExplicitIndexKey(entry.getKey())
+                    || resolvedIndexSymbols.contains(normalized)) {
                 indexQuotes.put(entry.getKey(), entry.getValue());
             }
         }
@@ -330,24 +316,13 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         }
     }
 
-    private boolean isExplicitIndexKey(String rawSymbol) {
-        String upper = rawSymbol == null ? "" : rawSymbol.trim().toUpperCase(Locale.ROOT);
-        return upper.startsWith("NSE_INDEX|") || upper.startsWith("BSE_INDEX|")
-                || upper.startsWith("NSE_INDEX:") || upper.startsWith("BSE_INDEX:");
+    private String normalizeSymbol(String rawSymbol) {
+        return indexSymbolRegistry.normalizeSymbol(rawSymbol);
     }
 
-    private String normalizeSymbol(String rawSymbol) {
-        if (rawSymbol == null) {
-            return "";
-        }
-        String symbol = rawSymbol.trim().toUpperCase(Locale.ROOT);
-        for (String prefix : List.of("NSE_INDEX|", "BSE_INDEX|", "NSE_INDEX:", "BSE_INDEX:",
-                "NSE_EQ|", "BSE_EQ|", "NSE_EQ:", "BSE_EQ:", "NSE:", "BSE:")) {
-            if (symbol.startsWith(prefix)) {
-                return symbol.substring(prefix.length()).trim();
-            }
-        }
-        return symbol;
+    private boolean isGlobalKey(String rawSymbol) {
+        String upper = rawSymbol == null ? "" : rawSymbol.trim().toUpperCase(Locale.ROOT);
+        return upper.startsWith("GLOBAL_INDEX|") || upper.startsWith("GLOBAL_INDEX:");
     }
 
     public CompletableFuture<Void> saveHistoricalData(String symbol, TimeFrame interval,
@@ -381,26 +356,15 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         }
 
         try {
-            // Filter out index symbols early to prevent false cache misses
-            Set<String> knownIndices = new HashSet<>(Arrays.asList(
-                "INDIA VIX", "NIFTY 50", "NIFTY NEXT 50", "NIFTY 100", "NIFTY 200", 
-                "NIFTY 500", "NIFTY MIDCAP 50", "NIFTY MIDCAP 100", "NIFTY SMLCAP 100", 
-                "NIFTY MIDCAP 150", "NIFTY SMLCAP 50", "NIFTY SMLCAP 250", "NIFTY SMLCAP 500", 
-                "NIFTY BANK", "NIFTY AUTO", "NIFTY FMCG", "NIFTY MEDIA", "NIFTY METAL", 
-                "NIFTY PHARMA", "NIFTY PSU BANK", "NIFTY PVT BANK", "NIFTY REALTY", 
-                "NIFTY HEALTHCARE", "NIFTY CONSR DURABLE", "NIFTY OIL AND GAS", 
-                "NIFTY MIDSML HLTH", "NIFTY IT", "NIFTY FIN SERVICES", "NIFTY ENERGY", 
-                "NIFTY PHARMACEUTICALS", "SENSEX", "NIFTY", "BANKNIFTY"
-            ));
+            // Filter out configured, metadata-resolved, and explicitly-prefixed index symbols
+            // before querying the equity latest-price path.
+            Set<String> knownIndices = indexSymbolRegistry.resolveKnownIndexNames(new HashSet<>(tradingSymbols));
             List<String> filteredSymbols = tradingSymbols.stream()
                     .filter(symbol -> {
-                        String clean = symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "").trim().toUpperCase();
-                        return !knownIndices.contains(clean) && 
-                               !clean.startsWith("NIFTY ") && 
-                               !clean.contains("VIX") && 
-                               !clean.startsWith("SENSEX") && 
-                               !clean.equals("FINNIFTY") &&
-                               !clean.equals("MIDCPNIFTY");
+                        String clean = indexSymbolRegistry.normalizeSymbol(symbol);
+                        return !indexSymbolRegistry.isExplicitIndexKey(symbol)
+                                && !isGlobalKey(symbol)
+                                && !knownIndices.contains(clean);
                     })
                     .collect(Collectors.toList());
 
