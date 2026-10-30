@@ -95,15 +95,18 @@ public class UpstoxSymbolResolver implements SymbolResolver {
         // 2. Identify remaining symbols to lookup in DB, whitelisting direct keys (containing '|')
         List<String> symbolsForDb = new ArrayList<>();
         for (String s : symbols) {
-            if (resolvedIndices.containsKey(s)) {
+            String normalized = s == null ? null : s.trim();
+            if (normalized != null && resolvedIndices.containsKey(normalized)) {
                 continue;
             }
-            if (s != null && (s.startsWith("GLOBAL_INDEX") || s.contains("|"))) {
+            if (normalized != null && (normalized.startsWith("GLOBAL_INDEX") || normalized.contains("|"))) {
                 // If it's already an instrument key or a global index key, resolve it directly
-                resolvedIndices.put(s, s.replace(":", "|"));
+                resolvedIndices.put(normalized, normalized.replace(":", "|"));
                 continue;
             }
-            symbolsForDb.add(s);
+            if (normalized != null && !normalized.isEmpty()) {
+                symbolsForDb.add(normalized);
+            }
         }
 
         if (!symbolsForDb.isEmpty()) {
