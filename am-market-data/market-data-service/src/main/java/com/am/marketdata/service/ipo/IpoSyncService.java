@@ -58,8 +58,17 @@ public class IpoSyncService {
         return ipoSyncMetaRepository.findById(scope.name());
     }
 
+    private static final java.util.Set<String> NSE_FEED_IDS = java.util.Set.of(
+            IpoFeedScope.PAST.name(),
+            IpoFeedScope.CURRENT.name(),
+            IpoFeedScope.UPCOMING.name(),
+            IpoFeedScope.SUBSCRIPTION.name()
+    );
+
     public List<IpoSyncMetaDocument> allSyncMeta() {
-        return ipoSyncMetaRepository.findAll();
+        return ipoSyncMetaRepository.findAll().stream()
+                .filter(doc -> doc.getId() != null && NSE_FEED_IDS.contains(doc.getId()))
+                .toList();
     }
 
     public int sync(IpoFeedScope scope, IpoSyncTrigger trigger) {

@@ -316,10 +316,12 @@ public class MarketAnalyticsService {
         // Flat stocks are not movers. Keeping zero-change rows in both sorted lists
         // made the same unchanged stocks appear as both gainers and losers.
         List<EnrichedStockData> gainersData = enrichedData.stream()
-                .filter(data -> data.getChange() != null && Double.isFinite(data.getChange()) && data.getChange() > 0.0)
+                .filter(this::hasConsistentReturn)
+                .filter(data -> data.getPercentChange() > 0.0)
                 .collect(Collectors.toList());
         List<EnrichedStockData> losersData = enrichedData.stream()
-                .filter(data -> data.getChange() != null && Double.isFinite(data.getChange()) && data.getChange() < 0.0)
+                .filter(this::hasConsistentReturn)
+                .filter(data -> data.getPercentChange() < 0.0)
                 .collect(Collectors.toList());
 
         List<StockMoverDTO> gainers = stockDataEnricher
@@ -484,13 +486,26 @@ public class MarketAnalyticsService {
      * Convert EnrichedStockData to Map for API response
      */
     private StockMoverDTO enrichedDataToMap(EnrichedStockData data) {
+        double change = data.getLastPrice() - data.getPreviousClose();
+        double percentChange = (change / data.getPreviousClose()) * 100.0;
         return StockMoverDTO.builder()
                 .symbol(data.getSymbol())
                 .lastPrice(data.getLastPrice())
-                .change(data.getChange())
-                .pChange(data.getPercentChange())
-                .percentChange(data.getPercentChange())
+                .change(change)
+                .pChange(percentChange)
+                .percentChange(percentChange)
                 .previousClose(data.getPreviousClose())
                 .build();
+    }
+
+    private boolean hasConsistentReturn(EnrichedStockData data) {
+        if (data == null || !data.hasValidPrice() || data.getChange() == null) {
+            return false;
+        }
+        double expectedChange = data.getLastPrice() - data.getPreviousClose();
+        double expectedPercent = (expectedChange / data.getPreviousClose()) * 100.0;
+        return Double.isFinite(expectedChange) && Double.isFinite(expectedPercent)
+                && Math.abs(data.getChange() - expectedChange) < 0.000001
+                && Math.abs(data.getPercentChange() - expectedPercent) < 0.000001;
     }
 }

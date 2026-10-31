@@ -36,6 +36,7 @@ public interface GlobalIndexConfigRepository extends MongoRepository<GlobalIndex
      */
     Optional<GlobalIndexConfigDocument> findBySymbol(String symbol);
 
+
     /**
      * Returns all configured global index instrument keys.
      *

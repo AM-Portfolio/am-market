@@ -1,22 +1,27 @@
 package com.am.marketdata.service;
 
 import com.am.common.investment.model.equity.EquityPrice;
+import com.am.common.investment.model.equity.MarketData;
+import com.am.common.investment.model.equity.MarketIndexIndices;
 import com.am.common.investment.model.historical.HistoricalData;
 import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.service.EquityService;
+import com.am.common.investment.service.MarketIndexIndicesService;
 import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.common.investment.service.historical.HistoricalDataService;
 import com.am.marketdata.common.mapper.OHLCMapper;
-import com.am.marketdata.service.MarketDataPersistenceService;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
+import com.am.marketdata.service.global.GlobalIndexCacheWriter;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
@@ -26,7 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
-import java.util.Arrays;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -44,22 +49,51 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
     private final EquityService equityService;
     private final com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService;
     private final OHLCMapper ohlcMapper;
+    private final MarketIndexIndicesService marketIndexIndicesService;
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
+    private final GlobalIndexCacheWriter globalIndexCacheWriter;
+    private final IndexSymbolRegistry indexSymbolRegistry;
 
+    /**
+     * Backward-compatible constructor for existing tests and callers that do not
+     * need to provide the registry explicitly.
+     */
     public MarketDataPersistenceService(
             HistoricalDataService historicalDataService,
             MarketDataCacheService marketDataCacheService,
             EquityService equityService,
             com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService,
             OHLCMapper ohlcMapper,
+            MarketIndexIndicesService marketIndexIndicesService,
             StockIndicesMarketDataService stockIndicesMarketDataService,
+            GlobalIndexCacheWriter globalIndexCacheWriter,
+            @Qualifier("marketDataPersistenceExecutor") ThreadPoolTaskExecutor taskExecutor) {
+        this(historicalDataService, marketDataCacheService, equityService, equityLatestPriceService,
+                ohlcMapper, marketIndexIndicesService, stockIndicesMarketDataService,
+                globalIndexCacheWriter, new IndexSymbolRegistry(stockIndicesMarketDataService), taskExecutor);
+    }
+
+    @Autowired
+    public MarketDataPersistenceService(
+            HistoricalDataService historicalDataService,
+            MarketDataCacheService marketDataCacheService,
+            EquityService equityService,
+            com.am.common.investment.service.EquityLatestPriceService equityLatestPriceService,
+            OHLCMapper ohlcMapper,
+            MarketIndexIndicesService marketIndexIndicesService,
+            StockIndicesMarketDataService stockIndicesMarketDataService,
+            GlobalIndexCacheWriter globalIndexCacheWriter,
+            IndexSymbolRegistry indexSymbolRegistry,
             @Qualifier("marketDataPersistenceExecutor") ThreadPoolTaskExecutor taskExecutor) {
         this.historicalDataService = historicalDataService;
         this.marketDataCacheService = marketDataCacheService;
         this.equityService = equityService;
         this.equityLatestPriceService = equityLatestPriceService;
         this.ohlcMapper = ohlcMapper;
+        this.marketIndexIndicesService = marketIndexIndicesService;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
+        this.globalIndexCacheWriter = globalIndexCacheWriter;
+        this.indexSymbolRegistry = indexSymbolRegistry;
         this.taskExecutor = taskExecutor;
     }
 
@@ -87,18 +121,34 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                 if ("MOCK".equalsIgnoreCase(provider)) {
                     log.info("Simulated/MOCK stream - bypassing MongoDB database and Cache save to prevent pollution");
                 } else {
-                    // 1. Save to database using EquityService (for individual stocks)
-                    log.debug("Saving {} OHLC data points to database", ohlcData.size());
-                    List<EquityPrice> equityPrices = ohlcMapper.toEquityPriceList(ohlcData, provider);
-                    equityService.saveAllPrices(equityPrices);
-                    log.debug("Successfully saved {} equity prices to database", equityPrices.size());
+                    Map<String, OHLCQuote> globalQuotes = extractGlobalQuotes(ohlcData);
+                    Map<String, OHLCQuote> indexQuotes = extractIndexQuotes(ohlcData);
+                    Map<String, OHLCQuote> equityQuotes = new HashMap<>(ohlcData);
+                    equityQuotes.keySet().removeAll(indexQuotes.keySet());
+                    equityQuotes.keySet().removeAll(globalQuotes.keySet());
+                    log.info("Routing OHLC batch: total={}, equity={}, index={}, global={}",
+                            ohlcData.size(), equityQuotes.size(), indexQuotes.size(), globalQuotes.size());
 
-                    // 2. Update the cache with default timeframe (1D for current day data)
+                    // 1. Save only individual stocks to the equity measurement.
+                    if (!equityQuotes.isEmpty()) {
+                        log.debug("Saving {} equity OHLC data points to database", equityQuotes.size());
+                        List<EquityPrice> equityPrices = ohlcMapper.toEquityPriceList(equityQuotes, provider);
+                        equityService.saveAllPrices(equityPrices);
+                        log.debug("Successfully saved {} equity prices to database", equityPrices.size());
+                    }
+
+                    // 2. Save Indian index ticks only to the market_index measurement.
+                    saveIndexQuotes(indexQuotes);
+
+                    // 3. Keep global index ticks on the isolated global_market_index path.
+                    saveGlobalQuotes(globalQuotes);
+
+                    // 4. Update the cache with default timeframe (1D for current day data)
                     marketDataCacheService.cacheOHLCData(ohlcData, TimeFrame.DAY);
                     log.debug("Successfully cached OHLC data for {} symbols", ohlcData.size());
 
-                    // 3. Unified Persistence: If symbols are indices, update the permanent Index Database
-                    updateStockIndicesIfNecessary(ohlcData);
+                    // 5. Keep the document used by the index API in sync.
+                    updateStockIndicesIfNecessary(indexQuotes);
                 }
             } catch (Exception e) {
                 log.error("Error saving OHLC data: {}", e.getMessage(), e);
@@ -112,25 +162,9 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
      * This bridges the gap between Streaming/Fallback data and the Index Page.
      */
     private void updateStockIndicesIfNecessary(Map<String, OHLCQuote> ohlcData) {
-        // Known list of index patterns to avoid expensive DB lookups for every stock tick
-        List<String> indexHints = Arrays.asList("NIFTY", "SENSEX", "INDIA VIX", "BANKNIFTY", "FINNIFTY");
-
         for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
             String rawSymbol = entry.getKey();
-            
-            // Optimization: Only check DB if it looks like an index
-            boolean mightBeIndex = indexHints.stream().anyMatch(hint -> rawSymbol.toUpperCase().contains(hint));
-            if (!mightBeIndex) continue;
-
-            // Normalize symbol
-            String symbol = rawSymbol;
-            if (symbol.contains("|")) {
-                symbol = symbol.substring(symbol.indexOf("|") + 1);
-            }
-            if (symbol.contains(":")) {
-                symbol = symbol.substring(symbol.indexOf(":") + 1);
-            }
-            symbol = symbol.toUpperCase().trim();
+            String symbol = normalizeSymbol(rawSymbol);
 
             try {
                 StockIndicesMarketData indexData = stockIndicesMarketDataService.findByIndexSymbol(symbol);
@@ -199,6 +233,98 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         }
     }
 
+    private Map<String, OHLCQuote> extractIndexQuotes(Map<String, OHLCQuote> ohlcData) {
+        Map<String, OHLCQuote> indexQuotes = new HashMap<>();
+        Set<String> candidateSymbols = ohlcData.keySet().stream()
+                .filter(rawSymbol -> !isGlobalKey(rawSymbol))
+                .map(indexSymbolRegistry::normalizeSymbol)
+                .filter(symbol -> !symbol.isBlank())
+                .collect(Collectors.toSet());
+        Set<String> resolvedIndexSymbols = indexSymbolRegistry.resolveKnownIndexNames(candidateSymbols);
+
+        for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
+            String normalized = normalizeSymbol(entry.getKey());
+            if (indexSymbolRegistry.isExplicitIndexKey(entry.getKey())
+                    || resolvedIndexSymbols.contains(normalized)) {
+                indexQuotes.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return indexQuotes;
+    }
+
+    private Map<String, OHLCQuote> extractGlobalQuotes(Map<String, OHLCQuote> ohlcData) {
+        Map<String, OHLCQuote> globalQuotes = new HashMap<>();
+        for (Map.Entry<String, OHLCQuote> entry : ohlcData.entrySet()) {
+            String symbol = entry.getKey();
+            if (symbol != null && symbol.trim().toUpperCase(Locale.ROOT).startsWith("GLOBAL_")) {
+                globalQuotes.put(symbol, entry.getValue());
+            }
+        }
+        return globalQuotes;
+    }
+
+    private void saveIndexQuotes(Map<String, OHLCQuote> indexQuotes) {
+        for (Map.Entry<String, OHLCQuote> entry : indexQuotes.entrySet()) {
+            OHLCQuote quote = entry.getValue();
+            if (quote == null) {
+                continue;
+            }
+
+            String symbol = normalizeSymbol(entry.getKey());
+            double previousClose = quote.getPreviousClose();
+            double change = quote.getChange() != null
+                    ? quote.getChange()
+                    : quote.getLastPrice() - previousClose;
+            double changePercent = quote.getChangePercent() != null
+                    ? quote.getChangePercent()
+                    : previousClose > 0 ? (change / previousClose) * 100.0 : 0.0;
+
+            OHLCQuote.OHLC ohlc = quote.getOhlc();
+            MarketData marketData = MarketData.builder()
+                    .last(quote.getLastPrice())
+                    .open(ohlc != null ? ohlc.getOpen() : quote.getLastPrice())
+                    .high(ohlc != null ? ohlc.getHigh() : quote.getLastPrice())
+                    .low(ohlc != null ? ohlc.getLow() : quote.getLastPrice())
+                    .previousClose(previousClose)
+                    .variation(change)
+                    .percentChange(changePercent)
+                    .build();
+
+            MarketIndexIndices indexData = MarketIndexIndices.builder()
+                    .key(entry.getKey())
+                    .index(symbol)
+                    .indexSymbol(symbol)
+                    .marketData(marketData)
+                    .timestamp(LocalDateTime.now(ZoneId.of("Asia/Kolkata")))
+                    .build();
+
+            marketIndexIndicesService.save(indexData);
+        }
+        if (!indexQuotes.isEmpty()) {
+            log.debug("Saved {} index ticks to market_index", indexQuotes.size());
+        }
+    }
+
+    private void saveGlobalQuotes(Map<String, OHLCQuote> globalQuotes) {
+        for (Map.Entry<String, OHLCQuote> entry : globalQuotes.entrySet()) {
+            if (entry.getValue() != null) {
+                globalIndexCacheWriter.writeTick(entry.getKey(), entry.getValue());
+            }
+        }
+        if (!globalQuotes.isEmpty()) {
+            log.debug("Saved {} global index ticks to global_market_index", globalQuotes.size());
+        }
+    }
+
+    private String normalizeSymbol(String rawSymbol) {
+        return indexSymbolRegistry.normalizeSymbol(rawSymbol);
+    }
+
+    private boolean isGlobalKey(String rawSymbol) {
+        String upper = rawSymbol == null ? "" : rawSymbol.trim().toUpperCase(Locale.ROOT);
+        return upper.startsWith("GLOBAL_INDEX|") || upper.startsWith("GLOBAL_INDEX:");
+    }
+
     public CompletableFuture<Void> saveHistoricalData(String symbol, TimeFrame interval,
             HistoricalData historicalData) {
         if (historicalData == null || historicalData.getDataPoints() == null
@@ -230,26 +356,15 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         }
 
         try {
-            // Filter out index symbols early to prevent false cache misses
-            Set<String> knownIndices = new HashSet<>(Arrays.asList(
-                "INDIA VIX", "NIFTY 50", "NIFTY NEXT 50", "NIFTY 100", "NIFTY 200", 
-                "NIFTY 500", "NIFTY MIDCAP 50", "NIFTY MIDCAP 100", "NIFTY SMLCAP 100", 
-                "NIFTY MIDCAP 150", "NIFTY SMLCAP 50", "NIFTY SMLCAP 250", "NIFTY SMLCAP 500", 
-                "NIFTY BANK", "NIFTY AUTO", "NIFTY FMCG", "NIFTY MEDIA", "NIFTY METAL", 
-                "NIFTY PHARMA", "NIFTY PSU BANK", "NIFTY PVT BANK", "NIFTY REALTY", 
-                "NIFTY HEALTHCARE", "NIFTY CONSR DURABLE", "NIFTY OIL AND GAS", 
-                "NIFTY MIDSML HLTH", "NIFTY IT", "NIFTY FIN SERVICES", "NIFTY ENERGY", 
-                "NIFTY PHARMACEUTICALS", "SENSEX", "NIFTY", "BANKNIFTY"
-            ));
+            // Filter out configured, metadata-resolved, and explicitly-prefixed index symbols
+            // before querying the equity latest-price path.
+            Set<String> knownIndices = indexSymbolRegistry.resolveKnownIndexNames(new HashSet<>(tradingSymbols));
             List<String> filteredSymbols = tradingSymbols.stream()
                     .filter(symbol -> {
-                        String clean = symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "").trim().toUpperCase();
-                        return !knownIndices.contains(clean) && 
-                               !clean.startsWith("NIFTY ") && 
-                               !clean.contains("VIX") && 
-                               !clean.startsWith("SENSEX") && 
-                               !clean.equals("FINNIFTY") &&
-                               !clean.equals("MIDCPNIFTY");
+                        String clean = indexSymbolRegistry.normalizeSymbol(symbol);
+                        return !indexSymbolRegistry.isExplicitIndexKey(symbol)
+                                && !isGlobalKey(symbol)
+                                && !knownIndices.contains(clean);
                     })
                     .collect(Collectors.toList());
 
@@ -472,6 +587,51 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         } catch (Exception e) {
             log.error("Error retrieving historical data for symbol {}: {}", symbol, e.getMessage(), e);
             return null;
+        }
+    }
+
+    /**
+     * Bulk historical-store read used after the existing Redis batch lookup.
+     * Existing single-symbol APIs remain unchanged for all other callers.
+     */
+    public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, TimeFrame interval,
+            String fromDate, String toDate, boolean isIndexSymbol) {
+        if (symbols == null || symbols.isEmpty() || interval == null) return Collections.emptyMap();
+        try {
+            LocalDate from = LocalDate.parse(fromDate, DateTimeFormatter.ISO_LOCAL_DATE);
+            LocalDate to = LocalDate.parse(toDate, DateTimeFormatter.ISO_LOCAL_DATE);
+            Instant fromInstant = from.atStartOfDay(ZoneId.systemDefault()).toInstant();
+            Instant toInstant = to.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
+
+            Map<String, String> originalByCleanSymbol = new HashMap<>();
+            for (String symbol : symbols) {
+                if (symbol == null || symbol.isBlank()) continue;
+                String cleanSymbol = symbol.replaceAll(
+                        "(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "")
+                        .trim().toUpperCase(java.util.Locale.ROOT);
+                originalByCleanSymbol.putIfAbsent(cleanSymbol, symbol);
+            }
+            if (originalByCleanSymbol.isEmpty()) return Collections.emptyMap();
+
+            Map<String, HistoricalData> storedData = historicalDataService.getHistoricalDataBatch(
+                    new java.util.ArrayList<>(originalByCleanSymbol.keySet()), fromInstant, toInstant,
+                    interval.getApiValue(), isIndexSymbol);
+            if (storedData == null || storedData.isEmpty()) return Collections.emptyMap();
+
+            Map<String, HistoricalData> result = new HashMap<>();
+            storedData.forEach((cleanSymbol, data) -> {
+                String requestedSymbol = cleanSymbol == null ? null
+                        : originalByCleanSymbol.get(cleanSymbol.toUpperCase(java.util.Locale.ROOT));
+                if (requestedSymbol != null && data != null && data.getDataPoints() != null
+                        && !data.getDataPoints().isEmpty()) {
+                    result.put(requestedSymbol, data);
+                }
+            });
+            return result;
+        } catch (Exception e) {
+            log.error("Error retrieving batch historical data for {} symbols interval={}: {}",
+                    symbols.size(), interval.getApiValue(), e.getMessage(), e);
+            return Collections.emptyMap();
         }
     }
 

@@ -9,12 +9,14 @@ MONGODB_DATABASE_NAME: ${MONGODB_DATABASE:market_data}
 MONGODB_USERNAME_INTERNAL: ${MONGODB_USERNAME:admin}
 MONGODB_PASSWORD_INTERNAL: ${MONGODB_PASSWORD:}
 
-# InfluxDB configuration is injected by Vault. Keep every value empty when it
-# is absent so InfluxConfigurationValidator can stop an unsafe startup.
+# InfluxDB configuration is injected by Vault (apps/data/{env}/infra/influxdb).
+# INFLUXDB_HOST and INFLUXDB_PORT are injected by the CSI Vault driver via vault-mappings.yaml.
+# INFLUXDB_URL is composed from those injected values; no hardcoded URL is needed in helm values.
+# Keep every value empty when absent so InfluxConfigurationValidator can stop an unsafe startup.
 INFLUXDB_TOKEN_INTERNAL: ${INFLUXDB_TOKEN:}
 INFLUXDB_ORG_INTERNAL: ${INFLUXDB_ORG:}
 INFLUXDB_BUCKET_INTERNAL: ${INFLUXDB_BUCKET:}
-INFLUXDB_URL_INTERNAL: ${INFLUXDB_URL:}
+INFLUXDB_URL_INTERNAL: ${INFLUXDB_URL:http://${INFLUXDB_HOST:localhost}:${INFLUXDB_PORT:8086}}
 
 # Redis Configuration
 REDIS_HOSTNAME: ${INFRA_HOST}
@@ -169,6 +171,7 @@ market-data:
   nse:
     cookies:
       ttl-minutes: ${NSE_COOKIES_TTL_MINUTES:60}
+
 # Logging Configuration
 logging:
   # NOTE: logging.file.name and logging.pattern.* are intentionally NOT set.
@@ -217,6 +220,14 @@ server:
     min-response-size: 1024
 
 market:
+  # Shared timeframe list for scheduled heatmap refreshes. Index names are
+  # sourced from the existing nseindices.yml registry.
+  analysis:
+    heatmap:
+      timeframes: ${MARKET_ANALYSIS_HEATMAP_TIMEFRAMES:1D,5D,1W,1M,3M,6M,1Y,3Y,5Y}
+      warming:
+        enabled: ${MARKET_ANALYSIS_INDEX_HEATMAP_WARMING_ENABLED:true}
+        minimum-constituents: ${MARKET_ANALYSIS_HEATMAP_MINIMUM_CONSTITUENTS:100}
   cache:
     async-backfill:
       enabled: ${MARKET_CACHE_ASYNC_ENABLED:true}

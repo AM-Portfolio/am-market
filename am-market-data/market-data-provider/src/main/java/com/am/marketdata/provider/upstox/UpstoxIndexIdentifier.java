@@ -71,7 +71,7 @@ public class UpstoxIndexIdentifier {
     public String getInstrumentKey(String name) {
         if (name == null)
             return null;
-        String cleanName = name.toUpperCase();
+        String cleanName = name.trim().toUpperCase();
         if (cleanName.contains("|")) {
             cleanName = cleanName.substring(cleanName.indexOf("|") + 1);
         }
@@ -94,9 +94,13 @@ public class UpstoxIndexIdentifier {
             return resolved;
 
         for (String symbol : symbols) {
-            String key = getInstrumentKey(symbol);
+            if (symbol == null || symbol.trim().isEmpty()) {
+                continue;
+            }
+            String normalized = symbol.trim();
+            String key = getInstrumentKey(normalized);
             if (key != null) {
-                resolved.put(symbol, key);
+                resolved.put(normalized, key);
             }
         }
         return resolved;

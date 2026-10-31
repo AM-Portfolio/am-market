@@ -1,5 +1,25 @@
 # Market price integrity TODO
 
+## Global-index integrity implementation (2026-10-25)
+
+- [x] Compare all ten public symbols with the Upstox global instrument catalog: eight exact candidates and unmatched IXIC/SSEC; do not substitute benchmarks.
+- [x] Trace provider→WebSocket/REST→Redis/Influx/Mongo→API→Flutter; preserve existing endpoint and response contracts.
+- [x] Centralize public symbol mappings, exchange sessions, offsets, and provider-age settings in `global-market-schedule.yml`; unsupported symbols fail closed.
+- [x] Seed empty config from that schedule and add an opt-in, field-only reconciler for existing config rows. It preserves sync state and historical records; it has not been run against a database.
+- [x] Validate positive finite prices and provider event timestamps. During open sessions enforce the configured source-age window; while closed accept only a quote from the latest completed venue session.
+- [x] Handle configured timezone, weekday/holiday schedule, and cross-midnight sessions in shared schedule logic; use provider event time for WebSocket cache/Influx writes and reject out-of-order cache updates.
+- [x] Subscribe configured global instruments during streamer refresh and use the application's configured Jackson mapper for quote serialization.
+- [x] Remove stale Mongo snapshot promotion in the global-index response path; preserve the existing response DTO and render missing quotes as pending rather than artificial zero in Market UI.
+- [x] Add focused backend quote-freshness/session tests and UI availability model tests.
+- [ ] Identify an exact, licensed, public-display-capable quote/history source for IXIC and SSEC. Do not proxy or fabricate either benchmark.
+- [ ] Execute the opt-in Mongo config reconciliation in a controlled non-production environment, verify its diff/rollback, then disable the flag. No migration has been run.
+- [ ] Bootstrap/backfill exact-key global history and verify timeframe baselines without rewriting old Influx provenance. (Code/tests are added; focused test execution, real provider data proof, and database backfill remain pending.)
+- [ ] Reduce remaining cold REST call serialization and synchronous Influx persistence only after tracing provider limits and current writer behavior; these are not addressed by this change.
+- [ ] Run full market-data and Indian-index regression tests; verify all ten mappings, exchange calendars/special closures, US date boundaries, and GIFT overnight edges.
+- [ ] Run preprod Postman global-index matrix and review source-time, cache lineage, latency, and two exchange-timezone sessions before any production request.
+- [ ] Create `REPORT.md` only after required tests and Postman validation have actually passed.
+
+
 - [x] Confirm production symptoms using read-only API/log inspection.
 - [x] Map direct and indirect Modern UI consumers.
 - [x] Identify the separate chart, card, and movers calculation paths and duplicate timeframe loading.
@@ -128,3 +148,15 @@
 - [x] Apply one provider/cache depth freshness rule: allow up to 2 seconds of clock skew and omit missing or stale depth rather than representing it as zero.
 - [ ] Add adapter, Redis round-trip, API compatibility, legacy-cache, stale-depth, partial-provider, and multi-provider tests.
 - [ ] Verify Paper Trading consumes returned depth, then capture a preprod warm-cache and cold-cache trace before release.
+
+## Upstox V3 global-index history slice
+
+- [x] Add global-only V3 URL routing for daily/weekly/monthly history; retain existing V2 paths for minute/hour requests and non-global instruments.
+- [x] Implement validated, config-driven daily backfill in the existing admin global sync; pending records and explicit `force=true` only.
+- [x] Bound lookback to configured 1–10 years; skip blank/mismatched keys and keep per-symbol failures isolated.
+- [x] Preserve provider timestamp instants and only persist valid, deduplicated candles under the existing instrument key/measurement.
+- [x] Replace global OHLC `mean` aggregation with first-open / max-high / min-low / last-close semantics.
+- [x] Add provider URL, candle validation, sync gating/error, timestamp, idempotency, and aggregation regression tests (including forced refresh, no completed session, provider/Influx failures, and duplicate-sync gating; execution pending).
+- [ ] Run focused provider, persistence, service tests; then market-data/Indian-index regression.
+- [ ] Preprod only: verify live Upstox history for every configured exact key, requested range/row counts, timeframe baselines, and Postman contract snapshots. No production calls or mutations without separate approval.
+- [ ] Leave IXIC/SSEC, Mongo reconciliation, actual database backfill, and provider redistribution approval gated until separately verified/authorized.

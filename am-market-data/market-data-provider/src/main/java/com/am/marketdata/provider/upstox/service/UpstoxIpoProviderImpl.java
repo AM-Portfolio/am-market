@@ -41,6 +41,10 @@ public class UpstoxIpoProviderImpl implements IpoDataProvider {
                 status, issueType, pageNumber, records);
         UpstoxIpoListWrapperDto wrapper = upstoxIpoClient.fetchIpos(status, issueType, pageNumber, records);
 
+        if (wrapper != null && "error".equalsIgnoreCase(wrapper.getStatus())) {
+            throw new IllegalStateException("Upstox API call failed for status=" + status + ", page=" + pageNumber);
+        }
+
         if (wrapper == null || wrapper.getData() == null || wrapper.getData().isEmpty()) {
             return Collections.emptyList();
         }

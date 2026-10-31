@@ -15,6 +15,7 @@ public interface EquityPriceMeasurementRepository extends Repository<EquityPrice
      List<EquityPriceMeasurement> findBySymbol(String symbol);
     List<EquityPriceMeasurement> findBySymbolAndTimeBetween(String symbol, Instant startTime, Instant endTime);
     List<EquityPriceMeasurement> findBySymbolAndTimeBetween(String symbol, Instant startTime, Instant endTime, String windowInterval);
+    List<EquityPriceMeasurement> findBySymbolsAndTimeBetween(List<String> symbols, Instant startTime, Instant endTime, String windowInterval);
     
     // // Find by ISIN
      Optional<EquityPriceMeasurement> findLatestByIsin(String isin);

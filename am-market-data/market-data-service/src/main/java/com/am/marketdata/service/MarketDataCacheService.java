@@ -50,6 +50,7 @@ public class MarketDataCacheService {
 
     private final AppLogger log = AppLogger.getLogger();
     private static final String DEFAULT_INTERVAL = "5m";
+    private static final int HISTORICAL_REDIS_PIPELINE_SYMBOL_BATCH_SIZE = 50;
 
     private final StockCacheService stockCacheService;
     private final ObjectMapper objectMapper;
@@ -424,6 +425,92 @@ public class MarketDataCacheService {
                     "Error caching historical data", e);
             // Don't rethrow as this is a non-critical operation
         }
+    }
+
+    /**
+     * Cache a fetched historical response for many symbols using one existing
+     * Redis pipeline. This is best-effort, like the single-symbol method above:
+     * invalid/empty members are skipped and a cache failure does not fail the
+     * market-data response.
+     */
+    public void cacheHistoricalDataBatch(Map<String, HistoricalData> historicalDataBySymbol, TimeFrame timeFrame) {
+        if (historicalDataBySymbol == null || historicalDataBySymbol.isEmpty() || timeFrame == null) {
+            return;
+        }
+
+        // Preserve the existing intraday key/date behavior; this optimization is
+        // for daily-or-larger candles used by index baseline/end calculations.
+        if (timeFrame != TimeFrame.DAY && timeFrame != TimeFrame.WEEK
+                && timeFrame != TimeFrame.MONTH && timeFrame != TimeFrame.YEAR) {
+            historicalDataBySymbol.forEach((symbol, history) -> cacheHistoricalData(symbol, timeFrame, history));
+            return;
+        }
+
+        long startedAt = System.nanoTime();
+        List<StockBars> batch = new ArrayList<>(historicalDataBySymbol.size());
+        int skipped = 0;
+        for (Map.Entry<String, HistoricalData> entry : historicalDataBySymbol.entrySet()) {
+            String symbol = entry.getKey();
+            HistoricalData historicalData = entry.getValue();
+            if (symbol == null || symbol.isBlank() || historicalData == null
+                    || historicalData.getDataPoints() == null || historicalData.getDataPoints().isEmpty()) {
+                skipped++;
+                continue;
+            }
+
+            try {
+                List<OHLCV> bars = historicalData.getDataPoints().stream()
+                        .filter(point -> point != null && point.getTime() != null)
+                        .map(point -> StockCacheService.createPricePoint(point.getTime(), point.getOpen(),
+                                point.getHigh(), point.getLow(), point.getClose(), point.getVolume(), null))
+                        .collect(Collectors.toList());
+                if (bars.isEmpty()) {
+                    skipped++;
+                    continue;
+                }
+
+                batch.add(StockBars.builder()
+                        .symbol(symbol)
+                        .interval(timeFrame.getApiValue())
+                        .startDate(bars.get(0).getTime().toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE))
+                        .bars(bars)
+                        .build());
+            } catch (Exception e) {
+                skipped++;
+                log.warn("cacheHistoricalDataBatch", "Skipping invalid history member {}: {}", symbol,
+                        e.getMessage());
+            }
+        }
+
+        if (batch.isEmpty()) {
+            log.info("cacheHistoricalDataBatch", "No valid members to cache (received={}, skipped={})",
+                    historicalDataBySymbol.size(), skipped);
+            return;
+        }
+
+        int pipelineBatches = 0;
+        int successfulBatches = 0;
+        for (int offset = 0; offset < batch.size(); offset += HISTORICAL_REDIS_PIPELINE_SYMBOL_BATCH_SIZE) {
+            List<StockBars> pipelineBatch = batch.subList(offset,
+                    Math.min(offset + HISTORICAL_REDIS_PIPELINE_SYMBOL_BATCH_SIZE, batch.size()));
+            pipelineBatches++;
+            try {
+                boolean cached;
+                cached = stockCacheService.cacheHistoricalDataBatch(pipelineBatch);
+                if (cached) {
+                    successfulBatches++;
+                }
+            } catch (Exception e) {
+                // Keep the cache best-effort and continue with later bounded chunks.
+                log.warn("cacheHistoricalDataBatch", "Redis pipeline batch failed (offset={}, symbols={}): {}",
+                        offset, pipelineBatch.size(), e.getMessage());
+            }
+        }
+        log.info("cacheHistoricalDataBatch",
+                "Historical cache batch completed (timeframe={}, received={}, queued={}, skipped={}, pipelineBatches={}, successfulBatches={}, durationMs={})",
+                timeFrame.getApiValue(), historicalDataBySymbol.size(), batch.size(), skipped, pipelineBatches,
+                successfulBatches,
+                (System.nanoTime() - startedAt) / 1_000_000);
     }
 
     public Map<String, OHLCQuote> getOHLCFromCache(List<String> tradingSymbols, TimeFrame timeFrame) {

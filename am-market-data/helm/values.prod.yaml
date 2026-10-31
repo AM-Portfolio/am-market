@@ -17,6 +17,9 @@ env:
   REDIS_CACHE_INTRADAY_BATCH_CHUNK_SIZE: "100"
   # Internal Kubernetes DNS endpoint for GrowthBook (bypasses Cloudflare HTTP 400 blocking)
   GROWTHBOOK_API_HOST: "http://growthbook-backend.growthbook.svc.cluster.local:3100/api"
+  # INFLUXDB_URL is no longer hardcoded here. It is composed at runtime from
+  # INFLUXDB_HOST and INFLUXDB_PORT, which are injected by the Vault CSI driver
+  # from the secret path: apps/data/prod/infra/influxdb (keys: host, port).
 
 probes:
   port: 8080

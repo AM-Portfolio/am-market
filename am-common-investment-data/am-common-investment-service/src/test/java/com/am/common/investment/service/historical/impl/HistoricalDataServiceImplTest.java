@@ -4,6 +4,7 @@ import com.am.common.investment.model.equity.EquityPrice;
 import com.am.common.investment.model.equity.MarketIndexIndices;
 import com.am.common.investment.model.equity.MarketData;
 import com.am.common.investment.model.historical.HistoricalData;
+import com.am.common.investment.model.historical.OHLCVTPoint;
 import com.am.common.investment.service.EquityService;
 import com.am.common.investment.service.MarketIndexIndicesService;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class HistoricalDataServiceImplTest {
@@ -116,5 +118,35 @@ class HistoricalDataServiceImplTest {
 
         // Then
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldBuildBatchHistoricalDataFromOneEquityBatchRead() {
+        Instant from = Instant.parse("2026-06-01T00:00:00Z");
+        Instant to = Instant.parse("2026-06-03T00:00:00Z");
+        List<EquityPrice> prices = List.of(
+                equityPrice("TCS", "2026-06-02T10:00:00Z", 102.0),
+                equityPrice("TCS", "2026-06-01T10:00:00Z", 100.0),
+                equityPrice("INFY", "2026-06-01T10:00:00Z", 50.0));
+        when(equityService.getPriceHistoryBySymbols(eq(List.of("TCS", "INFY")), eq(from), eq(to), eq("1d")))
+                .thenReturn(prices);
+
+        var result = historicalDataService.getHistoricalDataBatch(List.of("TCS", "INFY"), from, to, "1d", false);
+
+        assertThat(result).containsKeys("TCS", "INFY");
+        assertThat(result.get("TCS").getDataPoints()).hasSize(2);
+        assertThat(result.get("TCS").getDataPoints().get(0).getClose()).isEqualTo(100.0);
+        assertThat(result.get("TCS").getDataPoints().get(1).getClose()).isEqualTo(102.0);
+        assertThat(result.get("INFY").getDataPoints()).hasSize(1);
+        verify(equityService).getPriceHistoryBySymbols(List.of("TCS", "INFY"), from, to, "1d");
+    }
+
+    private EquityPrice equityPrice(String symbol, String timestamp, double close) {
+        return EquityPrice.builder()
+                .symbol(symbol)
+                .time(Instant.parse(timestamp))
+                .lastPrice(close)
+                .ohlcv(OHLCVTPoint.builder().open(close).high(close).low(close).close(close).volume(10L).build())
+                .build();
     }
 }

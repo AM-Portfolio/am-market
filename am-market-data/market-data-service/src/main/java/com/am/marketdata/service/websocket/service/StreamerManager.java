@@ -10,6 +10,7 @@ import com.am.marketdata.service.MarketDataCacheService;
 import com.am.marketdata.service.SymbolOrchestratorService;
 import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
 import com.am.marketdata.service.global.GlobalMarketScheduleService;
+import com.am.common.investment.persistence.document.global.GlobalIndexConfigRepository;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import com.am.marketdata.common.model.MarketDataUpdate;
 import com.upstox.feeder.MarketUpdateV3;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import java.util.HashMap;
 
 import jakarta.annotation.PostConstruct;
@@ -45,6 +47,13 @@ public class StreamerManager implements StreamerListener {
     private final MarketDataCacheService cacheService;
     private final StringRedisTemplate redisTemplate;
     private final com.am.marketdata.service.global.GlobalIndexCacheWriter globalIndexCacheWriter;
+    private final ObjectMapper objectMapper;
+    private final GlobalIndexConfigRepository globalIndexConfigRepository;
+    private static final DefaultRedisScript<Long> WRITE_NEWER_GLOBAL_TICK = new DefaultRedisScript<>(
+            "local old=redis.call('get', KEYS[2]); " +
+                    "if old and tonumber(old) and tonumber(old) >= tonumber(ARGV[1]) then return 0 end; " +
+                    "redis.call('set', KEYS[1], ARGV[2]); redis.call('set', KEYS[2], ARGV[1]); return 1",
+            Long.class);
 
     /**
      * Redis key written by the Indian market hours scheduler.
@@ -86,7 +95,9 @@ public class StreamerManager implements StreamerListener {
             MarketDataPublisher publisher,
             MarketDataCacheService cacheService,
             StringRedisTemplate redisTemplate,
-            com.am.marketdata.service.global.GlobalIndexCacheWriter globalIndexCacheWriter) {
+            com.am.marketdata.service.global.GlobalIndexCacheWriter globalIndexCacheWriter,
+            ObjectMapper objectMapper,
+            GlobalIndexConfigRepository globalIndexConfigRepository) {
         this.streamer = streamer;
         this.persistenceService = persistenceService;
         this.processor = processor;
@@ -95,6 +106,8 @@ public class StreamerManager implements StreamerListener {
         this.cacheService = cacheService;
         this.redisTemplate = redisTemplate;
         this.globalIndexCacheWriter = globalIndexCacheWriter;
+        this.objectMapper = objectMapper;
+        this.globalIndexConfigRepository = globalIndexConfigRepository;
     }
 
     // @PostConstruct
@@ -111,6 +124,15 @@ public class StreamerManager implements StreamerListener {
         
         // Load and merge index symbols from the configuration file so we stream index ticks too
         symbols.addAll(loadIndicesFromYaml());
+        try {
+            globalIndexConfigRepository.findAll().stream()
+                    .map(com.am.common.investment.persistence.document.global.GlobalIndexConfigDocument::getInstrumentKey)
+                    .filter(key -> key != null && !key.isBlank())
+                    .forEach(symbols::add);
+        } catch (Exception e) {
+            // A transient global-config DB failure must not prevent existing NSE/equity subscriptions.
+            log.warn("StreamerManager", "Could not load global index subscriptions; retaining existing subscriptions", e);
+        }
 
         if (!symbols.isEmpty()) {
             this.subscribedSymbols.clear();
@@ -503,17 +525,21 @@ public class StreamerManager implements StreamerListener {
      */
     private void handleGlobalIndexTick(String instrumentKey, OHLCQuote quote) {
         try {
-            // Serialize the OHLCQuote to JSON for Redis storage
-            ObjectMapper mapper = new ObjectMapper();
-            String json = mapper.writeValueAsString(quote);
+            if (quote == null || quote.getQuoteTimestamp() == null || !Double.isFinite(quote.getLastPrice())
+                    || quote.getLastPrice() <= 0 || quote.getQuoteTimestamp().isAfter(java.time.Instant.now().plusSeconds(120))) {
+                log.warn("StreamerManager", "[GlobalTick] Rejected invalid or untimed quote for instrumentKey=" + instrumentKey);
+                return;
+            }
+            String json = objectMapper.writeValueAsString(quote);
+            String sourceTime = String.valueOf(quote.getQuoteTimestamp().toEpochMilli());
 
-            // Write price to the global-specific Redis key (NOT the Indian market:latest-price key)
-            redisTemplate.opsForValue().set(GLOBAL_LATEST_PREFIX + instrumentKey, json);
-
-            // Write timestamp for the 30-min circuit breaker check
-            redisTemplate.opsForValue().set(
-                    GLOBAL_TIMESTAMP_PREFIX + instrumentKey,
-                    String.valueOf(System.currentTimeMillis()));
+            Long written = redisTemplate.execute(WRITE_NEWER_GLOBAL_TICK,
+                    java.util.List.of(GLOBAL_LATEST_PREFIX + instrumentKey, GLOBAL_TIMESTAMP_PREFIX + instrumentKey),
+                    sourceTime, json);
+            if (written == null || written == 0L) {
+                log.debug("StreamerManager", "[GlobalTick] Ignored out-of-order tick for instrumentKey=" + instrumentKey);
+                return;
+            }
 
             // Write tick to InfluxDB for historical/intraday charts
             globalIndexCacheWriter.writeTick(instrumentKey, quote);

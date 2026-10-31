@@ -1,6 +1,3 @@
-
-
-
 # Multi-stage build for Market Data Service
 # Stage 1: Build with Maven base image
 ARG BASE_REGISTRY=""
@@ -65,13 +62,7 @@ FROM eclipse-temurin:21-jdk-jammy
 
 WORKDIR /app
 
-# Copy the built JAR from build stage
-COPY --from=build /build/am-market-data/market-data-app/target/*.jar app.jar
-
-# Copy data directory for instrument seeding
-COPY am-market-data/data/ data/
-
-# Install curl, Google Chrome for Selenium scraper, and set timezone
+# Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer)
 RUN apt-get update && \
   apt-get install -y curl wget gnupg2 && \
   wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
@@ -81,6 +72,12 @@ RUN apt-get update && \
   rm -rf /var/lib/apt/lists/* && \
   # Set timezone
   ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime
+
+# Copy data directory for instrument seeding
+COPY am-market-data/data/ data/
+
+# Copy the built JAR from build stage
+COPY --from=build /build/am-market-data/market-data-app/target/*.jar app.jar
 
 # Set environment variables
 ENV SPRING_PROFILES_ACTIVE=docker

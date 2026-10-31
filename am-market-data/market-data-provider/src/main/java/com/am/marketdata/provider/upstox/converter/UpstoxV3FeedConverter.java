@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.time.Instant;
 
 /**
  * Converter to transform Upstox V3 messages to organization-level common model
@@ -65,7 +66,7 @@ public class UpstoxV3FeedConverter {
 
     /**
      * Extract OHLCQuote from MarketUpdateV3.Feed
-     * Structure: Feed -> fullFeed -> marketFF -> ltpc -> ltp
+     * Structure: Feed -> fullFeed -> marketFF/indexFF -> ltpc -> ltp
      */
     private OHLCQuote extractQuote(MarketUpdateV3.Feed feed) {
         if (feed == null) {
@@ -75,41 +76,53 @@ public class UpstoxV3FeedConverter {
         OHLCQuote quote = new OHLCQuote();
 
         try {
-            // Navigate: Feed -> fullFeed -> marketFF -> ltpc
+            // Upstox uses marketFF for equities and indexFF for indices. Both
+            // expose the same LTPC/OHLC shape, so normalize them into one
+            // organization-level quote before the provider-specific layer ends.
             MarketUpdateV3.FullFeed fullFeed = feed.getFullFeed();
-            if (fullFeed != null) {
-                MarketUpdateV3.MarketFullFeed marketFF = fullFeed.getMarketFF();
-                if (marketFF != null) {
-                    MarketUpdateV3.LTPC ltpc = marketFF.getLtpc();
-                    if (ltpc != null) {
-                        // Extract LTP (Last Traded Price)
-                        double ltp = ltpc.getLtp();
-                        if (ltp > 0) {
-                            quote.setLastPrice(ltp);
-                        }
+            if (fullFeed == null) {
+                return null;
+            }
 
-                        // Extract previous close
-                        double cp = ltpc.getCp();
-                        if (cp > 0) {
-                            quote.setPreviousClose(cp);
-                        }
-                    }
+            MarketUpdateV3.LTPC ltpc = null;
+            MarketUpdateV3.MarketOHLC marketOHLC = null;
+            if (fullFeed.getMarketFF() != null) {
+                ltpc = fullFeed.getMarketFF().getLtpc();
+                marketOHLC = fullFeed.getMarketFF().getMarketOHLC();
+            } else if (fullFeed.getIndexFF() != null) {
+                ltpc = fullFeed.getIndexFF().getLtpc();
+                marketOHLC = fullFeed.getIndexFF().getMarketOHLC();
+            }
 
-                    // Extract OHLC if available
-                    MarketUpdateV3.MarketOHLC marketOHLC = marketFF.getMarketOHLC();
-                    if (marketOHLC != null && marketOHLC.getOhlc() != null && !marketOHLC.getOhlc().isEmpty()) {
-                        MarketUpdateV3.OHLC ohlc = marketOHLC.getOhlc().get(0); // First interval (usually 1d)
+            if (ltpc == null) {
+                return null;
+            }
 
-                        OHLCQuote.OHLC ohlcData = OHLCQuote.OHLC.builder()
-                                .open(ohlc.getOpen())
-                                .high(ohlc.getHigh())
-                                .low(ohlc.getLow())
-                                .close(ohlc.getClose())
-                                .build();
+            double ltp = ltpc.getLtp();
+            if (ltp <= 0) {
+                return null;
+            }
+            quote.setLastPrice(ltp);
 
-                        quote.setOhlc(ohlcData);
-                    }
-                }
+            double cp = ltpc.getCp();
+            if (cp > 0) {
+                quote.setPreviousClose(cp);
+            }
+            if (ltpc.getLtt() > 0) {
+                quote.setQuoteTimestamp(Instant.ofEpochMilli(ltpc.getLtt()));
+            }
+
+            // OHLC is optional in some LTPC/index updates. Keep the LTP quote
+            // rather than dropping the entire update when OHLC is absent.
+            if (marketOHLC != null && marketOHLC.getOhlc() != null && !marketOHLC.getOhlc().isEmpty()) {
+                MarketUpdateV3.OHLC ohlc = marketOHLC.getOhlc().get(0);
+                OHLCQuote.OHLC ohlcData = OHLCQuote.OHLC.builder()
+                        .open(ohlc.getOpen())
+                        .high(ohlc.getHigh())
+                        .low(ohlc.getLow())
+                        .close(ohlc.getClose())
+                        .build();
+                quote.setOhlc(ohlcData);
             }
 
         } catch (Exception e) {

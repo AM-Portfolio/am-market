@@ -18,6 +18,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -125,6 +127,55 @@ public class SymbolOrchestratorService {
         return constituents.stream().toList();
     }
 
+    /**
+     * Returns the current unique constituent count for each index in the shared
+     * NSE registry. The membership documents are loaded in one repository call.
+     */
+    public Map<String, Integer> getConfiguredNseIndexConstituentCounts() {
+        return getIndexConstituentCounts(getConfiguredNseIndexNames());
+    }
+
+    Map<String, Integer> getIndexConstituentCounts(Set<String> configuredNames) {
+        if (configuredNames == null || configuredNames.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> displayNameByNormalizedName = new LinkedHashMap<>();
+        Map<String, Set<String>> membersByNormalizedName = new LinkedHashMap<>();
+        configuredNames.forEach(name -> {
+            String normalized = name.trim().toUpperCase(Locale.ROOT);
+            displayNameByNormalizedName.put(normalized, name);
+            membersByNormalizedName.put(normalized, new HashSet<>());
+        });
+
+        try {
+            var indexData = stockIndicesMarketDataService.findByIndexSymbols(configuredNames);
+            if (indexData != null) {
+                indexData.stream()
+                        .filter(doc -> doc != null && doc.getIndexSymbol() != null && doc.getData() != null)
+                        .forEach(doc -> {
+                            String normalized = doc.getIndexSymbol().trim().toUpperCase(Locale.ROOT);
+                            Set<String> members = membersByNormalizedName.get(normalized);
+                            if (members != null) {
+                                doc.getData().stream()
+                                        .filter(stock -> stock != null && stock.getSymbol() != null
+                                                && !stock.getSymbol().isBlank())
+                                        .map(stock -> stock.getSymbol().trim().toUpperCase(Locale.ROOT))
+                                        .forEach(members::add);
+                            }
+                        });
+            }
+        } catch (Exception e) {
+            log.error("Failed to load configured NSE index constituent counts (indexCount={})",
+                    configuredNames.size(), e);
+            return Map.of();
+        }
+
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        membersByNormalizedName.forEach((normalized, members) ->
+                counts.put(displayNameByNormalizedName.get(normalized), members.size()));
+        return counts;
+    }
+
     public synchronized Set<String> findDistinctSymbols() {
         Set<String> universe = new HashSet<>(loadOrRefreshBaseSymbols());
         int baseCount = universe.size();
@@ -214,7 +265,7 @@ public class SymbolOrchestratorService {
                 return Set.of("NIFTY 500");
             }
 
-            Set<String> names = new HashSet<>();
+            Set<String> names = new LinkedHashSet<>();
             for (String group : List.of("broad-market-indices", "sector-indices")) {
                 Object configured = nse.get(group);
                 if (configured instanceof List<?> values) {

@@ -318,6 +318,15 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
         Set<String> instrumentKeys = new HashSet<>(context.getInstrumentKeys());
 
+        // Keep the caller's canonical symbol (for example, "NIFTY 50") for
+        // the downstream Kafka/WebSocket topic. Without this map, the first
+        // feed is resolved back from the Upstox key ("Nifty 50"), which does
+        // not match the UI subscription destination and makes a healthy feed
+        // appear silent.
+        if (context.getKeyToSymbolMap() != null) {
+            instrumentKeyToTradingSymbolMap.putAll(context.getKeyToSymbolMap());
+        }
+
         if (instrumentKeys.isEmpty()) {
             log.warn("UpstoxStreamer", "Symbol resolution returned no instrument keys for symbols: " + rawSymbols);
             return;

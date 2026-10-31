@@ -311,6 +311,19 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 HistoricalDataFilterUtil.FilterParams filterParams = HistoricalDataFilterUtil
                         .extractFilterParams(additionalParams);
 
+                // Symbol resolution can return plain names such as "NIFTY 50" without an
+                // index prefix. Preserve the caller's semantic type so the correct Influx
+                // measurement is selected instead of inferring it from the resolved string.
+                boolean indexRequest = additionalParams != null
+                        && Boolean.TRUE.equals(additionalParams.get("isIndexSymbol"));
+                boolean indexInstrument = "INDEX".equalsIgnoreCase(instrumentType);
+                boolean routeAsIndex = indexRequest || indexInstrument;
+                log.info("Historical routing: indexRequest={} indexInstrument={} symbols={}",
+                        indexRequest, indexInstrument, symbols.size());
+                Set<String> resolvedIndexNames = routeAsIndex
+                        ? Collections.emptySet()
+                        : findKnownIndexNames(resolvedSymbols);
+
                 // Keep a map of resolved symbols to original symbols to map results back correctly
                 Map<String, String> resolvedToOriginal = new HashMap<>();
                 Set<String> indexSymbols = new java.util.HashSet<>();
@@ -320,7 +333,8 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                     Set<String> resolved = instrumentUtils.resolveSymbols(List.of(originalSymbol), fetchIndexStocks);
                     for (String sym : resolved) {
                         resolvedToOriginal.put(sym, originalSymbol);
-                        if (sym.startsWith("GLOBAL_INDEX|") || sym.startsWith("NSE_INDEX|") || sym.startsWith("BSE_INDEX|")) {
+                        if (routeAsIndex || isExplicitIndexSymbol(sym)
+                                || resolvedIndexNames.contains(normalizeIndexName(sym))) {
                             indexSymbols.add(sym);
                         } else {
                             stockSymbols.add(sym);
@@ -539,10 +553,12 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
         log.info("[HOLIDAY_ROLLBACK] Adjusted query range: {} to {}", fromDate, toDate);
 
-        Map<String, Object> additionalParams = request.getAdditionalParams();
-        if (additionalParams == null) {
-            additionalParams = new HashMap<>();
-        }
+        Map<String, Object> additionalParams = request.getAdditionalParams() == null
+                ? new HashMap<>()
+                : new HashMap<>(request.getAdditionalParams());
+        // Carry the request-level semantic type into the batch method. Without this,
+        // plain index names returned by InstrumentUtils are mistaken for equities.
+        additionalParams.put("isIndexSymbol", request.isIndexSymbol());
         additionalParams.put("filterType", request.getFilterType());
         additionalParams.put("filterFrequency", request.getFilterFrequency());
 
@@ -572,6 +588,62 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toSet());
+    }
+
+    private boolean isExplicitIndexSymbol(String symbol) {
+        if (symbol == null) {
+            return false;
+        }
+        String normalized = symbol.trim().toUpperCase(Locale.ROOT);
+        return normalized.startsWith("GLOBAL_INDEX|")
+                || normalized.startsWith("GLOBAL_INDEX:")
+                || normalized.startsWith("NSE_INDEX|")
+                || normalized.startsWith("NSE_INDEX:")
+                || normalized.startsWith("BSE_INDEX|")
+                || normalized.startsWith("BSE_INDEX:");
+    }
+
+    private Set<String> findKnownIndexNames(Set<String> symbols) {
+        if (symbols == null || symbols.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        Set<String> lookupNames = symbols.stream()
+                .map(this::normalizeIndexName)
+                .filter(name -> !name.isBlank())
+                .collect(Collectors.toSet());
+        try {
+            List<StockIndicesMarketData> documents = stockIndicesMarketDataService
+                    .findByIndexSymbols(lookupNames);
+            if (documents == null || documents.isEmpty()) {
+                return Collections.emptySet();
+            }
+            return documents.stream()
+                    .map(StockIndicesMarketData::getIndexSymbol)
+                    .filter(Objects::nonNull)
+                    .map(this::normalizeIndexName)
+                    .collect(Collectors.toSet());
+        } catch (Exception e) {
+            // Prefix and caller-level routing remain authoritative. A metadata outage must
+            // not turn a valid historical request into an API failure.
+            log.warn("Unable to resolve plain symbols as indexes: {}", e.getMessage());
+            return Collections.emptySet();
+        }
+    }
+
+    private String normalizeIndexName(String symbol) {
+        if (symbol == null) {
+            return "";
+        }
+        String normalized = symbol.trim().toUpperCase(Locale.ROOT);
+        for (String prefix : List.of("GLOBAL_INDEX|", "GLOBAL_INDEX:", "NSE_INDEX|", "NSE_INDEX:",
+                "BSE_INDEX|", "BSE_INDEX:", "NSE_EQ|", "NSE_EQ:", "BSE_EQ|", "BSE_EQ:",
+                "NSE:", "BSE:")) {
+            if (normalized.startsWith(prefix)) {
+                return normalized.substring(prefix.length()).trim();
+            }
+        }
+        return normalized;
     }
 
     @Override

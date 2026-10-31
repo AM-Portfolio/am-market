@@ -1,7 +1,6 @@
 package com.am.marketdata.kafka.consumer;
 
 import com.am.common.investment.model.historical.HistoricalData;
-import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.events.HistoricalDataIngestionEvent;
 import com.am.marketdata.common.model.events.OHLCDataIngestionEvent;
 import com.am.marketdata.common.service.MarketDataIngestionService;
@@ -19,48 +18,6 @@ import java.util.Map;
 public class MarketDataConsumer {
 
     private final MarketDataIngestionService ingestionService;
-
-    /**
-     * Consumes equity price updates from Kafka
-     * 
-     * @param event The equity price update event
-     */
-    @KafkaListener(topics = "${kafka.topics.stock-price}", groupId = "${kafka.consumer.group-id:market-data-service-group}")
-    public void consumeEquityPriceUpdates(com.am.common.investment.model.events.EquityPriceUpdateEvent event) {
-        try {
-            if (event == null || event.getEquityPrices() == null || event.getEquityPrices().isEmpty()) {
-                return;
-            }
-
-            log.debug("Received {} equity price updates from Kafka", event.getEquityPrices().size());
-
-            Map<String, OHLCQuote> quotes = new java.util.HashMap<>();
-            String provider = null;
-            for (com.am.common.investment.model.equity.EquityPrice price : event.getEquityPrices()) {
-                if (price.getSymbol() != null) {
-                    if ("MOCK".equalsIgnoreCase(price.getExchange())) {
-                        provider = "MOCK";
-                    }
-                    OHLCQuote quote = new OHLCQuote();
-                    quote.setLastPrice(price.getLastPrice() != null ? price.getLastPrice() : 0.0);
-                    if (price.getOhlcv() != null) {
-                        OHLCQuote.OHLC ohlc = new OHLCQuote.OHLC();
-                        ohlc.setOpen(price.getOhlcv().getOpen() != null ? price.getOhlcv().getOpen() : 0.0);
-                        ohlc.setHigh(price.getOhlcv().getHigh() != null ? price.getOhlcv().getHigh() : 0.0);
-                        ohlc.setLow(price.getOhlcv().getLow() != null ? price.getOhlcv().getLow() : 0.0);
-                        ohlc.setClose(price.getOhlcv().getClose() != null ? price.getOhlcv().getClose() : 0.0);
-                        quote.setOhlc(ohlc);
-                    }
-                    quotes.put(price.getSymbol(), quote);
-                }
-            }
-
-            ingestionService.saveOHLCData(quotes, provider);
-
-        } catch (Exception e) {
-            log.error("Error processing equity price update event", e);
-        }
-    }
 
     /**
      * Consumes OHLC data ingestion events from Kafka

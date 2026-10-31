@@ -70,6 +70,7 @@ Thumbs.db
 
 # Spring Boot
 spring-boot-*.pid
+.backend.pid
 
 # Test reports
 /test-output/
@@ -111,6 +112,11 @@ show_dbs_and_collections.py
 test_external_batch.py
 trigger_prev_close_now.py
 test_search_edge_cases.py
+*search*.py
+scratch/
+**/scratch/
+search/
+**/search/
 
 # Ignore local test files
 *Test.java
@@ -126,7 +132,25 @@ test_search_edge_cases.py
 !market-data-api/src/test/java/com/
 !market-data-api/src/test/java/com/am/
 !market-data-api/src/test/java/com/am/marketdata/
+
+# Keep the large-index heatmap latency regression tests under version control.
+!market-data-service/src/test/
+!market-data-service/src/test/java/
+!market-data-service/src/test/java/com/
+!market-data-service/src/test/java/com/am/
+!market-data-service/src/test/java/com/am/marketdata/
+!market-data-service/src/test/java/com/am/marketdata/service/
+!market-data-service/src/test/java/com/am/marketdata/service/MarketDataCacheServiceHistoricalBatchTest.java
+!market-data-scheduler/src/test/
+!market-data-scheduler/src/test/java/
+!market-data-scheduler/src/test/java/com/
+!market-data-scheduler/src/test/java/com/am/
+!market-data-scheduler/src/test/java/com/am/marketdata/
+!market-data-scheduler/src/test/java/com/am/marketdata/scheduler/
+!market-data-scheduler/src/test/java/com/am/marketdata/scheduler/service/
+!market-data-scheduler/src/test/java/com/am/marketdata/scheduler/service/MarketAnalysisSchedulerLargeIndexHeatmapTest.java
 !market-data-api/src/test/java/com/am/marketdata/api/
+!market-data-api/src/test/java/com/am/marketdata/api/service/
 !market-data-api/src/test/java/com/am/marketdata/api/MarketInfoSymbolMapTest.java
 !market-data-api/src/test/java/com/am/marketdata/api/MarketInfoDtoParseTest.java
 
@@ -146,6 +170,13 @@ test_search_edge_cases.py
 !market-data-service/src/test/java/com/am/marketdata/
 !market-data-service/src/test/java/com/am/marketdata/service/
 !market-data-service/src/test/java/com/am/marketdata/service/SmartStockPreviousCloseSnapshotTest.java
+
+# Local-only tests for index routing cleanup. Keep them available for local validation,
+# but do not publish them or their fixture to the repository.
+market-data-api/src/test/java/com/am/marketdata/api/service/impl/MarketDataFetchServiceRoutingTest.java
+market-data-service/src/test/java/com/am/marketdata/service/MarketDataPersistenceServiceRoutingTest.java
+market-data-service/src/test/java/com/am/marketdata/service/IndexSymbolRegistryTest.java
+market-data-service/src/test/resources/nseindices.yml
 !market-data-analysis/src/test/
 !market-data-analysis/src/test/java/
 !market-data-analysis/src/test/java/com/
@@ -162,6 +193,34 @@ test_search_edge_cases.py
 !market-data-common/src/test/java/com/am/marketdata/common/
 !market-data-common/src/test/java/com/am/marketdata/common/util/
 !market-data-common/src/test/java/com/am/marketdata/common/util/IndexMembershipUtilsTest.java
+!market-data-common/src/test/java/com/am/marketdata/common/model/
+!market-data-common/src/test/java/com/am/marketdata/common/model/TimeFrameTest.java
+
+# Keep focused global-history regression tests under version control.
+!market-data-provider/src/test/
+!market-data-provider/src/test/java/
+!market-data-provider/src/test/java/com/
+!market-data-provider/src/test/java/com/am/
+!market-data-provider/src/test/java/com/am/marketdata/
+!market-data-provider/src/test/java/com/am/marketdata/provider/
+!market-data-provider/src/test/java/com/am/marketdata/provider/upstox/
+!market-data-provider/src/test/java/com/am/marketdata/provider/upstox/UpstoxSdkServiceHistoricalUrlTest.java
+!market-data-service/src/test/
+!market-data-service/src/test/java/
+!market-data-service/src/test/java/com/
+!market-data-service/src/test/java/com/am/
+!market-data-service/src/test/java/com/am/marketdata/
+!market-data-service/src/test/java/com/am/marketdata/service/
+!market-data-service/src/test/java/com/am/marketdata/service/global/
+!market-data-service/src/test/java/com/am/marketdata/service/global/GlobalIndexHistoricalSyncServiceTest.java
 
 
 
+!market-data-service/src/test/java/com/am/marketdata/service/global/GlobalIndexGapFillServiceTest.java
+
+# Keep IPO calendar regression tests under version control.
+!market-data-service/src/test/java/com/am/marketdata/service/ipo/
+!market-data-service/src/test/java/com/am/marketdata/service/ipo/UpstoxIpoServiceCalendarTest.java
+!market-data-service/src/test/java/com/am/marketdata/service/ipo/IpoSyncServiceTest.java
+!market-data-api/src/test/java/com/am/marketdata/api/controller/
+!market-data-api/src/test/java/com/am/marketdata/api/controller/UpstoxIpoControllerTest.java
