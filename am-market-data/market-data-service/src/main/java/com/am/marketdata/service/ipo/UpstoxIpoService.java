@@ -88,6 +88,20 @@ public class UpstoxIpoService {
      * Hierarchy: 1) Redis Cache -> 2) MongoDB Fallback -> 3) Live Provider Sync.
      */
     public List<AsraxIpoSummaryDto> getIpos(String status, String issueType, Integer pageNumber, Integer records) {
+        return getIpos(status, issueType, pageNumber, records, true);
+    }
+
+    /**
+     * Gets a list of IPO summaries with an optional read-only mode.
+     * Read-only callers use the persisted Redis/Mongo snapshot and never trigger
+     * a vendor request or asynchronous persistence on a cache miss.
+     */
+    public List<AsraxIpoSummaryDto> getIpos(
+            String status,
+            String issueType,
+            Integer pageNumber,
+            Integer records,
+            boolean allowLiveFallback) {
         String effectiveStatus = (status != null && !status.trim().isEmpty()) ? status.trim().toLowerCase() : "open";
         int page = (pageNumber != null && pageNumber >= 1) ? pageNumber : 1;
         int size = (records != null) ? Math.min(100, Math.max(1, records)) : 30;
@@ -118,7 +132,16 @@ public class UpstoxIpoService {
                 return dbList;
             }
         } catch (Exception e) {
+            if (!allowLiveFallback) {
+                throw new IllegalStateException(
+                        "Persisted IPO list unavailable for status='" + effectiveStatus + "'",
+                        e);
+            }
             log.warn("MongoDB read exception for status='{}': {}. Falling through to live provider.", effectiveStatus, e.getMessage());
+        }
+
+        if (!allowLiveFallback) {
+            return Collections.emptyList();
         }
 
         // 3. Fallback to Live Provider
