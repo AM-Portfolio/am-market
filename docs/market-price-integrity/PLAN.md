@@ -262,6 +262,27 @@ flowchart TD
 
 ---
 
+## November 2026 stream and Redis recovery implementation
+
+This addendum covers only the two requested runtime environments: `dev` and
+`prod`. The investigation confirmed a dev Vault-synced Redis password mismatch
+and a separate prod stream-lifecycle race. Production Redis authentication is
+currently valid; no production credential rotation is part of this change.
+
+The implementation keeps Redis credentials and stream tuning in Vault-backed
+environment variables. Local exchange calendars are the safety fallback when a
+Redis market vote is missing or stale. Stream closure is no longer initiated by
+the Indian ingestion stop path alone. A bounded reconnect supervisor and
+no-tick watchdog recover unexpected provider closures without creating a second
+stream. Live tick cache writes use the existing bounded `cacheBackfillExecutor`
+so Redis latency cannot block the provider callback.
+
+Required operational follow-up, not performed by this code change: verify the
+`apps/data/dev/infra/redis` Vault version/audit history, correct the mismatched
+dev password at the approved source of truth, and populate the new stream/Redis
+tuning keys in both dev and prod scheduler configuration paths. Do not print or
+commit their values.
+
 ## 7. Acceptance & Verification Matrix
 
 | ID | Scenario | Required Behavior | Status |

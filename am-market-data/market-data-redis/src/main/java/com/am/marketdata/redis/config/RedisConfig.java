@@ -17,6 +17,8 @@ import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import io.lettuce.core.ClientOptions;
+import io.lettuce.core.SocketOptions;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
@@ -47,6 +49,12 @@ public class RedisConfig {
     @Value("${market.data.cache.ttl.seconds:300}")
     private long cacheTimeToLiveSeconds;
 
+    @Value("${market.redis.command-timeout-ms:2000}")
+    private long redisCommandTimeoutMs;
+
+    @Value("${market.redis.connect-timeout-ms:2000}")
+    private long redisConnectTimeoutMs;
+
     /**
      * Redis connection factory
      */
@@ -68,7 +76,19 @@ public class RedisConfig {
             log.warn("redisConnectionFactory", "No Redis password provided, connecting without authentication");
         }
 
-        return new LettuceConnectionFactory(redisConfig);
+        SocketOptions socketOptions = SocketOptions.builder()
+                .connectTimeout(Duration.ofMillis(redisConnectTimeoutMs))
+                .build();
+        ClientOptions clientOptions = ClientOptions.builder()
+                .socketOptions(socketOptions)
+                .build();
+        org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration clientConfiguration =
+                org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration.builder()
+                        .commandTimeout(Duration.ofMillis(redisCommandTimeoutMs))
+                        .clientOptions(clientOptions)
+                        .build();
+
+        return new LettuceConnectionFactory(redisConfig, clientConfiguration);
     }
 
     /**
