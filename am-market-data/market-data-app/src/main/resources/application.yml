@@ -241,6 +241,7 @@ market:
   redis:
     command-timeout-ms: ${REDIS_COMMAND_TIMEOUT_MS:2000}
     connect-timeout-ms: ${REDIS_CONNECT_TIMEOUT_MS:2000}
+    failure-cooldown-ms: ${REDIS_FAILURE_COOLDOWN_MS:30000}
   # Shared timeframe list for scheduled heatmap refreshes. Index names are
   # sourced from the existing nseindices.yml registry.
   analysis:

@@ -145,6 +145,7 @@
 - [x] Add bounded reconnect/backoff after provider close/error and a no-tick watchdog.
 - [x] Move live tick cache writes to the existing bounded background executor.
 - [x] Add Vault mappings for stream health/reconnect and Redis timeout settings.
+- [x] Add a shared Redis availability cooldown so repeated Redis auth/network failures do not add request latency; fall back to cache misses while the circuit is open.
 - [x] Remove the dev-only hardcoded ingestion disable from Helm values.
 - [ ] Read-only verify dev Vault Redis version/audit history before changing its value.
 - [ ] Populate the new runtime keys in dev and prod Vault scheduler configuration.

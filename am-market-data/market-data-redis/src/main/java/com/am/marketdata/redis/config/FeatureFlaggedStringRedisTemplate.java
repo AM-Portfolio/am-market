@@ -7,6 +7,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.lang.reflect.Proxy;
+import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Collections;
@@ -14,6 +15,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.data.redis.serializer.RedisSerializer;
 
 /**
  * Custom StringRedisTemplate subclass that intercepts Redis calls and returns safe fallback responses
@@ -25,37 +31,17 @@ import java.util.concurrent.TimeUnit;
 public class FeatureFlaggedStringRedisTemplate extends StringRedisTemplate {
 
     private final GrowthBookService growthBookService;
+    private final RedisAvailabilityGuard redisAvailabilityGuard;
     private final String flagKey = "redis-enabled";
     private volatile Boolean lastState = null;
 
     private ValueOperations<String, String> valueOpsProxy;
     private HashOperations<String, Object, Object> hashOpsProxy;
 
-    public FeatureFlaggedStringRedisTemplate(GrowthBookService growthBookService) {
+    public FeatureFlaggedStringRedisTemplate(GrowthBookService growthBookService,
+            RedisAvailabilityGuard redisAvailabilityGuard) {
         this.growthBookService = growthBookService;
-    }
-
-    private boolean isRedisEnabled() {
-        // Local Override: If running in a local developer environment, we might not have a
-        // direct connection to the self-hosted GrowthBook feature flag dashboard.
-        // Setting REDIS_FORCE_ENABLED=true in the run environment forces Redis templates
-        // to stay active, bypassing the GrowthBook server check.
-        if ("true".equalsIgnoreCase(System.getenv("REDIS_FORCE_ENABLED")) || "true".equalsIgnoreCase(System.getProperty("REDIS_FORCE_ENABLED"))) {
-            return true;
-        }
-        if (growthBookService == null) {
-            return true;
-        }
-        boolean enabled = growthBookService.isOn(flagKey);
-        if (lastState == null || lastState != enabled) {
-            lastState = enabled;
-            if (enabled) {
-                log.info("[Redis-FF] Redis caching is now ENABLED via GrowthBook feature flag.");
-            } else {
-                log.warn("[Redis-FF] Redis caching is now DISABLED via GrowthBook feature flag. Bypassing all cache operations.");
-            }
-        }
-        return enabled;
+        this.redisAvailabilityGuard = redisAvailabilityGuard;
     }
 
     @Override
@@ -69,7 +55,7 @@ public class FeatureFlaggedStringRedisTemplate extends StringRedisTemplate {
                         if (!isRedisEnabled()) {
                             return handleDisabledOps(method.getName(), args, method.getReturnType());
                         }
-                        return method.invoke(realOps, args);
+                        return invokeWithGuard(() -> method.invoke(realOps, args));
                     }
             );
         }
@@ -87,7 +73,7 @@ public class FeatureFlaggedStringRedisTemplate extends StringRedisTemplate {
                         if (!isRedisEnabled()) {
                             return handleDisabledOps(method.getName(), args, method.getReturnType());
                         }
-                        return method.invoke(realOps, args);
+                        return invokeWithGuard(() -> method.invoke(realOps, args));
                     }
             );
         }
@@ -97,31 +83,134 @@ public class FeatureFlaggedStringRedisTemplate extends StringRedisTemplate {
     @Override
     public Boolean expire(String key, long timeout, TimeUnit unit) {
         if (!isRedisEnabled()) return false;
-        return super.expire(key, timeout, unit);
+        return invokeWithGuard(() -> super.expire(key, timeout, unit));
     }
 
     @Override
     public Boolean expire(String key, Duration timeout) {
         if (!isRedisEnabled()) return false;
-        return super.expire(key, timeout);
+        return invokeWithGuard(() -> super.expire(key, timeout));
     }
 
     @Override
     public Boolean delete(String key) {
         if (!isRedisEnabled()) return false;
-        return super.delete(key);
+        return invokeWithGuard(() -> super.delete(key));
     }
 
     @Override
     public Long delete(Collection<String> keys) {
         if (!isRedisEnabled()) return 0L;
-        return super.delete(keys);
+        return invokeWithGuard(() -> super.delete(keys));
     }
 
     @Override
     public Boolean hasKey(String key) {
         if (!isRedisEnabled()) return false;
-        return super.hasKey(key);
+        return invokeWithGuard(() -> super.hasKey(key));
+    }
+
+    @Override
+    public <T> T execute(RedisCallback<T> action) {
+        if (!isRedisEnabled()) return null;
+        return invokeWithGuard(() -> super.execute(action));
+    }
+
+    @Override
+    public <T> T execute(RedisCallback<T> action, boolean exposeConnection) {
+        if (!isRedisEnabled()) return null;
+        return invokeWithGuard(() -> super.execute(action, exposeConnection));
+    }
+
+    @Override
+    public <T> T execute(RedisCallback<T> action, boolean exposeConnection, boolean pipeline) {
+        if (!isRedisEnabled()) return null;
+        return invokeWithGuard(() -> super.execute(action, exposeConnection, pipeline));
+    }
+
+    @Override
+    public <T> T execute(SessionCallback<T> session) {
+        if (!isRedisEnabled()) return null;
+        return invokeWithGuard(() -> super.execute(session));
+    }
+
+    @Override
+    public List<Object> executePipelined(RedisCallback<?> action) {
+        if (!isRedisEnabled()) return Collections.emptyList();
+        return invokeWithGuard(() -> super.executePipelined(action));
+    }
+
+    @Override
+    public List<Object> executePipelined(RedisCallback<?> action, RedisSerializer<?> resultSerializer) {
+        if (!isRedisEnabled()) return Collections.emptyList();
+        return invokeWithGuard(() -> super.executePipelined(action, resultSerializer));
+    }
+
+    @Override
+    public List<Object> executePipelined(SessionCallback<?> session) {
+        if (!isRedisEnabled()) return Collections.emptyList();
+        return invokeWithGuard(() -> super.executePipelined(session));
+    }
+
+    @Override
+    public List<Object> executePipelined(SessionCallback<?> session, RedisSerializer<?> resultSerializer) {
+        if (!isRedisEnabled()) return Collections.emptyList();
+        return invokeWithGuard(() -> super.executePipelined(session, resultSerializer));
+    }
+
+    @Override
+    public <T> T execute(RedisScript<T> script, java.util.List<String> keys, Object... args) {
+        if (!isRedisEnabled()) return null;
+        return invokeWithGuard(() -> super.execute(script, keys, args));
+    }
+
+    private boolean isRedisEnabled() {
+        return redisAvailabilityGuard.allowRequest() && isFeatureFlagEnabled();
+    }
+
+    private boolean isFeatureFlagEnabled() {
+        if ("true".equalsIgnoreCase(System.getenv("REDIS_FORCE_ENABLED"))
+                || "true".equalsIgnoreCase(System.getProperty("REDIS_FORCE_ENABLED"))) {
+            return true;
+        }
+        if (growthBookService == null) {
+            return true;
+        }
+        boolean enabled = growthBookService.isOn(flagKey);
+        if (lastState == null || lastState != enabled) {
+            lastState = enabled;
+            if (enabled) {
+                log.info("[Redis-FF] Redis caching is now ENABLED via GrowthBook feature flag.");
+            } else {
+                log.warn("[Redis-FF] Redis caching is now DISABLED via GrowthBook feature flag. Bypassing all cache operations.");
+            }
+        }
+        return enabled;
+    }
+
+    private <T> T invokeWithGuard(ThrowingSupplier<T> action) {
+        try {
+            T result = action.get();
+            redisAvailabilityGuard.recordSuccess();
+            return result;
+        } catch (InvocationTargetException e) {
+            redisAvailabilityGuard.recordFailure(e.getCause());
+            throw new RedisCacheOperationException(e.getCause());
+        } catch (Throwable e) {
+            redisAvailabilityGuard.recordFailure(e);
+            throw new RedisCacheOperationException(e);
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingSupplier<T> {
+        T get() throws Throwable;
+    }
+
+    private static final class RedisCacheOperationException extends RuntimeException {
+        private RedisCacheOperationException(Throwable cause) {
+            super(cause);
+        }
     }
 
     private Object handleDisabledOps(String methodName, Object[] args, Class<?> returnType) {
