@@ -72,6 +72,7 @@ vault:
         MARKET_WEBSOCKET_RECONNECT_MAX_DELAY_MS: "market_websocket_reconnect_max_delay_ms"
         REDIS_COMMAND_TIMEOUT_MS: "redis_command_timeout_ms"
         REDIS_CONNECT_TIMEOUT_MS: "redis_connect_timeout_ms"
+        REDIS_FAILURE_COOLDOWN_MS: "redis_failure_cooldown_ms"
         SCHEDULER_REDIS_CLEANUP_ENABLED: "scheduler_redis_cleanup_enabled"
         SCHEDULER_REDIS_CLEANUP_CRON: "scheduler_redis_cleanup_cron"
         REDIS_CLEANUP_RETENTION_DAYS: "redis_cleanup_retention_days"

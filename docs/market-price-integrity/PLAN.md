@@ -277,11 +277,26 @@ no-tick watchdog recover unexpected provider closures without creating a second
 stream. Live tick cache writes use the existing bounded `cacheBackfillExecutor`
 so Redis latency cannot block the provider callback.
 
+### Redis outage latency guard
+
+The Redis templates now share a per-process availability guard. After an
+authentication, DNS, connection, or command failure, cache reads/writes are
+treated as cache misses for a short cooldown instead of opening a new Redis
+attempt on every request. The first request after the cooldown is the probe;
+success closes the circuit and failure extends the cooldown. This preserves the
+existing provider/database fallback paths and keeps Redis failures from adding
+their timeout to every dashboard, movers, stream, and API request. The cooldown
+is configurable through the Vault-backed `REDIS_FAILURE_COOLDOWN_MS` mapping
+with a bounded local default; no credential or endpoint is stored in source.
+
 Required operational follow-up, not performed by this code change: verify the
 `apps/data/dev/infra/redis` Vault version/audit history, correct the mismatched
 dev password at the approved source of truth, and populate the new stream/Redis
-tuning keys in both dev and prod scheduler configuration paths. Do not print or
-commit their values.
+tuning keys in both dev and prod scheduler configuration paths. The live dev
+manifest must also enable the ingestion worker and consume the same Helm/Vault
+revision as the deployed image; an image-only rollout leaves streaming disabled
+and does not apply the resilience settings. Do not print or commit secret
+values.
 
 ## 7. Acceptance & Verification Matrix
 
