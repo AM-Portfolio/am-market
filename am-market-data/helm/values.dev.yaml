@@ -53,14 +53,14 @@ config:
     maxCandidatesPerQuery: 100
     internalBatchSize: 100
 
-  # Dev: disable live-market schedulers to prevent accidental ingestion.
+  # Runtime ingestion and stream settings are supplied by the dev Vault
+  # scheduler-config path. Keep deployment wiring here, not credentials.
   scheduler:
     cookie:
       enabled: false
     stockIndices:
       enabled: false
     ingestion:
-      enabled: false
       provider: "UPSTOX"
       force: false
       useWebsocket: true

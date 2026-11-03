@@ -220,6 +220,15 @@ server:
     min-response-size: 1024
 
 market:
+  websocket:
+    reconcile-interval-ms: ${MARKET_WEBSOCKET_RECONCILE_INTERVAL_MS:30000}
+    health-interval-ms: ${MARKET_WEBSOCKET_HEALTH_INTERVAL_MS:30000}
+    no-tick-timeout-ms: ${MARKET_WEBSOCKET_NO_TICK_TIMEOUT_MS:90000}
+    reconnect-initial-delay-ms: ${MARKET_WEBSOCKET_RECONNECT_INITIAL_DELAY_MS:5000}
+    reconnect-max-delay-ms: ${MARKET_WEBSOCKET_RECONNECT_MAX_DELAY_MS:120000}
+  redis:
+    command-timeout-ms: ${REDIS_COMMAND_TIMEOUT_MS:2000}
+    connect-timeout-ms: ${REDIS_CONNECT_TIMEOUT_MS:2000}
   # Shared timeframe list for scheduled heatmap refreshes. Index names are
   # sourced from the existing nseindices.yml registry.
   analysis:

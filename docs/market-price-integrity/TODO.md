@@ -137,6 +137,20 @@
 - [ ] Add a Redis-backed concurrency regression test for overlapping quote recovery.
 - [ ] Run focused module tests when the private Spring Boot dependency metadata is available locally.
 
+## Dev and prod stream recovery
+
+- [x] Keep Redis authentication password-only; do not add a username or hardcode credentials.
+- [x] Make stream reconciliation calendar-aware and tolerant of Redis vote read failures.
+- [x] Stop the Indian ingestion path from directly disconnecting a cross-market stream.
+- [x] Add bounded reconnect/backoff after provider close/error and a no-tick watchdog.
+- [x] Move live tick cache writes to the existing bounded background executor.
+- [x] Add Vault mappings for stream health/reconnect and Redis timeout settings.
+- [x] Remove the dev-only hardcoded ingestion disable from Helm values.
+- [ ] Read-only verify dev Vault Redis version/audit history before changing its value.
+- [ ] Populate the new runtime keys in dev and prod Vault scheduler configuration.
+- [ ] Deploy dev, refresh its synced secret, and verify Redis auth, streaming, movers, and latency.
+- [ ] Request separate production rollout approval with exact command, impact, and rollback.
+
 ## Optional quote details and market depth
 
 - [ ] Inventory quote endpoint consumers and identify any strict JSON decoders before extending `/quotes`.

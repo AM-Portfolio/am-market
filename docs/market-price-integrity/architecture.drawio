@@ -161,7 +161,7 @@
         <mxCell id="influx" value="InfluxDB&#xA;date-bounded historical batches&#xA;100 identities per chunk" style="shape=cylinder3;fillColor=#2E7D32;strokeColor=#1B5E20;fontColor=#FFFFFF;" vertex="1" parent="1">
           <mxGeometry x="865" y="395" width="250" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="stream" value="SymbolOrchestratorService + StreamerManager&#xA;configured NSE members -&gt; Redis ticks" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
+        <mxCell id="stream" value="SymbolOrchestratorService + StreamerManager&#xA;calendar-aware lifecycle + bounded reconnect&#xA;configured NSE members -&gt; Redis ticks" style="rounded=1;fillColor=#438DD5;strokeColor=#2E6DA4;fontColor=#FFFFFF;" vertex="1" parent="1">
           <mxGeometry x="275" y="440" width="275" height="82" as="geometry" />
         </mxCell>
         <mxCell id="resolver" value="UpstoxSymbolResolver +&#xA;UpstoxMarketDataProvider.getLTP&#xA;batched resolved instruments" style="rounded=1;fillColor=#F5F5F5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">

@@ -135,9 +135,10 @@ public class MarketDataIngestionScheduler {
     }
 
     private void stopLiveMarketData() {
-        if (useWebSocket && isUpstoxProvider()) {
-            streamerManager.stopStreaming();
-        }
+        // StreamerManager owns the cross-market lifecycle. Do not directly
+        // disconnect here: the Indian close can overlap an open global market.
+        // The calendar-aware reconciler will disconnect only after both markets
+        // are confirmed closed.
         ingestionService.stopIngestion(provider);
     }
 
