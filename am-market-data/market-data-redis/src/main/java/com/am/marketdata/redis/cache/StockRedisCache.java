@@ -5,6 +5,7 @@ import static com.am.marketdata.common.constants.TimeIntervalConstants.INTRADAY_
 
 import com.am.marketdata.redis.model.OHLCV;
 import com.am.marketdata.redis.model.StockBars;
+import com.am.marketdata.redis.config.RedisCacheCircuitBreaker;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,6 +38,8 @@ public class StockRedisCache {
     private final RedisTemplate<String, String> redisTemplate;
 
     private final ObjectMapper redisObjectMapper;
+
+    private final RedisCacheCircuitBreaker redisCircuitBreaker;
 
     @Value("${redis.cache.ttl.historical:86400}") // Default: 24 hours
     private long historicalTtlSeconds;
@@ -183,9 +186,14 @@ public class StockRedisCache {
             log.warn("saveHistoricalBar", "Empty or null StockBars list provided for historical data");
             return false;
         }
+        if (!redisCircuitBreaker.allowRequest()) {
+            log.debug("saveHistoricalBar", "Redis circuit is open; skipping historical cache write");
+            return false;
+        }
 
         try {
-            redisTemplate.executePipelined((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
+            List<Object> pipelineResults = redisTemplate.executePipelined(
+                    (org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
                 for (StockBars stockBars : stockBarsList) {
                     String symbol = stockBars.getSymbol();
                     String interval = stockBars.getInterval(); // Should be 1d usually
@@ -199,7 +207,7 @@ public class StockRedisCache {
                             String key = generateKey(HISTORICAL_PREFIX, symbol, interval, barDate);
                             
                             String json = redisObjectMapper.writeValueAsString(bar);
-                            long ttlSeconds = 86400; // 24 Hours
+                            long ttlSeconds = historicalTtlSeconds;
 
                             byte[] keyBytes = redisTemplate.getStringSerializer().serialize(key);
                             byte[] valueBytes = redisTemplate.getStringSerializer().serialize(json);
@@ -213,9 +221,20 @@ public class StockRedisCache {
                 return null;
             });
 
+            // Feature-flagged or unavailable Redis clients can make the
+            // pipeline a no-op. Do not report a successful cache write in that
+            // case; the caller must retain database/provider fallback behavior.
+            if (pipelineResults == null || pipelineResults.isEmpty()) {
+                redisCircuitBreaker.recordSuccess();
+                log.warn("saveHistoricalBar", "Historical cache pipeline produced no Redis results");
+                return false;
+            }
+
+            redisCircuitBreaker.recordSuccess();
             log.debug("saveHistoricalBar", "Executed pipeline for " + stockBarsList.size() + " stock bar sets");
             return true;
         } catch (Exception e) {
+            redisCircuitBreaker.recordFailure("historical-write", e);
             log.error("saveHistoricalBar", "Batch save failed", e);
             return false;
         }
@@ -233,16 +252,21 @@ public class StockRedisCache {
     public boolean saveHistoricalBar(String symbol, String date, OHLCV bar, String interval) {
         validateDate(date);
 
+        if (!redisCircuitBreaker.allowRequest()) {
+            log.debug("saveHistoricalBar", "Redis circuit is open; skipping historical cache write for " + symbol);
+            return false;
+        }
+
         String key = generateKey(HISTORICAL_PREFIX, symbol, interval, date);
 
         try {
             // Store only the bar data instead of the entire StockBars object
             String json = redisObjectMapper.writeValueAsString(bar);
 
-            // Historical data TTL: 24 hours (86400 seconds)
-            long ttlSeconds = 86400;
+            long ttlSeconds = historicalTtlSeconds;
 
             redisTemplate.opsForValue().set(key, json, ttlSeconds, TimeUnit.SECONDS);
+            redisCircuitBreaker.recordSuccess();
             log.debug("saveHistoricalBar",
                     String.format("Saved historical bar for %s, date: %s, TTL: %d seconds", symbol, date, ttlSeconds));
             return true;
@@ -250,6 +274,7 @@ public class StockRedisCache {
             log.error("saveHistoricalBar", "Failed to serialize historical bar for " + symbol + ": " + e.getMessage());
             return false;
         } catch (Exception e) {
+            redisCircuitBreaker.recordFailure("historical-write", e);
             log.error("saveHistoricalBar", "Error saving historical bar for " + symbol + ": " + e.getMessage());
             return false;
         }
@@ -469,6 +494,10 @@ public class StockRedisCache {
         if (symbols == null || symbols.isEmpty()) {
             return Collections.emptyMap();
         }
+        if (!redisCircuitBreaker.allowRequest()) {
+            log.debug("getMultiSymbolHistoricalBars", "Redis circuit is open; treating historical cache as unavailable");
+            return Collections.emptyMap();
+        }
 
         try {
             LocalDate start = LocalDate.parse(startDate, DateTimeFormatter.ISO_LOCAL_DATE);
@@ -526,6 +555,7 @@ public class StockRedisCache {
                 }
             } catch (Throwable e) {
                 // REDIS ABSENCE RESILIENCY: Treat as Cache MISS, fallback to Database seamlessly
+                redisCircuitBreaker.recordFailure("historical-read", e);
                 log.warn("getMultiSymbolHistoricalBars", "Redis unavailable or cache read failed, falling back to primary DB: " + e.getMessage());
                 return Collections.emptyMap(); 
             }
@@ -565,11 +595,17 @@ public class StockRedisCache {
                 }
             }
 
+            redisCircuitBreaker.recordSuccess();
             return result;
 
         } catch (DateTimeParseException e) {
             log.error("getMultiSymbolHistoricalBars", "Invalid date format: " + e.getMessage());
             throw new IllegalArgumentException("Invalid date format. Use YYYY-MM-DD");
+        }
+        catch (Throwable e) {
+            redisCircuitBreaker.recordFailure("historical-read", e);
+            log.warn("getMultiSymbolHistoricalBars", "Redis unavailable or cache read failed, falling back to primary DB: " + e.getMessage());
+            return Collections.emptyMap();
         }
     }
 
@@ -712,8 +748,13 @@ public class StockRedisCache {
      * @param hashData Map of constituent symbol to serialized HistoricalData
      */
     public void cacheIndexHistoricalData(String cacheKey, Map<String, String> hashData) {
+        if (!redisCircuitBreaker.allowRequest()) {
+            log.debug("cacheIndexHistoricalData", "Redis circuit is open; skipping index cache write");
+            return;
+        }
         try {
             if (hashData == null || hashData.isEmpty()) {
+                redisCircuitBreaker.recordSuccess();
                 log.warn("[INDEX_CACHE]", "No hash data to cache for key: " + cacheKey);
                 return;
             }
@@ -726,7 +767,9 @@ public class StockRedisCache {
 
             log.info("[INDEX_CACHE]", String.format("Cached index data with key: %s (%d constituents)",
                     cacheKey, hashData.size()));
+            redisCircuitBreaker.recordSuccess();
         } catch (Exception e) {
+            redisCircuitBreaker.recordFailure("index-write", e);
             log.error("[INDEX_CACHE]", "Error caching index historical data: " + e.getMessage(), e);
         }
     }
@@ -739,10 +782,17 @@ public class StockRedisCache {
      *         not found
      */
     public Map<String, String> getIndexHistoricalData(String cacheKey) {
+        if (!redisCircuitBreaker.allowRequest()) {
+            log.debug("getIndexHistoricalData", "Redis circuit is open; treating index cache as unavailable");
+            return null;
+        }
         try {
             Map<Object, Object> rawData = redisTemplate.opsForHash().entries(cacheKey);
 
             if (rawData == null || rawData.isEmpty()) {
+                // An empty hash is a healthy cache miss, not a Redis failure.
+                // Close a half-open recovery probe in this case as well.
+                redisCircuitBreaker.recordSuccess();
                 log.debug("[INDEX_CACHE]", "No index data found for key: " + cacheKey);
                 return null;
             }
@@ -755,8 +805,10 @@ public class StockRedisCache {
 
             log.info("[INDEX_CACHE]", String.format("Retrieved index data from cache: %s (%d constituents)",
                     cacheKey, result.size()));
+            redisCircuitBreaker.recordSuccess();
             return result;
         } catch (Exception e) {
+            redisCircuitBreaker.recordFailure("index-read", e);
             log.error("[INDEX_CACHE]", "Error retrieving index historical data: " + e.getMessage(), e);
             return null;
         }

@@ -123,6 +123,47 @@ public class MarketDataService {
         return providerName;
     }
 
+    /**
+     * Resolves plain symbols against the same index metadata used by the API
+     * symbol resolver. This keeps analysis endpoints from silently treating an
+     * index name such as NIFTY 50 as an equity symbol.
+     */
+    public boolean isIndexSymbol(String symbol) {
+        if (symbol == null || symbol.trim().isEmpty()) {
+            return false;
+        }
+
+        String normalized = symbol.trim().toUpperCase(java.util.Locale.ROOT);
+        for (String prefix : java.util.List.of("GLOBAL_INDEX|", "GLOBAL_INDEX:", "NSE_INDEX|",
+                "NSE_INDEX:", "BSE_INDEX|", "BSE_INDEX:")) {
+            if (normalized.startsWith(prefix)) {
+                return true;
+            }
+        }
+
+        String lookup = normalized;
+        for (String prefix : java.util.List.of("NSE:", "BSE:", "NSE_EQ:", "BSE_EQ:")) {
+            if (lookup.startsWith(prefix)) {
+                lookup = lookup.substring(prefix.length()).trim();
+                break;
+            }
+        }
+
+        final String indexLookup = lookup;
+        try {
+            List<com.am.common.investment.model.stockindice.StockIndicesMarketData> matches =
+                    stockIndicesService.findByIndexSymbols(Collections.singleton(indexLookup));
+            return matches != null && matches.stream()
+                    .anyMatch(index -> index != null && index.getIndexSymbol() != null
+                            && indexLookup.equalsIgnoreCase(index.getIndexSymbol().trim()));
+        } catch (Exception e) {
+            // Metadata outages must not fail the endpoint. The retriever will
+            // preserve its historical fallback behavior in this case.
+            log.warn("Unable to classify historical symbol {} as an index: {}", symbol, e.getMessage());
+            return false;
+        }
+    }
+
     public Map<String, String> getLoginUrl(String providerName) {
         Timer.Sample timer = Timer.start(meterRegistry);
         try {
@@ -301,11 +342,25 @@ public class MarketDataService {
 
     public HistoricalData getHistoricalData(String symbol, Date fromDate, Date toDate, TimeFrame interval,
             boolean continuous, Map<String, Object> additionalParams, String providerName) {
+        return getHistoricalData(symbol, fromDate, toDate, interval, continuous, additionalParams, providerName,
+                false);
+    }
+
+    /**
+     * Retrieves historical data while preserving the semantic type of the symbol.
+     *
+     * <p>Indexes and equities are persisted in different Influx measurements. A
+     * caller that knows the request represents an index must pass {@code true};
+     * otherwise the retriever defaults to the equity measurement.</p>
+     */
+    public HistoricalData getHistoricalData(String symbol, Date fromDate, Date toDate, TimeFrame interval,
+            boolean continuous, Map<String, Object> additionalParams, String providerName,
+            boolean isIndexSymbol) {
         Timer.Sample timer = Timer.start(meterRegistry);
         log.info(
-                "[INTERVAL_TRACE] MarketDataService.getHistoricalData: Fetching historical data for symbol: {}, interval: {} (enum: {}, apiValue: {}), from: {}, to: {}, continuous: {}",
+                "[INTERVAL_TRACE] MarketDataService.getHistoricalData: Fetching historical data for symbol: {}, interval: {} (enum: {}, apiValue: {}), from: {}, to: {}, continuous: {}, isIndexSymbol: {}",
                 symbol, interval, interval != null ? interval.name() : "null",
-                interval != null ? interval.getApiValue() : "null", fromDate, toDate, continuous);
+                interval != null ? interval.getApiValue() : "null", fromDate, toDate, continuous, isIndexSymbol);
 
         try {
             providerName = resolveProviderName(providerName);
@@ -326,6 +381,7 @@ public class MarketDataService {
                     .continuous(continuous)
                     .additionalParams(additionalParams)
                     .targetProviderName(providerName)
+                    .isIndexSymbol(isIndexSymbol)
                     .producer(producer)
                     .build();
 

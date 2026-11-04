@@ -329,15 +329,40 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 Set<String> indexSymbols = new java.util.HashSet<>();
                 Set<String> stockSymbols = new java.util.HashSet<>();
                 
-                for (String originalSymbol : symbols) {
-                    Set<String> resolved = instrumentUtils.resolveSymbols(List.of(originalSymbol), fetchIndexStocks);
-                    for (String sym : resolved) {
-                        resolvedToOriginal.put(sym, originalSymbol);
+                // processHistoricalDataRequest already expands index symbols before
+                // calling this method. Re-resolving each returned symbol creates an
+                // N+1 MongoDB pattern (51 calls for NIFTY 50) and repeats the same
+                // work the batch lookup above has already completed.
+                boolean alreadyResolved = symbols.size() == resolvedSymbols.size()
+                        && resolvedSymbols.containsAll(symbols);
+                if (alreadyResolved) {
+                    for (String sym : resolvedSymbols) {
+                        resolvedToOriginal.put(sym, sym);
                         if (routeAsIndex || isExplicitIndexSymbol(sym)
                                 || resolvedIndexNames.contains(normalizeIndexName(sym))) {
                             indexSymbols.add(sym);
                         } else {
                             stockSymbols.add(sym);
+                        }
+                    }
+                } else {
+                    // Preserve support for direct callers that provide an
+                    // unexpanded index and expect results mapped to that input.
+                    for (String originalSymbol : symbols) {
+                        Set<String> resolved = instrumentUtils.resolveSymbols(List.of(originalSymbol), fetchIndexStocks);
+                        for (String sym : resolved) {
+                            // If one input expands to multiple instruments, keep
+                            // each resolved symbol as its own response key. Mapping
+                            // all of them back to the index would overwrite the
+                            // constituent results in symbolsData.
+                            String responseSymbol = resolved.size() > 1 ? sym : originalSymbol;
+                            resolvedToOriginal.put(sym, responseSymbol);
+                            if (routeAsIndex || isExplicitIndexSymbol(sym)
+                                    || resolvedIndexNames.contains(normalizeIndexName(sym))) {
+                                indexSymbols.add(sym);
+                            } else {
+                                stockSymbols.add(sym);
+                            }
                         }
                     }
                 }

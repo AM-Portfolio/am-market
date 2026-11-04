@@ -18,6 +18,12 @@ INFLUXDB_ORG_INTERNAL: ${INFLUXDB_ORG:}
 INFLUXDB_BUCKET_INTERNAL: ${INFLUXDB_BUCKET:}
 INFLUXDB_URL_INTERNAL: ${INFLUXDB_URL:http://${INFLUXDB_HOST:localhost}:${INFLUXDB_PORT:8086}}
 
+# Bound the synchronous Influx read before the historical retriever falls back
+# to missing-symbol-only provider retrieval. Override per environment when a
+# measured database budget requires it.
+influxdb:
+  read-timeout-seconds: ${INFLUXDB_READ_TIMEOUT_SECONDS:15}
+
 # Redis Configuration
 REDIS_HOSTNAME: ${INFRA_HOST}
 REDIS_PASSWORD_INTERNAL: ${REDIS_PASSWORD:}
@@ -155,6 +161,12 @@ market-data:
       start: ${MARKET_DATA_MARKET_HOURS_START:09:15}
       end: ${MARKET_DATA_MARKET_HOURS_END:15:30}
     timezone: ${MARKET_DATA_MARKET_TIMEZONE:Asia/Kolkata}
+  historical:
+    influx:
+      # Keep Flux requests below the production timeout cliff. Larger index
+      # universes are processed in bounded parallel chunks.
+      chunk-size: ${MARKET_DATA_HISTORICAL_INFLUX_CHUNK_SIZE:25}
+      max-concurrency: ${MARKET_DATA_HISTORICAL_INFLUX_MAX_CONCURRENCY:4}
   batch-search:
     max-queries: ${BATCH_SEARCH_MAX_QUERIES:1000}
     internal-batch-size: ${BATCH_SEARCH_INTERNAL_BATCH_SIZE:100}
@@ -325,6 +337,11 @@ redis:
     ttl:
       historical: ${REDIS_CACHE_TTL_HISTORICAL:2592000}         # 30 days
       analysis: ${REDIS_CACHE_TTL_ANALYSIS:2592000}             # 30 days for historical analysis data
+    circuit:
+      # Redis is an acceleration layer. Fail fast during an outage, then allow
+      # one recovery probe instead of opening a connection on every request.
+      failure-threshold: ${REDIS_CACHE_CIRCUIT_FAILURE_THRESHOLD:3}
+      open-seconds: ${REDIS_CACHE_CIRCUIT_OPEN_SECONDS:10}
       intraday:
         past: ${REDIS_CACHE_TTL_INTRADAY_PAST:14400}            # 4 hours for past dates
         future: ${REDIS_CACHE_TTL_INTRADAY_FUTURE:86400}        # 24 hours for future dates

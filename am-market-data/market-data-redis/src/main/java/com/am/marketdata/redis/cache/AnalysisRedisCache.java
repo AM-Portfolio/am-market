@@ -4,6 +4,7 @@ import com.am.marketdata.common.model.analysis.CalendarHeatmapResponse;
 import com.am.marketdata.common.model.analysis.SeasonalityResponse;
 import com.am.marketdata.common.model.analysis.TechnicalAnalysisResponse;
 import com.am.marketdata.common.model.TimeFrame;
+import com.am.marketdata.redis.config.RedisCacheCircuitBreaker;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import com.am.marketdata.common.log.AppLogger;
@@ -24,6 +25,7 @@ public class AnalysisRedisCache {
     private final AppLogger log = AppLogger.getLogger();
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper redisObjectMapper;
+    private final RedisCacheCircuitBreaker redisCircuitBreaker;
 
     @Value("${redis.cache.ttl.analysis:86400}") // Default 24h
     private long analysisTtlSeconds;
@@ -222,12 +224,18 @@ public class AnalysisRedisCache {
             boolean detailed) {
         if (response == null)
             return;
+        if (!redisCircuitBreaker.allowRequest()) {
+            log.debug("saveHistoricalPerformance", "Redis circuit is open; skipping analysis cache write");
+            return;
+        }
         try {
             String key = getHistoryKey(response.getSymbol(), years, detailed);
             String json = redisObjectMapper.writeValueAsString(response);
             redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
+            redisCircuitBreaker.recordSuccess();
             log.debug("saveHistoricalPerformance", "Cached historical performance for " + response.getSymbol());
         } catch (Exception e) {
+            redisCircuitBreaker.recordFailure("analysis-write", e);
             log.error("saveHistoricalPerformance",
                     "Error caching historical performance for " + response.getSymbol() + ": " + e.getMessage());
         }
@@ -235,14 +243,21 @@ public class AnalysisRedisCache {
 
     public com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse getHistoricalPerformance(String symbol,
             int years, boolean detailed) {
+        if (!redisCircuitBreaker.allowRequest()) {
+            log.debug("getHistoricalPerformance", "Redis circuit is open; treating analysis cache as unavailable");
+            return null;
+        }
         try {
             String key = getHistoryKey(symbol, years, detailed);
             String json = redisTemplate.opsForValue().get(key);
             if (json != null) {
+                redisCircuitBreaker.recordSuccess();
                 return redisObjectMapper.readValue(json,
                         com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse.class);
             }
+            redisCircuitBreaker.recordSuccess();
         } catch (Exception e) {
+            redisCircuitBreaker.recordFailure("analysis-read", e);
             log.error("getHistoricalPerformance",
                     "Error retrieving historical performance for " + symbol + ": " + e.getMessage());
         }

@@ -17,6 +17,7 @@ import com.am.marketdata.service.global.GlobalIndexCacheWriter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
@@ -53,6 +54,17 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final GlobalIndexCacheWriter globalIndexCacheWriter;
     private final IndexSymbolRegistry indexSymbolRegistry;
+
+    /**
+     * A 50-symbol Flux request timed out in production. Keep each database
+     * request small enough to avoid that cliff, while allowing a NIFTY 500
+     * request to make progress through bounded parallelism.
+     */
+    @Value("${market-data.historical.influx.chunk-size:25}")
+    private int historicalInfluxChunkSize;
+
+    @Value("${market-data.historical.influx.max-concurrency:4}")
+    private int historicalInfluxMaxConcurrency;
 
     /**
      * Backward-compatible constructor for existing tests and callers that do not
@@ -613,9 +625,9 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             }
             if (originalByCleanSymbol.isEmpty()) return Collections.emptyMap();
 
-            Map<String, HistoricalData> storedData = historicalDataService.getHistoricalDataBatch(
-                    new java.util.ArrayList<>(originalByCleanSymbol.keySet()), fromInstant, toInstant,
-                    interval.getApiValue(), isIndexSymbol);
+            List<String> cleanSymbols = new java.util.ArrayList<>(originalByCleanSymbol.keySet());
+            Map<String, HistoricalData> storedData = getHistoricalDataInChunks(
+                    cleanSymbols, fromInstant, toInstant, interval.getApiValue(), isIndexSymbol);
             if (storedData == null || storedData.isEmpty()) return Collections.emptyMap();
 
             Map<String, HistoricalData> result = new HashMap<>();
@@ -633,6 +645,94 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                     symbols.size(), interval.getApiValue(), e.getMessage(), e);
             return Collections.emptyMap();
         }
+    }
+
+    /**
+     * Reads historical data in bounded chunks instead of sending one large
+     * Influx query for the complete index universe.
+     *
+     * <p>The first request remains synchronous for small/index-only requests,
+     * which avoids adding thread scheduling overhead to the common one-symbol
+     * path. Larger requests use at most the configured number of concurrent
+     * queries. A failed chunk is isolated: successful chunks are retained and
+     * the caller's retriever can send only the missing symbols to the provider.
+     */
+    private Map<String, HistoricalData> getHistoricalDataInChunks(
+            List<String> cleanSymbols, Instant fromInstant, Instant toInstant,
+            String interval, boolean isIndexSymbol) {
+        if (cleanSymbols == null || cleanSymbols.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        int chunkSize = historicalInfluxChunkSize > 0 ? historicalInfluxChunkSize : 25;
+        int maxConcurrency = historicalInfluxMaxConcurrency > 0 ? historicalInfluxMaxConcurrency : 4;
+
+        if (cleanSymbols.size() <= chunkSize || taskExecutor == null) {
+            return queryHistoricalDataChunk(cleanSymbols, fromInstant, toInstant, interval, isIndexSymbol);
+        }
+
+        Map<String, HistoricalData> merged = new HashMap<>();
+        int chunkCount = (cleanSymbols.size() + chunkSize - 1) / chunkSize;
+        log.info("[INFLUX_CHUNK] Reading {} symbols in {} chunks of up to {} symbols with maxConcurrency={}",
+                cleanSymbols.size(), chunkCount, chunkSize, maxConcurrency);
+
+        for (int groupStart = 0; groupStart < cleanSymbols.size(); groupStart += chunkSize * maxConcurrency) {
+            List<CompletableFuture<Map<String, HistoricalData>>> futures = new java.util.ArrayList<>();
+            int groupEnd = Math.min(cleanSymbols.size(), groupStart + chunkSize * maxConcurrency);
+
+            for (int chunkStart = groupStart; chunkStart < groupEnd; chunkStart += chunkSize) {
+                int chunkEnd = Math.min(cleanSymbols.size(), chunkStart + chunkSize);
+                List<String> chunk = new java.util.ArrayList<>(cleanSymbols.subList(chunkStart, chunkEnd));
+                int chunkNumber = (chunkStart / chunkSize) + 1;
+                try {
+                    futures.add(CompletableFuture.supplyAsync(() -> {
+                        long startedAt = System.currentTimeMillis();
+                        try {
+                            Map<String, HistoricalData> result = queryHistoricalDataChunk(
+                                    chunk, fromInstant, toInstant, interval, isIndexSymbol);
+                            log.info("[INFLUX_CHUNK] Completed chunk {}/{} symbols={} rows={} durationMs={}",
+                                    chunkNumber, chunkCount, chunk.size(), result.size(),
+                                    System.currentTimeMillis() - startedAt);
+                            return result;
+                        } catch (Exception e) {
+                            log.warn("[INFLUX_CHUNK] Failed chunk {}/{} symbols={} durationMs={} error={}",
+                                    chunkNumber, chunkCount, chunk.size(),
+                                    System.currentTimeMillis() - startedAt, e.getMessage());
+                            return Collections.emptyMap();
+                        }
+                    }, taskExecutor));
+                } catch (Exception e) {
+                    log.warn("[INFLUX_CHUNK] Could not schedule chunk {}/{} symbols={} error={}",
+                            chunkNumber, chunkCount, chunk.size(), e.getMessage());
+                }
+            }
+
+            for (CompletableFuture<Map<String, HistoricalData>> future : futures) {
+                try {
+                    Map<String, HistoricalData> chunkResult = future.join();
+                    if (chunkResult != null && !chunkResult.isEmpty()) {
+                        merged.putAll(chunkResult);
+                    }
+                } catch (Exception e) {
+                    // Keep successful chunks. Missing symbols remain eligible for
+                    // the existing provider fallback in HistoricalDataRetriever.
+                    log.warn("[INFLUX_CHUNK] Ignoring failed chunk so partial database results remain usable: {}",
+                            e.getMessage());
+                }
+            }
+        }
+        return merged;
+    }
+
+    private Map<String, HistoricalData> queryHistoricalDataChunk(
+            List<String> symbols, Instant fromInstant, Instant toInstant,
+            String interval, boolean isIndexSymbol) {
+        if (symbols == null || symbols.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, HistoricalData> result = historicalDataService.getHistoricalDataBatch(
+                symbols, fromInstant, toInstant, interval, isIndexSymbol);
+        return result != null ? result : Collections.emptyMap();
     }
 
     /**
