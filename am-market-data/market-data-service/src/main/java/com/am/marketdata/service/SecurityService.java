@@ -1,13 +1,16 @@
 package com.am.marketdata.service;
 
 import com.am.marketdata.common.log.AppLogger;
+import com.am.marketdata.common.model.UpstoxInstrument;
 import com.am.marketdata.config.BatchSearchProperties;
+import com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository;
 import com.am.marketdata.service.dto.SecuritySearchRequest;
 import com.am.marketdata.service.model.security.SecurityDocument;
 import com.am.marketdata.service.repo.SecurityRepository;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,6 +26,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -33,7 +37,9 @@ import java.time.Duration;
 public class SecurityService {
 
     /** Bumped when batch-search matching logic changes; ignores legacy Redis keys. */
-    private static final String BATCH_SEARCH_CACHE_PREFIX = "batch_search:v2:";
+    private static final String BATCH_SEARCH_CACHE_PREFIX = "batch_search:v3:";
+    /** Equity/ETF/mutual-fund ISIN (INE… and INF…). */
+    private static final Pattern ISIN_PATTERN = Pattern.compile("(?i)^IN[A-Z0-9]{10}$");
 
     private final AppLogger log = AppLogger.getLogger();
     private final SecurityRepository securityRepository;
@@ -42,6 +48,7 @@ public class SecurityService {
     private final ObjectMapper objectMapper;
     private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService;
     private final BatchSearchProperties batchSearchProperties;
+    private final UpstoxInstrumentRepository upstoxInstrumentRepository;
 
     // THUNDERING HERD / REQUEST COLLAPSING MAP:
     // Holds active in-flight CompletableFutures for queries currently being fetched from MongoDB.
@@ -52,12 +59,14 @@ public class SecurityService {
     public SecurityService(SecurityRepository securityRepository, MongoTemplate mongoTemplate,
             RedisTemplate<String, Object> redisTemplate,
             com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService,
-            BatchSearchProperties batchSearchProperties) {
+            BatchSearchProperties batchSearchProperties,
+            @Nullable UpstoxInstrumentRepository upstoxInstrumentRepository) {
         this.securityRepository = securityRepository;
         this.mongoTemplate = mongoTemplate;
         this.redisTemplate = redisTemplate;
         this.stockIndicesMarketDataService = stockIndicesMarketDataService;
         this.batchSearchProperties = batchSearchProperties;
+        this.upstoxInstrumentRepository = upstoxInstrumentRepository;
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -354,15 +363,23 @@ public class SecurityService {
                     List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> securityMatches =
                             convertToSecurityMatches(query, matches, request.getMinMatchScore());
 
+                    // securities miss for an ISIN → upstock_instruments (same source quotes use)
+                    if (securityMatches.isEmpty()) {
+                        securityMatches = resolveIsinFromInstruments(query);
+                    }
+
+                    // Mutable copy — instrument fallback may return List.of (immutable)
+                    securityMatches = new ArrayList<>(securityMatches);
                     securityMatches.sort(java.util.Comparator
                             .comparingDouble(
-                                    com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch::getMatchScore)
+                                    (com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch m) ->
+                                            m.getMatchScore() == null ? 0.0 : m.getMatchScore())
                             .reversed()
                             .thenComparing(m -> m.getMarketCapValue() == null ? 0L : m.getMarketCapValue(),
                                     java.util.Comparator.reverseOrder()));
 
                     if (securityMatches.size() > limit) {
-                        securityMatches = securityMatches.subList(0, limit);
+                        securityMatches = new ArrayList<>(securityMatches.subList(0, limit));
                     }
 
                     freshResults.put(query, securityMatches);
@@ -417,7 +434,7 @@ public class SecurityService {
         String trimmed = query.trim();
         LinkedHashMap<String, SecurityDocument> deduped = new LinkedHashMap<>();
 
-        if (trimmed.matches("(?i)^INE[A-Z0-9]{10}$")) {
+        if (ISIN_PATTERN.matcher(trimmed).matches()) {
             SecurityDocument byIsin = securityRepository.findByIsin(trimmed.toUpperCase());
             if (isValidDocument(byIsin)) {
                 deduped.put(byIsin.getKey().getIsin(), byIsin);
@@ -636,6 +653,72 @@ public class SecurityService {
     /**
      * Convert SecurityDocuments to SecurityMatches with scoring
      */
+    /**
+     * When {@code securities} has no row for an ISIN, resolve NSE EQ/GB trading symbol from
+     * {@code upstock_instruments} (same ranking used by SymbolOrchestrator / quotes path).
+     */
+    private List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> resolveIsinFromInstruments(
+            String query) {
+        if (upstoxInstrumentRepository == null || query == null || !ISIN_PATTERN.matcher(query.trim()).matches()) {
+            return List.of();
+        }
+        String isin = query.trim().toUpperCase(Locale.ROOT);
+        try {
+            List<UpstoxInstrument> instruments = upstoxInstrumentRepository.findByIsinIn(List.of(isin));
+            if (instruments == null || instruments.isEmpty()) {
+                return List.of();
+            }
+            UpstoxInstrument best = null;
+            for (UpstoxInstrument inst : instruments) {
+                if (inst == null || inst.getTradingSymbol() == null || inst.getTradingSymbol().isBlank()) {
+                    continue;
+                }
+                if (rankInstrument(inst) >= 100) {
+                    continue; // skip F&O / commodity
+                }
+                if (best == null || rankInstrument(inst) < rankInstrument(best)) {
+                    best = inst;
+                }
+            }
+            if (best == null) {
+                return List.of();
+            }
+            String tradingSymbol = best.getTradingSymbol().trim().toUpperCase(Locale.ROOT);
+            log.info("batchSearch", "ISIN " + isin + " resolved via upstock_instruments → " + tradingSymbol);
+            List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> out = new ArrayList<>(1);
+            out.add(com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch.builder()
+                    .symbol(tradingSymbol)
+                    .isin(isin)
+                    .companyName(best.getName())
+                    .matchScore(1.0)
+                    .matchedField("ISIN")
+                    .build());
+            return out;
+        } catch (Exception e) {
+            log.warn("batchSearch", "upstock_instruments ISIN fallback failed for " + isin + ": " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    private static int rankInstrument(UpstoxInstrument inst) {
+        String exchange = inst.getExchange() != null ? inst.getExchange().trim().toUpperCase(Locale.ROOT) : "";
+        String type = inst.getInstrumentType() != null ? inst.getInstrumentType().trim().toUpperCase(Locale.ROOT) : "";
+        if (exchange.contains("NFO") || exchange.contains("BFO") || exchange.contains("MCX")
+                || type.contains("FUT") || type.contains("OPT")) {
+            return 100;
+        }
+        if (exchange.startsWith("NSE") && (type.contains("EQ") || type.contains("GB") || type.isEmpty())) {
+            return 0;
+        }
+        if (exchange.startsWith("NSE")) {
+            return 1;
+        }
+        if (exchange.startsWith("BSE")) {
+            return 2;
+        }
+        return 3;
+    }
+
     private List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> convertToSecurityMatches(
             String query,
             List<SecurityDocument> documents,
