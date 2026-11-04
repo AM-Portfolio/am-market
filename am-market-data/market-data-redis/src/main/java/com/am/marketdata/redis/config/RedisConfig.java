@@ -17,6 +17,8 @@ import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import io.lettuce.core.ClientOptions;
+import io.lettuce.core.SocketOptions;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
@@ -47,6 +49,15 @@ public class RedisConfig {
     @Value("${market.data.cache.ttl.seconds:300}")
     private long cacheTimeToLiveSeconds;
 
+    @Value("${market.redis.command-timeout-ms:2000}")
+    private long redisCommandTimeoutMs;
+
+    @Value("${market.redis.connect-timeout-ms:2000}")
+    private long redisConnectTimeoutMs;
+
+    @Value("${market.redis.failure-cooldown-ms:30000}")
+    private long redisFailureCooldownMs;
+
     /**
      * Redis connection factory
      */
@@ -68,7 +79,24 @@ public class RedisConfig {
             log.warn("redisConnectionFactory", "No Redis password provided, connecting without authentication");
         }
 
-        return new LettuceConnectionFactory(redisConfig);
+        SocketOptions socketOptions = SocketOptions.builder()
+                .connectTimeout(Duration.ofMillis(redisConnectTimeoutMs))
+                .build();
+        ClientOptions clientOptions = ClientOptions.builder()
+                .socketOptions(socketOptions)
+                .build();
+        org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration clientConfiguration =
+                org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration.builder()
+                        .commandTimeout(Duration.ofMillis(redisCommandTimeoutMs))
+                        .clientOptions(clientOptions)
+                        .build();
+
+        return new LettuceConnectionFactory(redisConfig, clientConfiguration);
+    }
+
+    @Bean
+    public RedisAvailabilityGuard redisAvailabilityGuard() {
+        return new RedisAvailabilityGuard(redisFailureCooldownMs);
     }
 
     /**
@@ -94,8 +122,10 @@ public class RedisConfig {
     @Bean
     public RedisTemplate<String, Object> redisTemplate(
             @Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper,
-            java.util.Optional<GrowthBookService> growthBookServiceOpt) {
-        RedisTemplate<String, Object> template = new FeatureFlaggedRedisTemplate<>(growthBookServiceOpt.orElse(null));
+            java.util.Optional<GrowthBookService> growthBookServiceOpt,
+            RedisAvailabilityGuard redisAvailabilityGuard) {
+        RedisTemplate<String, Object> template = new FeatureFlaggedRedisTemplate<>(
+                growthBookServiceOpt.orElse(null), redisAvailabilityGuard);
         template.setConnectionFactory(redisConnectionFactory());
         template.setKeySerializer(new StringRedisSerializer());
 
@@ -112,8 +142,11 @@ public class RedisConfig {
 
     @Bean
     @Primary
-    public StringRedisTemplate stringRedisTemplate(java.util.Optional<GrowthBookService> growthBookServiceOpt) {
-        FeatureFlaggedStringRedisTemplate template = new FeatureFlaggedStringRedisTemplate(growthBookServiceOpt.orElse(null));
+    public StringRedisTemplate stringRedisTemplate(
+            java.util.Optional<GrowthBookService> growthBookServiceOpt,
+            RedisAvailabilityGuard redisAvailabilityGuard) {
+        FeatureFlaggedStringRedisTemplate template = new FeatureFlaggedStringRedisTemplate(
+                growthBookServiceOpt.orElse(null), redisAvailabilityGuard);
         template.setConnectionFactory(redisConnectionFactory());
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(new StringRedisSerializer());

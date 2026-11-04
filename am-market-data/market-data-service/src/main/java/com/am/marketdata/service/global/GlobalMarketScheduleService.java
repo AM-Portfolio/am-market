@@ -138,9 +138,7 @@ public class GlobalMarketScheduleService {
             return;
         }
 
-        boolean anyMarketOpen = markets.stream()
-                .filter(MarketEntry::hasInstrument)
-                .anyMatch(this::isMarketCurrentlyOpen);
+        boolean anyMarketOpen = isAnyMarketCurrentlyOpen(Instant.now());
 
         if (anyMarketOpen) {
             logger.info("[GlobalSchedule] At least one global market is open. Setting vote:global = true.");
@@ -149,6 +147,17 @@ public class GlobalMarketScheduleService {
         }
 
         setVote(anyMarketOpen);
+    }
+
+    /**
+     * Evaluates the in-memory global exchange schedule without consulting Redis.
+     * Redis votes are coordination hints; this local schedule is the fallback
+     * when a vote is stale or Redis is temporarily unavailable.
+     */
+    public boolean isAnyMarketCurrentlyOpen(Instant instant) {
+        return markets.stream()
+                .filter(MarketEntry::hasInstrument)
+                .anyMatch(market -> isMarketCurrentlyOpen(market, instant));
     }
 
     /**
