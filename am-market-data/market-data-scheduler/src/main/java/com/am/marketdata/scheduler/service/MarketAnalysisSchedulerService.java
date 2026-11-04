@@ -112,8 +112,11 @@ public class MarketAnalysisSchedulerService {
 
         // 2. Historical Performance (10 Years)
         try {
-            // Detailed = true for rich UI support, bypassCache = true
-            analysisService.getHistoricalPerformance(symbol, 10, true, true);
+            // Warm the exact key used by the default monthly-performance UI
+            // request: analysis:history:<symbol>:10:false. The previous
+            // detailed=true refresh populated a different key, so the UI still
+            // paid the full historical fetch on its first request.
+            analysisService.getHistoricalPerformance(symbol, 10, false, true);
         } catch (Exception e) {
             log.warn("Failed to calculate historical performance for {}", symbol, e);
         }

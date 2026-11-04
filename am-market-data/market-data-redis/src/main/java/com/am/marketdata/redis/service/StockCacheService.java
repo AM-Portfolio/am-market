@@ -200,36 +200,17 @@ public class StockCacheService {
     public Map<String, List<StockBars>> getHistoricalBarsWithStats(List<String> symbols, String startDate,
             String endDate, String interval, boolean isIndexSymbol) {
 
-        // If this is an index symbol request and we only have one symbol, check index
-        // cache first
+        // The aggregate index hash stores constituent HistoricalData JSON, while
+        // this method must return StockBars keyed by the requested symbols. The
+        // old code detected that hash as a hit and then discarded it because the
+        // formats did not match, producing a misleading cache miss. Index-only
+        // historical reads now use the canonical per-symbol stock:historical
+        // representation, which is also the format written by the retriever.
         if (isIndexSymbol && symbols.size() == 1) {
             String indexSymbol = symbols.get(0);
-            String cacheKey = String.format("index:historical:%s:%s:%s:%s",
-                    indexSymbol, interval, startDate, endDate);
-
             log.info("[INDEX_CACHE]", String.format(
-                    "Checking index cache for symbol: %s, interval: %s, dateRange: %s to %s",
+                    "Using canonical per-symbol historical cache for index: %s, interval: %s, dateRange: %s to %s",
                     indexSymbol, interval, startDate, endDate));
-
-            // Try to get from index cache
-            Map<String, String> indexCacheData = stockRedisCache.getIndexHistoricalData(cacheKey);
-
-            if (indexCacheData != null && !indexCacheData.isEmpty()) {
-                log.info("[INDEX_CACHE]", String.format(
-                        "Index cache HIT for %s with %d constituent symbols",
-                        indexSymbol, indexCacheData.size()));
-
-                // Convert cached data back to StockBars format
-                // For now, we'll fall through to regular cache since the index cache
-                // stores HistoricalData format, not StockBars format
-                // This is a design consideration - we may need to align formats
-                log.debug("[INDEX_CACHE]",
-                        "Index cache data found but format conversion needed, falling back to stock cache");
-            } else {
-                log.info("[INDEX_CACHE]", String.format(
-                        "Index cache MISS for %s, falling back to stock cache",
-                        indexSymbol));
-            }
         }
 
         // Fall back to regular historical service (stock-level cache)

@@ -1,5 +1,257 @@
 # Market Dashboard Performance and Long-Timeframe Correctness
 
+## Historical-data endpoint latency revision — 2026-11-04
+
+### Monthly-performance endpoint: production trace revision
+
+The primary UI endpoint is:
+
+`GET /v1/analysis/performance/monthly?symbol=NIFTY%2050&years=10`
+
+Live production verification returned HTTP 200 in **61,369 ms** with a 2,558
+byte response. The pod log trace was
+`19b5f15317d8d7c9944d0b06e423df9b`, and its server-side request duration was
+**60,560 ms**.
+
+| Trace phase | Observed result | Approx. time | Decision |
+|---|---|---:|---|
+| Analysis Redis lookup | Miss; request proceeded to raw history | ~13 ms | Fix exact key warming and verify read-after-write |
+| Raw history request | `NIFTY 50`, 2016-12-17 through 2026-11-04, daily, continuous | — | Keep the 15-day baseline buffer, but do not block on a 60s DB timeout |
+| Influx/database lookup | One-symbol batch query timed out | **60,000 ms** | P0 fix; optimize query/index/timeout or bypass safely |
+| Upstox fallback | 1/1 symbol, 2,448 points | ~120 ms | Keep as bounded fallback, not the normal path |
+| Kafka + Redis backfill | Kafka event plus Redis write | ~338 ms | Make writes non-blocking and verify cache visibility |
+| Monthly aggregation | 10 years / 120 months over 2,448 points | negligible compared with DB wait | Keep; algorithm is not the bottleneck |
+
+The result contains ten years (`2017`–`2026`) and is mathematically small. The
+latency is caused by the retrieval path, not by monthly aggregation or the
+amount of JSON returned.
+
+### Why it worked before and regressed
+
+The repository history identifies a likely behavioral regression rather than a
+market-data-volume problem:
+
+- Before commit `4a3032bc` (batch historical Flux query), the retriever queried
+  persistence per symbol and could accept already-available partial database
+  data while scheduling repair. The new path replaced that with a synchronous
+  batch Influx query before provider fallback.
+- Commit `0da76f86` changed the Influx client to a **60-second read timeout** and
+  reduced the repository chunk size from 50 to 25. On a slow or unhealthy
+  Influx path, this converts the request into a deterministic 60-second stall.
+- The monthly UI request uses `detailed=false`, so its analysis key is
+  `analysis:history:NIFTY 50:10:false`. The scheduler currently warms
+  `getHistoricalPerformance(symbol, 10, true, true)`, which uses
+  `analysis:history:NIFTY 50:10:true` and deliberately bypasses the cache. The
+  scheduler therefore does not warm the exact UI key.
+- The raw index path independently logs `INDEX_CACHE MISS`, then a database
+  miss, then Upstox. Its provider write does not produce a subsequent cache hit
+  for the same index/date request. This explains why both layers can miss even
+  after a successful response.
+
+These changes explain the “previously fast, now slow” behavior: the old path
+could return existing data or use a warm result, while the current path has a
+cache-key mismatch plus a synchronous 60-second database timeout on a miss.
+The commit history is evidence of a regression mechanism; production still
+needs a before/after benchmark on the exact deployed artifact before assigning
+sole blame to one commit.
+
+### Combined solution for both endpoints
+
+#### P0 — restore fast monthly UI response
+
+1. Warm the exact UI cache key (`detailed=false`) after market close and on
+   deployment/startup if missing. Do not use `bypassCache=true` for the normal
+   warm path.
+2. Add single-flight protection per `(symbol, years, detailed)` so concurrent
+   misses do not launch identical ten-year calculations.
+3. On a cache miss, use a bounded raw-history retrieval path with a short,
+   explicit database budget. Do not allow one Influx read to consume the full
+   HTTP request budget.
+4. If the last successful monthly result exists, use stale-while-revalidate:
+   return it immediately and refresh it asynchronously. If no prior result
+   exists, use the provider fallback with an explicit degraded-but-correct
+   response policy.
+
+#### P0 — make raw index history cacheable and durable
+
+1. Align index-cache reads and writes. Either write the dedicated
+   `index:historical:<symbol>:<interval>:<from>:<to>` representation and return
+   it directly, or remove the unused dedicated path and use the daily
+   `stock:historical:<symbol>:<interval>:<date>` format consistently.
+2. Add a read-after-write test for `NIFTY 50` covering the exact date range.
+   The second request must not log `INDEX_CACHE MISS`, database miss, or
+   provider fetch.
+3. Replace the hardcoded 24-hour historical Redis TTL with the configured
+   historical TTL, while treating the current trading day separately so stale
+   data is not served.
+4. Correct response metadata so `source` reports the actual tier rather than
+   `forceRefresh`.
+
+#### P0 — fix the Influx one-symbol/long-range query
+
+1. Benchmark the exact Flux query for `NIFTY 50`, 10 years, daily interval,
+   including server-side query duration and returned rows.
+2. Verify the Influx measurement, symbol tags, bucket, retention policy, and
+   time-range/index configuration. Production currently reports no rows before
+   timing out, so “small data” does not mean “cheap query.”
+3. Add a bounded query timeout shorter than the HTTP budget and return partial
+   database results where valid. Provider fallback should receive only missing
+   symbols/ranges.
+4. Reuse the existing 25-symbol chunking for multi-symbol requests; introduce
+   bounded parallel chunks only after measuring Influx capacity and connection
+   pool limits. Do not add an unbounded fan-out.
+
+#### P1 — remove repeated orchestration work
+
+- Reuse the initial symbol-resolution map instead of calling
+  `resolveSymbols(List.of(symbol), ...)` inside the loop.
+- Avoid repeating calendar/configuration lookups within one request.
+- Keep Kafka batch-size changes out of the critical fix until payload-size and
+  broker tests prove a larger batch is safe.
+
+### Freshness design for the current month
+
+The current implementation stores one whole analysis JSON value under
+`analysis:history:<symbol>:<years>:<detailed>`; there is no dedicated monthly
+bucket collection. Therefore it cannot update only November in place today.
+
+The plan has two options:
+
+- **Lower-risk option:** recompute the full aggregate asynchronously after the
+  market calendar closes, then atomically replace the aggregate cache value.
+  This is simplest after the Influx path is fixed.
+- **More granular option:** introduce a normalized monthly materialization
+  keyed by symbol/year/month and assemble the existing response from those
+  buckets. On a market day, update only the active month; on non-market days,
+  keep the prior month. This reduces recomputation but requires an agreed schema,
+  backfill, invalidation, and migration plan before implementation.
+
+The implementation should start with the lower-risk option unless the measured
+post-fix full recomputation is still too slow. No permanent cache of arbitrary
+user queries is required.
+
+### Combined plan gap review and final rating
+
+Initial plan rating: **8.5/10**. The first version correctly identified the
+multi-symbol Influx timeout but underweighted the one-symbol monthly path and
+the analysis-cache key mismatch.
+
+After the new production trace, source-history review, cache-path review, and
+freshness trade-off analysis, the revised plan rating is **9.2/10**.
+
+Remaining gaps before code implementation:
+
+- Confirm the exact production image commit against remote `main`.
+- Run an Influx query benchmark and inspect the production bucket/measurement
+  configuration without mutating data.
+- Verify the Redis feature flag/circuit state and prove why a provider write is
+  not visible to the next identical read.
+- Decide whether the lower-risk aggregate refresh is sufficient before adopting
+  a new monthly materialization schema.
+
+Verdict: **the root cause is sufficiently established to prepare the hotfix,
+but implementation should begin only after user approval of this revised plan**.
+
+### Decision scope
+
+This revision covers `POST /v1/market-data/historical-data`, especially the
+default request for an index such as `NIFTY 50` where `isIndexSymbol` is false
+and the service expands the index into constituents. The objective is to
+reduce cold and warm latency without caching every arbitrary request forever or
+changing the response contract.
+
+### Evidence-based diagnosis
+
+- The production request for `nifty 50`, 2026-06-01 through 2026-09-19, returned
+  HTTP 200 in about 78 seconds. The service normalized the Saturday end date to
+  2026-09-18 and returned 51 symbols / 3,978 points.
+- The same request with `isIndexSymbol=true` returned in about 1.2 seconds
+  with one index and 78 points. The dominant cost is therefore constituent
+  expansion and retrieval, not the index candle query itself.
+- The supplied production trace shows a roughly 60-second InfluxDB batch-query
+  timeout, followed by roughly 16 seconds of provider fallback for 50
+  constituents. This is the primary latency blocker.
+- The source also contains an N+1 resolver path: after an initial batch
+  resolution, `getHistoricalDataMultipleSymbols` calls
+  `resolveSymbols(List.of(originalSymbol), ...)` once per symbol. This adds
+  repeated Mongo/instrument lookups and must be removed or proven harmless.
+- The repository version already contains sequential 25-symbol Influx chunks,
+  while the production evidence describes a 50-symbol timeout. The deployed
+  artifact must therefore be compared with `origin/main` before changing the
+  query layer; adding another chunking layer blindly could make the system
+  worse.
+- Redis misses are confirmed, but the claim that an Influx timeout opened the
+  Redis circuit is not yet proven. `RedisAvailabilityGuard` opens on Redis
+  operation failures, so the implementation must record the actual circuit
+  reason instead of inferring it from an Influx failure.
+- The response metadata currently labels the source from `forceRefresh`, not
+  from the actual cache/database/provider tier. This can make a cache-backed
+  response appear authoritative when it was obtained through fallback.
+
+### Proposed implementation sequence
+
+1. Pull and inspect remote `main`, compare it with the deployed production
+   artifact, and create a hotfix branch only after this plan is approved.
+2. Remove the resolver N+1 by reusing the initial batch resolution/mapping.
+   Add tests proving that a 51-symbol request does not perform 51 additional
+   resolver queries.
+3. Fix the Influx retrieval path using one bounded, configurable strategy:
+   reuse the existing symbol chunking, benchmark safe chunk sizes, and only
+   introduce bounded parallelism if the Influx connection pool and server can
+   sustain it. Apply per-chunk timeouts and fall back only for missing/failed
+   symbols, not for the whole batch.
+4. Verify and correct the index-cache fast path so a valid index cache hit is
+   converted and returned rather than falling through to stock-cache logic.
+5. Keep Redis as a best-effort accelerator for raw candles, with batched reads,
+   accurate hit/miss/circuit metrics, and no correctness dependence on a
+   permanent query-result cache.
+6. Prevent duplicate provider calls and preserve provider rate limits. Leave
+   Kafka batch-size changes out of P0 unless payload-size testing proves they
+   are safe; they are not the 60-second blocker.
+7. Add observability for resolver-call count, cache tiers, Influx chunk count
+   and duration, provider symbols, fallback symbols, and final source. This is
+   important because production tracing is currently disabled.
+
+### Correctness and cache policy
+
+The endpoint should cache reusable daily candles under the existing normalized
+symbol/date/interval scheme, not every arbitrary multi-symbol/date query. The
+database remains the durable source of truth; provider fallback fills missing
+data; a market-calendar-aware refresh can be handled separately for monthly
+analysis materialization. This avoids stale forever-caching while retaining
+fast repeat reads.
+
+### Verification and acceptance criteria
+
+- Preserve the current response shape, date normalization, symbol counts, and
+  index-vs-constituent semantics.
+- A warm cache request must not query Influx or the provider.
+- A database partial hit must fetch only missing symbols from the provider.
+- A failed Influx chunk must not stall the whole request for the full 60-second
+  timeout.
+- The 51-symbol path must have one batch resolver operation, not one resolver
+  operation per constituent.
+- Test cold cache, warm cache, Redis unavailable, slow/failed Influx, provider
+  timeout/rate-limit, partial database results, one-symbol requests, index-only
+  requests, and ten-year ranges.
+- Report before/after latency by cache, resolver, database, provider, Kafka, and
+  total request phases. Do not claim a fixed target until the pre-production
+  benchmark is measured.
+
+### Plan self-review and verdict
+
+Initial rating: **8.5/10**. The diagnosis is strongly supported by the
+production timing and source inspection, but implementation must first resolve
+the deployed-artifact/source mismatch and validate Influx capacity. The main
+trade-offs are bounded concurrency versus database pressure, and partial
+fallback complexity versus avoiding a full-batch provider retry.
+
+After the gap review, the safer verdict is **Proceed to implementation only
+after user approval of this plan**. The plan explicitly avoids inventing a new
+cache collection, avoids an unbounded parallel query fan-out, keeps Kafka batch
+changes out of the critical fix, and treats the Redis-circuit explanation as an
+unverified hypothesis until instrumented.
+
 **Kind:** bug fix  
 **Lead service:** `am-market-data`  
 **Target environment:** preprod  
@@ -491,3 +743,81 @@ complete. Focused SmartStock/Heatmap tests passed after final edits, and the
 market-data service/analysis reactor passed. Runtime cold/warm timings remain
 pending; no speedup is claimed. Production remains read-only and was not part of
 this implementation.
+
+## November 4 contract verification — index flag and mixed historical data
+
+The requested historical-data contract is now explicitly covered by this plan:
+
+| Request | Required behavior | Current code verdict |
+|---|---|---|
+| `isIndexSymbol=true`, index payload | Do not expand constituents; query only the index through the `market_index` path; return only the index key and its historical points. | **Implemented in the public request path.** `processHistoricalDataRequest` disables expansion and the fetch service routes the batch with `isIndexSymbol=true`. |
+| `isIndexSymbol=false`, index payload | Expand to the index plus its constituents; route the index to `market_index`, route constituents to `equity`; merge both result maps without losing symbols. | **Implemented for the expanded controller path.** The fetch service partitions `indexSymbols` and `stockSymbols`, performs separate batch reads, and merges the results. |
+| `isIndexSymbol=false`, direct unexpanded caller | Expand and preserve a distinct response entry for the index and every constituent. | **Implemented.** The compatibility branch now maps a multi-result expansion to each resolved symbol, preventing constituent results from overwriting the index key. A focused regression test covers this contract. |
+
+### Evidence-based routing chain
+
+The verified chain is:
+
+`MarketDataController` → `processHistoricalDataRequest` → `InstrumentUtils.resolveSymbols` →
+`MarketDataFetchServiceImpl` partition → `MarketDataService.getHistoricalDataBatch` →
+`HistoricalDataRetriever` → `HistoricalDataServiceImpl`.
+
+When the batch flag is true, the shared service uses `MarketIndexIndicesService`,
+whose persistence query targets the `market_index` measurement. When false, it
+uses `EquityService`, whose persistence query targets the `equity` measurement.
+The public false-flag index flow therefore does not intentionally query the index
+through the equity measurement after the hotfix routing change.
+
+### Plan additions after gap review
+
+1. Add contract tests for index-only, expanded mixed index/equity, direct
+   unexpanded callers, duplicate/aliased symbols, and partial results. Assert
+   exact response keys and the measurement flag passed to each batch call.
+2. Replace the direct-caller compatibility mapping with an explicit
+   `resolvedSymbol → responseSymbol` contract so the index and every constituent
+   remain distinct; never use a map keyed only by the original index input.
+3. Make index classification resilient: explicit index keys remain authoritative;
+   plain names require a batched metadata lookup; metadata failure must produce a
+   truthful classification failure rather than silently querying `equity`.
+4. Verify `market_index` coverage for the complete ten-year NIFTY 50 range using
+   a read-only authenticated Influx query. If coverage is incomplete, backfill
+   only missing index candles with idempotent writes and validate range/point
+   counts before publishing the aggregate.
+5. Reduce the synchronous Influx timeout to a bounded endpoint budget and apply
+   missing-symbol-only provider fallback. A database timeout must not trigger a
+   full provider fetch for symbols that already have valid database data.
+
+### Trade-offs
+
+- Mixed requests require two database reads and two cache paths, but this is
+  required for measurement correctness; one mixed query would reintroduce the
+  index/equity measurement error.
+- Metadata classification adds one batched Mongo lookup on a cold request. This
+  is cheaper and safer than 51 per-symbol lookups, but its failure state must be
+  observable.
+- Returning index plus constituents increases response size and serialization
+  time. That is part of the requested contract; pagination or a separate
+  constituent endpoint would change the API semantics and is out of scope.
+- A shorter Influx timeout improves user latency but may return partial data more
+  often. Fallback must identify only missing/failed symbols and must not present
+  an incomplete result as complete.
+- Backfill improves future latency and database coverage but adds provider quota,
+  write load, and freshness coordination. It must remain bounded, idempotent,
+  and outside the synchronous user request where possible.
+
+### Unbiased plan review and rating
+
+Strengths: the public true/false behavior is mapped to concrete code and
+measurements; the N+1 resolver regression is addressed; the plan preserves the
+response contract and identifies the remaining production proof requirements.
+
+Gaps: complete `market_index` ten-year coverage is not yet proven, and live
+post-deployment latency is not yet measured. Bounded microchunking is now
+implemented with environment overrides, while full dependency tests remain
+blocked by an unrelated stale test constructor in `SmartRecommendationServiceTest`.
+
+**Plan rating: 9.1/10.** The core routing, N+1 avoidance, Redis write
+validation, cache-key alignment, bounded timeout, and bounded Influx
+microchunking are implemented and source compiled. The score remains below 10
+because production `market_index` coverage, backfill need, and post-deployment
+latency still require read-only verification.

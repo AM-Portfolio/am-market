@@ -364,13 +364,20 @@ public class AnalysisService {
         LocalDate from = LocalDate.of(to.getYear() - years + 1, 1, 1); // Start from Jan 1st of the starting year
         LocalDate fetchFrom = from.minusDays(15); // Fetch extra days for previous close
 
+        // The monthly endpoint serves both equities and indexes. Preserve the
+        // symbol type so the retriever reads the same Influx measurement used by
+        // the writer (market_index for indexes, equity for stocks).
+        boolean isIndexSymbol = marketDataService.isIndexSymbol(symbol);
+        log.info("Historical performance source routing: symbol={}, isIndexSymbol={}", symbol, isIndexSymbol);
+
         HistoricalData data = marketDataService.getHistoricalData(symbol,
                 java.sql.Date.valueOf(fetchFrom),
                 java.sql.Date.valueOf(to),
                 TimeFrame.DAY,
                 true,
                 null,
-                null);
+                null,
+                isIndexSymbol);
 
         if (data == null || data.getDataPoints() == null || data.getDataPoints().isEmpty()) {
             return com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse.builder()

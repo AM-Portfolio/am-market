@@ -55,4 +55,79 @@
     <mxCell id="e12" value="refresh large-index heatmaps" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="1" source="scheduler" target="analysis"><mxGeometry relative="1" as="geometry"/></mxCell>
     <mxCell id="l" value="Legend: blue = existing AM API/service · green cylinder = existing store/cache · solid green = existing/valid data flow · dashed gray = aggregate diagnostics · dashed red = reject invalid baseline" style="fillColor=#F5F5F5;strokeColor=#666666;" vertex="1" parent="1"><mxGeometry x="40" y="720" width="1100" height="40" as="geometry"/></mxCell>
   </root></mxGraphModel></diagram>
+  <diagram id="historical-containers" name="HistoricalDataContainers">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="hc0"/>
+        <mxCell id="hc1" parent="hc0"/>
+        <mxCell id="hc-api" value="MarketDataController\nPOST /historical-data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontColor=#1F1F1F;" vertex="1" parent="hc1"><mxGeometry x="40" y="120" width="190" height="70" as="geometry"/></mxCell>
+        <mxCell id="hc-fetch" value="MarketDataFetchService\nflag contract + index/equity partition" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontColor=#1F1F1F;" vertex="1" parent="hc1"><mxGeometry x="300" y="120" width="210" height="70" as="geometry"/></mxCell>
+        <mxCell id="hc-cache" value="Redis raw candle cache\nstock/index keys" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#1F1F1F;" vertex="1" parent="hc1"><mxGeometry x="590" y="40" width="190" height="80" as="geometry"/></mxCell>
+        <mxCell id="hc-influx" value="InfluxDB\nmarket_index for indexes\nequity for stocks" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#1F1F1F;" vertex="1" parent="hc1"><mxGeometry x="590" y="150" width="190" height="80" as="geometry"/></mxCell>
+        <mxCell id="hc-provider" value="Upstox provider\nmissing-symbol fallback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#1F1F1F;" vertex="1" parent="hc1"><mxGeometry x="590" y="270" width="190" height="80" as="geometry"/></mxCell>
+        <mxCell id="hc-mongo" value="Mongo instrument/index\none batch resolution" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#1F1F1F;" vertex="1" parent="hc1"><mxGeometry x="870" y="40" width="210" height="80" as="geometry"/></mxCell>
+        <mxCell id="hc-kafka" value="Kafka ingestion\nasync persistence" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontColor=#1F1F1F;" vertex="1" parent="hc1"><mxGeometry x="870" y="270" width="210" height="80" as="geometry"/></mxCell>
+        <mxCell id="hce1" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#6C8EBF;" edge="1" parent="hc1" source="hc-api" target="hc-fetch"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hce2" value="batch resolve" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="hc1" source="hc-fetch" target="hc-mongo"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hce3" value="cache first" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="hc1" source="hc-fetch" target="hc-cache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hce4" value="true → market_index; false stocks → equity" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="hc1" source="hc-fetch" target="hc-influx"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hce5" value="missing only" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#D6B656;" edge="1" parent="hc1" source="hc-fetch" target="hc-provider"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hce6" value="async write" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#666666;dashed=1;" edge="1" parent="hc1" source="hc-fetch" target="hc-kafka"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="historical-sequence" name="HistoricalDataSequence">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="hs0"/><mxCell id="hs1" parent="hs0"/>
+        <mxCell id="hs-a" value="Client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="hs1"><mxGeometry x="40" y="40" width="120" height="50" as="geometry"/></mxCell>
+        <mxCell id="hs-b" value="Fetch service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="hs1"><mxGeometry x="260" y="40" width="140" height="50" as="geometry"/></mxCell>
+        <mxCell id="hs-c" value="Redis" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="hs1"><mxGeometry x="500" y="40" width="120" height="50" as="geometry"/></mxCell>
+        <mxCell id="hs-d" value="Influx" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="hs1"><mxGeometry x="720" y="40" width="120" height="50" as="geometry"/></mxCell>
+        <mxCell id="hs-e" value="Provider" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;" vertex="1" parent="hs1"><mxGeometry x="940" y="40" width="120" height="50" as="geometry"/></mxCell>
+        <mxCell id="hsl1" value="POST symbols/date/interval" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#6C8EBF;" edge="1" parent="hs1" source="hs-a" target="hs-b"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hsl2" value="one batch resolve + route" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="hs1" source="hs-b" target="hs-c"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hsl3" value="misses only, bounded chunks" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="hs1" source="hs-b" target="hs-d"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hsl4" value="failed/missing symbols only" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#D6B656;" edge="1" parent="hs1" source="hs-b" target="hs-e"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hs-note" value="Return complete available result with accurate source/fallback metadata; preserve current response contract." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;" vertex="1" parent="hs1"><mxGeometry x="260" y="160" width="800" height="60" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="historical-failures" name="HistoricalDataFailures">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="hf0"/><mxCell id="hf1" parent="hf0"/>
+        <mxCell id="hf-db" value="Influx chunk timeout\n60s full-batch stall" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="hf1"><mxGeometry x="40" y="40" width="230" height="70" as="geometry"/></mxCell>
+        <mxCell id="hf-fallback" value="Provider fallback\nall 50 symbols" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="hf1"><mxGeometry x="360" y="40" width="230" height="70" as="geometry"/></mxCell>
+        <mxCell id="hf-n1" value="Resolver N+1\nrepeated Mongo calls" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;" vertex="1" parent="hf1"><mxGeometry x="40" y="180" width="230" height="70" as="geometry"/></mxCell>
+        <mxCell id="hf-redis" value="Redis miss/circuit\nreason must be measured" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;" vertex="1" parent="hf1"><mxGeometry x="360" y="180" width="230" height="70" as="geometry"/></mxCell>
+        <mxCell id="hf-kafka" value="Kafka batches of 2\nP2 until payload tested" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;" vertex="1" parent="hf1"><mxGeometry x="680" y="180" width="230" height="70" as="geometry"/></mxCell>
+        <mxCell id="hf-root" value="Hotfix controls\nbounded chunks · per-chunk timeout · missing-only fallback · one resolver mapping · tier telemetry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="hf1"><mxGeometry x="240" y="330" width="500" height="90" as="geometry"/></mxCell>
+        <mxCell id="hff1" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#B85450;" edge="1" parent="hf1" source="hf-db" target="hf-fallback"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hff2" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="hf1" source="hf-db" target="hf-root"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hff3" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="hf1" source="hf-n1" target="hf-root"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hff4" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="hf1" source="hf-redis" target="hf-root"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="monthly-performance-flow" name="MonthlyPerformanceFlow">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="mp0"/><mxCell id="mp1" parent="mp0"/>
+        <mxCell id="mp-client" value="Dashboard\nmonthly performance" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="mp1"><mxGeometry x="40" y="100" width="170" height="60" as="geometry"/></mxCell>
+        <mxCell id="mp-api" value="AnalysisController\nGET /performance/monthly" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="mp1"><mxGeometry x="280" y="100" width="210" height="60" as="geometry"/></mxCell>
+        <mxCell id="mp-cache" value="analysis:history\n&lt;symbol&gt;:&lt;years&gt;:false" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="mp1"><mxGeometry x="560" y="30" width="220" height="80" as="geometry"/></mxCell>
+        <mxCell id="mp-raw" value="Raw historical retrieval\nRedis → Influx → Upstox" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;" vertex="1" parent="mp1"><mxGeometry x="560" y="150" width="220" height="80" as="geometry"/></mxCell>
+        <mxCell id="mp-result" value="Monthly aggregation\n120 months / 2,448 points" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="mp1"><mxGeometry x="860" y="150" width="220" height="80" as="geometry"/></mxCell>
+        <mxCell id="mp-scheduler" value="Market-calendar scheduler\nafter-close refresh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;" vertex="1" parent="mp1"><mxGeometry x="860" y="30" width="220" height="80" as="geometry"/></mxCell>
+        <mxCell id="mpe1" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#6C8EBF;" edge="1" parent="mp1" source="mp-client" target="mp-api"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="mpe2" value="exact UI key" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="mp1" source="mp-api" target="mp-cache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="mpe3" value="miss: bounded refresh" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#D6B656;" edge="1" parent="mp1" source="mp-api" target="mp-raw"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="mpe4" value="calculate only after data arrives" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#6C8EBF;" edge="1" parent="mp1" source="mp-raw" target="mp-result"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="mpe5" value="atomic replace / monthly merge" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82B366;" edge="1" parent="mp1" source="mp-result" target="mp-cache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="mpe6" value="market-day refresh" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#666666;dashed=1;" edge="1" parent="mp1" source="mp-scheduler" target="mp-cache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="mp-note" value="Current production failure: exact UI key misses → one-symbol Influx query waits 60s → Upstox fallback. Scheduler currently warms detailed=true, not this detailed=false key." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="mp1"><mxGeometry x="180" y="300" width="900" height="70" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
 </mxfile>
