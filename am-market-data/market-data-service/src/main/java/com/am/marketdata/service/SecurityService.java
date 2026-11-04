@@ -368,15 +368,18 @@ public class SecurityService {
                         securityMatches = resolveIsinFromInstruments(query);
                     }
 
+                    // Mutable copy — instrument fallback may return List.of (immutable)
+                    securityMatches = new ArrayList<>(securityMatches);
                     securityMatches.sort(java.util.Comparator
                             .comparingDouble(
-                                    com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch::getMatchScore)
+                                    (com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch m) ->
+                                            m.getMatchScore() == null ? 0.0 : m.getMatchScore())
                             .reversed()
                             .thenComparing(m -> m.getMarketCapValue() == null ? 0L : m.getMarketCapValue(),
                                     java.util.Comparator.reverseOrder()));
 
                     if (securityMatches.size() > limit) {
-                        securityMatches = securityMatches.subList(0, limit);
+                        securityMatches = new ArrayList<>(securityMatches.subList(0, limit));
                     }
 
                     freshResults.put(query, securityMatches);
@@ -682,13 +685,15 @@ public class SecurityService {
             }
             String tradingSymbol = best.getTradingSymbol().trim().toUpperCase(Locale.ROOT);
             log.info("batchSearch", "ISIN " + isin + " resolved via upstock_instruments → " + tradingSymbol);
-            return List.of(com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch.builder()
+            List<com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch> out = new ArrayList<>(1);
+            out.add(com.am.marketdata.common.dto.BatchSearchResponse.SecurityMatch.builder()
                     .symbol(tradingSymbol)
                     .isin(isin)
                     .companyName(best.getName())
                     .matchScore(1.0)
                     .matchedField("ISIN")
                     .build());
+            return out;
         } catch (Exception e) {
             log.warn("batchSearch", "upstock_instruments ISIN fallback failed for " + isin + ": " + e.getMessage());
             return List.of();
