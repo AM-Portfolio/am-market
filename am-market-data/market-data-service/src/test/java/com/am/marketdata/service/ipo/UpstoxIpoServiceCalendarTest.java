@@ -354,6 +354,19 @@ class UpstoxIpoServiceCalendarTest {
     }
 
     @Test
+    void list_readOnlyMissDoesNotCallProviderOrPersist() {
+        when(cacheService.getCachedList("open", null, 1, 100)).thenReturn(Optional.empty());
+        when(mongoRepository.findByStatus(eq("open"), any()))
+                .thenReturn(org.springframework.data.domain.Page.empty());
+
+        List<AsraxIpoSummaryDto> response = service.getIpos("open", null, 1, 100, false);
+
+        assertTrue(response.isEmpty());
+        verify(ipoDataProvider, never()).getIpos(anyString(), any(), anyInt(), anyInt());
+        verify(cacheService, never()).cacheList(anyString(), any(), anyInt(), anyInt(), any());
+    }
+
+    @Test
     void sync_paginatesAcrossPagesAndDeduplicatesById() {
         // Page 1 has 30 items, page 2 has 5 items -> stops pagination
         List<AsraxIpoSummaryDto> page1 = new ArrayList<>();

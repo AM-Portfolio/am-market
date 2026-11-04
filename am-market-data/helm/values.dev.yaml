@@ -14,11 +14,8 @@ env:
   SCHEDULER_INGESTION_POLL_HISTORICAL: "false"
   SCHEDULER_INGESTION_USE_WEBSOCKET: "true"
   # TODO: Deploy a dedicated InfluxDB instance for dev.
-  # Currently dev shares the prod InfluxDB (influxdb.asrax.in:8086).
-  # INFLUXDB_URL is no longer hardcoded here. It is composed at runtime from
-  # INFLUXDB_HOST and INFLUXDB_PORT, which are injected by the Vault CSI driver
-  # from the secret path: apps/data/dev/infra/influxdb (keys: host, port).
-  # As long as dev Vault mirrors prod influxdb host/port, this points to the same instance.
+  # InfluxDB URL and endpoint are supplied by Vault at runtime.
+  # The dev deployment must not override them with a hardcoded URL.
 
 environment: dev
 replicaCount: 1
@@ -56,14 +53,14 @@ config:
     maxCandidatesPerQuery: 100
     internalBatchSize: 100
 
-  # Dev: disable live-market schedulers to prevent accidental ingestion.
+  # Runtime ingestion and stream settings are supplied by the dev Vault
+  # scheduler-config path. Keep deployment wiring here, not credentials.
   scheduler:
     cookie:
       enabled: false
     stockIndices:
       enabled: false
     ingestion:
-      enabled: false
       provider: "UPSTOX"
       force: false
       useWebsocket: true
@@ -139,7 +136,6 @@ monitoring:
 hostAliases:
   - ip: "203.174.22.129"
     hostnames:
-      - "influxdb.asrax.in"
       - "redis.asrax.in"
       - "mongodb.asrax.in"
       - "kafka.asrax.in"
