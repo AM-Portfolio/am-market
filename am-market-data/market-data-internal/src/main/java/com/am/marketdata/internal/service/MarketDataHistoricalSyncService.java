@@ -32,6 +32,7 @@ public class MarketDataHistoricalSyncService {
     private final MarketDataIngestionStatusRepository ingestionStatusRepository;
     private final IngestionJobLogRepository ingestionJobLogRepository;
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+    private final com.am.marketdata.service.IndexSymbolRegistry indexSymbolRegistry;
 
     private final ExecutorService batchExecutor = Executors.newFixedThreadPool(10);
     private static final int BATCH_SIZE = 20;
@@ -277,13 +278,20 @@ public class MarketDataHistoricalSyncService {
             long apiStartTime = System.currentTimeMillis();
 
             // Use getHistoricalDataMultipleSymbols
+            Set<String> knownIndexSymbols = indexSymbolRegistry.resolveKnownIndexNames(batch);
+            boolean indexOnlyBatch = !batch.isEmpty() && knownIndexSymbols.size() == batch.size();
+            Map<String, Object> additionalParams = new HashMap<>();
+            if (indexOnlyBatch) {
+                additionalParams.put("isIndexSymbol", true);
+            }
+
             HistoricalDataResponseV1 response = marketDataFetchService.getHistoricalDataMultipleSymbols(
                     batch,
                     from,
                     to,
                     TimeFrame.DAY,
-                    "STOCK", // Instrument Type
-                    new HashMap<>(), // Additional Params
+                    indexOnlyBatch ? "INDEX" : "STOCK",
+                    additionalParams,
                     true, // Always force refresh from provider for Ingestion Job (we know data is
                           // missing/needed)
                     fetchIndexStocks // Fetch individual stocks from index symbols if true

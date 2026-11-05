@@ -60,6 +60,34 @@ public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepos
     }
 
     @Override
+    public void saveAll(List<MarketIndexIndicesMeasurement> measurements) {
+        if (measurements == null || measurements.isEmpty()) {
+            return;
+        }
+        try (WriteApi writeApi = influxDBClient.makeWriteApi(WriteOptions.builder().batchSize(500).build())) {
+            for (MarketIndexIndicesMeasurement measurement : measurements) {
+                Point point = Point.measurement(MEASUREMENT_NAME)
+                        .addTag("key", measurement.getKey())
+                        .addTag("index", measurement.getIndex())
+                        .addTag("indexSymbol", measurement.getIndexSymbol())
+                        .addField("market_data_open", measurement.getMarketDataOpen())
+                        .addField("market_data_previous_close", measurement.getMarketDataPreviousClose())
+                        .addField("market_data_high", measurement.getMarketDataHigh())
+                        .addField("market_data_low", measurement.getMarketDataLow())
+                        .addField("market_data_close", measurement.getMarketDataClose())
+                        .addField("market_data_percentage_change", measurement.getMarketDataPercentageChange())
+                        .time(measurement.getTime(), WritePrecision.NS);
+                writeApi.writePoint(bucket, org, point);
+            }
+            writeApi.flush();
+            logger.info("Saved {} market_index measurements in one batch", measurements.size());
+        } catch (Exception e) {
+            logger.error("Failed to batch-write market index measurements: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to batch-save market index measurements", e);
+        }
+    }
+
+    @Override
     public List<MarketIndexIndicesMeasurement> findByKey(String key) {
         String query = String.format(
             "from(bucket: \"%s\") " +

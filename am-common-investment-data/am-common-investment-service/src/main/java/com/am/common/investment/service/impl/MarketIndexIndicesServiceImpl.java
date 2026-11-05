@@ -49,6 +49,18 @@ public class MarketIndexIndicesServiceImpl implements MarketIndexIndicesService 
     }
 
     @Override
+    public void saveAll(List<MarketIndexIndices> indices) {
+        if (indices == null || indices.isEmpty()) {
+            return;
+        }
+        List<MarketIndexIndicesMeasurement> measurements = indices.stream()
+                .map(mapper::convertToMeasurement)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toList());
+        marketIndexRepository.saveAll(measurements);
+    }
+
+    @Override
     public List<MarketIndexIndices> getByKey(String key) {
         logger.debug("Finding all indices by key: {}", key);
         return marketIndexRepository.findByKey(key).stream()
