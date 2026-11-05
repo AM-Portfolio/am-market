@@ -167,6 +167,17 @@ public class MarketAnalyticsService {
                                         return true;
                                     }
                                 })
+                                .filter(p -> p.getTime() != null)
+                                .sorted(Comparator.comparing(
+                                        com.am.common.investment.model.historical.OHLCVTPoint::getTime))
+                                .collect(Collectors.toMap(
+                                        com.am.common.investment.model.historical.OHLCVTPoint::getTime,
+                                        p -> p,
+                                        // Keep the last point at a duplicate timestamp; provider ticks
+                                        // arriving later carry the most recent candle values.
+                                        (first, last) -> last,
+                                        LinkedHashMap::new))
+                                .values().stream()
                                 .collect(Collectors.toList());
 
                         if (!filteredPoints.isEmpty()) {
