@@ -87,7 +87,9 @@ public class AnalysisService {
         Map<DayOfWeek, List<Double>> dayOfWeekReturns = new EnumMap<>(DayOfWeek.class);
         Map<Integer, List<Double>> monthlyReturns = new HashMap<>();
 
-        List<OHLCVTPoint> points = data.getDataPoints();
+        // Provider/cache implementations may return immutable lists.
+        // Analysis sorts its working set, so always copy at this boundary.
+        List<OHLCVTPoint> points = new ArrayList<>(data.getDataPoints());
         for (int i = 1; i < points.size(); i++) {
             OHLCVTPoint prev = points.get(i - 1);
             OHLCVTPoint curr = points.get(i);
@@ -355,8 +357,16 @@ public class AnalysisService {
         if (!bypassCache) {
             com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse cached = analysisRedisCache
                     .getHistoricalPerformance(symbol, years, detailed);
-            if (cached != null) {
+            // An empty result can be produced by a partial historical repair.
+            // Do not let that sentinel remain authoritative for the full cache
+            // TTL after durable history becomes available.
+            if (cached != null && cached.getYearlyPerformance() != null
+                    && !cached.getYearlyPerformance().isEmpty()) {
                 return cached;
+            }
+            if (cached != null) {
+                log.warn("Ignoring empty historical performance cache for symbol={}, years={}, detailed={}",
+                        symbol, years, detailed);
             }
         }
 
@@ -387,7 +397,9 @@ public class AnalysisService {
                     .build();
         }
 
-        List<OHLCVTPoint> points = data.getDataPoints();
+        // Provider/cache implementations may return immutable lists.
+        // Analysis sorts its working set, so always copy at this boundary.
+        List<OHLCVTPoint> points = new ArrayList<>(data.getDataPoints());
         // Sort points by date just in case
         points.sort(Comparator.comparing(OHLCVTPoint::getTime));
 
@@ -526,7 +538,11 @@ public class AnalysisService {
                 .yearlyPerformance(new ArrayList<>(yearlyMap.values()))
                 .build();
 
-        analysisRedisCache.saveHistoricalPerformance(response, years, detailed);
+        // Empty matrices are transient partial-data outcomes, not successful
+        // analysis snapshots. Avoid creating another long-lived empty cache.
+        if (response.getYearlyPerformance() != null && !response.getYearlyPerformance().isEmpty()) {
+            analysisRedisCache.saveHistoricalPerformance(response, years, detailed);
+        }
         return response;
     }
     // --- Heatmap Analysis ---

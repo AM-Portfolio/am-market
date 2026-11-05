@@ -101,7 +101,9 @@ public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepos
             "|> filter(fn: (r) => r.indexSymbol == \"%s\") " +
             "|> pivot(rowKey: [\"_time\"], " +
             "        columnKey: [\"_field\"], " +
-            "        valueColumn: \"_value\") ",
+            "        valueColumn: \"_value\") " +
+            "|> group(columns: []) " +
+            "|> sort(columns: [\"_time\"]) ",
             bucket, startTime, endTime, MEASUREMENT_NAME, indexSymbol
         );
 

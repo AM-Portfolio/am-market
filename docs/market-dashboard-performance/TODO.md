@@ -1,5 +1,39 @@
 # Market dashboard performance TODO
 
+## Index historical-candle integrity hotfix — 2026-11-05
+
+Planning gate: no production data copy, Redis deletion, deployment, or API
+contract change before this pack is reviewed and explicitly approved.
+
+- [x] Rebase local `hotfix/priority` onto `origin/main`; keep the remote branch
+      untouched until implementation review.
+- [x] Verify the Modern UI empty card is intentional for an empty
+      `yearlyPerformance` array, not a decoding failure.
+- [x] Verify the sync `STOCK` hardcode, unconditional equity persistence,
+      partial-read acceptance, and missing Flux ordering.
+- [x] Verify `HistoricalDataIngestionEvent` retains the authoritative symbol as
+      its map key and `MarketDataPersistenceService` already has
+      `IndexSymbolRegistry`; preserve Kafka compatibility by classifying that
+      key at persistence time.
+- [ ] Partition historical sync requests by index/equity to remove the `STOCK`
+      hardcode; persistence now reclassifies every consumed event key as
+      defense-in-depth.
+- [x] Route historical index daily candles through `MarketIndexIndices`; retain
+      equity persistence for stocks only.
+- [x] Add routing regression coverage for canonical index identity, timestamps,
+      OHLC fields, and proof that equity persistence is not called.
+- [x] Do not cache a newly empty monthly-performance result from partial index
+      history; ignore previously cached empty matrices on the next request.
+- [ ] Invalidate exact historical-performance cache entries after a confirmed
+      successful repair; preserve last-known-good values on failure.
+- [x] Add Flux grouping/ordering and Java sort/deduplication for chart results;
+      duplicate timestamps keep the last provider point.
+- [ ] Add safe logs/metrics for route, timestamp coverage, write target, repair,
+      cache invalidation, and deduplication count.
+- [ ] Run focused tests and Postman regression in preprod.
+- [ ] Author and review the production migration runbook before requesting any
+      production mutation approval.
+
 ## Historical-data endpoint hotfix — 2026-11-04
 
 Planning gate: source code, branches, and production remain unchanged until

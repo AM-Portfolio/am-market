@@ -1,5 +1,129 @@
 # Market Dashboard Performance and Long-Timeframe Correctness
 
+## Index historical-candle integrity hotfix — 2026-11-05
+
+**Kind:** bug fix
+**Lead service:** `am-market-data`
+**Target environment:** preprod; production stays read-only pending a separate approval.
+**Source-plan pointer:** user targeted diagnostic report plus read-only production
+traces for `NIFTY 50`, `NIFTY BANK`, `NIFTY IT`, `SENSEX`, `INFY`, and `TCS`.
+
+### Goal
+
+Restore multi-year monthly performance for Indian indices without changing the
+public HTTP or Flutter JSON contracts, and prevent index candles from being
+persisted as equity candles during sync or repair.
+
+### Current system (verified)
+
+- The Flutter card calls `GET /v1/analysis/performance/monthly` with
+  `detailed=false`; its existing empty state is the intended reaction to an
+  empty `yearlyPerformance`, not a decoding failure.
+- `MarketDataHistoricalSyncService.fetchBatch` sends every historical batch as
+  `STOCK` and omits `isIndexSymbol`.
+- `HistoricalDataServiceImpl.saveHistoricalData` maps every historical payload
+  to `EquityPrice` and writes it through the equity service.
+- `HistoricalDataIngestionEvent` is a `Map<symbol, HistoricalData>` with no
+  type field, while `MarketDataPersistenceService` already injects
+  `IndexSymbolRegistry`. The event map key is therefore the backward-compatible
+  source of classification at consume time; an event-schema revision is not
+  required for this hotfix.
+- `HistoricalDataRetriever` accepts partial stored history, removes that symbol
+  from synchronous fallback, and only schedules an asynchronous repair.
+- `MarketIndexIndicesRepositoryImpl` pivots `market_index` without grouping
+  Flux tables or ordering the result by `_time`.
+- Production returns an empty monthly matrix for NIFTY 50 even though the raw
+  endpoint returns thousands of points confined to two current-session dates.
+  This is an index persistence/read-path failure, not a Modern UI outage.
+
+### Scope and decisions
+
+1. Preserve index/equity identity through historical fetch, consumer, and
+   persistence. The consumer/persistence layer classifies the existing event
+   map key using `IndexSymbolRegistry`, so old and new Kafka events behave the
+   same. Index daily candles write to `market_index`; equities write only to
+   `equity`.
+2. Keep the live quote/UI path non-blocking. Historical sync and repair remain
+   asynchronous behind Kafka or the existing background executor.
+3. A partial index read may schedule one repair, but its empty aggregation must
+   not become a new cached historical-performance result. Successful durable
+   writes invalidate matching `analysis:history:<SYMBOL>:<years>:<detailed>`
+   keys only after persistence succeeds.
+4. Make Flux results deterministic with merged grouping and `_time` ordering;
+   defensively sort/deduplicate chart points in Java before response mapping.
+5. Add value-safe telemetry for symbol, instrument type, interval, point count,
+   oldest/newest timestamp, target measurement, repair, and cache invalidation.
+
+Out of scope: Flutter/model changes, public API changes, Kafka retention
+changes, a production migration, Redis deletion, deployment, or rollback.
+
+### Target flow
+
+1. Sync splits known index names from equities when requesting history; this
+   removes the `STOCK` hardcode at the fetch boundary.
+2. At consume time, persistence reclassifies the event map key using
+   `IndexSymbolRegistry`; this protects already-queued/older Kafka events.
+3. The consumer sends index candles through a point-to-`MarketIndexIndices`
+   mapper using the provider candle timestamp and the canonical symbol for
+   `key`, `index`, and `indexSymbol`. Stocks retain the existing
+   `EquityPrice` mapper/repository.
+4. The index read query uses canonical `indexSymbol`, daily candle instants,
+   grouped Flux rows, and ordered results.
+5. A repair write invalidates the exact aggregate cache after success; on
+   failure it retains the last known-good cache and records the outcome.
+
+### Corner-case matrix
+
+| Case | Expected | Covered by |
+|---|---|---|
+| NIFTY 50 historical sync | `market_index`, never `equity` | unit + integration |
+| INFY historical sync | `equity`, never `market_index` | unit + integration |
+| Mixed Kafka batch | each entry routes independently | consumer test |
+| Current-session-only index data | one repair; no new empty analysis cache value | retriever/service test |
+| Repair failure | prior valid cache retained; safe log | persistence test |
+| Disjoint Flux series / duplicates | chronological unique chart output | repository/analytics test |
+| Provider has no candles | unchanged empty response with diagnostic | API regression |
+
+### Test plan and rollout
+
+1. Unit-test classification and compatible per-symbol Kafka routing.
+2. Integration-test index tag/field mapping, idempotent write, and multi-year
+   NIFTY 50 readback.
+3. Regression-test NIFTY 50/NIFTY BANK and INFY monthly performance with the
+   existing response shape.
+4. Test partial repair, successful invalidation, failed-write cache retention,
+   and chart sort/deduplication.
+5. In preprod, use Postman plus logs/metrics to verify route, date coverage,
+   write target, cache state, and matrix row count.
+6. Before a production data write, provide an approved migration runbook with
+   target symbols, source/target queries, readback checks, rollback, cache
+   scope, and risk.
+
+### Gap review and scorecard (planning pass 1)
+
+The supplied diagnosis correctly captures the primary route/persistence/cache
+failure. It remains partial because the event schema, current index mapper,
+Influx duplicate-write semantics, production TTL override, and migration source
+set need verification before implementation.
+
+| Dimension | Score | Remaining gap |
+|---|---:|---|
+| Product / user outcome | 9.5 | Existing honest empty state remains only while a bounded repair completes. |
+| Architecture / design | 9.5 | Use event map key + existing registry; no schema break. |
+| Data / contracts | 9.5 | App config confirms the 30-day analysis TTL and existing tag schema. |
+| Reliability | 9.5 | Single repair, success-only invalidation, and durable-write gate are specified. |
+| Security | 9.5 | Migration rules prohibit values/credentials in logs and require a reviewed runbook. |
+| Observability | 9.5 | Route/repair/measurement telemetry is specified. |
+| Testability | 9.5 | Fixture, integration, and readback coverage is explicit. |
+| Operability / rollout | 9.5 | Preprod gate and production-runbook/approval gate are explicit. |
+| TODO / implementability | 9.5 | File-level work is bounded to existing modules. |
+
+**Self-rating: 9.5 / 10.** The plan is implementation-ready for the source
+change and intentionally separates the later production migration into an
+approved runbook. The remaining work is execution/verification rather than an
+undecided design. **Agent satisfied: yes; user approval is still required
+before code changes.**
+
 ## Historical-data endpoint latency revision — 2026-11-04
 
 ### Monthly-performance endpoint: production trace revision

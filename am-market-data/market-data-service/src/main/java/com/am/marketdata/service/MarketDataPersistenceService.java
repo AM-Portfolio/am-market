@@ -349,7 +349,11 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             try {
                 // First save to database
                 log.debug("Saving historical data to database for symbol: {}", symbol);
-                historicalDataService.saveHistoricalData(historicalData);
+                if (isIndianIndexSymbol(symbol)) {
+                    saveHistoricalIndexData(symbol, historicalData);
+                } else {
+                    historicalDataService.saveHistoricalData(historicalData);
+                }
                 log.debug("Successfully saved historical data for symbol: {}", symbol);
 
                 // Then update the cache
@@ -360,6 +364,49 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                 throw new RuntimeException("Failed to save historical data", e);
             }
         }, taskExecutor);
+    }
+
+    private boolean isIndianIndexSymbol(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            return false;
+        }
+        if (indexSymbolRegistry.isExplicitIndexKey(symbol)) {
+            return true;
+        }
+        String normalized = indexSymbolRegistry.normalizeSymbol(symbol);
+        return indexSymbolRegistry.resolveKnownIndexNames(Set.of(normalized)).contains(normalized);
+    }
+
+    /**
+     * Historical index candles must use the same market_index model as live
+     * index ticks. The event map key is authoritative because older Kafka
+     * historical events do not carry an instrument-type field and the payload's
+     * tradingSymbol may be absent.
+     */
+    private void saveHistoricalIndexData(String symbol, HistoricalData historicalData) {
+        String normalized = indexSymbolRegistry.normalizeSymbol(symbol);
+        int saved = 0;
+        for (com.am.common.investment.model.historical.OHLCVTPoint point : historicalData.getDataPoints()) {
+            if (point == null || point.getTime() == null || point.getClose() == null) {
+                continue;
+            }
+            MarketData marketData = MarketData.builder()
+                    .open(point.getOpen())
+                    .high(point.getHigh())
+                    .low(point.getLow())
+                    .last(point.getClose())
+                    .build();
+            MarketIndexIndices indexData = MarketIndexIndices.builder()
+                    .key(normalized)
+                    .index(normalized)
+                    .indexSymbol(normalized)
+                    .marketData(marketData)
+                    .timestamp(point.getTime())
+                    .build();
+            marketIndexIndicesService.save(indexData);
+            saved++;
+        }
+        log.info("Saved historical index candles: symbol={}, measurement=market_index, points={}", normalized, saved);
     }
 
     public Map<String, OHLCQuote> getOHLCData(List<String> tradingSymbols, TimeFrame timeFrame, boolean forceRefresh) {
