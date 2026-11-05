@@ -385,7 +385,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
      */
     private void saveHistoricalIndexData(String symbol, HistoricalData historicalData) {
         String normalized = indexSymbolRegistry.normalizeSymbol(symbol);
-        int saved = 0;
+        List<MarketIndexIndices> indexCandles = new java.util.ArrayList<>();
         for (com.am.common.investment.model.historical.OHLCVTPoint point : historicalData.getDataPoints()) {
             if (point == null || point.getTime() == null || point.getClose() == null) {
                 continue;
@@ -403,10 +403,10 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                     .marketData(marketData)
                     .timestamp(point.getTime())
                     .build();
-            marketIndexIndicesService.save(indexData);
-            saved++;
+            indexCandles.add(indexData);
         }
-        log.info("Saved historical index candles: symbol={}, measurement=market_index, points={}", normalized, saved);
+        marketIndexIndicesService.saveAll(indexCandles);
+        log.info("Saved historical index candles: symbol={}, measurement=market_index, points={}", normalized, indexCandles.size());
     }
 
     public Map<String, OHLCQuote> getOHLCData(List<String> tradingSymbols, TimeFrame timeFrame, boolean forceRefresh) {
