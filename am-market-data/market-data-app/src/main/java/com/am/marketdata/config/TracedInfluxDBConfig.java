@@ -51,6 +51,15 @@ public class TracedInfluxDBConfig {
     private String bucket;
 
     /**
+     * Keep database stalls below the user-facing request budget. This remains
+     * configurable because larger historical ranges may need a different
+     * operational budget in pre-production, but the previous 60-second default
+     * allowed a cache miss to block before provider fallback could begin.
+     */
+    @Value("${influxdb.read-timeout-seconds:15}")
+    private long readTimeoutSeconds;
+
+    /**
      * Overrides the default influxDBClient bean with our traced client.
      * Marked as @Primary to ensure it is preferred for injection.
      *
@@ -63,17 +72,18 @@ public class TracedInfluxDBConfig {
             ObjectProvider<ObservationRegistry> observationRegistryProvider,
             ObjectProvider<Tracer> tracerProvider) {
 
+        long effectiveReadTimeoutSeconds = readTimeoutSeconds > 0 ? readTimeoutSeconds : 15;
         okhttp3.OkHttpClient.Builder okHttpClientBuilder = new okhttp3.OkHttpClient.Builder()
                 .connectTimeout(java.time.Duration.ofSeconds(30))
-                .readTimeout(java.time.Duration.ofSeconds(60))
+                .readTimeout(java.time.Duration.ofSeconds(effectiveReadTimeoutSeconds))
                 .writeTimeout(java.time.Duration.ofSeconds(60));
 
         Tracer tracer = tracerProvider.getIfAvailable();
         ObservationRegistry registry = observationRegistryProvider.getIfAvailable();
 
         Logger logger = LoggerFactory.getLogger(TracedInfluxDBConfig.class);
-        logger.info("[INFLUXDB-CONFIG] Initializing InfluxDBClient. Tracer available: {}, ObservationRegistry available: {}", 
-                tracer != null, registry != null);
+        logger.info("[INFLUXDB-CONFIG] Initializing InfluxDBClient. Tracer available: {}, ObservationRegistry available: {}, readTimeoutSeconds: {}",
+                tracer != null, registry != null, effectiveReadTimeoutSeconds);
 
         // Interceptor 1: Query sanitizer — extracts safe metadata and tags the Tempo span
         // Must run BEFORE OkHttpObservationInterceptor so the span already exists when we tag it

@@ -1,5 +1,48 @@
 # Market dashboard performance TODO
 
+## Historical-data endpoint hotfix — 2026-11-04
+
+Planning gate: source code, branches, and production remain unchanged until
+the revised plan is approved.
+
+- [ ] Pull remote `main`; compare it with the deployed production artifact and
+      record the exact source/revision relationship.
+- [ ] Create a hotfix branch from the approved remote `main`.
+- [ ] Capture a reproducible baseline for one stock, multiple stocks, index-only
+      `NIFTY 50`, expanded `NIFTY 50`, warm cache, and ten-year ranges.
+- [ ] Remove the repeated per-symbol `resolveSymbols` call and add call-count
+      regression tests.
+- [x] Implement bounded Influx microchunking: 25 symbols per query and at most
+      4 concurrent queries by default; keep the values environment-configurable.
+- [x] Preserve partial database results and send only missing/failed symbols to
+      the existing provider fallback. Production benchmark still required.
+- [x] Route index-only history through the canonical per-symbol historical cache;
+      remove the incompatible aggregate-hash fallback that discarded hits.
+- [x] Add a shared Redis cache circuit breaker so outages fail fast and allow
+      one recovery probe instead of repeatedly blocking requests.
+- [ ] Add accurate cache/database/provider source and fallback telemetry.
+- [ ] Test Redis failure, Influx timeout/partial result, provider rate limits,
+      date normalization, duplicates, and response-shape compatibility.
+- [ ] Run the latency benchmark and review the diff before any deployment.
+- [ ] Keep production read-only; deployment requires a separate explicit
+      approval after code review and pre-production validation.
+
+## Monthly historical-performance endpoint — verified production trace
+
+- [ ] Compare `analysis:history:<symbol>:10:false` (UI) with the scheduler's
+      `analysis:history:<symbol>:10:true` key; warm the exact UI key.
+- [ ] Add single-flight protection for concurrent monthly-performance misses.
+- [ ] Verify why the monthly analysis cache write is not serving the next
+      request; inspect Redis feature-flag and circuit state.
+- [ ] Benchmark the one-symbol ten-year Influx query used by the monthly path.
+- [ ] Reduce the database timeout budget and prevent a 60-second synchronous
+      wait on a user request.
+- [ ] Preserve last-known-good monthly data with stale-while-revalidate when
+      the provider/database is temporarily slow.
+- [ ] Choose full aggregate replacement versus monthly bucket materialization
+      after measuring the repaired path; do not invent a new schema silently.
+- [ ] Add an exact trace regression test for 10-year `NIFTY 50` monthly data.
+
 ## October 22 large-index cold-cache latency slice — owner-approved scope
 
 - [x] Keep InfluxDB 25-symbol sequential chunking unchanged (explicitly
@@ -109,3 +152,17 @@ the successful runs used `-Dnet.bytebuddy.experimental=true`. No production
 mutation, database write, API contract change, or deployment occurred. The full
 13-module market-data application reactor also packaged successfully with tests
 skipped for this final compatibility compile.
+
+## Index-flag contract verification — 2026-11-04
+
+- [x] Verify `isIndexSymbol=true` keeps an index unexpanded and routes it to
+      the `market_index` historical path.
+- [x] Verify `isIndexSymbol=false` expands an index into the index plus
+      constituents, partitions index/equity reads, and merges both results.
+- [x] Add direct-unexpanded-caller tests so index and constituent response keys
+      cannot overwrite one another.
+- [ ] Run a read-only authenticated range/coverage query for NIFTY 50 in the
+      `market_index` measurement before deciding whether backfill is required.
+- [x] Add a bounded configurable Influx read timeout and preserve
+      missing-symbol-only provider fallback. Live timeout/partial-result behavior
+      still needs post-deployment measurement.
