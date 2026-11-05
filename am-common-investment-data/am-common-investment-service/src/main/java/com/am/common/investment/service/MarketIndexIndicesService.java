@@ -7,6 +7,7 @@ import java.util.List;
 public interface MarketIndexIndicesService {
     // Basic operations
     void save(MarketIndexIndices indices);
+    void saveAll(List<MarketIndexIndices> indices);
     List<MarketIndexIndices> getByKey(String key);
     List<MarketIndexIndices> getByIndexSymbolAndTimeBetween(String indexSymbol, java.time.Instant startTime, java.time.Instant endTime);
 }
