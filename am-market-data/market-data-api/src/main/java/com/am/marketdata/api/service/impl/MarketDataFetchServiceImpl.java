@@ -346,10 +346,15 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         }
                     }
                 } else {
-                    // Preserve support for direct callers that provide an
-                    // unexpanded index and expect results mapped to that input.
+                    // When callers request an index with isIndexSymbol=false (constituent expansion mode):
+                    // 1. If symbols.size() == 1, reuse resolvedSymbols to avoid a redundant duplicate MongoDB query.
+                    // 2. The index symbol (e.g. NIFTY 50) is routed to indexSymbols -> queried from 'market_index'.
+                    // 3. Constituent stocks (e.g. RELIANCE, TCS) are routed to stockSymbols -> queried from 'equity'.
+                    // 4. Both results are collected into batchResult and returned together in the response map.
                     for (String originalSymbol : symbols) {
-                        Set<String> resolved = instrumentUtils.resolveSymbols(List.of(originalSymbol), fetchIndexStocks);
+                        Set<String> resolved = symbols.size() == 1
+                                ? resolvedSymbols
+                                : instrumentUtils.resolveSymbols(List.of(originalSymbol), fetchIndexStocks);
                         for (String sym : resolved) {
                             // If one input expands to multiple instruments, keep
                             // each resolved symbol as its own response key. Mapping
