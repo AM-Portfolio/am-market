@@ -22,7 +22,6 @@ import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Async;
@@ -145,7 +144,6 @@ public class MarketDataProcessingService {
      * Fetch and process both indices and stock indices data
      * This method is called by the regular scheduler (every 2 minutes)
      */
-    @ConditionalOnProperty(name = "scheduler.indices.enabled", havingValue = "true", matchIfMissing = true)
     public void fetchAndProcessMarketData() {
         try {
             log.info("Executing fetchAndProcessMarketData...");

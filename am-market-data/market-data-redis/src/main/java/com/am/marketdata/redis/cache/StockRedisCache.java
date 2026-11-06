@@ -6,6 +6,7 @@ import static com.am.marketdata.common.constants.TimeIntervalConstants.INTRADAY_
 import com.am.marketdata.redis.model.OHLCV;
 import com.am.marketdata.redis.model.StockBars;
 import com.am.marketdata.redis.config.RedisCacheCircuitBreaker;
+import com.am.marketdata.redis.config.FeatureFlaggedStringRedisTemplate;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -88,6 +89,10 @@ public class StockRedisCache {
             log.warn("saveIntradayBars", "Empty or null StockBars list provided for intraday data");
             return false;
         }
+        if (!isRedisFeatureEnabled()) {
+            log.debug("saveIntradayBars", "Redis caching is disabled; skipping pipeline write");
+            return false;
+        }
 
         // Use configured micro-chunk size (default to 50 if invalid value provided)
         int chunkSize = intradayBatchChunkSize > 0 ? intradayBatchChunkSize : 50;
@@ -143,6 +148,10 @@ public class StockRedisCache {
      * @return true if saved successfully, false otherwise
      */
     public boolean saveIntradayBars(String symbol, String interval, String date, List<OHLCV> bars) {
+        if (!isRedisFeatureEnabled()) {
+            log.debug("saveIntradayBars", "Redis caching is disabled; skipping write");
+            return false;
+        }
         validateInterval(interval);
         validateDate(date);
 
@@ -184,6 +193,10 @@ public class StockRedisCache {
     public boolean saveHistoricalBar(List<StockBars> stockBarsList) {
         if (stockBarsList == null || stockBarsList.isEmpty()) {
             log.warn("saveHistoricalBar", "Empty or null StockBars list provided for historical data");
+            return false;
+        }
+        if (!isRedisFeatureEnabled()) {
+            log.debug("saveHistoricalBar", "Redis caching is disabled; skipping pipeline write");
             return false;
         }
         if (!redisCircuitBreaker.allowRequest()) {
@@ -251,6 +264,11 @@ public class StockRedisCache {
      */
     public boolean saveHistoricalBar(String symbol, String date, OHLCV bar, String interval) {
         validateDate(date);
+
+        if (!isRedisFeatureEnabled()) {
+            log.debug("saveHistoricalBar", "Redis caching is disabled; skipping write for " + symbol);
+            return false;
+        }
 
         if (!redisCircuitBreaker.allowRequest()) {
             log.debug("saveHistoricalBar", "Redis circuit is open; skipping historical cache write for " + symbol);
@@ -507,8 +525,6 @@ public class StockRedisCache {
                 throw new IllegalArgumentException("End date cannot be before start date");
             }
 
-            String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
-
             // Initialize result map
             Map<String, List<StockBars>> result = new HashMap<>();
             for (String symbol : symbols) {
@@ -522,14 +538,11 @@ public class StockRedisCache {
             LocalDate current = start;
             while (!current.isAfter(end)) {
                 String dateStr = current.format(DateTimeFormatter.ISO_LOCAL_DATE);
-                // Edge Case 1: Today vs Past Key Mismatch - dynamically assign prefix
-                boolean isToday = dateStr.equals(today);
-                String prefix;
-                if (isToday) {
-                    prefix = INTRADAY_PREFIX;
-                } else {
-                    prefix = HISTORICAL_INTERVALS.contains(interval) ? HISTORICAL_PREFIX : INTRADAY_PREFIX;
-                }
+                // The key family is determined by interval, not date. Historical
+                // daily bars are written under stock:historical even for today.
+                String prefix = HISTORICAL_INTERVALS.contains(interval)
+                        ? HISTORICAL_PREFIX
+                        : INTRADAY_PREFIX;
                 
                 for (String symbol : symbols) {
                     allKeys.add(generateKey(prefix, symbol, interval, dateStr));
@@ -707,12 +720,21 @@ public class StockRedisCache {
         if (providerName == null || providerName.trim().isEmpty()) {
             return;
         }
+        if (!isRedisFeatureEnabled()) {
+            log.debug("setActiveProvider", "Redis caching is disabled; skipping active-provider write");
+            return;
+        }
         try {
             redisTemplate.opsForValue().set("market-data:config:active-provider", providerName);
             log.info("setActiveProvider", "Set active provider to: " + providerName);
         } catch (Exception e) {
             log.error("setActiveProvider", "Error setting active provider: " + e.getMessage());
         }
+    }
+
+    private boolean isRedisFeatureEnabled() {
+        return !(redisTemplate instanceof FeatureFlaggedStringRedisTemplate featureFlaggedTemplate)
+                || featureFlaggedTemplate.isRedisEnabled();
     }
 
     private volatile String cachedActiveProvider = null;
