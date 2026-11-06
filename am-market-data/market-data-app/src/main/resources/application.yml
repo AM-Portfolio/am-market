@@ -25,7 +25,7 @@ influxdb:
   read-timeout-seconds: ${INFLUXDB_READ_TIMEOUT_SECONDS:15}
 
 # Redis Configuration
-REDIS_HOSTNAME: ${INFRA_HOST}
+REDIS_HOSTNAME: ${REDIS_HOST:${INFRA_HOST:localhost}}
 REDIS_PASSWORD_INTERNAL: ${REDIS_PASSWORD:}
 REDIS_PORT: 6379
 
@@ -245,6 +245,8 @@ market:
   # Shared timeframe list for scheduled heatmap refreshes. Index names are
   # sourced from the existing nseindices.yml registry.
   analysis:
+    historical-performance:
+      symbols: ${MARKET_ANALYSIS_HISTORICAL_PERFORMANCE_SYMBOLS:NIFTY 50,NIFTY BANK}
     heatmap:
       timeframes: ${MARKET_ANALYSIS_HEATMAP_TIMEFRAMES:1D,5D,1W,1M,3M,6M,1Y,3Y,5Y}
       warming:
@@ -314,6 +316,8 @@ scheduler:
   # ── Analysis ─────────────────────────────────────────────────────────────
   analysis:
     daily: "${SCHEDULER_ANALYSIS_DAILY_CRON:0 15 7 * * *}"               # 7:15 AM daily
+    historical-performance:
+      cron: "${SCHEDULER_ANALYSIS_HISTORICAL_PERFORMANCE_CRON:0 15 16 * * MON-FRI}"
   # ── Stream start/stop ─────────────────────────────────────────────────────
   stream:
     start-cron: "${SCHEDULER_STREAM_START_CRON:0 0 9 ? * MON-FRI}"
@@ -337,6 +341,7 @@ redis:
     ttl:
       historical: ${REDIS_CACHE_TTL_HISTORICAL:2592000}         # 30 days
       analysis: ${REDIS_CACHE_TTL_ANALYSIS:2592000}             # 30 days for historical analysis data
+      historical-performance: ${REDIS_CACHE_TTL_HISTORICAL_PERFORMANCE:345600} # Four days, including weekends
     circuit:
       # Redis is an acceleration layer. Fail fast during an outage, then allow
       # one recovery probe instead of opening a connection on every request.

@@ -289,6 +289,14 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             Date fromDate, Date toDate,
             TimeFrame interval, String instrumentType,
             Map<String, Object> additionalParams, boolean forceRefresh, boolean fetchIndexStocks) {
+        return getHistoricalDataMultipleSymbolsInternal(symbols, fromDate, toDate, interval, instrumentType,
+                additionalParams, forceRefresh, fetchIndexStocks, symbols);
+    }
+
+    private HistoricalDataResponseV1 getHistoricalDataMultipleSymbolsInternal(Set<String> symbols,
+            Date fromDate, Date toDate, TimeFrame interval, String instrumentType,
+            Map<String, Object> additionalParams, boolean forceRefresh, boolean fetchIndexStocks,
+            Set<String> requestedSymbols) {
 
         if (symbols == null || symbols.isEmpty()) {
             log.warn("No symbols provided for historical data request");
@@ -304,12 +312,14 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             try {
                 Map<String, HistoricalData> symbolsData = new HashMap<>();
 
+                Map<String, Object> queryParams = additionalParams == null ? Collections.emptyMap() : additionalParams;
+
                 Set<String> resolvedSymbols = instrumentUtils.resolveSymbols(new ArrayList<>(symbols), fetchIndexStocks);
                 // Fixed SLF4J pattern: removed redundant methodName param
                 log.info("Resolved {} symbols from {} input symbols", resolvedSymbols.size(), symbols.size());
 
                 HistoricalDataFilterUtil.FilterParams filterParams = HistoricalDataFilterUtil
-                        .extractFilterParams(additionalParams);
+                        .extractFilterParams(queryParams);
 
                 // Symbol resolution can return plain names such as "NIFTY 50" without an
                 // index prefix. Preserve the caller's semantic type so the correct Influx
@@ -337,7 +347,8 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                         && resolvedSymbols.containsAll(symbols);
                 if (alreadyResolved) {
                     for (String sym : resolvedSymbols) {
-                        resolvedToOriginal.put(sym, sym);
+                        resolvedToOriginal.put(sym,
+                                findRequestedResponseSymbol(sym, requestedSymbols, resolvedSymbols));
                         if (routeAsIndex || isExplicitIndexSymbol(sym)
                                 || resolvedIndexNames.contains(normalizeIndexName(sym))) {
                             indexSymbols.add(sym);
@@ -372,15 +383,28 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                     }
                 }
 
+                Map<String, Set<String>> responseKeysByNormalizedSymbol = new HashMap<>();
+                resolvedToOriginal.forEach((resolved, responseSymbol) -> responseKeysByNormalizedSymbol
+                        .computeIfAbsent(normalizeIndexName(resolved), ignored -> new java.util.HashSet<>())
+                        .add(responseSymbol));
+                Set<String> ambiguousNormalizedSymbols = new java.util.HashSet<>();
+                responseKeysByNormalizedSymbol.forEach((normalized, responseKeys) -> {
+                    if (responseKeys.size() == 1) {
+                        resolvedToOriginal.putIfAbsent(normalized, responseKeys.iterator().next());
+                    } else {
+                        ambiguousNormalizedSymbols.add(normalized);
+                    }
+                });
+
                 Map<String, HistoricalData> batchResult = new java.util.HashMap<>();
                 if (!indexSymbols.isEmpty()) {
                     batchResult.putAll(marketDataService.getHistoricalDataBatch(
-                            new ArrayList<>(indexSymbols), fromDate, toDate, interval, false, additionalParams, null,
+                            new ArrayList<>(indexSymbols), fromDate, toDate, interval, false, queryParams, null,
                             true, forceRefresh));
                 }
                 if (!stockSymbols.isEmpty()) {
                     batchResult.putAll(marketDataService.getHistoricalDataBatch(
-                            new ArrayList<>(stockSymbols), fromDate, toDate, interval, false, additionalParams, null,
+                            new ArrayList<>(stockSymbols), fromDate, toDate, interval, false, queryParams, null,
                             false, forceRefresh));
                 }
 
@@ -392,6 +416,15 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                     String resolvedSymbol = entry.getKey();
                     HistoricalData historicalData = entry.getValue();
                     String originalSymbol = resolvedToOriginal.get(resolvedSymbol);
+                    if (originalSymbol == null) {
+                        String normalizedResultSymbol = normalizeIndexName(resolvedSymbol);
+                        if (!ambiguousNormalizedSymbols.contains(normalizedResultSymbol)) {
+                            originalSymbol = resolvedToOriginal.get(normalizedResultSymbol);
+                        } else {
+                            log.warn("Cannot safely map normalized historical result key to a requested exchange symbol: {}",
+                                    resolvedSymbol);
+                        }
+                    }
                     
                     if (originalSymbol != null && historicalData != null && historicalData.getDataPoints() != null
                             && !historicalData.getDataPoints().isEmpty()) {
@@ -500,18 +533,19 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         // Resolve symbols - DON'T expand if isIndexSymbol is true
         // isIndexSymbol=true means we want the index itself, not its constituents
         // isIndexSymbol=false means expand indices to constituent stocks
+        Set<String> requestedSymbols = parseSymbols(request.getSymbols());
         Set<String> symbolList;
         if (request.isIndexSymbol()) {
             log.info("[INTERVAL_TRACE] isIndexSymbol=true, returning index symbols as-is: {}",
                     request.getSymbols());
-            symbolList = parseSymbols(request.getSymbols());
+            symbolList = new HashSet<>(requestedSymbols);
             // Pass expandIndices=false to keep index symbols as-is
             symbolList = instrumentUtils.resolveSymbols(new ArrayList<>(symbolList), false);
             log.info("[INTERVAL_TRACE] Kept {} index symbols without expansion",
                     symbolList.size());
         } else {
             log.info("[INTERVAL_TRACE] isIndexSymbol=false, expanding indices to constituent stocks");
-            Set<String> parsedSymbols = parseSymbols(request.getSymbols());
+            Set<String> parsedSymbols = requestedSymbols;
             // Pass expandIndices=true to expand indices to constituent stocks
             symbolList = instrumentUtils.resolveSymbols(new ArrayList<>(parsedSymbols), true);
             log.info("[INTERVAL_TRACE] Expanded {} symbols to {} stocks",
@@ -596,10 +630,10 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 "[INTERVAL_TRACE] Service → getHistoricalDataMultipleSymbols: Calling with interval: {} (apiValue: {})",
                 request.getInterval(), request.getInterval().getApiValue());
 
-        HistoricalDataResponseV1 response = getHistoricalDataMultipleSymbols(
+        HistoricalDataResponseV1 response = getHistoricalDataMultipleSymbolsInternal(
                 symbolList, fromDate, toDate, request.getInterval(),
                 request.getInstrumentType(),
-                additionalParams, request.isForceRefresh(), !request.isIndexSymbol()); // fetchIndexStocks =
+                additionalParams, request.isForceRefresh(), !request.isIndexSymbol(), requestedSymbols); // fetchIndexStocks =
                                                                                        // !isIndexSymbol
 
         log.info(
@@ -674,6 +708,46 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             }
         }
         return normalized;
+    }
+
+    private String findRequestedResponseSymbol(String resolvedSymbol, Set<String> requestedSymbols,
+            Set<String> allResolvedSymbols) {
+        if (requestedSymbols == null || requestedSymbols.isEmpty()
+                || requestedSymbols.size() != allResolvedSymbols.size()) {
+            return resolvedSymbol;
+        }
+
+        List<String> matches = requestedSymbols.stream()
+                .filter(requested -> symbolsReferToSameInstrument(requested, resolvedSymbol))
+                .toList();
+        return matches.size() == 1 ? matches.get(0) : resolvedSymbol;
+    }
+
+    private boolean symbolsReferToSameInstrument(String first, String second) {
+        if (!normalizeIndexName(first).equals(normalizeIndexName(second))) {
+            return false;
+        }
+        String firstExchange = exchangePrefix(first);
+        String secondExchange = exchangePrefix(second);
+        return firstExchange.isEmpty() || secondExchange.isEmpty() || firstExchange.equals(secondExchange);
+    }
+
+    private String exchangePrefix(String symbol) {
+        if (symbol == null) {
+            return "";
+        }
+        String upper = symbol.trim().toUpperCase(Locale.ROOT);
+        int separator = upper.indexOf(':');
+        if (separator < 0) {
+            separator = upper.indexOf('|');
+        }
+        if (separator <= 0) {
+            return "";
+        }
+        String prefix = upper.substring(0, separator);
+        return Set.of("NSE_EQ", "BSE_EQ", "NSE_INDEX", "BSE_INDEX", "GLOBAL_INDEX").contains(prefix)
+                ? prefix
+                : "";
     }
 
     @Override

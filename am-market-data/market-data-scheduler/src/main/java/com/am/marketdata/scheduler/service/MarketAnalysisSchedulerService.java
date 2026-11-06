@@ -34,6 +34,9 @@ public class MarketAnalysisSchedulerService {
     @Value("${market.analysis.heatmap.timeframes}")
     private String configuredHeatmapTimeframes;
 
+    @Value("${market.analysis.historical-performance.symbols:NIFTY 50,NIFTY BANK}")
+    private String historicalPerformanceSymbols;
+
     // Executor for parallel batch processing if needed
     // Using a simple loop is safer for database limits, but parallel can be faster.
     // Given "thousands of stocks", sequential batches is probably fine for a
@@ -68,6 +71,29 @@ public class MarketAnalysisSchedulerService {
 
         long duration = System.currentTimeMillis() - startTime;
         log.info("Daily Market Analysis Job completed in {} ms", duration);
+    }
+
+    /** Warm the exact default monthly-performance cache keys after market close. */
+    public void warmHistoricalPerformanceSnapshots() {
+        List<String> symbols = Arrays.stream(historicalPerformanceSymbols.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .distinct()
+                .toList();
+        log.info("Starting after-close historical performance warm-up symbols={} years=10 detailed=false", symbols);
+        for (String symbol : symbols) {
+            long startedAt = System.currentTimeMillis();
+            try {
+                var response = analysisService.getHistoricalPerformance(symbol, 10, false, true);
+                int yearCount = response == null || response.getYearlyPerformance() == null
+                        ? 0 : response.getYearlyPerformance().size();
+                log.info("After-close historical performance warm completed symbol={} years=10 entries={} durationMs={}",
+                        symbol, yearCount, System.currentTimeMillis() - startedAt);
+            } catch (Exception e) {
+                log.warn("After-close historical performance warm failed symbol={} durationMs={}",
+                        symbol, System.currentTimeMillis() - startedAt, e);
+            }
+        }
     }
 
     private void processBatch(List<String> batch) {
