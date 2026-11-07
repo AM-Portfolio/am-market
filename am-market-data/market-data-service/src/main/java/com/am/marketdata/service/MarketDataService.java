@@ -439,6 +439,18 @@ public class MarketDataService {
     public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, Date fromDate, Date toDate,
             TimeFrame interval, boolean continuous, Map<String, Object> additionalParams, String providerName,
             boolean isIndexSymbol, boolean forceRefresh, boolean allowProviderFallback) {
+        return getHistoricalDataBatch(symbols, fromDate, toDate, interval, continuous, additionalParams,
+                providerName, isIndexSymbol, forceRefresh, allowProviderFallback, true);
+    }
+
+    /**
+     * Internal retrieval policy overload. Existing callers retain the standard
+     * cache/database/provider flow; chart reads can opt out of both cache and
+     * provider tiers while leaving persistence writes untouched.
+     */
+    public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, Date fromDate, Date toDate,
+            TimeFrame interval, boolean continuous, Map<String, Object> additionalParams, String providerName,
+            boolean isIndexSymbol, boolean forceRefresh, boolean allowProviderFallback, boolean allowCache) {
         if (symbols == null || symbols.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -450,14 +462,24 @@ public class MarketDataService {
             try {
                 providerName = resolveProviderName(providerName);
 
-                List<DataSourceType> retrievalOrder = allowProviderFallback
-                        ? DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh)
-                        : java.util.Arrays.asList(DataSourceType.CACHE, DataSourceType.DATABASE);
+                List<DataSourceType> retrievalOrder;
+                if (forceRefresh && allowProviderFallback) {
+                    retrievalOrder = DataRetrievalStrategyUtil.getRetrievalOrder(true);
+                } else {
+                    retrievalOrder = new ArrayList<>();
+                    if (allowCache) {
+                        retrievalOrder.add(DataSourceType.CACHE);
+                    }
+                    retrievalOrder.add(DataSourceType.DATABASE);
+                    if (allowProviderFallback) {
+                        retrievalOrder.add(DataSourceType.PROVIDER);
+                    }
+                }
                 HistoricalDataRetriever retriever = HistoricalDataRetriever.builder()
                         .persistenceService(persistenceService)
                         .providerFactory(providerFactory)
                         .retrievalOrder(retrievalOrder)
-                        .cacheResults(true)
+                        .cacheResults(allowCache)
                         .fromDate(fromDate)
                         .toDate(toDate)
                         .interval(interval)
