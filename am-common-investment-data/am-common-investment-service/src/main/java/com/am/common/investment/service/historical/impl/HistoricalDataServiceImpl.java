@@ -239,6 +239,13 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             logger.warn("Invalid interval format: {}. Returning original data.", interval);
             return prices;
         }
+
+        if (rawIndianIndex && unit.isTimeBased()) {
+            orderedPrices = removeConflictingIndexSamplesAtSameTime(orderedPrices, interval);
+            if (orderedPrices.isEmpty()) {
+                return Collections.emptyList();
+            }
+        }
         
         // Group data points by interval buckets
         Map<Instant, List<EquityPrice>> buckets = new HashMap<>();
@@ -291,6 +298,48 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         logger.debug("Resampled {} raw data points to {} {} intervals", 
                 prices.size(), result.size(), interval);
         
+        return result;
+    }
+
+    /**
+     * Influx can return same-time rows from separate tag series for one index.
+     * Identical prices are redundant; conflicting prices have no source identity
+     * in the existing contract, so drop that timestamp instead of choosing an
+     * arbitrary row that could create a false OHLC extreme.
+     */
+    private List<EquityPrice> removeConflictingIndexSamplesAtSameTime(List<EquityPrice> orderedPrices,
+            String interval) {
+        List<EquityPrice> result = new ArrayList<>(orderedPrices.size());
+        int conflictingTimestamps = 0;
+        int start = 0;
+        while (start < orderedPrices.size()) {
+            int end = start + 1;
+            Instant timestamp = orderedPrices.get(start).getTime();
+            while (end < orderedPrices.size() && timestamp.equals(orderedPrices.get(end).getTime())) {
+                end++;
+            }
+
+            Map<Long, EquityPrice> uniquePrices = new HashMap<>();
+            for (int i = start; i < end; i++) {
+                EquityPrice sample = orderedPrices.get(i);
+                Double value = getValidIndexPriceSample(sample);
+                if (value != null) {
+                    uniquePrices.putIfAbsent(Double.doubleToLongBits(value), sample);
+                }
+            }
+
+            if (uniquePrices.size() == 1) {
+                result.add(uniquePrices.values().iterator().next());
+            } else if (uniquePrices.size() > 1) {
+                conflictingTimestamps++;
+            }
+            start = end;
+        }
+
+        if (conflictingTimestamps > 0) {
+            logger.warn("Dropped {} ambiguous duplicate index timestamps symbol={} interval={}",
+                    conflictingTimestamps, orderedPrices.get(0).getSymbol(), interval);
+        }
         return result;
     }
 

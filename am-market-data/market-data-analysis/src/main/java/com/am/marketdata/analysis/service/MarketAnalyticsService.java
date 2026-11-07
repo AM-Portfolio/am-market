@@ -39,13 +39,14 @@ public class MarketAnalyticsService {
             String symbols, String range, Boolean requestedIndexSymbol) {
 
         boolean isIndexSymbol = resolveChartSymbolType(symbols, requestedIndexSymbol);
+        String rangeKey = range == null || range.isBlank() ? "1Y" : range.trim().toUpperCase(Locale.ROOT);
 
         String interval = "1D";
         java.time.LocalDateTime to = java.time.LocalDateTime.now();
         java.time.LocalDateTime from = to.minusDays(1);
 
         // Determine Interval and From Time based on Range
-        switch (range.toUpperCase()) {
+        switch (rangeKey) {
             case "10M":
                 interval = "1m";
                 from = to.minusMinutes(10);
@@ -113,8 +114,12 @@ public class MarketAnalyticsService {
 
         // Fetch Data
         try {
+            boolean intradayChart = Set.of("10M", "15M", "30M", "1H", "4H", "1D").contains(rangeKey);
+            // Intraday charts consume the WebSocket data already persisted by the
+            // stream pipeline. A chart GET must not create a provider fetch or a
+            // hidden Kafka backfill when the stored series is empty or partial.
             com.am.marketdata.api.model.HistoricalDataResponseV1 response = marketDataFetchService
-                    .processHistoricalDataRequest(request);
+                    .processHistoricalDataRequest(request, !intradayChart, !intradayChart);
 
             if (response.getError() != null) {
                 return response;
@@ -151,6 +156,9 @@ public class MarketAnalyticsService {
                         : from;
                 java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
                 long minTime = filterFrom.atZone(kolkataZone).toInstant().toEpochMilli();
+                long maxTime = "1D".equalsIgnoreCase(range)
+                        ? targetDate.atTime(15, 30).atZone(kolkataZone).toInstant().toEpochMilli()
+                        : Long.MAX_VALUE;
 
                 response.getData().forEach((s, symbolData) -> {
                     if (symbolData != null && symbolData.getDataPoints() != null) {
@@ -162,7 +170,7 @@ public class MarketAnalyticsService {
                                         long timestamp = p.getTime().atZone(kolkataZone)
                                                 .toInstant()
                                                 .toEpochMilli();
-                                        return timestamp >= minTime;
+                                        return timestamp >= minTime && timestamp <= maxTime;
                                     } catch (Exception e) {
                                         return true;
                                     }

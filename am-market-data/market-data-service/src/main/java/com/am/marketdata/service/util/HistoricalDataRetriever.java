@@ -274,14 +274,19 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                     missingRecentData = dataEndMs < validationEndMs - toleranceMs;
                 }
 
-                // Preserve the existing partial-hit behavior: return real stored
-                // points and schedule single-flight repair, never synthesize values.
+                // Preserve real stored points. Only normal retrievals may schedule
+                // repair; chart-only reads must not start hidden provider/Kafka work.
                 result.put(symbol, data);
                 remainingSymbols.remove(symbol);
                 if (missingEarlyData || missingRecentData) {
-                    log.info("[DATABASE_PARTIAL_HIT] Partial history for {} ({} points); scheduling single-flight backfill",
-                            symbol, points.size());
-                    triggerSingleFlightBackfill(symbol, fromDateStr, toDateStr);
+                    if (retrievalOrder.contains(DataSourceType.PROVIDER)) {
+                        log.info("[DATABASE_PARTIAL_HIT] Partial history for {} ({} points); scheduling single-flight backfill",
+                                symbol, points.size());
+                        triggerSingleFlightBackfill(symbol, fromDateStr, toDateStr);
+                    } else {
+                        log.debug("[DATABASE_PARTIAL_HIT] Returning stored partial data for {} without provider backfill",
+                                symbol);
+                    }
                 }
             } catch (Exception e) {
                 log.warn("[DATABASE] Error validating batch history for {}: {}", symbol, e.getMessage());
@@ -575,6 +580,10 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
      * Prevents duplicate HTTP requests to Upstox when multiple requests arrive concurrently for the same range.
      */
     private void triggerSingleFlightBackfill(String symbol, String fromDateStr, String toDateStr) {
+        if (!retrievalOrder.contains(DataSourceType.PROVIDER)) {
+            log.debug("[SINGLE_FLIGHT_SKIP] Provider backfill disabled for this historical read symbol={}", symbol);
+            return;
+        }
         String backfillKey = symbol + ":" + interval.getApiValue() + ":" + fromDateStr + ":" + toDateStr;
 
         // Try putting key into activeBackfills map. If non-null, another thread is already backfilling this gap!

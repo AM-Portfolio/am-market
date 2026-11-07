@@ -290,13 +290,13 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             TimeFrame interval, String instrumentType,
             Map<String, Object> additionalParams, boolean forceRefresh, boolean fetchIndexStocks) {
         return getHistoricalDataMultipleSymbolsInternal(symbols, fromDate, toDate, interval, instrumentType,
-                additionalParams, forceRefresh, fetchIndexStocks, symbols);
+                additionalParams, forceRefresh, fetchIndexStocks, symbols, true, true);
     }
 
     private HistoricalDataResponseV1 getHistoricalDataMultipleSymbolsInternal(Set<String> symbols,
             Date fromDate, Date toDate, TimeFrame interval, String instrumentType,
             Map<String, Object> additionalParams, boolean forceRefresh, boolean fetchIndexStocks,
-            Set<String> requestedSymbols) {
+            Set<String> requestedSymbols, boolean allowCache, boolean allowProviderFallback) {
 
         if (symbols == null || symbols.isEmpty()) {
             log.warn("No symbols provided for historical data request");
@@ -400,12 +400,12 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 if (!indexSymbols.isEmpty()) {
                     batchResult.putAll(marketDataService.getHistoricalDataBatch(
                             new ArrayList<>(indexSymbols), fromDate, toDate, interval, false, queryParams, null,
-                            true, forceRefresh));
+                            true, forceRefresh && allowProviderFallback, allowProviderFallback, allowCache));
                 }
                 if (!stockSymbols.isEmpty()) {
                     batchResult.putAll(marketDataService.getHistoricalDataBatch(
                             new ArrayList<>(stockSymbols), fromDate, toDate, interval, false, queryParams, null,
-                            false, forceRefresh));
+                            false, forceRefresh && allowProviderFallback, allowProviderFallback, allowCache));
                 }
 
                 int successCount = 0;
@@ -521,6 +521,12 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     @Override
     public HistoricalDataResponseV1 processHistoricalDataRequest(
             HistoricalDataRequest request) throws Exception {
+        return processHistoricalDataRequest(request, true, true);
+    }
+
+    @Override
+    public HistoricalDataResponseV1 processHistoricalDataRequest(
+            HistoricalDataRequest request, boolean allowCache, boolean allowProviderFallback) throws Exception {
         log.info(
                 "[INTERVAL_TRACE] Controller → Service: Processing historical data request symbols={} from={} to={} interval={} (enum={}, apiValue={}) filterType={} isIndexSymbol={}",
                 request.getSymbols(), request.getFrom(), request.getTo(),
@@ -633,8 +639,9 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         HistoricalDataResponseV1 response = getHistoricalDataMultipleSymbolsInternal(
                 symbolList, fromDate, toDate, request.getInterval(),
                 request.getInstrumentType(),
-                additionalParams, request.isForceRefresh(), !request.isIndexSymbol(), requestedSymbols); // fetchIndexStocks =
-                                                                                       // !isIndexSymbol
+                additionalParams, request.isForceRefresh() && allowProviderFallback,
+                !request.isIndexSymbol(), requestedSymbols, allowCache, allowProviderFallback); // fetchIndexStocks =
+                                                                                              // !isIndexSymbol
 
         log.info(
                 "[INTERVAL_TRACE] Service → Controller: Returning response for interval: {}",

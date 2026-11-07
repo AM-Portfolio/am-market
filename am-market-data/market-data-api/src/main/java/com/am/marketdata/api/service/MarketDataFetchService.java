@@ -159,6 +159,17 @@ public interface MarketDataFetchService {
                         throws Exception;
 
         /**
+         * Internal retrieval policy for chart callers. This overload does not
+         * change the HTTP contract; it lets intraday chart reads use stored data
+         * without falling through to provider calls or cache write-back.
+         */
+        HistoricalDataResponseV1 processHistoricalDataRequest(
+                        HistoricalDataRequest request,
+                        boolean allowCache,
+                        boolean allowProviderFallback)
+                        throws Exception;
+
+        /**
          * Get historical charts data (1Y Daily or 5Y Monthly)
          * 
          * @param symbol Symbol to fetch data for
