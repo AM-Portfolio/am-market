@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Component
@@ -18,9 +19,20 @@ import java.util.stream.Collectors;
 @Slf4j
 public class InstrumentUtils {
 
+    private static final long METADATA_CACHE_TTL_MILLIS = 5 * 60 * 1000L;
+    private static final int MAX_METADATA_CACHE_ENTRIES = 10_000;
+
     private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final UpstoxInstrumentRepository upstoxInstrumentRepository;
     private final UnresolvedSymbolRepository unresolvedSymbolRepository;
+    private final Map<String, CacheEntry<StockIndicesMarketData>> indexMetadataCache = new ConcurrentHashMap<>();
+    private final Map<String, CacheEntry<String>> instrumentSymbolCache = new ConcurrentHashMap<>();
+
+    private record CacheEntry<T>(T value, long expiresAt) {
+        boolean valid(long now) {
+            return expiresAt > now;
+        }
+    }
 
     /**
      * Resolves a comma-separated string of symbols with optional index expansion.
@@ -88,14 +100,42 @@ public class InstrumentUtils {
                 }
             }
             try {
-                List<StockIndicesMarketData> indexDocs = stockIndicesMarketDataService.findByIndexSymbols(searchSymbols);
+                long now = System.currentTimeMillis();
+                // Short expiry keeps requests fast while allowing new or changed indexes to appear.
+                Set<String> uncachedIndexSymbols = new HashSet<>();
+                for (String searchSymbol : searchSymbols) {
+                    CacheEntry<StockIndicesMarketData> cached = indexMetadataCache.get(normalizeLookupSymbol(searchSymbol));
+                    if (cached != null && cached.valid(now)) {
+                        if (cached.value() != null && cached.value().getIndexSymbol() != null) {
+                            StockIndicesMarketData value = cached.value();
+                            indexDocsBySymbol.put(value.getIndexSymbol().toUpperCase(), value);
+                        }
+                    } else {
+                        uncachedIndexSymbols.add(searchSymbol);
+                    }
+                }
+
+                List<StockIndicesMarketData> indexDocs = uncachedIndexSymbols.isEmpty()
+                        ? Collections.emptyList()
+                        : stockIndicesMarketDataService.findByIndexSymbols(uncachedIndexSymbols);
                 if (indexDocs != null) {
                     for (StockIndicesMarketData doc : indexDocs) {
                         if (doc != null && doc.getIndexSymbol() != null) {
                             indexDocsBySymbol.put(doc.getIndexSymbol().toUpperCase(), doc);
+                            indexMetadataCache.put(normalizeLookupSymbol(doc.getIndexSymbol()),
+                                    new CacheEntry<>(doc, now + METADATA_CACHE_TTL_MILLIS));
                         }
                     }
                 }
+                // Cache misses briefly as well, so a normal equity request does not
+                // query the index collection repeatedly. Expiry lets new indexes appear.
+                for (String symbol : uncachedIndexSymbols) {
+                    String normalized = normalizeLookupSymbol(symbol);
+                    if (!indexMetadataCache.containsKey(normalized)) {
+                        indexMetadataCache.put(normalized, new CacheEntry<>(null, now + METADATA_CACHE_TTL_MILLIS));
+                    }
+                }
+                trimMetadataCache(indexMetadataCache);
             } catch (Exception e) {
                 log.warn("Failed to batch-fetch index symbols from MongoDB, falling back to treating all as regular symbols: {}", e.getMessage());
             }
@@ -157,12 +197,30 @@ public class InstrumentUtils {
                         .collect(Collectors.toList());
 
                 if (!symbolCandidates.isEmpty()) {
-                    List<UpstoxInstrument> validInstruments = upstoxInstrumentRepository.findByTradingSymbolIn(symbolCandidates);
+                    long now = System.currentTimeMillis();
+                    // Cache only confirmed instruments. Unknown symbols must still reach MongoDB
+                    // so a new listing is not hidden by a negative cache entry.
+                    List<String> uncachedSymbols = symbolCandidates.stream()
+                            .filter(symbol -> {
+                                CacheEntry<String> cached = instrumentSymbolCache.get(normalizeLookupSymbol(symbol));
+                                if (cached != null && cached.valid(now)) {
+                                    validTradingSymbols.add(cached.value());
+                                    return false;
+                                }
+                                return true;
+                            })
+                            .toList();
+                    List<UpstoxInstrument> validInstruments = uncachedSymbols.isEmpty()
+                            ? Collections.emptyList()
+                            : upstoxInstrumentRepository.findByTradingSymbolIn(uncachedSymbols);
                     // Null-guard: treat null return same as empty list (e.g. mock/isolated profile)
                     if (validInstruments != null) {
                         validInstruments.forEach(inst -> {
                             if (inst.getTradingSymbol() != null) {
-                                validTradingSymbols.add(inst.getTradingSymbol().toUpperCase());
+                                String tradingSymbol = inst.getTradingSymbol().toUpperCase();
+                                validTradingSymbols.add(tradingSymbol);
+                                instrumentSymbolCache.put(normalizeLookupSymbol(tradingSymbol),
+                                        new CacheEntry<>(tradingSymbol, now + METADATA_CACHE_TTL_MILLIS));
                             }
                         });
                     }
@@ -175,6 +233,7 @@ public class InstrumentUtils {
                                 .map(String::toUpperCase)
                                 .collect(Collectors.toSet()));
                     }
+                    trimMetadataCache(instrumentSymbolCache);
                 }
 
                 isinToTicker = lookupIsinToTradingSymbol(isinCandidates);
@@ -189,16 +248,11 @@ public class InstrumentUtils {
         Set<String> resolvedSymbols = new HashSet<>();
         List<String> unresolvedSymbols = new ArrayList<>();
 
-        // Whitelist: index constituents + known NSE cash tickers that dig may miss from a thin instruments table
-        java.util.Set<String> whitelist = java.util.Set.of(
-                "TATAMOTORS", "MOTHERSON", "BIRLACORPN", "NUVAMA", "GSPL", "MCX", "ANGELONE",
-                "PWL", "IDEA", "VODAFONEIDEA", "VIKRAMSOLR", "TATAGOLD");
-
         for (String sym : candidateSymbols) {
             String upper = sym.toUpperCase();
             String baseSymbol = sym.contains(":") ? sym.substring(sym.indexOf(":") + 1).trim() : sym;
             String upperBase = baseSymbol.toUpperCase();
-            if (upper.startsWith("GLOBAL_") || matchingIndices.contains(upper) || whitelist.contains(upper) || whitelist.contains(upperBase)) {
+            if (upper.startsWith("GLOBAL_") || matchingIndices.contains(upper)) {
                 resolvedSymbols.add(sym);
             } else if (isinToTicker.containsKey(upper) || isinToTicker.containsKey(upperBase)) {
                 // Upstox quotes by trading symbol, not ISIN
@@ -272,6 +326,22 @@ public class InstrumentUtils {
 
     static boolean looksLikeIsin(String value) {
         return value != null && value.length() == 12 && value.matches("[A-Z]{2}[A-Z0-9]{10}");
+    }
+
+    private String normalizeLookupSymbol(String symbol) {
+        if (symbol == null) return "";
+        String normalized = symbol.trim().toUpperCase(Locale.ROOT);
+        int separator = Math.max(normalized.indexOf(':'), normalized.indexOf('|'));
+        return separator >= 0 ? normalized.substring(separator + 1).trim() : normalized;
+    }
+
+    private <T> void trimMetadataCache(Map<String, CacheEntry<T>> cache) {
+        if (cache.size() > MAX_METADATA_CACHE_ENTRIES) {
+            cache.entrySet().removeIf(entry -> !entry.getValue().valid(System.currentTimeMillis()));
+        }
+        if (cache.size() > MAX_METADATA_CACHE_ENTRIES) {
+            cache.clear();
+        }
     }
 
     private Map<String, String> lookupIsinToTradingSymbol(List<String> isinCandidates) {

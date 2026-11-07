@@ -536,8 +536,11 @@ public class MarketDataCacheService {
                 return Collections.emptyMap();
             }
 
-            // Get today's date in the same format used for caching
-            String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            // Use the exchange session date, not calendar today. This lets Friday's
+            // verified close serve weekend and holiday requests without Upstox calls.
+            LocalDate resolvedSession = expectedQuoteSessionDate("NSE");
+            String today = (resolvedSession != null ? resolvedSession : LocalDate.now())
+                    .format(DateTimeFormatter.ISO_LOCAL_DATE);
 
             // Log the cache retrieval operation
             List<String> expectedKeys = new ArrayList<>();
@@ -555,8 +558,8 @@ public class MarketDataCacheService {
             log.debug("getOHLCFromCache", "Expected Redis keys: {}", expectedKeys);
 
             // Try to get data from cache
-            Map<String, StockBars> cachedBars = stockCacheService.getTodayMultiSymbolBars(cleanSymbols,
-                    timeFrame.getApiValue());
+            Map<String, StockBars> cachedBars = stockCacheService.getMultiSymbolBarsWithStats(cleanSymbols,
+                    timeFrame.getApiValue(), today);
 
             log.info("getOHLCFromCache", "[CACHE_RESULT] Redis returned {} stocks out of {} requested",
                     cachedBars != null ? cachedBars.size() : 0, cleanSymbols.size());
@@ -660,17 +663,31 @@ public class MarketDataCacheService {
         }
 
         try {
-            // Fetch qualified and legacy quote snapshots in one batch. The legacy scalar
-            // previous-close key is excluded because it has no date and can be stale.
+            // Read quotes and dated baselines in one Redis batch. A baseline is used
+            // only when its date matches the exchange calendar.
             List<String> combinedKeys = new ArrayList<>(primaryKeys.size() * 2);
             combinedKeys.addAll(primaryKeys);
             combinedKeys.addAll(fallbackKeys);
+
+            List<String> baselineCloseKeys = new ArrayList<>(entries.size());
+            List<String> baselineDateKeys = new ArrayList<>(entries.size());
+            for (int i = 0; i < entries.size(); i++) {
+                String symbol = normalizeSymbol(entries.get(i).getKey());
+                baselineCloseKeys.add("market:prev-close:" + symbol);
+                baselineDateKeys.add("market:prev-close-date:" + symbol);
+            }
+            combinedKeys.addAll(baselineCloseKeys);
+            combinedKeys.addAll(baselineDateKeys);
 
             List<String> allValues = redisTemplate.opsForValue().multiGet(combinedKeys);
             
             int n = entries.size();
             List<String> jsonList = (allValues != null && allValues.size() >= n) ? allValues.subList(0, n) : null;
             List<String> fallbackJsonList = (allValues != null && allValues.size() >= 2 * n) ? allValues.subList(n, 2 * n) : null;
+            List<String> baselineCloseList = (allValues != null && allValues.size() >= 3 * n)
+                    ? allValues.subList(2 * n, 3 * n) : null;
+            List<String> baselineDateList = (allValues != null && allValues.size() >= 4 * n)
+                    ? allValues.subList(3 * n, 4 * n) : null;
             if (jsonList != null || fallbackJsonList != null) {
                 for (int i = 0; i < entries.size(); i++) {
                     OHLCQuote quote = entries.get(i).getValue();
@@ -794,6 +811,26 @@ public class MarketDataCacheService {
                     }
                 }
             }
+
+            // A dated scalar baseline avoids the repeated Mongo fallback when the
+            // websocket snapshot did not carry previousClose. It never replaces LTP.
+            if (baselineCloseList != null && baselineDateList != null) {
+                for (int i = 0; i < entries.size(); i++) {
+                    OHLCQuote quote = entries.get(i).getValue();
+                    LocalDate expectedDate = expectedQuoteSessionDate(exchanges.get(i));
+                    if (quote == null || quote.getPreviousClose() > 0.0 || expectedDate == null) continue;
+                    String close = baselineCloseList.get(i);
+                    String date = baselineDateList.get(i);
+                    if (date != null && date.equals(expectedDate.toString())) {
+                        try {
+                            double parsed = Double.parseDouble(close);
+                            if (Double.isFinite(parsed) && parsed > 0.0) quote.setPreviousClose(parsed);
+                        } catch (RuntimeException ignored) {
+                            // Invalid cache metadata falls through to the existing Mongo fallback.
+                        }
+                    }
+                }
+            }
         } catch (Exception ex) {
             log.warn("overlayLatestPrices", "Batch overlay failed for {} symbols: {}", primaryKeys.size(), ex.getMessage(), ex);
         }
@@ -814,6 +851,7 @@ public class MarketDataCacheService {
                 try {
                     List<PreviousCloseDocument> mongoDocs = previousCloseRepository.findBySymbolIn(missingSymbols);
                     if (mongoDocs != null && !mongoDocs.isEmpty()) {
+                        Map<String, String> verifiedRedisBaseline = new HashMap<>();
                         Map<String, PreviousCloseDocument> dbCloseMap = mongoDocs.stream()
                                 .filter(d -> d.getPreviousClose() != null && d.getPreviousClose() > 0)
                                 .collect(Collectors.toMap(PreviousCloseDocument::getSymbol, d -> d, (v1, v2) -> v1));
@@ -830,8 +868,24 @@ public class MarketDataCacheService {
                                 if (document != null && expectedDate != null
                                         && expectedDate.toString().equals(document.getTradeDate())) {
                                     quote.setPreviousClose(document.getPreviousClose());
+                                    verifiedRedisBaseline.put("market:prev-close:" + norm,
+                                            String.valueOf(document.getPreviousClose()));
+                                    verifiedRedisBaseline.put("market:prev-close-date:" + norm,
+                                            document.getTradeDate());
                                 }
                             }
+                        }
+                        if (!verifiedRedisBaseline.isEmpty()) {
+                            // Cache only a calendar-verified baseline. The next request can
+                            // use the dated Redis metadata without repeating this Mongo query.
+                            redisTemplate.executePipelined((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
+                                for (Map.Entry<String, String> baseline : verifiedRedisBaseline.entrySet()) {
+                                    byte[] key = redisTemplate.getStringSerializer().serialize(baseline.getKey());
+                                    byte[] value = redisTemplate.getStringSerializer().serialize(baseline.getValue());
+                                    connection.setEx(key, 26 * 3600, value);
+                                }
+                                return null;
+                            });
                         }
                     }
                 } catch (Exception mongoEx) {

@@ -1,6 +1,7 @@
 package com.am.common.investment.persistence.repository.measurement.impl;
 
 import com.am.common.investment.persistence.influx.measurement.MarketIndexIndicesMeasurement;
+import com.am.common.investment.persistence.influx.MarketDataStorageConstants;
 import com.am.common.investment.persistence.repository.measurement.MarketIndexIndicesRepository;
 import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.QueryApi;
@@ -21,7 +22,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MarketIndexIndicesRepositoryImpl implements MarketIndexIndicesRepository {
     private static final Logger logger = LoggerFactory.getLogger(MarketIndexIndicesRepositoryImpl.class);
-    private static final String MEASUREMENT_NAME = "market_index";
+    private static final String MEASUREMENT_NAME = MarketDataStorageConstants.INDIAN_INDEX_MEASUREMENT;
 
     @Value("${spring.influx.bucket}")
     private String bucket;
