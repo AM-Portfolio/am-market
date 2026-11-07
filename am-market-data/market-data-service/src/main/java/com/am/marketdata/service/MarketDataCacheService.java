@@ -1291,9 +1291,10 @@ public class MarketDataCacheService {
         ohlc.setLow(bar.getLow());
         ohlc.setClose(bar.getClose());
 
-        // Set the OHLC and last price in the quote
+        // Redis OHLC bars may omit lastPrice; the candle close is the valid
+        // last price fallback and must not turn a cache hit into a provider call.
         quote.setOhlc(ohlc);
-        quote.setLastPrice(bar.getLastPrice()); // Set last price to close price
+        quote.setLastPrice(bar.getLastPrice() != null ? bar.getLastPrice() : bar.getClose());
 
         // Log at debug level
         log.debug("createOHLCQuoteFromBar",
