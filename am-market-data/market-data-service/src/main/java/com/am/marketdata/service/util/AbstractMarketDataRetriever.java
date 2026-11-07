@@ -10,6 +10,9 @@ import org.springframework.retry.support.RetryTemplate;
 import com.am.marketdata.common.model.TimeFrame;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Abstract base class for market data retrieval using the Template Method
@@ -34,6 +37,13 @@ public abstract class AbstractMarketDataRetriever<K, T> {
 
     @Getter
     protected String targetProviderName;
+
+    /**
+     * Collapses identical normal fallback requests so a cold cache does not
+     * send the same symbols to the provider once per concurrent user request.
+     */
+    private final ConcurrentHashMap<String, CompletableFuture<Map<K, T>>> inFlightProviderRequests =
+            new ConcurrentHashMap<>();
 
     /**
      * Constructor for AbstractMarketDataRetriever
@@ -150,13 +160,10 @@ public abstract class AbstractMarketDataRetriever<K, T> {
                 case DATABASE:
                     // Check InfluxDB for symbols still missing after the cache lookup.
                     // Symbols found here are removed from remainingKeys.
-                    // OPTIMIZATION: InfluxDB queries are slow and timeout frequently on dev env for small sets of keys.
-                    // If there are only a few keys remaining (e.g. <= 5 keys), bypass InfluxDB lookup and go directly to Provider.
-                    // However, we MUST NOT bypass InfluxDB for global index keys since the provider cannot serve them.
                     boolean hasGlobalIndex = remainingKeys.stream()
                             .anyMatch(k -> k.toString().startsWith("GLOBAL_INDEX|"));
                     if (shouldBypassDatabase(remainingKeys, hasGlobalIndex)) {
-                        log.info("[DATABASE] Bypassing InfluxDB query because remaining keys count is small ({}) to prevent database timeouts", remainingKeys.size());
+                        log.info("[DATABASE] Database bypass requested for {} keys", remainingKeys.size());
                         sourceData = Collections.emptyMap();
                     } else {
                         sourceData = retrieveFromDatabase(remainingKeys, timeFrame);
@@ -233,12 +240,20 @@ public abstract class AbstractMarketDataRetriever<K, T> {
     }
 
     /**
-     * Hook for subclasses to determine whether to bypass the database lookup.
-     * Default behavior bypasses database queries for <= 5 remaining keys to prevent slow dev DB roundtrips,
-     * unless global index keys are present.
+     * Hook for subclasses that have a proven, source-specific reason to bypass
+     * the database. The normal path must query the database for every cache miss;
+     * a small request is not a valid reason to call the provider directly.
      */
     protected boolean shouldBypassDatabase(Set<K> remainingKeys, boolean hasGlobalIndex) {
-        return remainingKeys.size() <= 5 && !hasGlobalIndex;
+        return false;
+    }
+
+    /**
+     * Allows a retriever to separate requests that use different provider
+     * semantics, such as different OHLC timeframes.
+     */
+    protected String providerRequestIdentity() {
+        return "";
     }
 
     /**
@@ -250,10 +265,24 @@ public abstract class AbstractMarketDataRetriever<K, T> {
     private Map<K, T> retrieveFromProviderWithSave(List<K> keys) {
         // This method is called only when BOTH Redis and InfluxDB returned no data
         // for the requested symbols. It is the most expensive code path.
-        MarketDataProvider provider = providerFactory.getProvider(targetProviderName);
-        Map<K, T> providerData = retrieveFromProvider(provider, keys);
+        String flightKey = buildProviderRequestKey(keys);
+        CompletableFuture<Map<K, T>> ownerFuture = new CompletableFuture<>();
+        CompletableFuture<Map<K, T>> existingFuture = inFlightProviderRequests.putIfAbsent(flightKey, ownerFuture);
+        if (existingFuture != null) {
+            log.info("[PROVIDER_SINGLE_FLIGHT] Joining existing provider request for {} symbols", keys.size());
+            try {
+                return existingFuture.join();
+            } catch (CompletionException e) {
+                throw e;
+            }
+        }
 
-        if (cacheResults && providerData != null && !providerData.isEmpty()) {
+        Map<K, T> providerData;
+        try {
+            MarketDataProvider provider = providerFactory.getProvider(targetProviderName);
+            providerData = retrieveFromProvider(provider, keys);
+
+            if (cacheResults && providerData != null && !providerData.isEmpty()) {
             // -----------------------------------------------------------------------
             // DUAL-WRITE STRATEGY — WHY WE WRITE TO TWO PLACES:
             //
@@ -293,9 +322,26 @@ public abstract class AbstractMarketDataRetriever<K, T> {
                 // The next request will hit the provider again until Redis is available.
                 log.warn("[PROVIDER_CACHE] Failed to write provider results to Redis cache: {}", e.getMessage());
             }
+            }
+            Map<K, T> completedData = providerData != null ? providerData : Collections.emptyMap();
+            ownerFuture.complete(completedData);
+            return completedData;
+        } catch (RuntimeException e) {
+            ownerFuture.completeExceptionally(e);
+            throw e;
+        } finally {
+            inFlightProviderRequests.remove(flightKey, ownerFuture);
         }
+    }
 
-        return providerData;
+    private String buildProviderRequestKey(List<K> keys) {
+        List<String> normalizedKeys = keys.stream()
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .sorted()
+                .toList();
+        return getClass().getName() + "|" + targetProviderName + "|"
+                + providerRequestIdentity() + "|" + String.join(",", normalizedKeys);
     }
 
     /**
