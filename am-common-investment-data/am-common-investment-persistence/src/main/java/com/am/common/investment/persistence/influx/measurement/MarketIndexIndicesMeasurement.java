@@ -2,12 +2,13 @@ package com.am.common.investment.persistence.influx.measurement;
 
 import com.influxdb.annotations.Column;
 import com.influxdb.annotations.Measurement;
+import com.am.common.investment.persistence.influx.MarketDataStorageConstants;
 import lombok.Data;
 
 import java.time.Instant;
 
 @Data
-@Measurement(name = "market_index")
+@Measurement(name = MarketDataStorageConstants.INDIAN_INDEX_MEASUREMENT)
 public class MarketIndexIndicesMeasurement {
     @Column(tag = true)
     private String key;
