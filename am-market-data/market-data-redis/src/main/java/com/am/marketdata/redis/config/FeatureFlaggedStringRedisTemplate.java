@@ -164,7 +164,7 @@ public class FeatureFlaggedStringRedisTemplate extends StringRedisTemplate {
         return invokeWithGuard(() -> super.execute(script, keys, args));
     }
 
-    private boolean isRedisEnabled() {
+    public boolean isRedisEnabled() {
         return redisAvailabilityGuard.allowRequest() && isFeatureFlagEnabled();
     }
 
