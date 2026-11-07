@@ -24,6 +24,11 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
 
     private final com.am.marketdata.service.kafka.producer.MarketDataProducer producer;
 
+    @Override
+    protected String providerRequestIdentity() {
+        return timeFrame != null ? timeFrame.getApiValue() : "1D";
+    }
+
     private OHLCDataRetriever(
             MarketDataPersistenceService persistenceService,
             MarketDataProviderFactory providerFactory,
