@@ -16,12 +16,16 @@ import org.springframework.stereotype.Component;
 public class MarketCalendarSyncScheduler {
 
     private final MarketCalendarSyncService marketCalendarSyncService;
+    private final com.am.marketdata.provider.upstox.service.UpstoxInstrumentService upstoxInstrumentService;
 
     @Value("${market-data.calendar.exchange:NSE}")
     private String exchange;
 
     @Value("${market-data.calendar.sync.enabled:true}")
     private boolean syncEnabled;
+
+    @Value("${market-data.instruments.sync.enabled:true}")
+    private boolean instrumentSyncEnabled;
 
     @Scheduled(cron = "${scheduler.market-calendar.sync-cron:0 30 6 * * *}", zone = "Asia/Kolkata")
     @com.am.scheduler.annotation.TrackedAndLockedScheduler(
@@ -36,6 +40,16 @@ public class MarketCalendarSyncScheduler {
             marketCalendarSyncService.sync(exchange, MarketCalendarSyncTrigger.SCHEDULER);
         } catch (Exception e) {
             log.error("Nightly market calendar sync failed for {}", exchange, e);
+        }
+
+        // Daily pre-market instrument master sync (fetches latest active futures/options & equities from Upstox CDN)
+        if (instrumentSyncEnabled) {
+            try {
+                log.info("[INSTRUMENT_SYNC] Pre-market cron initiating daily Upstox instrument master sync");
+                upstoxInstrumentService.updateInstruments(null);
+            } catch (Exception e) {
+                log.error("[INSTRUMENT_SYNC] Pre-market daily instrument sync failed", e);
+            }
         }
     }
 
