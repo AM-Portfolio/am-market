@@ -1,5 +1,6 @@
 package com.am.marketdata.service;
 
+import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.marketdata.common.dto.BatchSearchRequest;
 import com.am.marketdata.common.dto.BatchSearchResponse;
 import com.am.marketdata.common.model.UpstoxInstrument;
@@ -42,7 +43,7 @@ class SecurityServiceTest {
     private ValueOperations<String, Object> valueOperations;
 
     @Mock
-    private com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService;
+    private StockIndicesMarketDataService stockIndicesMarketDataService;
 
     @Mock
     private BatchSearchProperties batchSearchProperties;

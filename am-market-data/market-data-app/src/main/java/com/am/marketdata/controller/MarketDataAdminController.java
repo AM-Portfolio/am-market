@@ -9,11 +9,15 @@ import com.am.marketdata.internal.model.IngestionJobLog;
 import com.am.marketdata.internal.repository.IngestionJobLogRepository;
 import com.am.marketdata.internal.service.MarketDataHistoricalSyncService;
 import com.am.marketdata.internal.service.MarketDataIngestionService;
+import com.am.marketdata.provider.upstox.service.UpstoxInstrumentService;
 import com.am.marketdata.scraper.cookie.CookieCache;
 import com.am.marketdata.scraper.cookie.CookieManager;
 import com.am.marketdata.scraper.exception.CookieException;
 import com.am.marketdata.service.ipo.IpoSyncTrigger;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,7 +60,7 @@ public class MarketDataAdminController {
     private Executor marketDataTaskExecutor;
 
     private final com.am.marketdata.service.global.GlobalIndexHistoricalSyncService globalIndexSyncService;
-    private final com.am.marketdata.provider.upstox.service.UpstoxInstrumentService upstoxInstrumentService;
+    private final UpstoxInstrumentService upstoxInstrumentService;
 
     @GetMapping("/logs/{jobId}")
     public ResponseEntity<IngestionJobLog> getJobDetails(@PathVariable String jobId) {
@@ -312,7 +316,12 @@ public class MarketDataAdminController {
 
     @PostMapping("/sync/instruments")
     @Operation(summary = "Sync NSE Instruments from official Upstox master (NSE.json.gz)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Instrument sync accepted for background execution"),
+            @ApiResponse(responseCode = "503", description = "Admin task queue is full")
+    })
     public ResponseEntity<String> syncInstruments(
+            @Parameter(description = "Optional local file path or remote URL; defaults to the official Upstox master")
             @RequestParam(required = false) String source) {
         log.info("Manual trigger: Instrument Sync (source: {})", source != null ? source : "OFFICIAL_UPSTOX_MASTER");
         return submitAdminTask("instrument sync", () -> {

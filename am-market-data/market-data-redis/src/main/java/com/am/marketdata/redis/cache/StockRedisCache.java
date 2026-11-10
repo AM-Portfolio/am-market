@@ -275,9 +275,8 @@ public class StockRedisCache {
             return false;
         }
 
-        String key = generateKey(HISTORICAL_PREFIX, symbol, interval, date);
-
         try {
+            String key = generateKey(HISTORICAL_PREFIX, symbol, interval, date);
             // Store only the bar data instead of the entire StockBars object
             String json = redisObjectMapper.writeValueAsString(bar);
 
@@ -289,6 +288,7 @@ public class StockRedisCache {
                     String.format("Saved historical bar for %s, date: %s, TTL: %d seconds", symbol, date, ttlSeconds));
             return true;
         } catch (JsonProcessingException e) {
+            redisCircuitBreaker.recordSkipped();
             log.error("saveHistoricalBar", "Failed to serialize historical bar for " + symbol + ": " + e.getMessage());
             return false;
         } catch (Exception e) {
@@ -612,6 +612,7 @@ public class StockRedisCache {
             return result;
 
         } catch (DateTimeParseException e) {
+            redisCircuitBreaker.recordSkipped();
             log.error("getMultiSymbolHistoricalBars", "Invalid date format: " + e.getMessage());
             throw new IllegalArgumentException("Invalid date format. Use YYYY-MM-DD");
         }

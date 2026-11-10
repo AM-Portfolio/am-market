@@ -26,9 +26,12 @@ public class RedisCacheCircuitBreaker {
     @Value("${redis.cache.circuit.open-seconds:10}")
     private long openSeconds;
 
+    private static final long PROBE_TIMEOUT_MILLIS = 15_000L;
+
     private final AtomicInteger consecutiveFailures = new AtomicInteger();
     private final AtomicLong openUntilMillis = new AtomicLong();
     private final AtomicBoolean recoveryProbeInFlight = new AtomicBoolean();
+    private final AtomicLong probeStartedAtMillis = new AtomicLong();
 
     /**
      * Returns whether a Redis operation may be attempted.
@@ -40,8 +43,23 @@ public class RedisCacheCircuitBreaker {
         long now = System.currentTimeMillis();
         long openUntil = openUntilMillis.get();
         if (openUntil <= now) {
-            if (openUntil > 0 && !recoveryProbeInFlight.compareAndSet(false, true)) {
-                return false;
+            if (openUntil > 0) {
+                if (!recoveryProbeInFlight.compareAndSet(false, true)) {
+                    // Self-healing: if probe has been in flight longer than PROBE_TIMEOUT_MILLIS, recover the probe lock
+                    long probeStart = probeStartedAtMillis.get();
+                    if (probeStart > 0 && (now - probeStart) > PROBE_TIMEOUT_MILLIS) {
+                        log.warn("[REDIS_CIRCUIT] Recovery probe timed out after {}ms without reporting result; releasing probe lock for next caller",
+                                now - probeStart);
+                        recoveryProbeInFlight.set(false);
+                        probeStartedAtMillis.set(0);
+                        if (recoveryProbeInFlight.compareAndSet(false, true)) {
+                            probeStartedAtMillis.set(now);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                probeStartedAtMillis.set(now);
             }
             return true;
         }
@@ -52,10 +70,12 @@ public class RedisCacheCircuitBreaker {
         consecutiveFailures.set(0);
         openUntilMillis.set(0);
         recoveryProbeInFlight.set(false);
+        probeStartedAtMillis.set(0);
     }
 
     public void recordFailure(String operation, Throwable error) {
         recoveryProbeInFlight.set(false);
+        probeStartedAtMillis.set(0);
         int failures = consecutiveFailures.incrementAndGet();
         int threshold = failureThreshold > 0 ? failureThreshold : 3;
         if (failures >= threshold) {
@@ -68,6 +88,12 @@ public class RedisCacheCircuitBreaker {
             log.warn("[REDIS_CIRCUIT] Redis {} failed ({}/{}): {}",
                     operation, failures, threshold, error != null ? error.getMessage() : "unknown error");
         }
+    }
+
+    /** Release a half-open probe when work ends before Redis is attempted. */
+    public void recordSkipped() {
+        recoveryProbeInFlight.set(false);
+        probeStartedAtMillis.set(0);
     }
 
     public boolean isOpen() {

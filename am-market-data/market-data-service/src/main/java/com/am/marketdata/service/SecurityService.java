@@ -1,5 +1,6 @@
 package com.am.marketdata.service;
 
+import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.marketdata.common.log.AppLogger;
 import com.am.marketdata.common.model.UpstoxInstrument;
 import com.am.marketdata.config.BatchSearchProperties;
@@ -46,7 +47,7 @@ public class SecurityService {
     private final MongoTemplate mongoTemplate;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
-    private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService;
+    private final StockIndicesMarketDataService stockIndicesMarketDataService;
     private final BatchSearchProperties batchSearchProperties;
     private final UpstoxInstrumentRepository upstoxInstrumentRepository;
 
@@ -58,7 +59,7 @@ public class SecurityService {
 
     public SecurityService(SecurityRepository securityRepository, MongoTemplate mongoTemplate,
             RedisTemplate<String, Object> redisTemplate,
-            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesMarketDataService,
+            StockIndicesMarketDataService stockIndicesMarketDataService,
             BatchSearchProperties batchSearchProperties,
             @Nullable UpstoxInstrumentRepository upstoxInstrumentRepository) {
         this.securityRepository = securityRepository;
