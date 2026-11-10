@@ -56,6 +56,7 @@ public class MarketDataAdminController {
     private Executor marketDataTaskExecutor;
 
     private final com.am.marketdata.service.global.GlobalIndexHistoricalSyncService globalIndexSyncService;
+    private final com.am.marketdata.provider.upstox.service.UpstoxInstrumentService upstoxInstrumentService;
 
     @GetMapping("/logs/{jobId}")
     public ResponseEntity<IngestionJobLog> getJobDetails(@PathVariable String jobId) {
@@ -307,6 +308,20 @@ public class MarketDataAdminController {
         symbolOrchestratorService.refreshCache();
         Set<String> refreshed = symbolOrchestratorService.findDistinctSymbols();
         return ResponseEntity.ok("Symbol universe refreshed. count=" + refreshed.size());
+    }
+
+    @PostMapping("/sync/instruments")
+    @Operation(summary = "Sync NSE Instruments from official Upstox master (NSE.json.gz)")
+    public ResponseEntity<String> syncInstruments(
+            @RequestParam(required = false) String source) {
+        log.info("Manual trigger: Instrument Sync (source: {})", source != null ? source : "OFFICIAL_UPSTOX_MASTER");
+        return submitAdminTask("instrument sync", () -> {
+            try {
+                upstoxInstrumentService.updateInstruments(source);
+            } catch (Exception e) {
+                log.error("[INSTRUMENT_SYNC] Manual instrument sync failed", e);
+            }
+        }, "Instrument sync triggered in background from " + (source != null ? source : "official Upstox master"));
     }
 
     @PostMapping("/sync/market-calendar")
