@@ -3,6 +3,7 @@ package com.am.marketdata.service;
 import com.am.common.investment.model.equity.EquityPrice;
 import com.am.common.investment.model.equity.Instrument;
 import com.am.common.investment.model.historical.HistoricalData;
+import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.common.investment.service.instrument.InstrumentService;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.InstrumentIdentity;
@@ -71,7 +72,7 @@ public class MarketDataService {
     private String defaultProvider;
 
     private final FlowLogger flowLogger;
-    private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService;
+    private final StockIndicesMarketDataService stockIndicesService;
     private final MarketHoursService marketHoursService;
     private final MarketDataCacheService cacheService;
 
@@ -81,7 +82,7 @@ public class MarketDataService {
             MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
             MarketDataRetrievalUtil marketDataRetrievalUtil,
             java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
-            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
+            StockIndicesMarketDataService stockIndicesService,
             java.util.Optional<FlowLogger> flowLogger,
             java.util.Optional<MarketHoursService> marketHoursService,
             @org.springframework.beans.factory.annotation.Qualifier("serviceModuleMarketDataCacheService") MarketDataCacheService cacheService) {
@@ -104,7 +105,7 @@ public class MarketDataService {
             MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
             MarketDataRetrievalUtil marketDataRetrievalUtil,
             java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
-            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
+            StockIndicesMarketDataService stockIndicesService,
             FlowLogger flowLogger,
             java.util.Optional<MarketHoursService> marketHoursService,
             MarketDataCacheService cacheService) {
