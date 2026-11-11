@@ -9,7 +9,6 @@ import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
 
 import com.am.marketdata.common.log.AppLogger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +27,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 @Service
-@RequiredArgsConstructor
 public class StockIndicesService {
 
     private final java.util.concurrent.ConcurrentHashMap<String, Long> membershipRepairCooldown = new java.util.concurrent.ConcurrentHashMap<>();
@@ -46,15 +44,27 @@ public class StockIndicesService {
     private final MarketDataCacheService redisCacheService;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
-    @Autowired(required = false)
-    private MarketHoursService marketHoursService;
-
-    @Autowired(required = false)
-    @Qualifier("livePriceRecoveryExecutor")
-    private Executor livePriceRecoveryExecutor;
+    private final MarketHoursService marketHoursService;
+    private final Executor livePriceRecoveryExecutor;
 
     @Value("${market.data.cache.enabled:true}")
     private boolean cacheEnabled;
+
+    @Autowired
+    public StockIndicesService(
+            MarketDataProcessingService marketDataProcessingService,
+            StockIndicesMarketDataService stockIndicesMarketDataService,
+            MarketDataFetchService marketDataCacheService,
+            MarketDataCacheService redisCacheService,
+            MarketHoursService marketHoursService,
+            @Qualifier("livePriceRecoveryExecutor") Executor livePriceRecoveryExecutor) {
+        this.marketDataProcessingService = marketDataProcessingService;
+        this.stockIndicesMarketDataService = stockIndicesMarketDataService;
+        this.marketDataCacheService = marketDataCacheService;
+        this.redisCacheService = redisCacheService;
+        this.marketHoursService = marketHoursService;
+        this.livePriceRecoveryExecutor = livePriceRecoveryExecutor;
+    }
 
     /**
      * Checks only the stored index registry. This method must not refresh prices,
@@ -403,25 +413,21 @@ public class StockIndicesService {
             List<String> symbols,
             boolean forceProviderRefresh,
             String methodName) {
-        Executor executor = livePriceRecoveryExecutor != null ? livePriceRecoveryExecutor : Runnable::run;
         CompletableFuture<Map<String, OHLCQuote>> future = CompletableFuture.supplyAsync(
                 () -> marketDataCacheService.getOHLC(new HashSet<>(symbols), true, TimeFrame.DAY, forceProviderRefresh),
-                executor);
+                livePriceRecoveryExecutor);
         future.whenComplete((ignored, error) -> activeQuoteBatchFetches.remove(batchKey, future));
         log.info(methodName, "Initiating coalesced live-price recovery for {} symbols", symbols.size());
         return future;
     }
 
     private boolean isMarketOpen() {
-        if (marketHoursService != null) {
-            try {
-                return marketHoursService.isMarketOpen();
-            } catch (Exception calendarException) {
-                log.warn("getLatestIndicesData", "Market calendar lookup failed; using conservative closed-session fallback", calendarException);
-                return false;
-            }
+        try {
+            return marketHoursService.isMarketOpen();
+        } catch (Exception calendarException) {
+            log.warn("getLatestIndicesData", "Market calendar lookup failed; using conservative closed-session fallback", calendarException);
+            return false;
         }
-        return false;
     }
 
     private List<StockIndicesMarketData> checkCache(List<String> indexSymbols, boolean forceRefresh,

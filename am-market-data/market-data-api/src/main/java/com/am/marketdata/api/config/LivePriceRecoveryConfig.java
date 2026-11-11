@@ -24,8 +24,10 @@ public class LivePriceRecoveryConfig {
         executor.setMaxPoolSize(maxPoolSize);
         executor.setQueueCapacity(queueCapacity);
         executor.setThreadNamePrefix("live-price-recovery-");
-        // Apply backpressure instead of silently dropping a recovery request.
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        // Never run provider I/O on the interactive request thread when this
+        // bounded pool is saturated. The caller handles rejection as a bounded
+        // recovery miss and can return without freezing the request.
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(false);
         executor.initialize();
         return executor;

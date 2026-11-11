@@ -19,6 +19,7 @@ import com.am.marketdata.service.global.GlobalMarketScheduleService;
 import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
 import java.util.concurrent.Executor;
 import java.util.Map;
+import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -53,9 +54,6 @@ class StreamerManagerResilienceTest {
     private GlobalMarketScheduleService globalMarketScheduleService;
     @Mock
     private MarketHoursService marketHoursService;
-    @Mock
-    private Executor cacheBackfillExecutor;
-
     private StreamerManager manager;
 
     @BeforeEach
@@ -80,7 +78,7 @@ class StreamerManagerResilienceTest {
                 globalIndexConfigRepository,
                 globalMarketScheduleService,
                 marketHoursService,
-                cacheBackfillExecutor);
+                Runnable::run);
         ReflectionTestUtils.setField(manager, "ingestionEnabled", true);
         ReflectionTestUtils.setField(manager, "reconnectInitialDelayMs", 1000L);
         ReflectionTestUtils.setField(manager, "reconnectMaxDelayMs", 5000L);
@@ -121,6 +119,7 @@ class StreamerManagerResilienceTest {
     @Test
     void connectedStreamIsNotReadyUntilARealTickArrives() {
         when(streamer.isConnected()).thenReturn(true);
+        when(cacheService.cacheLatestPrices(any())).thenReturn(true);
 
         manager.onOpen();
 
@@ -129,10 +128,41 @@ class StreamerManagerResilienceTest {
         OHLCQuote quote = OHLCQuote.builder()
                 .lastPrice(25000.0)
                 .previousClose(24900.0)
+                .quoteTimestamp(Instant.now())
                 .build();
         manager.onMessage(Map.of("NIFTY 50", quote));
 
         org.junit.jupiter.api.Assertions.assertTrue(manager.isStreaming());
+    }
+
+    @Test
+    void invalidOrStaleTickDoesNotMarkStreamReady() {
+        when(streamer.isConnected()).thenReturn(true);
+        manager.onOpen();
+
+        OHLCQuote quote = OHLCQuote.builder()
+                .lastPrice(0.0)
+                .quoteTimestamp(Instant.now())
+                .build();
+        manager.onMessage(Map.of("NIFTY 50", quote));
+
+        org.junit.jupiter.api.Assertions.assertFalse(manager.isStreaming());
+        verify(cacheService, never()).cacheLatestPrices(any());
+    }
+
+    @Test
+    void cacheFailureKeepsStreamUnreadySoFallbackCanRun() {
+        when(streamer.isConnected()).thenReturn(true);
+        when(cacheService.cacheLatestPrices(any())).thenReturn(false);
+        manager.onOpen();
+
+        OHLCQuote quote = OHLCQuote.builder()
+                .lastPrice(25000.0)
+                .quoteTimestamp(Instant.now())
+                .build();
+        manager.onMessage(Map.of("NIFTY 50", quote));
+
+        org.junit.jupiter.api.Assertions.assertFalse(manager.isStreaming());
     }
 
     @Test
@@ -143,5 +173,38 @@ class StreamerManagerResilienceTest {
         manager.startStreaming();
 
         verify(streamer, org.mockito.Mockito.times(1)).connect();
+    }
+
+    @Test
+    void externalSubscriptionsUseTheSameSingleFlightConnectionGuard() {
+        when(streamer.isConnected()).thenReturn(false);
+
+        manager.subscribe(java.util.Set.of("NIFTY 50"));
+        manager.subscribe(java.util.Set.of("NIFTY BANK"));
+
+        verify(streamer, org.mockito.Mockito.times(1)).connect();
+        verify(streamer, org.mockito.Mockito.times(1)).setListener(manager);
+    }
+
+    @Test
+    void lateOpenAfterStopDisconnectsWithoutResubscribing() {
+        when(streamer.isConnected()).thenReturn(false);
+
+        manager.startStreaming();
+        manager.stopStreaming();
+        manager.onOpen();
+
+        verify(streamer).disconnect();
+        verify(streamer, never()).subscribe(any(), anyString());
+    }
+
+    @Test
+    void openCallbackDoesNotResurrectDisabledIngestion() {
+        ReflectionTestUtils.setField(manager, "ingestionEnabled", false);
+
+        manager.onOpen();
+
+        verify(streamer).disconnect();
+        verify(streamer, never()).subscribe(any(), anyString());
     }
 }

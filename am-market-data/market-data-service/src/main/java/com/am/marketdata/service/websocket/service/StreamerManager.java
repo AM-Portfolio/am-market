@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.time.Instant;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -212,11 +213,9 @@ public class StreamerManager implements StreamerListener {
         this.subscribedSymbols.addAll(symbols);
 
         if (!streamer.isConnected()) {
-            log.info("StreamerManager", "Streamer not connected. Connecting...");
-            streamer.setListener(this);
-            streamer.connect();
-            // Subscription depends on onOpen if connect is async.
-            // But assume we track symbols and subscribe in onOpen too.
+            log.info("StreamerManager", "Streamer not connected. Connecting through the guarded path...");
+            streamingDesired = true;
+            connectAndSubscribe();
         } else {
             streamer.subscribe(symbols, DEFAULT_MODE);
         }
@@ -389,6 +388,8 @@ public class StreamerManager implements StreamerListener {
         if (!ingestionEnabled) {
             streamingDesired = false;
             reconnectScheduled.set(false);
+            connectionAttemptInFlight.set(false);
+            streamReady.set(false);
             if (streamer.isConnected()) {
                 log.info("StreamerManager", "[Reconciler] Ingestion is disabled; disconnecting the stream.");
                 streamer.disconnect();
@@ -506,6 +507,19 @@ public class StreamerManager implements StreamerListener {
         log.info("StreamerManager", "Connection Opened. Subscribing to tracked symbols.");
         connectionAttemptInFlight.set(false);
         streamReady.set(false);
+
+        // A provider callback can arrive after stopStreaming() or after ingestion
+        // has been disabled. Do not let a late callback resurrect the stream.
+        if (!streamingDesired || !ingestionEnabled) {
+            lastStreamActivityAt = 0;
+            try {
+                streamer.disconnect();
+            } catch (Exception e) {
+                log.warn("StreamerManager", "Failed to close a late connection callback", e);
+            }
+            return;
+        }
+
         streamingDesired = true;
         reconnectDelayMs = Math.max(1000L, reconnectInitialDelayMs);
         lastStreamActivityAt = System.currentTimeMillis();
@@ -514,11 +528,6 @@ public class StreamerManager implements StreamerListener {
 
     @Override
     public void onMessage(Object message) {
-        lastStreamActivityAt = System.currentTimeMillis();
-        if ((message instanceof Map && !((Map<?, ?>) message).isEmpty()) || message instanceof MarketUpdateV3) {
-            streamReady.set(true);
-            connectionAttemptInFlight.set(false);
-        }
         // Service layer expects ONLY common DTOs (UpstoxFeedResponse)
         // Provider layer is responsible for converting proto → common DTO
 
@@ -533,6 +542,10 @@ public class StreamerManager implements StreamerListener {
             try {
                 @SuppressWarnings("unchecked")
                 Map<String, OHLCQuote> ohlcMap = (Map<String, OHLCQuote>) message;
+                if (!hasUsableLiveTick(ohlcMap)) {
+                    log.warn("StreamerManager", "Ignoring a market update without a valid, timestamped quote");
+                    return;
+                }
                 Map<String, MarketDataUpdate.QuoteChange> quotes = new HashMap<>();
                 for (Map.Entry<String, OHLCQuote> entry : ohlcMap.entrySet()) {
                     String symbol = entry.getKey();
@@ -598,7 +611,14 @@ public class StreamerManager implements StreamerListener {
                 Map<String, OHLCQuote> cacheBatch = new HashMap<>(ohlcMap);
                 cacheBackfillExecutor.execute(() -> {
                     try {
-                        cacheService.cacheLatestPrices(cacheBatch);
+                        boolean persisted = cacheService.cacheLatestPrices(cacheBatch);
+                        if (persisted) {
+                            lastStreamActivityAt = System.currentTimeMillis();
+                            streamReady.set(true);
+                            connectionAttemptInFlight.set(false);
+                        } else {
+                            log.warn("StreamerManager", "Market update was valid but could not be persisted to the live-price cache");
+                        }
                     } catch (Exception e) {
                         log.error("StreamerManager", "Error caching latest prices to Redis", e);
                     }
@@ -625,6 +645,25 @@ public class StreamerManager implements StreamerListener {
         } catch (Exception e) {
             log.error("StreamerManager", "Error handling message for persistence", e);
         }
+    }
+
+    private boolean hasUsableLiveTick(Map<String, OHLCQuote> quotes) {
+        if (quotes == null || quotes.isEmpty()) {
+            return false;
+        }
+
+        Instant now = Instant.now();
+        long maxAgeMillis = Math.max(TimeUnit.SECONDS.toMillis(30), noTickTimeoutMs);
+        return quotes.values().stream()
+                .filter(java.util.Objects::nonNull)
+                .anyMatch(quote -> {
+                    Instant timestamp = quote.getQuoteTimestamp();
+                    if (quote.getLastPrice() <= 0.0 || timestamp == null) {
+                        return false;
+                    }
+                    long ageMillis = now.toEpochMilli() - timestamp.toEpochMilli();
+                    return ageMillis >= 0 && ageMillis <= maxAgeMillis;
+                });
     }
 
     @Override

@@ -1462,9 +1462,9 @@ public class MarketDataCacheService {
      * Cache the latest streaming prices strictly in Redis with a 6-hour TTL.
      * Normalized format is used.
      */
-    public void cacheLatestPrices(Map<String, OHLCQuote> quotes) {
+    public boolean cacheLatestPrices(Map<String, OHLCQuote> quotes) {
         if (quotes == null || quotes.isEmpty()) {
-            return;
+            return false;
         }
 
         try {
@@ -1679,8 +1679,11 @@ public class MarketDataCacheService {
                 }
             }
 
+            return !latestPriceRedisWrites.isEmpty();
+
         } catch (Exception e) {
             log.error("cacheLatestPrices", "Error caching latest prices to Redis/MongoDB in bulk", e);
+            return false;
         }
     }
 
