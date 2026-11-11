@@ -341,6 +341,16 @@ public class UpstoxInstrumentService implements InstrumentDataProvider {
             criteriaList.add(org.springframework.data.mongodb.core.query.Criteria.where("trading_symbol")
                     .in(criteria.getTradingSymbols()));
         }
+        if (criteria.getUnderlyingSymbols() != null && !criteria.getUnderlyingSymbols().isEmpty()) {
+            // Structured derivative searches must not rely on the broad text query.
+            // Upstox instrument rows carry the same underlying in either field
+            // depending on the instrument family, so match both exact fields.
+            criteriaList.add(new org.springframework.data.mongodb.core.query.Criteria().orOperator(
+                    org.springframework.data.mongodb.core.query.Criteria.where("underlying_symbol")
+                            .in(criteria.getUnderlyingSymbols()),
+                    org.springframework.data.mongodb.core.query.Criteria.where("asset_symbol")
+                            .in(criteria.getUnderlyingSymbols())));
+        }
 
         // 2. Apply Search Queries ("Gym balls" + Semantic)
         if (criteria.getQueries() != null && !criteria.getQueries().isEmpty()) {
