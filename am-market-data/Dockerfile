@@ -63,19 +63,17 @@ FROM eclipse-temurin:21-jdk-jammy
 WORKDIR /app
 
 # Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer).
-# Use a signed HTTPS repository instead of the deprecated apt-key/HTTP flow.
+# Install Chrome from Google's official package endpoint so the build does not
+# depend on the availability or metadata state of the apt repository.
 RUN set -eux; \
   export DEBIAN_FRONTEND=noninteractive; \
   apt-get -o Acquire::Retries=3 update; \
-  apt-get install -y --no-install-recommends ca-certificates curl gnupg tzdata; \
-  install -d -m 0755 /etc/apt/keyrings; \
-  curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | \
-    gpg --dearmor --yes -o /etc/apt/keyrings/google-chrome.gpg; \
-  chmod a+r /etc/apt/keyrings/google-chrome.gpg; \
-  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
-    > /etc/apt/sources.list.d/google-chrome.list; \
-  apt-get -o Acquire::Retries=3 update; \
-  apt-get install -y --no-install-recommends google-chrome-stable; \
+  apt-get install -y --no-install-recommends ca-certificates curl tzdata; \
+  curl -fsSL --retry 3 --retry-all-errors \
+    https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    -o /tmp/google-chrome-stable.deb; \
+  apt-get install -y --no-install-recommends /tmp/google-chrome-stable.deb; \
+  rm -f /tmp/google-chrome-stable.deb; \
   ln -snf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime; \
   echo "Asia/Kolkata" > /etc/timezone; \
   rm -rf /var/lib/apt/lists/*
