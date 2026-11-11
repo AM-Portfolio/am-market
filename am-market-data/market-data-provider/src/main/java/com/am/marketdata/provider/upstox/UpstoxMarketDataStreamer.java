@@ -258,11 +258,16 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                     
                     if (isAuthFailure) {
                         log.warn("UpstoxStreamer", "⚠️ Authentication failure detected at runtime. Disconnecting to prevent infinite reconnect loop.");
-                        try {
-                            disconnect(); // Wrapped to prevent secondary socket-closed exceptions from crashing the thread
-                        } catch (Exception ex) {
-                            log.error("UpstoxStreamer", "Error executing disconnect during loop break: " + ex.getMessage());
-                        }
+                    }
+
+                    // The application owns reconnect/backoff because SDK auto-reconnect
+                    // is disabled above. Every terminal provider error must therefore
+                    // invalidate this connection; otherwise StreamerManager still sees
+                    // the dead client as connected and cannot schedule recovery.
+                    try {
+                        disconnect();
+                    } catch (Exception ex) {
+                        log.error("UpstoxStreamer", "Error executing disconnect after provider error: " + ex.getMessage());
                     }
                     
                     if (listener != null)

@@ -1602,6 +1602,13 @@ public class MarketDataCacheService {
                 if (quote.getMarketDepth() != null) cacheData.put("marketDepth", quote.getMarketDepth());
 
                 String json = objectMapper.writeValueAsString(cacheData);
+                // The ordering guard cannot safely compare a quote without a
+                // provider source timestamp. Do not let a legacy/fallback value
+                // overwrite a newer timestamped live tick in Redis.
+                if (quote.getQuoteTimestamp() == null) {
+                    log.warn("cacheLatestPrices", "Skipping latest-price cache write for {} because quoteTimestamp is missing", symbol);
+                    continue;
+                }
                 // 1. Write standard plain key for backward compatibility
                 String plainLatestKey = "market:latest-price:" + symbol;
                 latestPriceRedisWrites.put(plainLatestKey, json);

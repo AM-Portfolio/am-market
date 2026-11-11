@@ -4,6 +4,7 @@ import com.am.common.investment.model.stockindice.StockIndicesMarketData;
 import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.marketdata.scraper.service.MarketDataProcessingService;
 import com.am.marketdata.service.MarketDataCacheService;
+import com.am.marketdata.service.MarketHoursService;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.common.investment.model.events.StockInsidicesEventData.IndexMetadata;
@@ -11,6 +12,8 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 
 import com.am.marketdata.common.log.AppLogger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +23,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +34,7 @@ public class StockIndicesService {
     private final java.util.concurrent.ConcurrentHashMap<String, Long> membershipRepairCooldown = new java.util.concurrent.ConcurrentHashMap<>();
     private static final long MEMBERSHIP_REPAIR_COOLDOWN_MS = 15 * 60 * 1000;
     private final java.util.concurrent.ConcurrentHashMap<String, Long> lastMongoSaveTimeMap = new java.util.concurrent.ConcurrentHashMap<>();
-    private final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<OHLCQuote>> activeSymbolFetches = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<String, CompletableFuture<Map<String, OHLCQuote>>> activeQuoteBatchFetches = new java.util.concurrent.ConcurrentHashMap<>();
     private static final long MONGO_SAVE_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
     // Auto-detects class name "StockIndicesService"
@@ -40,6 +45,13 @@ public class StockIndicesService {
     private final MarketDataFetchService marketDataCacheService;
     private final MarketDataCacheService redisCacheService;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    @Autowired(required = false)
+    private MarketHoursService marketHoursService;
+
+    @Autowired(required = false)
+    @Qualifier("livePriceRecoveryExecutor")
+    private Executor livePriceRecoveryExecutor;
 
     @Value("${market.data.cache.enabled:true}")
     private boolean cacheEnabled;
@@ -140,10 +152,7 @@ public class StockIndicesService {
                     // the WebSocket is healthy, so never suppress the current-price
                     // fallback merely because UPSTOX is selected.
                     boolean isWebSocketActive = "UPSTOX".equalsIgnoreCase(redisCacheService.getActiveProvider());
-                    java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                    java.time.DayOfWeek dayOfWeek = istNow.getDayOfWeek();
-                    boolean isWeekend = dayOfWeek == java.time.DayOfWeek.SATURDAY || dayOfWeek == java.time.DayOfWeek.SUNDAY;
-                    boolean isMarketHours = !isWeekend && istNow.toLocalTime().isAfter(java.time.LocalTime.of(9, 10)) && istNow.toLocalTime().isBefore(java.time.LocalTime.of(15, 45));
+                    boolean isMarketHours = isMarketOpen();
 
                     boolean providerRefreshRequired = forceRefresh || isMarketHours;
                     if (isWebSocketActive && isMarketHours) {
@@ -151,37 +160,22 @@ public class StockIndicesService {
                                 + " symbols; using bounded provider fallback instead of returning stale index metadata");
                     }
 
-                    List<CompletableFuture<Void>> futures = new ArrayList<>();
-                    for (String symbol : missingSymbols) {
-                            CompletableFuture<Void> symbolFuture = activeSymbolFetches.computeIfAbsent(symbol, sym -> {
-                                log.info(methodName, "🚀 [COALESCING] Initiating single flight live price fetch for symbol: " + sym);
-                                return CompletableFuture.supplyAsync(() -> {
-                                    try {
-                                        // Use getOHLC to fetch complete daily OHLC and previous close directly from provider
-                                        Map<String, OHLCQuote> ohlcResponse = marketDataCacheService.getOHLC(Set.of(sym), true, TimeFrame.DAY, providerRefreshRequired);
-                                        if (ohlcResponse != null && ohlcResponse.containsKey(sym)) {
-                                            return ohlcResponse.get(sym);
-                                        }
-                                        return null;
-                                    } catch (Exception e) {
-                                        throw new RuntimeException(e);
-                                    }
-                                });
-                            }).thenAccept(quote -> {
-                                if (quote != null) {
-                                    latestPrices.put(symbol, quote);
-                                }
-                            }).orTimeout(1500, TimeUnit.MILLISECONDS)
-                              .exceptionally(ex -> {
-                                  log.warn(methodName, "Timeout fetching live price for: " + symbol);
-                                  return null;
-                              }).whenComplete((v, ex) -> activeSymbolFetches.remove(symbol));
-
-                        futures.add(symbolFuture);
+                    List<String> missingSymbolList = new ArrayList<>(missingSymbols);
+                    missingSymbolList.sort(String.CASE_INSENSITIVE_ORDER);
+                    String batchKey = String.join("\u0001", missingSymbolList) + "|refresh=" + providerRefreshRequired;
+                    CompletableFuture<Map<String, OHLCQuote>> recoveryFuture = activeQuoteBatchFetches.computeIfAbsent(
+                            batchKey,
+                            ignored -> createQuoteRecoveryFuture(batchKey, missingSymbolList, providerRefreshRequired, methodName));
+                    try {
+                        // get(timeout) does not cancel the underlying provider request. The
+                        // in-flight entry remains coalesced until that request really finishes.
+                        Map<String, OHLCQuote> recovered = recoveryFuture.get(1500, TimeUnit.MILLISECONDS);
+                        if (recovered != null && !recovered.isEmpty()) {
+                            latestPrices.putAll(recovered);
+                        }
+                    } catch (TimeoutException timeout) {
+                        log.warn(methodName, "Timed out recovering live prices for {} symbols", missingSymbolList.size());
                     }
-
-                    // Wait for all symbol fetches to finish (or timeout)
-                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
                 } catch (Exception e) {
                     log.error(methodName, "Error fetching fallback live prices for indices", e);
                 }
@@ -356,6 +350,7 @@ public class StockIndicesService {
             // 4. Sanitize stale data before returning to prevent showing wrong prices
             // NOTE: updatedAt is stored as UTC (server default). Compare only against UTC to avoid timezone skew.
             long nowMsFinal = System.currentTimeMillis();
+            boolean marketOpenForResponse = isMarketOpen();
             for (StockIndicesMarketData data : finalResults) {
                 com.am.common.investment.model.stockindice.AuditData audit = data.getAudit();
                 boolean isStale = true;
@@ -367,23 +362,31 @@ public class StockIndicesService {
                     if (minutesOld <= 15) {
                         isStale = false;
                     } else {
-                        // Check if outside market hours (IST) and less than 3 days old (weekend)
-                        java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                        java.time.DayOfWeek dayOfWeek = istNow.getDayOfWeek();
-                        boolean isWeekend = dayOfWeek == java.time.DayOfWeek.SATURDAY || dayOfWeek == java.time.DayOfWeek.SUNDAY;
-                        boolean isMarketHours = !isWeekend && istNow.toLocalTime().isAfter(java.time.LocalTime.of(9, 10)) && istNow.toLocalTime().isBefore(java.time.LocalTime.of(15, 45));
-                        if (!isMarketHours && minutesOld < 3 * 24 * 60) {
+                        // Outside an exchange session, a recent completed-session snapshot
+                        // is valid. The shared calendar also handles holidays.
+                        if (!marketOpenForResponse && minutesOld < 3 * 24 * 60) {
                             isStale = false;
                         }
                     }
                 }
-                
+
+                OHLCQuote responseQuote = latestPrices.get(data.getIndexSymbol());
+                boolean hasCurrentQuote = responseQuote != null && responseQuote.getLastPrice() > 0.0;
+                if (marketOpenForResponse && !hasCurrentQuote && data.getMetadata() != null) {
+                    // A DB document is only a membership/metadata fallback. During an
+                    // open session it must not be rendered as a current price when the
+                    // live quote path timed out or returned only a partial batch.
+                    data.setMetadata(null);
+                    log.warn(methodName, "Suppressing stale index metadata for {} because no current quote was available",
+                            data.getIndexSymbol());
+                }
+
                 // Legacy DTOs cannot represent quote quality. Do not turn stale data into
                 // a convincing 0.00% move; the typed quote endpoint will expose NO_DATA.
                 // Keeping stored values untouched also prevents false zeros being persisted.
                 if (isStale && data.getMetadata() != null) {
                     log.warn(methodName, "Stale index metadata detected for " + data.getIndexSymbol()
-                            + "; preserving values until quote quality is exposed");
+                            + "; suppressing it during an open session when no live quote is available");
                 }
             }
 
@@ -393,6 +396,32 @@ public class StockIndicesService {
             log.error(methodName, "Error processing stock indices request", e);
             return new ArrayList<>();
         }
+    }
+
+    private CompletableFuture<Map<String, OHLCQuote>> createQuoteRecoveryFuture(
+            String batchKey,
+            List<String> symbols,
+            boolean forceProviderRefresh,
+            String methodName) {
+        Executor executor = livePriceRecoveryExecutor != null ? livePriceRecoveryExecutor : Runnable::run;
+        CompletableFuture<Map<String, OHLCQuote>> future = CompletableFuture.supplyAsync(
+                () -> marketDataCacheService.getOHLC(new HashSet<>(symbols), true, TimeFrame.DAY, forceProviderRefresh),
+                executor);
+        future.whenComplete((ignored, error) -> activeQuoteBatchFetches.remove(batchKey, future));
+        log.info(methodName, "Initiating coalesced live-price recovery for {} symbols", symbols.size());
+        return future;
+    }
+
+    private boolean isMarketOpen() {
+        if (marketHoursService != null) {
+            try {
+                return marketHoursService.isMarketOpen();
+            } catch (Exception calendarException) {
+                log.warn("getLatestIndicesData", "Market calendar lookup failed; using conservative closed-session fallback", calendarException);
+                return false;
+            }
+        }
+        return false;
     }
 
     private List<StockIndicesMarketData> checkCache(List<String> indexSymbols, boolean forceRefresh,
@@ -442,11 +471,7 @@ public class StockIndicesService {
                         }
 
                         if (isStale) {
-                            java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                            java.time.DayOfWeek dayOfWeek = istNow.getDayOfWeek();
-                            boolean isWeekend = dayOfWeek == java.time.DayOfWeek.SATURDAY || dayOfWeek == java.time.DayOfWeek.SUNDAY;
-                            boolean isMarketHours = !isWeekend && istNow.toLocalTime().isAfter(java.time.LocalTime.of(9, 10)) && istNow.toLocalTime().isBefore(java.time.LocalTime.of(15, 45));
-                            if (!isMarketHours) {
+                            if (!isMarketOpen()) {
                                 isStale = false; // Outside market hours, consider it fresh
                             }
                         }
