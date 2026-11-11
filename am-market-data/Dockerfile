@@ -62,24 +62,16 @@ FROM eclipse-temurin:21-jdk-jammy
 
 WORKDIR /app
 
-# Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer).
-# Use resilient DNS resolvers and Azure Ubuntu mirror for reliable builds on CI runners.
-RUN set -eux; \
-  export DEBIAN_FRONTEND=noninteractive; \
-  printf "nameserver 8.8.8.8\nnameserver 1.1.1.1\n" > /etc/resolv.conf; \
-  if [ -f /etc/apt/sources.list ]; then \
-    sed -i 's/archive.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list; \
-    sed -i 's/security.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list; \
-  fi; \
-  apt-get update; \
-  apt-get install -y --no-install-recommends curl wget gnupg; \
-  wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -; \
-  echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google.list; \
-  apt-get update; \
-  apt-get install -y --no-install-recommends google-chrome-stable; \
-  rm -rf /var/lib/apt/lists/*; \
-  ln -snf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime; \
-  echo "Asia/Kolkata" > /etc/timezone
+# Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer)
+RUN apt-get update && \
+  apt-get install -y curl wget gnupg2 && \
+  wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+  sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
+  apt-get update && \
+  apt-get install -y google-chrome-stable && \
+  rm -rf /var/lib/apt/lists/* && \
+  # Set timezone
+  ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime
 
 # Copy data directory for instrument seeding
 COPY am-market-data/data/ data/
