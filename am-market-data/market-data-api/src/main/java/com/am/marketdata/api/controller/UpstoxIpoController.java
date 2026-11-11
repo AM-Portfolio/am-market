@@ -73,9 +73,17 @@ public class UpstoxIpoController {
             @RequestParam(required = false, defaultValue = "1") Integer pageNumber,
 
             @Parameter(description = "Number of records per page (1 to 100)", example = "30")
-            @RequestParam(required = false, defaultValue = "30") Integer records
+            @RequestParam(required = false, defaultValue = "30") Integer records,
+
+            @Parameter(description = "Read persisted Redis/Mongo data only; never call Upstox or persist on a miss", example = "true")
+            @RequestParam(required = false, defaultValue = "false") boolean cacheOnly
     ) {
-        List<AsraxIpoSummaryDto> list = upstoxIpoService.getIpos(status, issueType, pageNumber, records);
+        List<AsraxIpoSummaryDto> list = upstoxIpoService.getIpos(
+                status,
+                issueType,
+                pageNumber,
+                records,
+                !cacheOnly);
         return ResponseEntity.ok(list);
     }
 

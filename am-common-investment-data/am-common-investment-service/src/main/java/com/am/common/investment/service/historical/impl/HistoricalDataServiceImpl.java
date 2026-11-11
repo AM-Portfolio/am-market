@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,7 +49,7 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         
         List<EquityPrice> prices;
         if (isIndexSymbol) {
-            if (tradingSymbol.startsWith("GLOBAL_INDEX|")) {
+            if (isGlobalIndexKey(tradingSymbol)) {
                 // Determine Flux aggregation interval
                 String aggregateWindowEvery;
                 if ("DAY".equalsIgnoreCase(interval) || "1D".equalsIgnoreCase(interval)) {
@@ -136,14 +137,16 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             return Optional.empty();
         }
         
-        // Smart Resampling: If InfluxDB already downsampled data via aggregateWindow,
-        // bypass the CPU-heavy Java processDataByInterval loop to eliminate ZoneId processing bottlenecks.
+        // Indian market_index reads are raw and have no aggregateWindow. Always
+        // resample them here. Global-index and equity repositories already apply
+        // their own query aggregation for non-empty intervals.
+        boolean rawIndianIndex = isIndexSymbol && !isGlobalIndexKey(tradingSymbol);
         List<EquityPrice> processedPrices;
-        if (interval != null && !interval.isEmpty()) {
+        if (rawIndianIndex || interval == null || interval.isEmpty()) {
+            processedPrices = processDataByInterval(prices, interval, rawIndianIndex);
+        } else {
             logger.debug("Data pre-aggregated via InfluxDB aggregateWindow for interval {}; bypassing Java processDataByInterval", interval);
             processedPrices = prices;
-        } else {
-            processedPrices = processDataByInterval(prices, interval);
         }
         
         // Convert to OHLCVTPoint objects
@@ -212,13 +215,21 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
      * @param interval The desired interval
      * @return Processed price data
      */
-    private List<EquityPrice> processDataByInterval(List<EquityPrice> prices, String interval) {
+    private List<EquityPrice> processDataByInterval(List<EquityPrice> prices, String interval,
+            boolean rawIndianIndex) {
         if (prices == null || prices.isEmpty() || interval == null || interval.isEmpty()) {
             return prices;
         }
         
-        // Sort prices by time
-        Collections.sort(prices, (p1, p2) -> p1.getTime().compareTo(p2.getTime()));
+        // Repository results may be immutable or split across unordered series.
+        // Sort a local copy so OHLC open/close samples are chronological.
+        List<EquityPrice> orderedPrices = prices.stream()
+                .filter(price -> price != null && price.getTime() != null)
+                .sorted(Comparator.comparing(EquityPrice::getTime))
+                .toList();
+        if (orderedPrices.isEmpty()) {
+            return Collections.emptyList();
+        }
         
         // Parse the interval
         int amount = parseIntervalAmount(interval);
@@ -228,18 +239,30 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             logger.warn("Invalid interval format: {}. Returning original data.", interval);
             return prices;
         }
+
+        if (rawIndianIndex && unit.isTimeBased()) {
+            orderedPrices = removeConflictingIndexSamplesAtSameTime(orderedPrices, interval);
+            if (orderedPrices.isEmpty()) {
+                return Collections.emptyList();
+            }
+        }
         
         // Group data points by interval buckets
         Map<Instant, List<EquityPrice>> buckets = new HashMap<>();
-        Instant firstTimestamp = prices.get(0).getTime();
+        Instant firstTimestamp = orderedPrices.get(0).getTime();
         
         java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
         java.time.ZonedDateTime firstZoned = firstTimestamp.atZone(zone);
         boolean isDateUnit = !unit.isTimeBased();
         
-        for (EquityPrice price : prices) {
+        for (EquityPrice price : orderedPrices) {
             Instant bucketKey;
-            if (isDateUnit && price.getTime() != null) {
+            if (rawIndianIndex) {
+                bucketKey = getIndianIndexBucketKey(price.getTime(), amount, unit);
+                if (bucketKey == null) {
+                    continue;
+                }
+            } else if (isDateUnit) {
                 long diffUnits = unit.between(firstZoned.toLocalDate(), price.getTime().atZone(zone).toLocalDate()) / amount;
                 java.time.LocalDate bucketDate = firstZoned.toLocalDate().plus(diffUnits * amount, unit);
                 bucketKey = bucketDate.atTime(firstZoned.toLocalTime()).atZone(zone).toInstant();
@@ -259,7 +282,13 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             List<EquityPrice> bucketPrices = entry.getValue();
             
             if (!bucketPrices.isEmpty()) {
-                result.add(aggregatePrices(bucketPrices, bucketTime));
+                boolean useIndexPriceSamples = rawIndianIndex && unit.isTimeBased();
+                EquityPrice aggregated = useIndexPriceSamples
+                        ? aggregateIndianIndexPriceSamples(bucketPrices, bucketTime)
+                        : aggregatePrices(bucketPrices, bucketTime);
+                if (aggregated != null) {
+                    result.add(aggregated);
+                }
             }
         }
         
@@ -270,6 +299,139 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
                 prices.size(), result.size(), interval);
         
         return result;
+    }
+
+    /**
+     * Influx can return same-time rows from separate tag series for one index.
+     * Identical prices are redundant; conflicting prices have no source identity
+     * in the existing contract, so drop that timestamp instead of choosing an
+     * arbitrary row that could create a false OHLC extreme.
+     */
+    private List<EquityPrice> removeConflictingIndexSamplesAtSameTime(List<EquityPrice> orderedPrices,
+            String interval) {
+        List<EquityPrice> result = new ArrayList<>(orderedPrices.size());
+        int conflictingTimestamps = 0;
+        int start = 0;
+        while (start < orderedPrices.size()) {
+            int end = start + 1;
+            Instant timestamp = orderedPrices.get(start).getTime();
+            while (end < orderedPrices.size() && timestamp.equals(orderedPrices.get(end).getTime())) {
+                end++;
+            }
+
+            Map<Long, EquityPrice> uniquePrices = new HashMap<>();
+            for (int i = start; i < end; i++) {
+                EquityPrice sample = orderedPrices.get(i);
+                Double value = getValidIndexPriceSample(sample);
+                if (value != null) {
+                    uniquePrices.putIfAbsent(Double.doubleToLongBits(value), sample);
+                }
+            }
+
+            if (uniquePrices.size() == 1) {
+                result.add(uniquePrices.values().iterator().next());
+            } else if (uniquePrices.size() > 1) {
+                conflictingTimestamps++;
+            }
+            start = end;
+        }
+
+        if (conflictingTimestamps > 0) {
+            logger.warn("Dropped {} ambiguous duplicate index timestamps symbol={} interval={}",
+                    conflictingTimestamps, orderedPrices.get(0).getSymbol(), interval);
+        }
+        return result;
+    }
+
+    /**
+     * Index timestamps are persisted as UTC instants representing market-wall
+     * clock values; OHLCVTMapper converts them back to UTC LocalDateTime for the
+     * existing chart contract. Bucket on that same wall clock and align intraday
+     * intervals to the NSE 09:15 session open.
+     */
+    private Instant getIndianIndexBucketKey(Instant timestamp, int amount, ChronoUnit unit) {
+        java.time.LocalDateTime marketWallTime = java.time.LocalDateTime.ofInstant(timestamp,
+                java.time.ZoneOffset.UTC);
+        java.time.LocalDate date = marketWallTime.toLocalDate();
+
+        if (unit == ChronoUnit.MINUTES || unit == ChronoUnit.HOURS) {
+            java.time.LocalTime sessionOpen = java.time.LocalTime.of(9, 15);
+            java.time.LocalTime sessionClose = java.time.LocalTime.of(15, 30);
+            java.time.LocalTime pointTime = marketWallTime.toLocalTime();
+            if (pointTime.isBefore(sessionOpen) || pointTime.isAfter(sessionClose)) {
+                return null;
+            }
+
+            long bucketMinutes = unit == ChronoUnit.HOURS ? amount * 60L : amount;
+            long minutesFromOpen = java.time.Duration.between(sessionOpen, pointTime).toMinutes();
+            long lastBucketStart = ((375L - 1L) / bucketMinutes) * bucketMinutes;
+            long bucketStart = Math.min((minutesFromOpen / bucketMinutes) * bucketMinutes, lastBucketStart);
+            return date.atTime(sessionOpen).plusMinutes(bucketStart).toInstant(java.time.ZoneOffset.UTC);
+        }
+
+        java.time.LocalDate bucketDate;
+        if (unit == ChronoUnit.DAYS) {
+            long epochDay = date.toEpochDay();
+            bucketDate = java.time.LocalDate.ofEpochDay(Math.floorDiv(epochDay, amount) * amount);
+        } else if (unit == ChronoUnit.WEEKS) {
+            java.time.LocalDate monday = date.with(java.time.temporal.TemporalAdjusters.previousOrSame(
+                    java.time.DayOfWeek.MONDAY));
+            long epochWeek = Math.floorDiv(monday.toEpochDay() - 4L, 7L);
+            long bucketWeek = Math.floorDiv(epochWeek, amount) * amount;
+            bucketDate = java.time.LocalDate.ofEpochDay(bucketWeek * 7L + 4L);
+        } else if (unit == ChronoUnit.MONTHS) {
+            long monthIndex = (long) date.getYear() * 12L + date.getMonthValue() - 1L;
+            long bucketMonth = Math.floorDiv(monthIndex, amount) * amount;
+            bucketDate = java.time.LocalDate.of((int) Math.floorDiv(bucketMonth, 12L),
+                    (int) Math.floorMod(bucketMonth, 12L) + 1, 1);
+        } else if (unit == ChronoUnit.YEARS) {
+            int bucketYear = Math.floorDiv(date.getYear(), amount) * amount;
+            bucketDate = java.time.LocalDate.of(bucketYear, 1, 1);
+        } else {
+            logger.warn("Unsupported index interval unit {}; returning raw points", unit);
+            return timestamp;
+        }
+
+        return bucketDate.atTime(9, 15).toInstant(java.time.ZoneOffset.UTC);
+    }
+
+    /** Build sampled intraday OHLC from index last-price observations, not the
+     * running day-level open/high/low snapshots stored on each live tick. */
+    private EquityPrice aggregateIndianIndexPriceSamples(List<EquityPrice> prices, Instant bucketTime) {
+        List<Double> samples = prices.stream()
+                .map(this::getValidIndexPriceSample)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        if (samples.isEmpty()) {
+            return null;
+        }
+
+        EquityPrice reference = prices.get(0);
+        double open = samples.get(0);
+        double close = samples.get(samples.size() - 1);
+        double high = samples.stream().mapToDouble(Double::doubleValue).max().orElse(close);
+        double low = samples.stream().mapToDouble(Double::doubleValue).min().orElse(close);
+        return EquityPrice.builder()
+                .symbol(reference.getSymbol())
+                .isin(reference.getIsin())
+                .exchange(reference.getExchange())
+                .currency(reference.getCurrency())
+                .time(bucketTime)
+                .lastPrice(close)
+                .ohlcv(OHLCVTPoint.builder().open(open).high(high).low(low).close(close).volume(0L).build())
+                .build();
+    }
+
+    private Double getValidIndexPriceSample(EquityPrice price) {
+        Double value = price.getLastPrice();
+        if (value == null && price.getOhlcv() != null) {
+            value = price.getOhlcv().getClose();
+        }
+        return value != null && Double.isFinite(value) && value > 0 ? value : null;
+    }
+
+    private boolean isGlobalIndexKey(String symbol) {
+        return symbol != null && (symbol.startsWith("GLOBAL_INDEX|") || symbol.startsWith("GLOBAL_INDEX:"));
     }
     
     /**
@@ -360,13 +522,14 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         }
         
         String unitPart = interval.replaceAll("[0-9]", "");
-        
-        return switch (unitPart.toLowerCase()) {
+
+        return switch (unitPart) {
             case "m" -> ChronoUnit.MINUTES;
-            case "h" -> ChronoUnit.HOURS;
-            case "d" -> ChronoUnit.DAYS;
-            case "w" -> ChronoUnit.WEEKS;
-            case "mo" -> ChronoUnit.MONTHS;
+            case "h", "H" -> ChronoUnit.HOURS;
+            case "d", "D" -> ChronoUnit.DAYS;
+            case "w", "W" -> ChronoUnit.WEEKS;
+            case "M", "mo", "MO" -> ChronoUnit.MONTHS;
+            case "y", "Y" -> ChronoUnit.YEARS;
             default -> {
                 logger.warn("Unrecognized interval unit: {}. Defaulting to days.", unitPart);
                 yield ChronoUnit.DAYS;

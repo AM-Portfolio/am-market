@@ -13,6 +13,8 @@ import com.am.marketdata.service.global.GlobalMarketScheduleService;
 import com.am.common.investment.persistence.document.global.GlobalIndexConfigRepository;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,13 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.time.Instant;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import jakarta.annotation.PreDestroy;
 
 /**
  * Service to manage the Market Data Streamer (Upstox).
@@ -49,6 +58,24 @@ public class StreamerManager implements StreamerListener {
     private final com.am.marketdata.service.global.GlobalIndexCacheWriter globalIndexCacheWriter;
     private final ObjectMapper objectMapper;
     private final GlobalIndexConfigRepository globalIndexConfigRepository;
+    private final GlobalMarketScheduleService globalMarketScheduleService;
+    private final com.am.marketdata.service.MarketHoursService marketHoursService;
+    private final Executor cacheBackfillExecutor;
+
+    @Value("${market.websocket.reconnect-initial-delay-ms:5000}")
+    private long reconnectInitialDelayMs;
+
+    @Value("${market.websocket.reconnect-max-delay-ms:120000}")
+    private long reconnectMaxDelayMs;
+
+    @Value("${market.websocket.no-tick-timeout-ms:90000}")
+    private long noTickTimeoutMs;
+
+    @Value("${market.websocket.connection-attempt-timeout-ms:20000}")
+    private long connectionAttemptTimeoutMs;
+
+    @Value("${scheduler.ingestion.enabled:true}")
+    private boolean ingestionEnabled;
     private static final DefaultRedisScript<Long> WRITE_NEWER_GLOBAL_TICK = new DefaultRedisScript<>(
             "local old=redis.call('get', KEYS[2]); " +
                     "if old and tonumber(old) and tonumber(old) >= tonumber(ARGV[1]) then return 0 end; " +
@@ -86,6 +113,18 @@ public class StreamerManager implements StreamerListener {
 
     private Set<String> subscribedSymbols = new HashSet<>();
     private static final String DEFAULT_MODE = "full";
+    private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "market-stream-reconnect");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);
+    private final AtomicBoolean connectionAttemptInFlight = new AtomicBoolean(false);
+    private final AtomicBoolean streamReady = new AtomicBoolean(false);
+    private volatile boolean streamingDesired;
+    private volatile long lastStreamActivityAt;
+    private volatile long connectionAttemptStartedAt;
+    private volatile long reconnectDelayMs;
 
     @Autowired
     public StreamerManager(MarketDataStreamer streamer,
@@ -97,7 +136,10 @@ public class StreamerManager implements StreamerListener {
             StringRedisTemplate redisTemplate,
             com.am.marketdata.service.global.GlobalIndexCacheWriter globalIndexCacheWriter,
             ObjectMapper objectMapper,
-            GlobalIndexConfigRepository globalIndexConfigRepository) {
+            GlobalIndexConfigRepository globalIndexConfigRepository,
+            GlobalMarketScheduleService globalMarketScheduleService,
+            com.am.marketdata.service.MarketHoursService marketHoursService,
+            @Qualifier("cacheBackfillExecutor") Executor cacheBackfillExecutor) {
         this.streamer = streamer;
         this.persistenceService = persistenceService;
         this.processor = processor;
@@ -108,6 +150,9 @@ public class StreamerManager implements StreamerListener {
         this.globalIndexCacheWriter = globalIndexCacheWriter;
         this.objectMapper = objectMapper;
         this.globalIndexConfigRepository = globalIndexConfigRepository;
+        this.globalMarketScheduleService = globalMarketScheduleService;
+        this.marketHoursService = marketHoursService;
+        this.cacheBackfillExecutor = cacheBackfillExecutor;
     }
 
     // @PostConstruct
@@ -168,11 +213,9 @@ public class StreamerManager implements StreamerListener {
         this.subscribedSymbols.addAll(symbols);
 
         if (!streamer.isConnected()) {
-            log.info("StreamerManager", "Streamer not connected. Connecting...");
-            streamer.setListener(this);
-            streamer.connect();
-            // Subscription depends on onOpen if connect is async.
-            // But assume we track symbols and subscribe in onOpen too.
+            log.info("StreamerManager", "Streamer not connected. Connecting through the guarded path...");
+            streamingDesired = true;
+            connectAndSubscribe();
         } else {
             streamer.subscribe(symbols, DEFAULT_MODE);
         }
@@ -183,6 +226,7 @@ public class StreamerManager implements StreamerListener {
      */
     public void startStreaming() {
         log.info("StreamerManager", "Starting Market Data Streamer (Manual/External Trigger)...");
+        streamingDesired = true;
         connectAndSubscribe();
     }
 
@@ -191,6 +235,10 @@ public class StreamerManager implements StreamerListener {
      */
     public void stopStreaming() {
         log.info("StreamerManager", "Stopping Market Data Streamer (Manual/External Trigger)...");
+        streamingDesired = false;
+        reconnectScheduled.set(false);
+        connectionAttemptInFlight.set(false);
+        streamReady.set(false);
         if (streamer.isConnected()) {
             streamer.disconnect();
         }
@@ -199,6 +247,7 @@ public class StreamerManager implements StreamerListener {
     // Exposed method for manual control
     public void manualStart() {
         log.info("StreamerManager", "Manual start triggered.");
+        streamingDesired = true;
         connectAndSubscribe();
     }
 
@@ -221,7 +270,11 @@ public class StreamerManager implements StreamerListener {
      * @return true if streamer is connected
      */
     public boolean isStreaming() {
-        return streamer != null && streamer.isConnected();
+        if (streamer == null || !streamer.isConnected() || !streamReady.get()) {
+            return false;
+        }
+        long lastActivity = lastStreamActivityAt;
+        return lastActivity > 0 && System.currentTimeMillis() - lastActivity <= noTickTimeoutMs;
     }
 
     /**
@@ -283,12 +336,25 @@ public class StreamerManager implements StreamerListener {
     }
 
     private void connectAndSubscribe() {
-        if (!streamer.isConnected()) {
-            streamer.setListener(this);
-            streamer.connect();
-        } else {
+        if (streamer.isConnected()) {
             log.info("StreamerManager", "Already connected. Ensuring subscriptions.");
             subscribeToSymbols();
+            return;
+        }
+
+        if (!connectionAttemptInFlight.compareAndSet(false, true)) {
+            log.debug("StreamerManager", "Connection attempt already in flight; skipping duplicate connect request.");
+            return;
+        }
+
+        connectionAttemptStartedAt = System.currentTimeMillis();
+        try {
+            streamer.setListener(this);
+            streamer.connect();
+        } catch (Exception e) {
+            connectionAttemptInFlight.set(false);
+            log.error("StreamerManager", "Connection attempt failed before the provider callback", e);
+            scheduleReconnect("connection attempt failed");
         }
     }
 
@@ -319,29 +385,119 @@ public class StreamerManager implements StreamerListener {
      */
     @Scheduled(fixedRateString = "${market.websocket.reconcile-interval-ms:300000}")
     public void reconcileWebSocketConnection() {
-        boolean indianVote = "true".equalsIgnoreCase(
-                redisTemplate.opsForValue().get(INDIAN_VOTE_KEY));
-        boolean globalVote = "true".equalsIgnoreCase(
-                redisTemplate.opsForValue().get(GLOBAL_VOTE_KEY));
+        if (!ingestionEnabled) {
+            streamingDesired = false;
+            reconnectScheduled.set(false);
+            connectionAttemptInFlight.set(false);
+            streamReady.set(false);
+            if (streamer.isConnected()) {
+                log.info("StreamerManager", "[Reconciler] Ingestion is disabled; disconnecting the stream.");
+                streamer.disconnect();
+            }
+            return;
+        }
 
-        boolean shouldConnect = indianVote || globalVote;
+        VoteSnapshot votes = readVotesSafely();
+        boolean indianMarketOpen = marketHoursService.isMarketOpen();
+        boolean globalMarketOpen = globalMarketScheduleService.isAnyMarketCurrentlyOpen(java.time.Instant.now());
+        boolean shouldConnect = indianMarketOpen || globalMarketOpen || votes.anyOpen();
+        boolean canConfirmClosed = votes.readSuccessfully() && !votes.anyOpen()
+                && !indianMarketOpen && !globalMarketOpen;
 
         log.info("StreamerManager",
-                String.format("[Reconciler] vote:indian=%s, vote:global=%s → shouldConnect=%s",
-                        indianVote, globalVote, shouldConnect));
+                String.format("[Reconciler] localIndian=%s, localGlobal=%s, voteIndian=%s, voteGlobal=%s, redisHealthy=%s → shouldConnect=%s",
+                        indianMarketOpen, globalMarketOpen, votes.indianOpen(), votes.globalOpen(),
+                        votes.readSuccessfully(), shouldConnect));
 
         if (shouldConnect) {
+            streamingDesired = true;
             if (!streamer.isConnected()) {
                 log.info("StreamerManager", "[Reconciler] Connecting WebSocket (market open).");
                 connectAndSubscribe();
             }
-        } else {
+        } else if (canConfirmClosed) {
+            streamingDesired = false;
+            reconnectScheduled.set(false);
             if (streamer.isConnected()) {
                 log.info("StreamerManager",
                         "[Reconciler] All markets closed. Disconnecting WebSocket.");
                 streamer.disconnect();
             }
+        } else if (!streamer.isConnected()) {
+            scheduleReconnect("market state could not be confirmed");
         }
+    }
+
+    /** Redis vote keys are advisory; a failed read must not look like market close. */
+    private VoteSnapshot readVotesSafely() {
+        try {
+            String indian = redisTemplate.opsForValue().get(INDIAN_VOTE_KEY);
+            String global = redisTemplate.opsForValue().get(GLOBAL_VOTE_KEY);
+            return new VoteSnapshot(
+                    "true".equalsIgnoreCase(indian),
+                    "true".equalsIgnoreCase(global),
+                    true);
+        } catch (Exception e) {
+            log.warn("StreamerManager", "Redis vote read failed; retaining current stream state and using local schedules", e);
+            return new VoteSnapshot(false, false, false);
+        }
+    }
+
+    @Scheduled(fixedRateString = "${market.websocket.health-interval-ms:30000}")
+    public void monitorStreamHealth() {
+        if (!streamingDesired) {
+            return;
+        }
+
+        if (!streamer.isConnected()) {
+            if (connectionAttemptInFlight.get()
+                    && System.currentTimeMillis() - connectionAttemptStartedAt < connectionAttemptTimeoutMs) {
+                return;
+            }
+            connectionAttemptInFlight.set(false);
+            scheduleReconnect("stream is disconnected");
+            return;
+        }
+
+        long lastActivity = lastStreamActivityAt;
+        if (lastActivity > 0 && System.currentTimeMillis() - lastActivity > noTickTimeoutMs
+                && isMarketWindowOpen()) {
+            log.warn("StreamerManager", "No market tick received for " + noTickTimeoutMs + " ms; resetting the stream");
+            try {
+                streamer.disconnect();
+            } catch (Exception e) {
+                log.warn("StreamerManager", "Failed to reset stale stream", e);
+            }
+            scheduleReconnect("no tick watchdog");
+        }
+    }
+
+    public boolean isMarketWindowOpen() {
+        return marketHoursService.isMarketOpen()
+                || globalMarketScheduleService.isAnyMarketCurrentlyOpen(java.time.Instant.now());
+    }
+
+    private void scheduleReconnect(String reason) {
+        if (!streamingDesired || reconnectScheduled.getAndSet(true)) {
+            return;
+        }
+
+        long configuredInitialDelay = reconnectInitialDelayMs > 0 ? reconnectInitialDelayMs : 5000L;
+        long delay = Math.max(1000L, reconnectDelayMs > 0 ? reconnectDelayMs : configuredInitialDelay);
+        log.warn("StreamerManager", "Scheduling stream reconnect in " + delay + " ms: " + reason);
+        reconnectExecutor.schedule(() -> {
+            reconnectScheduled.set(false);
+            if (!streamingDesired || streamer.isConnected()) {
+                return;
+            }
+            connectAndSubscribe();
+            reconnectDelayMs = Math.min(Math.max(delay * 2, delay), reconnectMaxDelayMs);
+        }, delay, TimeUnit.MILLISECONDS);
+    }
+
+    @PreDestroy
+    public void shutdownReconnectExecutor() {
+        reconnectExecutor.shutdownNow();
     }
 
     // --- StreamerListener Implementation ---
@@ -349,6 +505,24 @@ public class StreamerManager implements StreamerListener {
     @Override
     public void onOpen() {
         log.info("StreamerManager", "Connection Opened. Subscribing to tracked symbols.");
+        connectionAttemptInFlight.set(false);
+        streamReady.set(false);
+
+        // A provider callback can arrive after stopStreaming() or after ingestion
+        // has been disabled. Do not let a late callback resurrect the stream.
+        if (!streamingDesired || !ingestionEnabled) {
+            lastStreamActivityAt = 0;
+            try {
+                streamer.disconnect();
+            } catch (Exception e) {
+                log.warn("StreamerManager", "Failed to close a late connection callback", e);
+            }
+            return;
+        }
+
+        streamingDesired = true;
+        reconnectDelayMs = Math.max(1000L, reconnectInitialDelayMs);
+        lastStreamActivityAt = System.currentTimeMillis();
         subscribeToSymbols();
     }
 
@@ -368,6 +542,10 @@ public class StreamerManager implements StreamerListener {
             try {
                 @SuppressWarnings("unchecked")
                 Map<String, OHLCQuote> ohlcMap = (Map<String, OHLCQuote>) message;
+                if (!hasUsableLiveTick(ohlcMap)) {
+                    log.warn("StreamerManager", "Ignoring a market update without a valid, timestamped quote");
+                    return;
+                }
                 Map<String, MarketDataUpdate.QuoteChange> quotes = new HashMap<>();
                 for (Map.Entry<String, OHLCQuote> entry : ohlcMap.entrySet()) {
                     String symbol = entry.getKey();
@@ -430,11 +608,21 @@ public class StreamerManager implements StreamerListener {
 
                 // Cache live tick prices (lastPrice + previousClose) to Redis Path 2
                 // market:latest-price:<SYMBOL> so that page refreshes pick up the latest price.
-                try {
-                    cacheService.cacheLatestPrices(ohlcMap);
-                } catch (Exception e) {
-                    log.error("StreamerManager", "Error caching latest prices to Redis", e);
-                }
+                Map<String, OHLCQuote> cacheBatch = new HashMap<>(ohlcMap);
+                cacheBackfillExecutor.execute(() -> {
+                    try {
+                        boolean persisted = cacheService.cacheLatestPrices(cacheBatch);
+                        if (persisted) {
+                            lastStreamActivityAt = System.currentTimeMillis();
+                            streamReady.set(true);
+                            connectionAttemptInFlight.set(false);
+                        } else {
+                            log.warn("StreamerManager", "Market update was valid but could not be persisted to the live-price cache");
+                        }
+                    } catch (Exception e) {
+                        log.error("StreamerManager", "Error caching latest prices to Redis", e);
+                    }
+                });
 
                 if (!quotes.isEmpty()) {
                     MarketDataUpdate data = MarketDataUpdate.builder()
@@ -459,20 +647,50 @@ public class StreamerManager implements StreamerListener {
         }
     }
 
+    private boolean hasUsableLiveTick(Map<String, OHLCQuote> quotes) {
+        if (quotes == null || quotes.isEmpty()) {
+            return false;
+        }
+
+        Instant now = Instant.now();
+        long maxAgeMillis = Math.max(TimeUnit.SECONDS.toMillis(30), noTickTimeoutMs);
+        return quotes.values().stream()
+                .filter(java.util.Objects::nonNull)
+                .anyMatch(quote -> {
+                    Instant timestamp = quote.getQuoteTimestamp();
+                    if (quote.getLastPrice() <= 0.0 || timestamp == null) {
+                        return false;
+                    }
+                    long ageMillis = now.toEpochMilli() - timestamp.toEpochMilli();
+                    return ageMillis >= 0 && ageMillis <= maxAgeMillis;
+                });
+    }
+
     @Override
     public void onError(Throwable error) {
+        connectionAttemptInFlight.set(false);
+        streamReady.set(false);
         log.error("StreamerManager", "Streamer Error: " + error.getMessage(), error);
-        // Introduce a cooling period so it doesn't spin in a rapid loop
-        try {
-            Thread.sleep(5000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        if (streamingDesired) {
+            scheduleReconnect("provider error");
         }
     }
 
     @Override
     public void onClose() {
         log.info("StreamerManager", "Connection Closed.");
+        connectionAttemptInFlight.set(false);
+        streamReady.set(false);
+        lastStreamActivityAt = 0;
+        if (streamingDesired) {
+            scheduleReconnect("provider closed connection");
+        }
+    }
+
+    private record VoteSnapshot(boolean indianOpen, boolean globalOpen, boolean readSuccessfully) {
+        boolean anyOpen() {
+            return indianOpen || globalOpen;
+        }
     }
 
     private void processUpdateForPublisher(MarketUpdateV3 update) {

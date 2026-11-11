@@ -24,6 +24,11 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
 
     private final com.am.marketdata.service.kafka.producer.MarketDataProducer producer;
 
+    @Override
+    protected String providerRequestIdentity() {
+        return timeFrame != null ? timeFrame.getApiValue() : "1D";
+    }
+
     private OHLCDataRetriever(
             MarketDataPersistenceService persistenceService,
             MarketDataProviderFactory providerFactory,
@@ -159,40 +164,42 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
                 log.info("[PROVIDER] {} Successfully fetched {} OHLC quotes from provider with timeFrame {}",
                         provider.getProviderName(), providerData.size(), tfValue);
 
-                // Fetch ISIN mappings for the requested symbols to support copying quote values back to ISIN keys.
+                // Resolve ISINs only when requested. Ordinary ticker misses should not trigger
+                // two additional metadata lookups on the provider fallback path.
                 Map<String, String> isinToSymbolMap = new HashMap<>();
-                try {
-                    com.am.marketdata.service.SecurityService securityService = 
-                            com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.marketdata.service.SecurityService.class);
-                    log.info("[PROVIDER_MAP] Fetching ISIN mapping from SecurityService for symbols: " + symbols);
-                    List<com.am.marketdata.service.model.security.SecurityDocument> docs = 
-                            securityService.findBySymbols(symbols);
-                    for (com.am.marketdata.service.model.security.SecurityDocument doc : docs) {
-                        if (doc.getKey() != null && doc.getKey().getIsin() != null && doc.getKey().getSymbol() != null) {
-                            isinToSymbolMap.put(doc.getKey().getIsin().toUpperCase().trim(), doc.getKey().getSymbol().toUpperCase().trim());
+                List<String> isinCandidates = symbols.stream().map(this::cleanSymbol)
+                        .filter(this::looksLikeIsin).distinct().toList();
+                if (!isinCandidates.isEmpty()) {
+                    try {
+                        com.am.marketdata.service.SecurityService securityService =
+                                com.am.marketdata.common.util.ApplicationContextProvider.getBean(com.am.marketdata.service.SecurityService.class);
+                        List<com.am.marketdata.service.model.security.SecurityDocument> docs =
+                                securityService.findBySymbols(isinCandidates);
+                        for (com.am.marketdata.service.model.security.SecurityDocument doc : docs) {
+                            if (doc.getKey() != null && doc.getKey().getIsin() != null && doc.getKey().getSymbol() != null) {
+                                isinToSymbolMap.put(doc.getKey().getIsin().toUpperCase().trim(), doc.getKey().getSymbol().toUpperCase().trim());
+                            }
                         }
+                    } catch (Exception e) {
+                        log.error("Failed to resolve requested ISINs from SecurityService: {}", e.getMessage(), e);
                     }
-                } catch (Exception e) {
-                    log.error("Failed to fetch ISIN mapping from SecurityService: " + e.getMessage(), e);
-                }
 
-                try {
-                    org.springframework.data.mongodb.core.MongoTemplate mongoTemplate = 
-                            com.am.marketdata.common.util.ApplicationContextProvider.getBean(org.springframework.data.mongodb.core.MongoTemplate.class);
-                    log.info("[PROVIDER_MAP] Fetching ISIN mapping from upstock_instruments for symbols: " + symbols);
-                    org.springframework.data.mongodb.core.query.Query mongoQuery = new org.springframework.data.mongodb.core.query.Query(
-                            org.springframework.data.mongodb.core.query.Criteria.where("isin").in(symbols)
-                    );
-                    List<com.am.marketdata.common.model.UpstoxInstrument> instruments = 
-                            mongoTemplate.find(mongoQuery, com.am.marketdata.common.model.UpstoxInstrument.class);
-                    for (com.am.marketdata.common.model.UpstoxInstrument inst : instruments) {
-                        if (inst.getIsin() != null && inst.getTradingSymbol() != null) {
-                            isinToSymbolMap.put(inst.getIsin().toUpperCase().trim(), inst.getTradingSymbol().toUpperCase().trim());
+                    try {
+                        org.springframework.data.mongodb.core.MongoTemplate mongoTemplate =
+                                com.am.marketdata.common.util.ApplicationContextProvider.getBean(org.springframework.data.mongodb.core.MongoTemplate.class);
+                        org.springframework.data.mongodb.core.query.Query mongoQuery = new org.springframework.data.mongodb.core.query.Query(
+                                org.springframework.data.mongodb.core.query.Criteria.where("isin").in(isinCandidates)
+                        );
+                        List<com.am.marketdata.common.model.UpstoxInstrument> instruments =
+                                mongoTemplate.find(mongoQuery, com.am.marketdata.common.model.UpstoxInstrument.class);
+                        for (com.am.marketdata.common.model.UpstoxInstrument inst : instruments) {
+                            if (inst.getIsin() != null && inst.getTradingSymbol() != null) {
+                                isinToSymbolMap.put(inst.getIsin().toUpperCase().trim(), inst.getTradingSymbol().toUpperCase().trim());
+                            }
                         }
+                    } catch (Exception e) {
+                        log.error("Failed to resolve requested ISINs from Upstox instruments: {}", e.getMessage(), e);
                     }
-                    log.info("[PROVIDER_MAP] Final Resolved ISIN mapping: " + isinToSymbolMap);
-                } catch (Exception e) {
-                    log.error("Failed to fetch ISIN mapping from MongoTemplate: " + e.getMessage(), e);
                 }
                 
                 // Map the results back to the original requested symbols.
@@ -200,12 +207,12 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
                 // If we cache GOLDAXIS, the next request for AXISGOLD will miss the cache.
                 Map<String, OHLCQuote> mappedData = new HashMap<>();
                 for (String reqSymbol : symbols) {
-                    String cleanReq = reqSymbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
+                    String cleanReq = cleanSymbol(reqSymbol);
                     
                     // Look for matches in the provider keys
                     boolean matched = false;
                     for (Map.Entry<String, OHLCQuote> entry : providerData.entrySet()) {
-                        String cleanProv = entry.getKey().replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "").trim().toUpperCase();
+                        String cleanProv = cleanSymbol(entry.getKey());
                         
                          // Handle known mappings:
                          // 1. Exact match (e.g. RELIANCE == RELIANCE)
@@ -258,6 +265,15 @@ public class OHLCDataRetriever extends AbstractMarketDataRetriever<String, OHLCQ
 
     private boolean hasUsableLastPrice(OHLCQuote quote) {
         return quote != null && Double.isFinite(quote.getLastPrice()) && quote.getLastPrice() > 0.0;
+    }
+
+    private String cleanSymbol(String symbol) {
+        return symbol == null ? "" : symbol.replaceAll("(?i)^(NSE_EQ:|NSE:|BSE_EQ:|BSE:)", "")
+                .trim().toUpperCase(Locale.ROOT);
+    }
+
+    private boolean looksLikeIsin(String symbol) {
+        return symbol != null && symbol.matches("[A-Z]{2}[A-Z0-9]{10}");
     }
 
     /**

@@ -3,6 +3,8 @@ package com.am.marketdata.service;
 import com.am.common.investment.model.equity.EquityPrice;
 import com.am.common.investment.model.equity.Instrument;
 import com.am.common.investment.model.historical.HistoricalData;
+import com.am.common.investment.model.historical.OHLCVTPoint;
+import com.am.common.investment.service.StockIndicesMarketDataService;
 import com.am.common.investment.service.instrument.InstrumentService;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.InstrumentIdentity;
@@ -71,7 +73,7 @@ public class MarketDataService {
     private String defaultProvider;
 
     private final FlowLogger flowLogger;
-    private final com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService;
+    private final StockIndicesMarketDataService stockIndicesService;
     private final MarketHoursService marketHoursService;
     private final MarketDataCacheService cacheService;
 
@@ -81,7 +83,7 @@ public class MarketDataService {
             MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
             MarketDataRetrievalUtil marketDataRetrievalUtil,
             java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
-            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
+            StockIndicesMarketDataService stockIndicesService,
             java.util.Optional<FlowLogger> flowLogger,
             java.util.Optional<MarketHoursService> marketHoursService,
             @org.springframework.beans.factory.annotation.Qualifier("serviceModuleMarketDataCacheService") MarketDataCacheService cacheService) {
@@ -104,7 +106,7 @@ public class MarketDataService {
             MarketDataGenericMapper genericMapper, MarketDataPersistenceService persistenceService,
             MarketDataRetrievalUtil marketDataRetrievalUtil,
             java.util.Optional<com.am.marketdata.service.kafka.producer.MarketDataProducer> producer,
-            com.am.common.investment.service.StockIndicesMarketDataService stockIndicesService,
+            StockIndicesMarketDataService stockIndicesService,
             FlowLogger flowLogger,
             java.util.Optional<MarketHoursService> marketHoursService,
             MarketDataCacheService cacheService) {
@@ -439,6 +441,18 @@ public class MarketDataService {
     public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, Date fromDate, Date toDate,
             TimeFrame interval, boolean continuous, Map<String, Object> additionalParams, String providerName,
             boolean isIndexSymbol, boolean forceRefresh, boolean allowProviderFallback) {
+        return getHistoricalDataBatch(symbols, fromDate, toDate, interval, continuous, additionalParams,
+                providerName, isIndexSymbol, forceRefresh, allowProviderFallback, true);
+    }
+
+    /**
+     * Internal retrieval policy overload. Existing callers retain the standard
+     * cache/database/provider flow; chart reads can opt out of both cache and
+     * provider tiers while leaving persistence writes untouched.
+     */
+    public Map<String, HistoricalData> getHistoricalDataBatch(List<String> symbols, Date fromDate, Date toDate,
+            TimeFrame interval, boolean continuous, Map<String, Object> additionalParams, String providerName,
+            boolean isIndexSymbol, boolean forceRefresh, boolean allowProviderFallback, boolean allowCache) {
         if (symbols == null || symbols.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -450,14 +464,24 @@ public class MarketDataService {
             try {
                 providerName = resolveProviderName(providerName);
 
-                List<DataSourceType> retrievalOrder = allowProviderFallback
-                        ? DataRetrievalStrategyUtil.getRetrievalOrder(forceRefresh)
-                        : java.util.Arrays.asList(DataSourceType.CACHE, DataSourceType.DATABASE);
+                List<DataSourceType> retrievalOrder;
+                if (forceRefresh && allowProviderFallback) {
+                    retrievalOrder = DataRetrievalStrategyUtil.getRetrievalOrder(true);
+                } else {
+                    retrievalOrder = new ArrayList<>();
+                    if (allowCache) {
+                        retrievalOrder.add(DataSourceType.CACHE);
+                    }
+                    retrievalOrder.add(DataSourceType.DATABASE);
+                    if (allowProviderFallback) {
+                        retrievalOrder.add(DataSourceType.PROVIDER);
+                    }
+                }
                 HistoricalDataRetriever retriever = HistoricalDataRetriever.builder()
                         .persistenceService(persistenceService)
                         .providerFactory(providerFactory)
                         .retrievalOrder(retrievalOrder)
-                        .cacheResults(true)
+                        .cacheResults(allowCache)
                         .fromDate(fromDate)
                         .toDate(toDate)
                         .interval(interval)
@@ -704,13 +728,43 @@ public class MarketDataService {
             Set<String> remainingSymbols = new HashSet<>(tradingSymbols);
             List<EquityPrice> result = new ArrayList<>();
             Map<String, OHLCQuote> cachedData = null;
+            int cachePriceCount = 0;
+            boolean marketOpen = false;
+            try {
+                marketOpen = marketHoursService != null && marketHoursService.isMarketOpen();
+            } catch (Exception calendarException) {
+                log.warn("Could not resolve market hours for live prices; using provider recovery: {}",
+                        calendarException.getMessage());
+            }
+
+            // During an active session, the Redis latest-tick snapshot is the
+            // only cache source allowed to satisfy a live-price request. The
+            // daily OHLC/Influx cache may contain yesterday's close and must not
+            // be promoted to the current card value.
+            if (!forceRefresh && marketOpen) {
+                Map<String, OHLCQuote> latestData = cacheService.getLatestPrices(new HashSet<>(tradingSymbols));
+                if (latestData != null && !latestData.isEmpty()) {
+                    for (Map.Entry<String, OHLCQuote> entry : latestData.entrySet()) {
+                        OHLCQuote quote = entry.getValue();
+                        if (quote == null || quote.getLastPrice() <= 0.0) {
+                            continue;
+                        }
+                        result.add(toEquityPrice(entry.getKey(), quote, tradingSymbols));
+                    }
+                    cachePriceCount = result.size();
+                    removeCachedHitsFromRemaining(remainingSymbols, latestData.keySet());
+                }
+                log.info("[LIVE_CACHE] {} valid current-session prices; {} symbols require provider recovery",
+                        result.size(), remainingSymbols.size());
+            }
 
             // Step 1: Try to get data from cache first if not forced refresh
-            if (!forceRefresh) {
+            if (!forceRefresh && !marketOpen) {
                 log.info("[CACHE] Attempting to fetch live prices from cache for {} symbols", tradingSymbols.size());
                 cachedData = persistenceService.getOHLCData(tradingSymbols, TimeFrame.DAY, false);
             } else {
-                log.info("[CACHE] Skipping cache lookup due to forceRefresh=true");
+                log.info("[CACHE] Skipping historical cache lookup because forceRefresh={} marketOpen={}",
+                        forceRefresh, marketOpen);
             }
 
             if (cachedData != null && !cachedData.isEmpty()) {
@@ -758,10 +812,11 @@ public class MarketDataService {
                 // Only a positive LTP satisfies this request. Removing a zero cache entry
                 // here previously prevented the provider recovery attempt.
                 removeCachedHitsFromRemaining(remainingSymbols, validCachedData.keySet());
+                cachePriceCount += validCachedData.size();
 
                 log.info("[CACHE] {} valid prices; {} symbols require provider recovery",
                         validCachedData.size(), remainingSymbols.size());
-            } else {
+            } else if (!marketOpen) {
                 log.info("[CACHE] No live prices found in cache");
             }
 
@@ -775,8 +830,8 @@ public class MarketDataService {
 
             log.info("Successfully retrieved {} total live prices ({} from cache, {} from provider)",
                     result.size(),
-                    cachedData != null ? cachedData.size() : 0,
-                    result.size() - (cachedData != null ? cachedData.size() : 0));
+                    cachePriceCount,
+                    Math.max(0, result.size() - cachePriceCount));
 
             return result;
         } catch (Exception e) {
@@ -786,6 +841,26 @@ public class MarketDataService {
         } finally {
             timer.stop(meterRegistry.timer("market.data.request.time", "operation", "getLivePrices"));
         }
+    }
+
+    private EquityPrice toEquityPrice(String key, OHLCQuote quote, List<String> requestedSymbols) {
+        String[] exchangeAndSymbol = resolveExchangeAndSymbol(key, requestedSymbols);
+        EquityPrice price = new EquityPrice();
+        price.setSymbol(exchangeAndSymbol[1]);
+        price.setExchange(exchangeAndSymbol[0]);
+        price.setLastPrice(quote.getLastPrice());
+        if (quote.getOhlc() != null) {
+            double closeForChange = quote.getPreviousClose() > 0.0
+                    ? quote.getPreviousClose()
+                    : quote.getOhlc().getClose();
+            price.setOhlcv(OHLCVTPoint.builder()
+                    .open(quote.getOhlc().getOpen())
+                    .high(quote.getOhlc().getHigh())
+                    .low(quote.getOhlc().getLow())
+                    .close(closeForChange)
+                    .build());
+        }
+        return price;
     }
 
     /**

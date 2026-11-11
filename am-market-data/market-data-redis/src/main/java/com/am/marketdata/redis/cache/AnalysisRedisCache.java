@@ -5,6 +5,7 @@ import com.am.marketdata.common.model.analysis.SeasonalityResponse;
 import com.am.marketdata.common.model.analysis.TechnicalAnalysisResponse;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.redis.config.RedisCacheCircuitBreaker;
+import com.am.marketdata.redis.config.FeatureFlaggedStringRedisTemplate;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import com.am.marketdata.common.log.AppLogger;
@@ -29,6 +30,9 @@ public class AnalysisRedisCache {
 
     @Value("${redis.cache.ttl.analysis:86400}") // Default 24h
     private long analysisTtlSeconds;
+
+    @Value("${redis.cache.ttl.historical-performance:345600}")
+    private long historicalPerformanceTtlSeconds;
 
     private static final String SEASONALITY_PREFIX = "analysis:seasonality";
     private static final String HEATMAP_PREFIX = "analysis:heatmap";
@@ -224,6 +228,10 @@ public class AnalysisRedisCache {
             boolean detailed) {
         if (response == null)
             return;
+        if (!isRedisFeatureEnabled()) {
+            log.debug("saveHistoricalPerformance", "Redis feature is disabled; skipping cache write");
+            return;
+        }
         if (!redisCircuitBreaker.allowRequest()) {
             log.debug("saveHistoricalPerformance", "Redis circuit is open; skipping analysis cache write");
             return;
@@ -231,7 +239,7 @@ public class AnalysisRedisCache {
         try {
             String key = getHistoryKey(response.getSymbol(), years, detailed);
             String json = redisObjectMapper.writeValueAsString(response);
-            redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
+            redisTemplate.opsForValue().set(key, json, historicalPerformanceTtlSeconds, TimeUnit.SECONDS);
             redisCircuitBreaker.recordSuccess();
             log.debug("saveHistoricalPerformance", "Cached historical performance for " + response.getSymbol());
         } catch (Exception e) {
@@ -243,6 +251,10 @@ public class AnalysisRedisCache {
 
     public com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse getHistoricalPerformance(String symbol,
             int years, boolean detailed) {
+        if (!isRedisFeatureEnabled()) {
+            log.debug("getHistoricalPerformance", "Redis feature is disabled; treating analysis cache as unavailable");
+            return null;
+        }
         if (!redisCircuitBreaker.allowRequest()) {
             log.debug("getHistoricalPerformance", "Redis circuit is open; treating analysis cache as unavailable");
             return null;
@@ -262,6 +274,11 @@ public class AnalysisRedisCache {
                     "Error retrieving historical performance for " + symbol + ": " + e.getMessage());
         }
         return null;
+    }
+
+    private boolean isRedisFeatureEnabled() {
+        return !(redisTemplate instanceof FeatureFlaggedStringRedisTemplate featureFlaggedTemplate)
+                || featureFlaggedTemplate.isRedisEnabled();
     }
     // --- INDICES HISTORICAL PERFORMANCE (AGGREGATE) ---
 

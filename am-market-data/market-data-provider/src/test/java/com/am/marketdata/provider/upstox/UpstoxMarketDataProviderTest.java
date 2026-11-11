@@ -18,9 +18,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
 
 class UpstoxMarketDataProviderTest {
 
@@ -47,6 +49,39 @@ class UpstoxMarketDataProviderTest {
         assertEquals(1, result.size());
         assertTrue(result.containsKey(requestedSymbol));
         assertEquals(1023.4, result.get(requestedSymbol).lastPrice, 0.001);
+    }
+
+    @Test
+    void instrumentSearchAppliesExactUnderlyingFilterAlongsideBroadQuery() {
+        org.springframework.data.mongodb.core.MongoTemplate mongoTemplate =
+                mock(org.springframework.data.mongodb.core.MongoTemplate.class);
+        when(mongoTemplate.find(any(org.springframework.data.mongodb.core.query.Query.class),
+                eq(UpstoxInstrument.class))).thenReturn(List.of());
+
+        com.am.marketdata.provider.upstox.service.UpstoxInstrumentService service =
+                new com.am.marketdata.provider.upstox.service.UpstoxInstrumentService(
+                        mock(com.am.marketdata.provider.upstox.repo.UpstoxInstrumentRepository.class),
+                        new ObjectMapper(),
+                        mongoTemplate);
+
+        com.am.marketdata.common.dto.InstrumentSearchCriteria criteria =
+                new com.am.marketdata.common.dto.InstrumentSearchCriteria();
+        criteria.setQueries(List.of("NIFTY"));
+        criteria.setUnderlyingSymbols(List.of("NIFTY"));
+        criteria.setExchanges(List.of("NSE", "NSE_FO"));
+        criteria.setSegments(List.of("NSE_FO", "NFO"));
+        criteria.setInstrumentTypes(List.of("FUT", "FUTIDX", "FUTSTK"));
+
+        service.searchInstruments(criteria);
+
+        org.mockito.ArgumentCaptor<org.springframework.data.mongodb.core.query.Query> queryCaptor =
+                org.mockito.ArgumentCaptor.forClass(org.springframework.data.mongodb.core.query.Query.class);
+        verify(mongoTemplate).find(queryCaptor.capture(), eq(UpstoxInstrument.class));
+
+        String query = queryCaptor.getValue().getQueryObject().toJson();
+        assertTrue(query.contains("underlying_symbol"));
+        assertTrue(query.contains("asset_symbol"));
+        assertTrue(query.contains("NIFTY"));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.am.common.investment.persistence.repository.measurement.impl;
 
 import com.am.common.investment.persistence.influx.measurement.EquityPriceMeasurement;
+import com.am.common.investment.persistence.influx.MarketDataStorageConstants;
 import com.am.common.investment.persistence.repository.measurement.EquityPriceMeasurementRepository;
 import com.am.common.investment.persistence.config.EquityRangeConfig;
 import com.influxdb.client.InfluxDBClient;
@@ -31,7 +32,7 @@ import java.util.stream.Collectors;
 public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurementRepository {
 
     private static final Logger logger = LoggerFactory.getLogger(EquityPriceMeasurementRepositoryImpl.class);
-    private static final String MEASUREMENT_NAME = "equity";
+    private static final String MEASUREMENT_NAME = MarketDataStorageConstants.EQUITY_MEASUREMENT;
     private static final int BATCH_SIZE = 5000;
     private static final int FLUSH_INTERVAL = 1000; // milliseconds
     
@@ -54,7 +55,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
     @Override
     public void save(EquityPriceMeasurement measurement) {
         try (WriteApi writeApi = influxDBClient.makeWriteApi(WriteOptions.builder().batchSize(1).build())) {
-            Point point = Point.measurement("equity")
+            Point point = Point.measurement(MEASUREMENT_NAME)
                 .addTag("symbol", measurement.getSymbol())
                 .addTag("isin", measurement.getIsin())
                 .addTag("exchange", measurement.getExchange())
@@ -131,7 +132,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
         String query = String.format(
             "from(bucket: \"%s\") " +
             "|> range(start: %s) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
+            "|> filter(fn: (r) => r._measurement == \"" + MEASUREMENT_NAME + "\") " +
             "|> filter(fn: (r) => r.isin == \"%s\") " +
             "|> last() " +
             "|> pivot(rowKey: [\"_time\"], " +
@@ -161,7 +162,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
         String query = String.format(
             "from(bucket: \"%s\") " +
             "|> range(start: %s) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
+            "|> filter(fn: (r) => r._measurement == \"" + MEASUREMENT_NAME + "\") " +
             "|> filter(fn: (r) => r.symbol == \"%s\") " +
             "|> last() " +
             "|> pivot(rowKey: [\"_time\"], " +
@@ -242,7 +243,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
         return String.format(
             "from(bucket: \"%s\") " +
             "|> range(start: %s, stop: %s) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
+            "|> filter(fn: (r) => r._measurement == \"" + MEASUREMENT_NAME + "\") " +
             "|> filter(fn: (r) => %s) " +
             "%s" +
             "|> pivot(rowKey: [\"_time\"], " +
@@ -319,7 +320,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
         return String.format(
                 "from(bucket: \"%s\") "
                 + "|> range(start: %s, stop: %s) "
-                + "|> filter(fn: (r) => r._measurement == \"equity\") "
+                + "|> filter(fn: (r) => r._measurement == \"" + MEASUREMENT_NAME + "\") "
                 + "|> filter(fn: (r) => %s) "
                 + "%s"
                 + "|> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")",
@@ -372,7 +373,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
         String query = String.format(
             "from(bucket: \"%s\") " +
             "|> range(start: %s, stop: %s) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
+            "|> filter(fn: (r) => r._measurement == \"" + MEASUREMENT_NAME + "\") " +
             "|> filter(fn: (r) => r.isin == \"%s\") " +
             "%s" +
             "|> pivot(rowKey: [\"_time\"], " +
@@ -395,7 +396,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
         String query = String.format(
             "from(bucket: \"%s\") " +
             "|> range(start: %s) " +
-            "|> filter(fn: (r) => r._measurement == \"equity\") " +
+            "|> filter(fn: (r) => r._measurement == \"" + MEASUREMENT_NAME + "\") " +
             "|> filter(fn: (r) => r.exchange == \"%s\") " +
             "|> pivot(rowKey: [\"_time\"], " +
             "        columnKey: [\"_field\"], " +
@@ -453,7 +454,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
             String query = String.format(
                 "from(bucket: \"%s\") " +
                 "|> range(start: %s) " +
-                "|> filter(fn: (r) => r._measurement == \"equity\") " +
+                "|> filter(fn: (r) => r._measurement == \"" + MEASUREMENT_NAME + "\") " +
                 "|> filter(fn: (r) => %s) " +
                 "|> last() " +
                 "|> pivot(rowKey: [\"_time\"], " +
@@ -496,7 +497,7 @@ public class EquityPriceMeasurementRepositoryImpl implements EquityPriceMeasurem
             String query = String.format(
                 "from(bucket: \"%s\") " +
                 "|> range(start: %s) " +
-                "|> filter(fn: (r) => r._measurement == \"equity\") " +
+                "|> filter(fn: (r) => r._measurement == \"" + MEASUREMENT_NAME + "\") " +
                 "|> filter(fn: (r) => %s) " +
                 "|> last() " +
                 "|> pivot(rowKey: [\"_time\"], " +

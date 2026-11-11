@@ -71,7 +71,9 @@ class StockIndicesServiceMembershipTest {
                 mock(MarketDataProcessingService.class),
                 mock(StockIndicesMarketDataService.class),
                 mock(MarketDataFetchService.class),
-                mock(MarketDataCacheService.class));
+                mock(MarketDataCacheService.class),
+                mock(com.am.marketdata.service.MarketHoursService.class),
+                Runnable::run);
     }
 
     private static boolean invokeUsable(StockIndicesService service, StockIndicesMarketData index) {

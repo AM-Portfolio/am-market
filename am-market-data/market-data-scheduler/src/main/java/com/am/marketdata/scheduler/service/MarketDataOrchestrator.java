@@ -2,6 +2,7 @@ package com.am.marketdata.scheduler.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -26,16 +27,20 @@ public class MarketDataOrchestrator {
     private final java.util.Optional<StreamerScheduler> streamerScheduler;
     private final java.util.Optional<MarketAnalysisSchedulerService> marketAnalysisSchedulerService;
 
+    @Value("${scheduler.indices.enabled:false}")
+    private boolean indexScraperEnabled;
+
     // --- High Frequency Jobs ---
 
     /**
      * Indices Data Processing: Runs every 2 minutes
      */
-    /**
-     * Indices Data Processing: Runs every 2 minutes
-     */
     @Scheduled(cron = "${scheduler.indices.fetch:0 */2 * * * *}", zone = "Asia/Kolkata")
     public void triggerIndicesDataProcessing() {
+        if (!indexScraperEnabled) {
+            log.debug("Skipping scheduled index scraper; scheduler.indices.enabled=false");
+            return;
+        }
         log.info("Orchestrator: Triggering Indices Data Processing");
         if (cookieScheduler.isPresent()) {
             // Uncommented to enable scheduled indices data processing and cookie checks
@@ -230,6 +235,18 @@ public class MarketDataOrchestrator {
             marketAnalysisSchedulerService.get().executeDailyAnalysis();
         } else {
             log.warn("Orchestrator: MarketAnalysisSchedulerService is not present, skipping Analysis");
+        }
+    }
+
+    /** Refresh the monthly-performance snapshots from completed market data. */
+    @Scheduled(cron = "${scheduler.analysis.historical-performance.cron:0 15 16 * * MON-FRI}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_historicalPerformanceWarm", lockAtMostFor = "2h", lockAtLeastFor = "1m")
+    public void triggerHistoricalPerformanceWarm() {
+        log.info("Orchestrator: Triggering after-close historical performance warm-up");
+        if (marketAnalysisSchedulerService.isPresent()) {
+            marketAnalysisSchedulerService.get().warmHistoricalPerformanceSnapshots();
+        } else {
+            log.warn("Orchestrator: MarketAnalysisSchedulerService is not present, skipping historical performance warm-up");
         }
     }
 

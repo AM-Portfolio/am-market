@@ -133,6 +133,29 @@ search/
 !market-data-api/src/test/java/com/am/
 !market-data-api/src/test/java/com/am/marketdata/
 
+# Keep the stream resilience regression test under version control.
+!market-data-service/src/
+!market-data-service/src/test/
+!market-data-service/src/test/java/
+!market-data-service/src/test/java/com/
+!market-data-service/src/test/java/com/am/
+!market-data-service/src/test/java/com/am/marketdata/
+!market-data-service/src/test/java/com/am/marketdata/service/
+!market-data-service/src/test/java/com/am/marketdata/service/websocket/
+!market-data-service/src/test/java/com/am/marketdata/service/websocket/service/
+!market-data-service/src/test/java/com/am/marketdata/service/websocket/service/StreamerManagerResilienceTest.java
+
+# Keep the Redis outage-circuit regression test under version control.
+!market-data-redis/src/
+!market-data-redis/src/test/
+!market-data-redis/src/test/java/
+!market-data-redis/src/test/java/com/
+!market-data-redis/src/test/java/com/am/
+!market-data-redis/src/test/java/com/am/marketdata/
+!market-data-redis/src/test/java/com/am/marketdata/redis/
+!market-data-redis/src/test/java/com/am/marketdata/redis/config/
+!market-data-redis/src/test/java/com/am/marketdata/redis/config/RedisAvailabilityGuardTest.java
+
 # Keep the large-index heatmap latency regression tests under version control.
 !market-data-service/src/test/
 !market-data-service/src/test/java/
