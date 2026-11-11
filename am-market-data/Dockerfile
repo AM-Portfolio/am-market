@@ -62,16 +62,19 @@ FROM eclipse-temurin:21-jdk-jammy
 
 WORKDIR /app
 
-# Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer)
-RUN apt-get update && \
-  apt-get install -y curl wget gnupg2 && \
+# Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer).
+# Retry apt-get update to handle transient DNS failures on CI runners.
+RUN set -eux; \
+  export DEBIAN_FRONTEND=noninteractive; \
+  for i in 1 2 3; do apt-get update && break || sleep 10; done; \
+  apt-get install -y curl wget gnupg && \
   wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
   sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
   apt-get update && \
   apt-get install -y google-chrome-stable && \
   rm -rf /var/lib/apt/lists/* && \
-  # Set timezone
-  ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime
+  ln -snf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
+  echo "Asia/Kolkata" > /etc/timezone
 
 # Copy data directory for instrument seeding
 COPY am-market-data/data/ data/
