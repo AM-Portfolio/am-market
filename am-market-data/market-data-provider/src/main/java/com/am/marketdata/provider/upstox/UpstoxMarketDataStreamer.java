@@ -27,6 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Upstox implementation of the MarketDataStreamer.
@@ -44,10 +45,11 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
     private static final String REDIS_KEY_ACCESS_TOKEN = "market_data:upstox:access_token";
 
     private final Map<String, String> instrumentKeyToTradingSymbolMap = new java.util.concurrent.ConcurrentHashMap<>();
-    private MarketDataStreamerV3 streamer;
+    private volatile MarketDataStreamerV3 streamer;
     private StreamerListener listener;
-    private boolean isConnected = false;
+    private volatile boolean isConnected = false;
     private volatile boolean isConnecting = false;
+    private final AtomicLong connectionGeneration = new AtomicLong();
     private java.util.concurrent.ScheduledFuture<?> connectionWatchdog;
     private final java.util.concurrent.ScheduledExecutorService scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
 
@@ -71,6 +73,7 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
         }
         try {
             isConnecting = true;
+            final long generation = connectionGeneration.incrementAndGet();
             
             // Set safety watchdog to reset isConnecting in case handshake hangs indefinitely
             if (connectionWatchdog != null) {
@@ -120,14 +123,21 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
             // Initialize Streamer
             log.info("UpstoxStreamer", "Step 3: Initializing MarketDataStreamerV3...");
-            streamer = new MarketDataStreamerV3(apiClient);
+            MarketDataStreamerV3 activeStreamer = new MarketDataStreamerV3(apiClient);
+            streamer = activeStreamer;
+            // StreamerManager owns reconnect and backoff. Disable the SDK retry
+            // loop so heartbeat failures cannot race application reconnects.
+            activeStreamer.autoReconnect(false);
             log.info("UpstoxStreamer", "Step 3: Streamer initialized successfully");
 
             // Set Listeners
             log.info("UpstoxStreamer", "Step 4: Setting up listeners...");
-            streamer.setOnOpenListener(new OnOpenListener() {
+            activeStreamer.setOnOpenListener(new OnOpenListener() {
                 @Override
                 public void onOpen() {
+                    if (!isCurrentConnection(generation, activeStreamer)) {
+                        return;
+                    }
                     log.info("UpstoxStreamer", "✅ *** CONNECTION ESTABLISHED *** ✅");
                     isConnected = true;
                     isConnecting = false;
@@ -143,9 +153,12 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                 }
             });
 
-            streamer.setOnMarketUpdateListener(new OnMarketUpdateV3Listener() {
+            activeStreamer.setOnMarketUpdateListener(new OnMarketUpdateV3Listener() {
                 @Override
                 public void onUpdate(MarketUpdateV3 marketUpdate) {
+                    if (!isCurrentConnection(generation, activeStreamer)) {
+                        return;
+                    }
                     log.debug("UpstoxStreamer", "📊 Received market update");
                     if (listener != null) {
                         // Convert proto to common DTO (Map<String, OHLCQuote>) before passing to
@@ -199,9 +212,12 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                 }
             });
 
-            streamer.setOnErrorListener(new OnErrorListener() {
+            activeStreamer.setOnErrorListener(new OnErrorListener() {
                 @Override
                 public void onError(Throwable error) {
+                    if (!isCurrentConnection(generation, activeStreamer)) {
+                        return;
+                    }
                     if (error instanceof java.io.InterruptedIOException || error.getCause() instanceof InterruptedException) {
                         log.info("UpstoxStreamer", "Streamer thread interrupted (normal during disconnect/reconnect).");
                         return;
@@ -242,11 +258,16 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                     
                     if (isAuthFailure) {
                         log.warn("UpstoxStreamer", "⚠️ Authentication failure detected at runtime. Disconnecting to prevent infinite reconnect loop.");
-                        try {
-                            disconnect(); // Wrapped to prevent secondary socket-closed exceptions from crashing the thread
-                        } catch (Exception ex) {
-                            log.error("UpstoxStreamer", "Error executing disconnect during loop break: " + ex.getMessage());
-                        }
+                    }
+
+                    // The application owns reconnect/backoff because SDK auto-reconnect
+                    // is disabled above. Every terminal provider error must therefore
+                    // invalidate this connection; otherwise StreamerManager still sees
+                    // the dead client as connected and cannot schedule recovery.
+                    try {
+                        disconnect();
+                    } catch (Exception ex) {
+                        log.error("UpstoxStreamer", "Error executing disconnect after provider error: " + ex.getMessage());
                     }
                     
                     if (listener != null)
@@ -254,9 +275,12 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                 }
             });
 
-            streamer.setOnCloseListener(new OnCloseListener() {
+            activeStreamer.setOnCloseListener(new OnCloseListener() {
                 @Override
                 public void onClose(int code, String reason) {
+                    if (!isCurrentConnection(generation, activeStreamer)) {
+                        return;
+                    }
                     log.info("UpstoxStreamer", "Connection Closed: " + code + " | Reason: " + reason);
                     isConnected = false;
                     isConnecting = false;
@@ -271,7 +295,7 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
 
             // Connect
             log.info("UpstoxStreamer", "Step 5: Calling streamer.connect()...");
-            streamer.connect();
+            activeStreamer.connect();
             log.info("UpstoxStreamer", "Step 5: streamer.connect() called - waiting for onOpen callback...");
 
         } catch (Exception e) {
@@ -291,17 +315,25 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
         if (connectionWatchdog != null) {
             connectionWatchdog.cancel(false);
         }
-        if (streamer != null) {
+        MarketDataStreamerV3 activeStreamer = streamer;
+        connectionGeneration.incrementAndGet();
+        streamer = null;
+        if (activeStreamer != null) {
             log.info("UpstoxStreamer", "Disconnecting...");
             isConnecting = false;
-            streamer.disconnect();
+            activeStreamer.disconnect();
             isConnected = false;
         }
     }
 
+    private boolean isCurrentConnection(long generation, MarketDataStreamerV3 candidate) {
+        return generation == connectionGeneration.get() && streamer == candidate;
+    }
+
     @Override
     public void subscribe(Set<String> rawSymbols, String mode) {
-        if (streamer == null) {
+        MarketDataStreamerV3 activeStreamer = streamer;
+        if (activeStreamer == null) {
             log.warn("UpstoxStreamer", "Streamer not initialized. Cannot subscribe.");
             return;
         }
@@ -338,7 +370,7 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
         Mode sdkMode = parseMode(mode);
 
         log.info("UpstoxStreamer", "Subscribing to instrument keys: " + instrumentKeys);
-        streamer.subscribe(instrumentKeys, sdkMode);
+        activeStreamer.subscribe(instrumentKeys, sdkMode);
         log.info("UpstoxStreamer", "Subscription successful for " + instrumentKeys.size() + " instruments");
     }
 

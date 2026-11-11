@@ -16,6 +16,8 @@ public class InstrumentSearchCriteria {
     private List<String> segments; // List of segments (e.g., NSE_EQ, NSE_FO)
     private List<String> isins; // List of ISINs
     private List<String> tradingSymbols; // List of trading symbols
+    /** Exact underlying/asset symbols for structured derivative searches. */
+    private List<String> underlyingSymbols;
     private Boolean weekly; // Filter by weekly expiry
     private String provider = "UPSTOX"; // Data provider (UPSTOX, ZERODHA, etc.)
 }
