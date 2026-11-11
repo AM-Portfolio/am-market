@@ -62,27 +62,16 @@ FROM eclipse-temurin:21-jdk-jammy
 
 WORKDIR /app
 
-# Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer).
-# Enable Ubuntu universe repository so Chrome's dependencies (fonts-liberation,
-# libvulkan1, libx11-6, etc.) can be resolved by apt.
-RUN set -eux; \
-  export DEBIAN_FRONTEND=noninteractive; \
-  if [ -f /etc/apt/sources.list ]; then \
-    sed -i 's/main/main universe multiverse/g' /etc/apt/sources.list; \
-  fi; \
-  if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
-    sed -i 's/Components: main/Components: main universe multiverse/g' /etc/apt/sources.list.d/ubuntu.sources; \
-  fi; \
-  apt-get -o Acquire::Retries=3 update; \
-  apt-get install -y --no-install-recommends ca-certificates curl tzdata; \
-  curl -fsSL --retry 3 --retry-all-errors \
-    https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    -o /tmp/google-chrome-stable.deb; \
-  apt-get install -y --no-install-recommends /tmp/google-chrome-stable.deb; \
-  rm -f /tmp/google-chrome-stable.deb; \
-  ln -snf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime; \
-  echo "Asia/Kolkata" > /etc/timezone; \
-  rm -rf /var/lib/apt/lists/*
+# Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer)
+RUN apt-get update && \
+  apt-get install -y curl wget gnupg2 && \
+  wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+  sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
+  apt-get update && \
+  apt-get install -y google-chrome-stable && \
+  rm -rf /var/lib/apt/lists/* && \
+  # Set timezone
+  ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime
 
 # Copy data directory for instrument seeding
 COPY am-market-data/data/ data/
