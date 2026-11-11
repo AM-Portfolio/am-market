@@ -62,16 +62,23 @@ FROM eclipse-temurin:21-jdk-jammy
 
 WORKDIR /app
 
-# Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer)
-RUN apt-get update && \
-  apt-get install -y curl wget gnupg2 && \
-  wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-  sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
-  apt-get update && \
-  apt-get install -y google-chrome-stable && \
-  rm -rf /var/lib/apt/lists/* && \
-  # Set timezone
-  ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime
+# Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer).
+# Use a signed HTTPS repository instead of the deprecated apt-key/HTTP flow.
+RUN set -eux; \
+  export DEBIAN_FRONTEND=noninteractive; \
+  apt-get -o Acquire::Retries=3 update; \
+  apt-get install -y --no-install-recommends ca-certificates curl gnupg tzdata; \
+  install -d -m 0755 /etc/apt/keyrings; \
+  curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | \
+    gpg --dearmor --yes -o /etc/apt/keyrings/google-chrome.gpg; \
+  chmod a+r /etc/apt/keyrings/google-chrome.gpg; \
+  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
+    > /etc/apt/sources.list.d/google-chrome.list; \
+  apt-get -o Acquire::Retries=3 update; \
+  apt-get install -y --no-install-recommends google-chrome-stable; \
+  ln -snf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime; \
+  echo "Asia/Kolkata" > /etc/timezone; \
+  rm -rf /var/lib/apt/lists/*
 
 # Copy data directory for instrument seeding
 COPY am-market-data/data/ data/
