@@ -135,24 +135,30 @@ public class StockIndicesService {
 
             if (!missingSymbols.isEmpty()) {
                 try {
-                    // Skip REST fallback if WebSocket is active and streaming, UNLESS forceRefresh is requested
+                    // A missing cache entry means the stream has not produced a usable
+                    // quote for this symbol. The provider name alone is not proof that
+                    // the WebSocket is healthy, so never suppress the current-price
+                    // fallback merely because UPSTOX is selected.
                     boolean isWebSocketActive = "UPSTOX".equalsIgnoreCase(redisCacheService.getActiveProvider());
                     java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
                     java.time.DayOfWeek dayOfWeek = istNow.getDayOfWeek();
                     boolean isWeekend = dayOfWeek == java.time.DayOfWeek.SATURDAY || dayOfWeek == java.time.DayOfWeek.SUNDAY;
                     boolean isMarketHours = !isWeekend && istNow.toLocalTime().isAfter(java.time.LocalTime.of(9, 10)) && istNow.toLocalTime().isBefore(java.time.LocalTime.of(15, 45));
 
-                    if (isWebSocketActive && isMarketHours && !forceRefresh) {
-                        log.info(methodName, "WebSocket is active provider and market is open. Skipping REST fallback for: " + missingSymbols + " (relying purely on WS ticks)");
-                    } else {
-                        List<CompletableFuture<Void>> futures = new ArrayList<>();
-                        for (String symbol : missingSymbols) {
+                    boolean providerRefreshRequired = forceRefresh || isMarketHours;
+                    if (isWebSocketActive && isMarketHours) {
+                        log.warn(methodName, "Live cache is missing/stale for " + missingSymbols.size()
+                                + " symbols; using bounded provider fallback instead of returning stale index metadata");
+                    }
+
+                    List<CompletableFuture<Void>> futures = new ArrayList<>();
+                    for (String symbol : missingSymbols) {
                             CompletableFuture<Void> symbolFuture = activeSymbolFetches.computeIfAbsent(symbol, sym -> {
                                 log.info(methodName, "🚀 [COALESCING] Initiating single flight live price fetch for symbol: " + sym);
                                 return CompletableFuture.supplyAsync(() -> {
                                     try {
                                         // Use getOHLC to fetch complete daily OHLC and previous close directly from provider
-                                        Map<String, OHLCQuote> ohlcResponse = marketDataCacheService.getOHLC(Set.of(sym), true, TimeFrame.DAY, forceRefresh);
+                                        Map<String, OHLCQuote> ohlcResponse = marketDataCacheService.getOHLC(Set.of(sym), true, TimeFrame.DAY, providerRefreshRequired);
                                         if (ohlcResponse != null && ohlcResponse.containsKey(sym)) {
                                             return ohlcResponse.get(sym);
                                         }
@@ -171,12 +177,11 @@ public class StockIndicesService {
                                   return null;
                               }).whenComplete((v, ex) -> activeSymbolFetches.remove(symbol));
 
-                            futures.add(symbolFuture);
-                        }
-
-                        // Wait for all symbol fetches to finish (or timeout)
-                        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
+                        futures.add(symbolFuture);
                     }
+
+                    // Wait for all symbol fetches to finish (or timeout)
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
                 } catch (Exception e) {
                     log.error(methodName, "Error fetching fallback live prices for indices", e);
                 }

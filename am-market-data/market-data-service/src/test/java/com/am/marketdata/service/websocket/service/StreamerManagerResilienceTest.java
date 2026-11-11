@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.am.common.investment.persistence.document.global.GlobalIndexConfigRepository;
 import com.am.marketdata.common.MarketDataStreamer;
+import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.service.MarketDataPublisher;
 import com.am.marketdata.service.MarketDataCacheService;
 import com.am.marketdata.service.MarketDataPersistenceService;
@@ -17,6 +18,7 @@ import com.am.marketdata.service.global.GlobalIndexCacheWriter;
 import com.am.marketdata.service.global.GlobalMarketScheduleService;
 import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
 import java.util.concurrent.Executor;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -114,5 +116,32 @@ class StreamerManagerResilienceTest {
 
         verify(streamer).disconnect();
         verify(redisTemplate, never()).opsForValue();
+    }
+
+    @Test
+    void connectedStreamIsNotReadyUntilARealTickArrives() {
+        when(streamer.isConnected()).thenReturn(true);
+
+        manager.onOpen();
+
+        org.junit.jupiter.api.Assertions.assertFalse(manager.isStreaming());
+
+        OHLCQuote quote = OHLCQuote.builder()
+                .lastPrice(25000.0)
+                .previousClose(24900.0)
+                .build();
+        manager.onMessage(Map.of("NIFTY 50", quote));
+
+        org.junit.jupiter.api.Assertions.assertTrue(manager.isStreaming());
+    }
+
+    @Test
+    void duplicateConnectRequestsAreCoalescedWhileHandshakeIsInFlight() {
+        when(streamer.isConnected()).thenReturn(false);
+
+        manager.startStreaming();
+        manager.startStreaming();
+
+        verify(streamer, org.mockito.Mockito.times(1)).connect();
     }
 }

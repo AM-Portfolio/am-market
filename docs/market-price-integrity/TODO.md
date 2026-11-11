@@ -152,6 +152,31 @@
 - [ ] Deploy dev, refresh its synced secret, and verify Redis auth, streaming, movers, and latency.
 - [ ] Request separate production rollout approval with exact command, impact, and rollback.
 
+## Confirmed Dev top-widget stale-price regression
+
+- [ ] Correct the effective Dev `SCHEDULER_INGESTION_ENABLED` value at the authoritative Vault/config source; retain WebSocket enabled and REST polling disabled.
+- [ ] Verify the deployed pod starts the existing Upstox stream and subscribes to configured index/instrument symbols during market hours.
+- [ ] Replace the provider-configured-only fallback decision with actual stream-health validation: connection state plus recent tick age.
+- [ ] On stale/missing live cache, perform one bounded/coalesced fresh quote recovery instead of returning old Mongo metadata as current.
+- [ ] Change inactive-stream fallback to use the current quote path and fix the invalid `upstox` bean lookup through injection.
+- [ ] Add regression tests for ingestion disabled, disconnected stream, stale Redis, fresh WebSocket tick, provider timeout, and closed-market behavior.
+- [ ] Add operational diagnostics for effective flags, stream state, last tick age, subscriptions, and fallback path.
+- [ ] Validate with Dev curl/API comparisons and browser WebSocket frames before marking the fix complete.
+
+## Plan-review additions: provider heartbeat and reconnect safety
+
+- [ ] Verify the exact effective Dev Vault/config revision and set ingestion enabled at the approved source.
+- [x] Verify the Upstox SDK reconnect controls/version and select one reconnect owner; prevent SDK/application reconnect races.
+- [x] Add connection-generation and single-flight guards so stale callbacks cannot reconnect or overwrite a newer stream.
+- [x] Treat pong timeout/1006 as a bounded network recovery; treat 401/403/token expiry as credential recovery, not infinite retry.
+- [x] Mark a stream healthy only after a valid post-reconnect tick is persisted to Redis.
+- [ ] Track last provider tick, last Redis write, cache age, reconnect count, subscribed count, and updated-symbol count as operational metrics.
+- [x] Reject out-of-order ticks and prevent timestamped old writes from replacing newer Redis quotes across multiple pods.
+- [x] Bound index fallback refreshes and prevent stale `forceRefresh=false` fallback publication during market hours.
+- [x] Fix the invalid `upstox` self-healing lookup through dependency injection.
+- [ ] Add tests for heartbeat loss, reconnect-without-ticks, reconnect race, token expiry, provider rate limit, Redis outage, duplicate subscriptions, partial batches, holidays, market close, and pod restart.
+- [ ] Re-run Dev and Preprod normal/forced/live endpoint comparisons and browser gateway-frame verification after implementation.
+
 ## Optional quote details and market depth
 
 - [ ] Inventory quote endpoint consumers and identify any strict JSON decoders before extending `/quotes`.
@@ -175,3 +200,11 @@
 - [ ] Run focused provider, persistence, service tests; then market-data/Indian-index regression.
 - [ ] Preprod only: verify live Upstox history for every configured exact key, requested range/row counts, timeframe baselines, and Postman contract snapshots. No production calls or mutations without separate approval.
 - [ ] Leave IXIC/SSEC, Mongo reconciliation, actual database backfill, and provider redistribution approval gated until separately verified/authorized.
+
+## Implementation update — 2026-11-11
+
+- [x] Reject previous-session or expired Redis latest-price snapshots during an active exchange session using quote session date and quote/write freshness.
+- [x] Apply the same snapshot validation to OHLC live-price overlays so historical OHLC cannot silently become the current card price.
+- [x] Make the legacy live-prices path prefer validated current-tick Redis data during market hours and recover missing symbols from the provider instead of historical OHLC.
+- [x] Add regression coverage for previous-session snapshots with a refreshed Redis write timestamp and for live-price reads during market hours.
+- [ ] Build/deploy the backend image and repeat Dev endpoint verification for all index timeframes and refresh modes.

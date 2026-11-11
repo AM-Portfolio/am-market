@@ -298,6 +298,173 @@ revision as the deployed image; an image-only rollout leaves streaming disabled
 and does not apply the resilience settings. Do not print or commit secret
 values.
 
+## Confirmed Dev top-widget stale-price regression (2026-11-11)
+
+**Evidence:** During Indian market hours, `POST /v1/indices/batch?forceRefresh=false`
+returned the old Dev snapshot (for example, NIFTY 50 `24399.35` and `-2.58%`),
+while `GET /v1/market-data/live-prices?...&refresh=false` returned approximately
+`25228.65`, and the same batch request with `forceRefresh=true` returned
+`25229.15` and `+0.74%`. The effective Dev Deployment currently contains
+`SCHEDULER_INGESTION_ENABLED=false`, `SCHEDULER_INGESTION_USE_WEBSOCKET=true`,
+and REST polling disabled. Runtime logs repeatedly report `Streamer inactive`.
+
+**Root cause:** The live stream path already exists, but the `StreamerManager`
+guard added in commit `72c8ed62` exits when ingestion is disabled. When stale
+Redis latest-price data is rejected after the 15-minute market-hours freshness
+limit, `StockIndicesService` incorrectly treats configured provider `UPSTOX` as
+proof that a live WebSocket is healthy and skips the REST recovery path. The
+response then retains old Mongo index metadata. The fallback scheduler also
+uses `forceRefresh=false`, which can perpetuate the stale snapshot, and its
+self-healing lookup logs `No bean named 'upstox' available`.
+
+**Implementation plan:**
+
+1. Correct the authoritative Dev scheduler configuration so ingestion and the
+   existing Upstox WebSocket are enabled; keep the guard for environments that
+   intentionally disable market ingestion.
+2. Reuse the existing stream-health state (`connected`, last tick time, and
+   no-tick watchdog) when deciding whether `StockIndicesService` may skip live
+   recovery. Provider selection alone must never suppress recovery.
+3. On a stale/missing live cache during market hours, execute one bounded,
+   coalesced fresh provider batch. Do not return old Mongo metadata as current.
+4. Make the inactive-stream fallback use the current-quote path and repair the
+   provider bean lookup through dependency injection, not the invalid string
+   name `upstox`.
+5. Add startup/health diagnostics for effective ingestion flags, stream state,
+   last tick age, subscribed symbol count, and fallback reason without secrets.
+6. Verify normal batch, forced batch, live-price, Redis cache, WebSocket tick,
+   and UI top-card values agree during market hours; verify closed-market
+   behavior separately.
+
+**Non-goals:** no hardcoded prices, no UI-side correction, no new endpoint,
+no change to the public batch response, and no changes to movers, heatmap, or
+unrelated market modules.
+
+## Plan review and hardened recovery design (2026-11-11)
+
+### Runtime evidence reviewed
+
+- **Dev:** the effective Deployment has ingestion disabled, WebSocket enabled,
+  and REST polling disabled. Logs report `Streamer inactive`; the normal batch
+  response is stale while forced/live reads are current.
+- **Preprod:** ingestion and WebSocket are enabled. The provider stream closed
+  with code `1006` because the peer did not answer a pong, followed by repeated
+  `InterruptedIOException` errors during authorization/reconnect. A later
+  `CONNECTION ESTABLISHED` and subscription to 704 symbols was logged, but a
+  successful reconnect alone is not proof that post-reconnect ticks reached the
+  cache. Normal batch, live-price, and forced-batch values still differed.
+- **Source behavior:** the Upstox SDK has its own auto-reconnect path while
+  `StreamerManager` also schedules reconnects. The two recovery owners can
+  overlap and produce interrupted authorization attempts.
+
+### Initial plan rating: 7/10
+
+The initial plan correctly covered the Dev flag, stale-cache fallback, actual
+stream health, provider recovery, diagnostics, and basic regression tests. It
+was incomplete because it did not explicitly cover provider heartbeat loss,
+SDK-versus-application reconnect ownership, post-reconnect tick proof, token
+expiry, duplicate streams, ordered cache writes, fallback rate limits, or the
+user-visible stale/pending state.
+
+### Gaps and edge cases added
+
+1. A WebSocket can report connected but deliver no ticks after reconnect.
+2. Provider heartbeat/pong failure can repeatedly interrupt authorization.
+3. SDK auto-reconnect and application reconnect can race or create duplicate
+   connections/subscriptions.
+4. A late/out-of-order tick can overwrite a newer Redis quote.
+5. Token expiry, 401/403, provider rate limits, DNS failure, and timeout need
+   different recovery behavior from a temporary network disconnect.
+6. A fallback refresh for 704 symbols can overload the provider or executor.
+7. One pod restart or multiple replicas can create duplicate upstream streams.
+8. A stale quote must never be labelled live; after-hours and holidays need a
+   verified last-close state.
+9. A partial batch must not make some cards current and others silently old.
+10. Reconnect success must be verified through a fresh tick and cache timestamp,
+    not only through a socket-open callback.
+
+### Hardened implementation plan
+
+1. **Configuration gate:** set Dev's authoritative scheduler value to enabled;
+   preserve explicit disable behavior for environments that intentionally stop
+   ingestion. Log the effective values at startup.
+2. **Single reconnect owner:** choose one owner for reconnect/backoff. Prefer
+   `StreamerManager` as the lifecycle owner and prevent overlapping SDK and
+   application reconnect attempts, using a single-flight connection lock.
+3. **Heartbeat recovery:** on pong timeout, close the old client cleanly,
+   invalidate its connection generation, and reconnect with bounded exponential
+   backoff and jitter. Classify 401/403/token expiry as a credential-refresh
+   stop condition, not an endless retry.
+4. **Post-reconnect readiness:** mark the stream healthy only after receiving a
+   valid tick for an expected subscribed symbol and writing it successfully to
+   Redis. Track `lastTickAt`, `lastCacheWriteAt`, connection generation, and
+   subscription count.
+5. **Fresh quote selection:** make `/v1/indices/batch` use a fresh live cache
+   only when its timestamp, session date, symbol identity, and sequence/order
+   are valid. If stale or missing, use one bounded/coalesced current-provider
+   batch. Never promote old Mongo metadata as current during market hours.
+6. **Safe fallback:** when the stream is unhealthy, refresh only the required
+   symbols in bounded chunks with rate-limit-aware concurrency. Do not let the
+   five-minute fallback repeatedly write old `forceRefresh=false` data back into
+   the live cache. Fix the invalid `upstox` bean lookup through injection.
+7. **Consistency rule:** publish a quote snapshot with one source timestamp and
+   baseline. Reject partial/stale entries or expose their availability state;
+   do not mix a new LTP with an old change/previous-close calculation.
+8. **Operational visibility:** add metrics/health details for effective flags,
+   stream state, provider error class, last tick age, cache age, reconnect count,
+   symbols subscribed, symbols updated, and fallback calls. Never log tokens.
+9. **Regression coverage:** test disabled ingestion, heartbeat close, reconnect
+   race, reconnect-without-ticks, token expiry, provider timeout/rate limit,
+   Redis outage, out-of-order ticks, partial batch, duplicate subscription,
+   market close, holiday, and pod restart.
+10. **Rollout proof:** validate Dev and Preprod with normal batch, forced batch,
+    live-price, Redis/cache age, provider stream logs, and browser gateway
+    frames. Require normal and forced responses to converge within a documented
+    tolerance before declaring the environment healthy.
+
+### Final plan rating: 9/10
+
+The plan now covers the confirmed Dev configuration failure, the confirmed
+Preprod heartbeat/reconnect failure, stale-cache promotion, data consistency,
+provider failures, operational recovery, and test/rollout evidence. It is not
+10/10 yet because the exact Upstox SDK switch for disabling its internal
+auto-reconnect and the authoritative Dev Vault revision still need to be
+verified before implementation.
+
+## Implementation status (2026-11-11)
+
+The first implementation slice is complete in the existing backend paths:
+
+- `StreamerManager` is now the application-level reconnect owner with a
+  single in-flight connection guard. A connected socket is not considered
+  healthy until a real tick arrives, and the no-tick watchdog can recover it.
+- `UpstoxMarketDataStreamer` disables the SDK auto-reconnect loop and uses a
+  connection generation guard so callbacks from an old socket cannot mutate
+  the new connection state.
+- `StockIndicesService` no longer suppresses the current-provider fallback
+  just because UPSTOX is selected. Missing/stale live cache entries now use a
+  bounded current-provider refresh during market hours instead of returning
+  stale Mongo index metadata.
+- The fallback scheduler no longer publishes cache-first fallback values while
+  the market is open and the live stream is not ready.
+- The Dev Helm default explicitly enables ingestion; the authoritative Vault
+  value still must be verified during deployment.
+- Redis latest-price reads now preserve quote timestamp/trade date, and the
+  invalid self-healing provider lookup now uses the qualified provider bean.
+- Timestamped latest-price writes now use an atomic Redis compare-and-set, so
+  out-of-order WebSocket ticks cannot overwrite a newer quote, including when
+  more than one application instance writes the same symbol.
+
+Build verification passed for the affected Maven modules. Focused cache and
+stream resilience tests passed, including post-reconnect readiness and
+duplicate-connect regression coverage. One pre-existing quote snapshot test
+still requires a Spring `ApplicationContext` in its standalone setup; it is
+not caused by this implementation slice.
+
+The remaining rollout items are authoritative Dev Vault verification,
+provider-rate-limit/concurrency metrics, broader partial-batch test coverage,
+and live Dev/Preprod endpoint convergence after deployment.
+
 ## 7. Acceptance & Verification Matrix
 
 | ID | Scenario | Required Behavior | Status |

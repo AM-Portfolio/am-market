@@ -40,6 +40,14 @@ public class MarketDataFallbackScheduler {
             return;
         }
 
+        if (streamerManager.isMarketWindowOpen()) {
+            // A dead or reconnecting stream during market hours must not publish
+            // cache-first/Mongo fallback values as if they were live ticks. The
+            // request path owns the bounded current-provider fallback instead.
+            log.warn("Live streamer is not ready during market hours; skipping stale fallback publication");
+            return;
+        }
+
         log.info("⏰ Streamer inactive - fetching fallback data via API");
 
         try {

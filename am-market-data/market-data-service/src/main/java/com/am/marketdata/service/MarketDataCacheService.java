@@ -4,6 +4,7 @@ import com.am.common.investment.model.historical.HistoricalData;
 import com.am.common.investment.model.historical.OHLCVTPoint;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
+import com.marketdata.common.MarketDataProvider;
 import com.am.marketdata.common.util.ApplicationContextProvider;
 import com.am.marketdata.common.util.MarketDepthFreshness;
 import com.am.marketdata.redis.model.OHLCV;
@@ -21,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.connection.ReturnType;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executor;
 import java.util.concurrent.CompletableFuture;
@@ -41,6 +43,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Implementation of MarketDataCacheService for caching market data in Redis
@@ -51,6 +54,11 @@ public class MarketDataCacheService {
     private final AppLogger log = AppLogger.getLogger();
     private static final String DEFAULT_INTERVAL = "5m";
     private static final int HISTORICAL_REDIS_PIPELINE_SYMBOL_BATCH_SIZE = 50;
+    private static final String WRITE_NEWER_LATEST_PRICE =
+            "local old=redis.call('get', KEYS[2]); " +
+            "if old and tonumber(old) and tonumber(old) >= tonumber(ARGV[1]) then return 0 end; " +
+            "redis.call('setex', KEYS[1], ARGV[2], ARGV[3]); " +
+            "redis.call('setex', KEYS[2], ARGV[2], ARGV[1]); return 1";
 
     private final StockCacheService stockCacheService;
     private final ObjectMapper objectMapper;
@@ -58,6 +66,10 @@ public class MarketDataCacheService {
     private final PreviousCloseRepository previousCloseRepository;
     private final MarketHoursService marketHoursService;
     private final MarketCalendarService marketCalendarService;
+
+    @Autowired(required = false)
+    @org.springframework.beans.factory.annotation.Qualifier("upstoxMarketDataProvider")
+    private MarketDataProvider upstoxMarketDataProvider;
 
     @Value("${market.data.depth.max.age.seconds:60}")
     private long marketDepthMaxAgeSeconds = 60;
@@ -214,6 +226,60 @@ public class MarketDataCacheService {
 
     private static long readLong(Object value) {
         return value instanceof Number number ? number.longValue() : 0L;
+    }
+
+    /**
+     * A latest-price snapshot is a live quote only when it belongs to the
+     * currently expected exchange session and is recent enough to represent
+     * that session. Historical OHLC data must not be promoted to a current
+     * price merely because it is present in Redis.
+     */
+    private boolean isUsableLiveSnapshot(Map<String, Object> latestData, String exchange) {
+        Double lastPrice = readPositiveNumber(latestData.get("lastPrice"));
+        if (lastPrice == null) {
+            return false;
+        }
+
+        boolean marketOpen = isLiveTickOverlayAllowed();
+        if (!marketOpen) {
+            // After the session, the last verified session close is valid until
+            // the next exchange session starts.
+            return true;
+        }
+
+        LocalDate expectedDate = expectedQuoteSessionDate(exchange);
+        if (expectedDate == null) {
+            return false;
+        }
+
+        LocalDate quoteDate = readDate(latestData.get("quoteTradeDate"));
+        Object timestampValue = latestData.get("quoteTimestamp");
+        Instant quoteTimestamp = null;
+        if (timestampValue instanceof String timestamp && !timestamp.isBlank()) {
+            try {
+                quoteTimestamp = Instant.parse(timestamp);
+            } catch (RuntimeException ignored) {
+                return false;
+            }
+        }
+
+        if (quoteDate != null && !expectedDate.equals(quoteDate)) {
+            return false;
+        }
+        if (quoteTimestamp != null) {
+            if (!expectedDate.equals(quoteTimestamp.atZone(ZoneId.of("Asia/Kolkata")).toLocalDate())) {
+                return false;
+            }
+            return isRecentMillis(quoteTimestamp.toEpochMilli(),
+                    TimeUnit.MINUTES.toMillis(marketQuoteMaxAgeMinutes));
+        }
+
+        // Backward-compatible support for cache entries created before
+        // quoteTimestamp was persisted, but only while their write timestamp is
+        // demonstrably recent.
+        long updatedAt = readLong(latestData.get("updatedAt"));
+        return quoteDate != null && expectedDate.equals(quoteDate)
+                && isRecent(updatedAt, marketQuoteMaxAgeMinutes);
     }
 
     private static boolean isRecent(long updatedAtMillis, long maxAgeMinutes) {
@@ -705,12 +771,8 @@ public class MarketDataCacheService {
                             double latestPrice = ((Number) latestData.getOrDefault("lastPrice", 0.0)).doubleValue();
                             double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
                             LocalDate quoteDate = readDate(latestData.get("quoteTradeDate"));
-                            long updatedAt = readLong(latestData.get("updatedAt"));
                             LocalDate expectedDate = expectedQuoteSessionDate(exchanges.get(i));
-                            boolean sessionMatches = quoteDate != null && quoteDate.equals(expectedDate);
-                            boolean isMarketOpen = isLiveTickOverlayAllowed();
-                            boolean recentUndatedSnapshot = quoteDate == null && (!isMarketOpen || isRecent(updatedAt, marketQuoteMaxAgeMinutes));
-                            if (!sessionMatches && !recentUndatedSnapshot) {
+                            if (!isUsableLiveSnapshot(latestData, exchanges.get(i))) {
                                 log.info("overlayLatestPrices", "Ignoring stale quote snapshot symbol={} quoteDate={} expectedDate={}",
                                         entries.get(i).getKey(), quoteDate, expectedDate);
                                 continue;
@@ -906,7 +968,7 @@ public class MarketDataCacheService {
                 if (cacheBackfillExecutor != null) {
                     CompletableFuture.runAsync(() -> {
                         try {
-                            com.marketdata.common.MarketDataProvider provider = com.am.marketdata.common.util.ApplicationContextProvider.getBean("upstox", com.marketdata.common.MarketDataProvider.class);
+                            MarketDataProvider provider = upstoxMarketDataProvider;
                             if (provider != null) {
                                 log.info("overlayLatestPrices", "Self-healing (async): Triggering historical fallback sync for " + finalMissingSymbols.size() + " symbols: " + finalMissingSymbols);
                                 Map<String, OHLCQuote> freshQuotes = provider.getOHLC(finalMissingSymbols, TimeFrame.DAY);
@@ -1454,6 +1516,7 @@ public class MarketDataCacheService {
 
             // Step 3: Accumulate Redis pipeline commands and MongoDB documents
             Map<String, String> latestPriceRedisWrites = new HashMap<>();
+            Map<String, Long> latestPriceSourceTimes = new HashMap<>();
             Map<String, String> prevCloseRedisWrites = new HashMap<>();
             List<PreviousCloseDocument> mongoPrevCloseDocs = new ArrayList<>();
 
@@ -1540,7 +1603,11 @@ public class MarketDataCacheService {
 
                 String json = objectMapper.writeValueAsString(cacheData);
                 // 1. Write standard plain key for backward compatibility
-                latestPriceRedisWrites.put("market:latest-price:" + symbol, json);
+                String plainLatestKey = "market:latest-price:" + symbol;
+                latestPriceRedisWrites.put(plainLatestKey, json);
+                if (quote.getQuoteTimestamp() != null) {
+                    latestPriceSourceTimes.put(plainLatestKey, quote.getQuoteTimestamp().toEpochMilli());
+                }
                 // 2. Write exchange-qualified key if rawSymbol has exchange prefix (e.g. BSE:RELIANCE or BSE_EQ|...)
                 if (rawSymbol.contains(":") || rawSymbol.contains("|")) {
                     String ex = "NSE";
@@ -1549,17 +1616,34 @@ public class MarketDataCacheService {
                     } else if (rawSymbol.contains("|")) {
                         ex = rawSymbol.split("\\|", 2)[0].trim().toUpperCase();
                     }
-                    latestPriceRedisWrites.put("market:latest-price:" + ex + ":" + symbol, json);
+                    String qualifiedLatestKey = "market:latest-price:" + ex + ":" + symbol;
+                    latestPriceRedisWrites.put(qualifiedLatestKey, json);
+                    if (quote.getQuoteTimestamp() != null) {
+                        latestPriceSourceTimes.put(qualifiedLatestKey, quote.getQuoteTimestamp().toEpochMilli());
+                    }
                 }
             }
 
-            // Step 4: Execute bulk Redis pipelined write for latest prices (7 days TTL - weekend & holiday resilient)
+            // Step 4: Execute bulk Redis pipelined write for latest prices (7 days TTL - weekend & holiday resilient).
+            // Timestamped provider ticks use an atomic Redis compare-and-set so a
+            // late WebSocket frame cannot overwrite a newer quote.
             if (!latestPriceRedisWrites.isEmpty()) {
                 redisTemplate.executePipelined((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
                     for (Map.Entry<String, String> e : latestPriceRedisWrites.entrySet()) {
                         byte[] keyBytes = redisTemplate.getStringSerializer().serialize(e.getKey());
                         byte[] valueBytes = redisTemplate.getStringSerializer().serialize(e.getValue());
-                        connection.setEx(keyBytes, 7 * 24 * 3600, valueBytes); // 7 days expiration
+                        Long sourceTime = latestPriceSourceTimes.get(e.getKey());
+                        if (sourceTime != null && sourceTime > 0) {
+                            byte[] timestampKey = redisTemplate.getStringSerializer()
+                                    .serialize(e.getKey() + ":source-time");
+                            byte[] sourceTimeBytes = String.valueOf(sourceTime).getBytes(StandardCharsets.UTF_8);
+                            byte[] ttlBytes = String.valueOf(7 * 24 * 3600).getBytes(StandardCharsets.UTF_8);
+                            byte[] scriptBytes = WRITE_NEWER_LATEST_PRICE.getBytes(StandardCharsets.UTF_8);
+                            connection.eval(scriptBytes, ReturnType.INTEGER, 2,
+                                    keyBytes, timestampKey, sourceTimeBytes, ttlBytes, valueBytes);
+                        } else {
+                            connection.setEx(keyBytes, 7 * 24 * 3600, valueBytes); // 7 days expiration
+                        }
                     }
                     return null;
                 });
@@ -1650,6 +1734,15 @@ public class MarketDataCacheService {
                 for (int index = 0; index < chunk.size(); index++) {
                     String symbol = chunk.get(index);
                     String cleanSymbol = canonicalTicker(symbol);
+                    String rawSymbol = symbol == null ? "" : symbol.trim().toUpperCase();
+                    String exchange = "NSE";
+                    if (rawSymbol.contains("|")) {
+                        String[] parts = rawSymbol.split("\\|", 2);
+                        exchange = parts[0];
+                    } else if (rawSymbol.contains(":")) {
+                        String[] parts = rawSymbol.split(":", 2);
+                        exchange = parts[0];
+                    }
                     String json = values != null && index < values.size() ? values.get(index) : null;
                     if (json == null && values != null && index + chunk.size() < values.size()) {
                         json = values.get(index + chunk.size());
@@ -1659,11 +1752,8 @@ public class MarketDataCacheService {
 
                     // Only ignore Redis prices as stale during active market hours.
                     // When market is closed, the closing session price remains valid until the next session.
-                    long updatedAt = ((Number) map.getOrDefault("updatedAt", 0L)).longValue();
-                    long ageMs = System.currentTimeMillis() - updatedAt;
-                    boolean isMarketOpen = isLiveTickOverlayAllowed();
-                    if (isMarketOpen && ageMs > 15 * 60 * 1000) {
-                        log.warn("getLatestPrices", "Redis price for " + cleanSymbol + " is stale during market hours (age: " + (ageMs / 1000) + "s). Ignoring.");
+                    if (!isUsableLiveSnapshot(map, exchange)) {
+                        log.warn("getLatestPrices", "Redis price for {} is stale or belongs to an unexpected market session; ignoring", cleanSymbol);
                         continue;
                     }
 
@@ -1683,6 +1773,18 @@ public class MarketDataCacheService {
                     quote.setLastPrice(lastPrice);
                     quote.setOhlc(ohlc);
                     quote.setPreviousClose(previousClose);
+                    LocalDate quoteTradeDate = readDate(map.get("quoteTradeDate"));
+                    if (quoteTradeDate != null) {
+                        quote.setQuoteTradeDate(quoteTradeDate);
+                    }
+                    Object quoteTimestamp = map.get("quoteTimestamp");
+                    if (quoteTimestamp instanceof String timestamp && !timestamp.isBlank()) {
+                        try {
+                            quote.setQuoteTimestamp(Instant.parse(timestamp));
+                        } catch (RuntimeException ignored) {
+                            log.debug("getLatestPrices", "Ignoring invalid quote timestamp for {}", cleanSymbol);
+                        }
+                    }
 
                     if (Double.isFinite(lastPrice) && lastPrice > 0.0) {
                         result.put(symbol, quote);
