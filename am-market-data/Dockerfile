@@ -63,10 +63,16 @@ FROM eclipse-temurin:21-jdk-jammy
 WORKDIR /app
 
 # Install curl, Google Chrome for Selenium scraper, and set timezone (cached layer).
-# Install Chrome from Google's official package endpoint so the build does not
-# depend on the availability or metadata state of the apt repository.
+# Enable Ubuntu universe repository so Chrome's dependencies (fonts-liberation,
+# libvulkan1, libx11-6, etc.) can be resolved by apt.
 RUN set -eux; \
   export DEBIAN_FRONTEND=noninteractive; \
+  if [ -f /etc/apt/sources.list ]; then \
+    sed -i 's/main/main universe multiverse/g' /etc/apt/sources.list; \
+  fi; \
+  if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
+    sed -i 's/Components: main/Components: main universe multiverse/g' /etc/apt/sources.list.d/ubuntu.sources; \
+  fi; \
   apt-get -o Acquire::Retries=3 update; \
   apt-get install -y --no-install-recommends ca-certificates curl tzdata; \
   curl -fsSL --retry 3 --retry-all-errors \
