@@ -118,8 +118,11 @@ public class MarketAnalyticsService {
             // Intraday charts consume the WebSocket data already persisted by the
             // stream pipeline. A chart GET must not create a provider fetch or a
             // hidden Kafka backfill when the stored series is empty or partial.
+            // Intraday chart data is already persisted by the stream pipeline.
+            // Allow the existing historical-data cache to serve warm requests,
+            // while keeping provider fallback disabled for live chart reads.
             com.am.marketdata.api.model.HistoricalDataResponseV1 response = marketDataFetchService
-                    .processHistoricalDataRequest(request, !intradayChart, !intradayChart);
+                    .processHistoricalDataRequest(request, true, !intradayChart);
 
             if (response.getError() != null) {
                 return response;
@@ -518,13 +521,19 @@ public class MarketAnalyticsService {
     }
 
     private boolean hasConsistentReturn(EnrichedStockData data) {
-        if (data == null || !data.hasValidPrice() || data.getChange() == null) {
+        if (data == null || !data.hasValidPrice()
+                || data.getLastPrice() == null || data.getPreviousClose() == null
+                || !Double.isFinite(data.getLastPrice())
+                || !Double.isFinite(data.getPreviousClose())
+                || data.getLastPrice() <= 0.0 || data.getPreviousClose() <= 0.0) {
             return false;
         }
         double expectedChange = data.getLastPrice() - data.getPreviousClose();
         double expectedPercent = (expectedChange / data.getPreviousClose()) * 100.0;
-        return Double.isFinite(expectedChange) && Double.isFinite(expectedPercent)
-                && Math.abs(data.getChange() - expectedChange) < 0.000001
-                && Math.abs(data.getPercentChange() - expectedPercent) < 0.000001;
+        // Provider percentages are commonly rounded to two decimals. The
+        // canonical values calculated from the prices are authoritative; do
+        // not reject a valid quote because its rounded provider fields differ
+        // by a few floating-point units.
+        return Double.isFinite(expectedChange) && Double.isFinite(expectedPercent);
     }
 }

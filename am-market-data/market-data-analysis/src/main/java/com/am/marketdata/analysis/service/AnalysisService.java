@@ -409,7 +409,7 @@ public class AnalysisService {
         // Map Date -> Close
         NavigableMap<LocalDate, Double> closeMap = new TreeMap<>();
         for (OHLCVTPoint p : points) {
-            if (p.getTime() != null && p.getClose() != null) {
+            if (p.getTime() != null && isValidPrice(p.getClose())) {
                 closeMap.put(p.getTime().toLocalDate(), p.getClose());
             }
         }
@@ -452,14 +452,15 @@ public class AnalysisService {
                     double startPrice = prevEntry.getValue();
                     double endPrice = lastEntry.getValue();
 
-                    if (startPrice > 0) {
+                    if (isValidPrice(startPrice) && isValidPrice(endPrice)) {
                         double ret = (endPrice - startPrice) / startPrice * 100.0;
                         monthlyReturns.put(m.toString(), round2(ret));
                     }
 
-                    if (yearStartPrice == -1 && startPrice > 0)
+                    if (yearStartPrice == -1 && isValidPrice(startPrice))
                         yearStartPrice = startPrice; // First month processed (Jan or partial)
-                    yearEndPrice = endPrice; // Keep updating
+                    if (isValidPrice(endPrice))
+                        yearEndPrice = endPrice; // Keep updating
                 }
 
                 // Detailed Daily Returns
@@ -471,12 +472,14 @@ public class AnalysisService {
                         Double yesterdayClose = closeMap.get(d.minusDays(1)); // This might rely on map having exact key
                         // Better: use floorEntry for yesterday? No, return is strict day-to-day
                         // Actually, for calendar heatmap, it compares to previous trading day
-                        if (todayClose != null) {
+                        if (isValidPrice(todayClose)) {
                             Map.Entry<LocalDate, Double> prevDayEntry = closeMap.floorEntry(d.minusDays(1));
                             if (prevDayEntry != null) {
                                 double pClose = prevDayEntry.getValue();
-                                double change = (todayClose - pClose) / pClose * 100.0;
-                                days.put(d.getDayOfMonth(), round2(change));
+                                if (isValidPrice(pClose)) {
+                                    double change = (todayClose - pClose) / pClose * 100.0;
+                                    days.put(d.getDayOfMonth(), round2(change));
+                                }
                             }
                         }
                         d = d.plusDays(1);
@@ -503,14 +506,14 @@ public class AnalysisService {
             if (yearPrevEntry != null && yearLastEntry != null && yearLastEntry.getKey().getYear() == currentYear) {
                 double yStart = yearPrevEntry.getValue();
                 double yEnd = yearLastEntry.getValue();
-                if (yStart > 0) {
+                if (isValidPrice(yStart) && isValidPrice(yEnd)) {
                     yearlyRet = round2((yEnd - yStart) / yStart * 100.0);
                 }
 
                 // Capture for overall
-                if (currentYear == to.getYear())
+                if (currentYear == to.getYear() && isValidPrice(yEnd))
                     overallEndPrice = yEnd;
-                if (currentYear == from.getYear())
+                if (currentYear == from.getYear() && isValidPrice(yStart))
                     overallStartPrice = yStart;
             }
 
@@ -545,6 +548,7 @@ public class AnalysisService {
         }
         return response;
     }
+
     // --- Heatmap Analysis ---
 
     public Map<String, Double> getHeatmap(String symbol, String timeframeStr) {
