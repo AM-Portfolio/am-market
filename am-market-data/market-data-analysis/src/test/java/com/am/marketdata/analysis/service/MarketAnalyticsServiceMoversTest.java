@@ -61,8 +61,10 @@ class MarketAnalyticsServiceMoversTest {
 
         StockDataEnricher enricher = spy(new StockDataEnricher(mock(SmartStockService.class)));
         doReturn(prices).when(enricher).enrichWithPrices(members, TimeFrame.DAY, false);
+        AnalysisRedisCache analysisRedisCache = mock(AnalysisRedisCache.class);
+        when(analysisRedisCache.normalizeIndexSymbol(anyString())).thenAnswer(invocation -> invocation.getArgument(0));
         MarketAnalyticsService service = new MarketAnalyticsService(
-                indicesService, securityService, enricher, marketDataFetchService);
+                indicesService, securityService, enricher, marketDataFetchService, analysisRedisCache);
 
         TopMoversResponse result = service.getMoversUnified(10, "NIFTY 50", TimeFrame.DAY, false);
 
@@ -105,8 +107,10 @@ class MarketAnalyticsServiceMoversTest {
 
         StockDataEnricher enricher = spy(new StockDataEnricher(mock(SmartStockService.class)));
         doReturn(prices).when(enricher).enrichWithPrices(members, TimeFrame.DAY, false);
+        AnalysisRedisCache analysisRedisCache = mock(AnalysisRedisCache.class);
+        when(analysisRedisCache.normalizeIndexSymbol(anyString())).thenAnswer(invocation -> invocation.getArgument(0));
         MarketAnalyticsService service = new MarketAnalyticsService(
-                indicesService, securityService, enricher, marketDataFetchService);
+                indicesService, securityService, enricher, marketDataFetchService, analysisRedisCache);
 
         TopMoversResponse result = service.getMoversUnified(10, "NIFTY 50", TimeFrame.DAY, false);
         assertEquals(List.of("STOCK0"), result.getGainers().stream().map(StockMoverDTO::getSymbol).toList());
@@ -140,8 +144,10 @@ class MarketAnalyticsServiceMoversTest {
 
         StockDataEnricher enricher = spy(new StockDataEnricher(mock(SmartStockService.class)));
         doReturn(prices).when(enricher).enrichWithPrices(members, TimeFrame.DAY, false);
+        AnalysisRedisCache analysisRedisCache = mock(AnalysisRedisCache.class);
+        when(analysisRedisCache.normalizeIndexSymbol(anyString())).thenAnswer(invocation -> invocation.getArgument(0));
         MarketAnalyticsService service = new MarketAnalyticsService(
-                indicesService, securityService, enricher, marketDataFetchService);
+                indicesService, securityService, enricher, marketDataFetchService, analysisRedisCache);
 
         TopMoversResponse result = service.getMoversUnified(10, "NIFTY 50", TimeFrame.DAY, false);
         assertEquals(List.of(), result.getGainers());

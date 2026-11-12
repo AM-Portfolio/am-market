@@ -205,11 +205,20 @@ public class StockRedisCache {
         }
 
         try {
+            // RedisConnection#setEx is a write-only command and does not
+            // produce a per-command result in Spring's pipelined callback.
+            // Count commands queued instead of treating an empty result list
+            // as a failed write (which caused index caches to be reported as
+            // unsuccessful even though the pipeline had valid commands).
+            int[] queuedWrites = { 0 };
             List<Object> pipelineResults = redisTemplate.executePipelined(
                     (org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
                 for (StockBars stockBars : stockBarsList) {
-                    String symbol = stockBars.getSymbol();
-                    String interval = stockBars.getInterval(); // Should be 1d usually
+                    if (stockBars == null || stockBars.getSymbol() == null || stockBars.getInterval() == null) {
+                        continue;
+                    }
+                    String symbol = stockBars.getSymbol().trim();
+                    String interval = stockBars.getInterval().trim().toUpperCase(Locale.ROOT);
                     List<OHLCV> bars = stockBars.getBars();
 
                     if (bars == null || bars.isEmpty()) continue;
@@ -226,6 +235,7 @@ public class StockRedisCache {
                             byte[] valueBytes = redisTemplate.getStringSerializer().serialize(json);
 
                             connection.setEx(keyBytes, ttlSeconds, valueBytes);
+                            queuedWrites[0]++;
                         } catch (Exception e) {
                             log.error("saveHistoricalBar", "Error processing bar for " + symbol + ": " + e.getMessage());
                         }
@@ -234,17 +244,18 @@ public class StockRedisCache {
                 return null;
             });
 
-            // Feature-flagged or unavailable Redis clients can make the
-            // pipeline a no-op. Do not report a successful cache write in that
-            // case; the caller must retain database/provider fallback behavior.
-            if (pipelineResults == null || pipelineResults.isEmpty()) {
+            // A write-only Redis pipeline legitimately has no result objects.
+            // The queued command count is the success signal here.
+            if (queuedWrites[0] == 0) {
                 redisCircuitBreaker.recordSuccess();
-                log.warn("saveHistoricalBar", "Historical cache pipeline produced no Redis results");
+                log.warn("saveHistoricalBar", "Historical cache pipeline queued no valid Redis writes");
                 return false;
             }
 
             redisCircuitBreaker.recordSuccess();
-            log.debug("saveHistoricalBar", "Executed pipeline for " + stockBarsList.size() + " stock bar sets");
+            log.debug("saveHistoricalBar", "Executed pipeline for " + stockBarsList.size()
+                    + " stock bar sets and queued " + queuedWrites[0] + " writes"
+                    + " (pipelineResults=" + (pipelineResults == null ? 0 : pipelineResults.size()) + ")");
             return true;
         } catch (Exception e) {
             redisCircuitBreaker.recordFailure("historical-write", e);

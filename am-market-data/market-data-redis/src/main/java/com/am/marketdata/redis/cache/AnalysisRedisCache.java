@@ -361,4 +361,114 @@ public class AnalysisRedisCache {
         }
         return null;
     }
+
+    // --- MOVERS CACHE ---
+
+    private static final String MOVERS_PREFIX = "analysis:movers";
+
+    /**
+     * Builds standard Redis cache key for top movers:
+     * analysis:movers:{INDEX_SYMBOL}:{TIMEFRAME}:{LIMIT}:{TYPE}:{EXPAND_INDICES}
+     */
+    private String getMoversKey(String indexSymbol, String timeFrame, int limit, String type, boolean expandIndices) {
+        String normIndex = normalizeIndexSymbol(indexSymbol);
+        String normTf = (timeFrame == null || timeFrame.isBlank()) ? "1D" : timeFrame.trim().toUpperCase(java.util.Locale.ROOT);
+        String normType = (type == null || type.isBlank()) ? "ALL" : type.trim().toUpperCase(java.util.Locale.ROOT);
+        return String.format("%s:%s:%s:%d:%s:%b", MOVERS_PREFIX, normIndex, normTf, limit, normType, expandIndices);
+    }
+
+    /**
+     * Normalizes index symbol to match the exact `_id` stored in MongoDB `stock_indices_market_data`.
+     * Strips exchange prefixes (e.g., 'NSE:', 'BSE:'), trims leading/trailing whitespace, and uppercases.
+     */
+    public String normalizeIndexSymbol(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            return "NIFTY 50";
+        }
+        String clean = symbol.trim().toUpperCase(java.util.Locale.ROOT);
+        while (clean.contains(":")) {
+            clean = clean.substring(clean.indexOf(":") + 1).trim();
+        }
+        return clean;
+    }
+
+    /**
+     * Computes dynamic TTL based on Indian Market trading hours (Asia/Kolkata):
+     * - Regular Market Hours (09:15 - 15:30 IST on Weekdays): Short 30s TTL for real-time freshness.
+     * - Off-Market Hours / Weekends: Cache is capped to next market opening (09:15 IST) up to a max of 3600s (1h).
+     * This prevents off-market static data from persisting into live market trading sessions.
+     */
+    public long calculateMoversTtlSeconds() {
+        java.time.ZoneId istZone = java.time.ZoneId.of("Asia/Kolkata");
+        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(istZone);
+        java.time.DayOfWeek day = now.getDayOfWeek();
+        java.time.LocalTime time = now.toLocalTime();
+
+        boolean isWeekday = (day != java.time.DayOfWeek.SATURDAY && day != java.time.DayOfWeek.SUNDAY);
+        java.time.LocalTime marketOpen = java.time.LocalTime.of(9, 15);
+        java.time.LocalTime marketClose = java.time.LocalTime.of(15, 30);
+
+        boolean isMarketOpen = isWeekday && !time.isBefore(marketOpen) && !time.isAfter(marketClose);
+
+        if (isMarketOpen) {
+            return 30L;
+        }
+
+        // Off-market: calculate remaining seconds until next weekday 09:15 IST market open
+        java.time.ZonedDateTime nextOpen = now.with(marketOpen).withSecond(0).withNano(0);
+        if (time.isAfter(marketClose) || !isWeekday) {
+            nextOpen = nextOpen.plusDays(1);
+            while (nextOpen.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || nextOpen.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+                nextOpen = nextOpen.plusDays(1);
+            }
+        }
+
+        long secondsUntilOpen = java.time.Duration.between(now, nextOpen).getSeconds();
+        if (secondsUntilOpen <= 0) {
+            return 30L;
+        }
+        // Cap to 1 hour max, or until market open if closer
+        return Math.min(3600L, secondsUntilOpen);
+    }
+
+    /**
+     * Saves JSON payload of calculated movers into Redis with circuit-breaker protection and dynamic TTL.
+     */
+    public void saveMoversRawJson(String indexSymbol, String timeFrame, int limit, String type, boolean expandIndices, String json) {
+        if (json == null || json.isBlank()) return;
+        if (!isRedisFeatureEnabled() || !redisCircuitBreaker.allowRequest()) return;
+        try {
+            String key = getMoversKey(indexSymbol, timeFrame, limit, type, expandIndices);
+            long ttl = calculateMoversTtlSeconds();
+            redisTemplate.opsForValue().set(key, json, ttl, TimeUnit.SECONDS);
+            redisCircuitBreaker.recordSuccess();
+            log.debug("saveMoversRawJson", "Cached movers for " + key + " with ttlSec=" + ttl);
+        } catch (Exception e) {
+            redisCircuitBreaker.recordFailure("movers-write", e);
+            log.error("saveMoversRawJson", "Error caching movers: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves precomputed movers JSON from Redis if available and circuit is healthy.
+     */
+    public String getMoversRawJson(String indexSymbol, String timeFrame, int limit, String type, boolean expandIndices) {
+        if (!isRedisFeatureEnabled() || !redisCircuitBreaker.allowRequest()) return null;
+        try {
+            String key = getMoversKey(indexSymbol, timeFrame, limit, type, expandIndices);
+            String json = redisTemplate.opsForValue().get(key);
+            if (json != null) {
+                redisCircuitBreaker.recordSuccess();
+                return json;
+            }
+        } catch (Exception e) {
+            redisCircuitBreaker.recordFailure("movers-read", e);
+            log.error("getMoversRawJson", "Error retrieving movers cache: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public com.fasterxml.jackson.databind.ObjectMapper getRedisObjectMapper() {
+        return this.redisObjectMapper;
+    }
 }
