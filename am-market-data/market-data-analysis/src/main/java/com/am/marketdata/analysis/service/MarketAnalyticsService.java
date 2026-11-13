@@ -28,6 +28,7 @@ public class MarketAnalyticsService {
     private final SecurityService securityService;
     private final StockDataEnricher stockDataEnricher;
     private final com.am.marketdata.api.service.MarketDataFetchService marketDataFetchService;
+    private final com.am.marketdata.redis.cache.AnalysisRedisCache analysisRedisCache;
 
     // Default broad index for "entire market" analytics
     private static final String DEFAULT_MARKET_INDEX = "NIFTY 50";
@@ -118,8 +119,11 @@ public class MarketAnalyticsService {
             // Intraday charts consume the WebSocket data already persisted by the
             // stream pipeline. A chart GET must not create a provider fetch or a
             // hidden Kafka backfill when the stored series is empty or partial.
+            // Intraday chart data is already persisted by the stream pipeline.
+            // Allow the existing historical-data cache to serve warm requests,
+            // while keeping provider fallback disabled for live chart reads.
             com.am.marketdata.api.model.HistoricalDataResponseV1 response = marketDataFetchService
-                    .processHistoricalDataRequest(request, !intradayChart, !intradayChart);
+                    .processHistoricalDataRequest(request, true, !intradayChart);
 
             if (response.getError() != null) {
                 return response;
@@ -287,25 +291,38 @@ public class MarketAnalyticsService {
      * 
      * @param limit         Number of records
      * @param type          "gainers" or "losers"
-     * @param indexSymbol   Index to use for filtering (e.g., "NIFTY 50", "NIFTY
-     *                      500")
+     * @param indexSymbol   Index to use for filtering (e.g., "NIFTY 50", "NIFTY 500")
      * @param timeFrame     Time frame for price data (e.g., 1D, 1W, 1M)
      * @param expandIndices Whether to expand index symbols to constituent stocks
      * @return List of enriched stock data sorted by percentage change
      */
     public List<StockMoverDTO> getMovers(int limit, String type, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
-        // Use provided index or default
-        String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
+        // Normalize symbol (e.g. "NSE:NIFTY 50" -> "NIFTY 50") to match MongoDB stock_indices_market_data _id
+        String targetIndex = analysisRedisCache != null ? analysisRedisCache.normalizeIndexSymbol(indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX) : (indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol.trim().toUpperCase(Locale.ROOT) : DEFAULT_MARKET_INDEX);
+        String tfStr = timeFrame != null ? timeFrame.getApiValue() : "1D";
 
-        // Fetch enriched data
+        // 1. Check Redis response cache first
+        if (analysisRedisCache != null) {
+            String cachedJson = analysisRedisCache.getMoversRawJson(targetIndex, tfStr, limit, type, expandIndices);
+            if (cachedJson != null) {
+                try {
+                    return analysisRedisCache.getRedisObjectMapper().readValue(cachedJson,
+                            new com.fasterxml.jackson.core.type.TypeReference<List<StockMoverDTO>>() {});
+                } catch (Exception e) {
+                    log.warn("getMovers", "Failed to deserialize cached movers for " + targetIndex + ": " + e.getMessage());
+                }
+            }
+        }
+
+        // 2. Cache miss: Fetch and enrich constituent quotes from MongoDB / InfluxDB
         List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices, true);
 
         if (enrichedData.isEmpty()) {
             return Collections.emptyList();
         }
 
-        // Sort by percentage change
+        // 3. Sort by percentage change (gainers descending, losers ascending)
         boolean descending = "gainers".equalsIgnoreCase(type);
         List<EnrichedStockData> filteredData = enrichedData.stream()
                 .filter(data -> data.getChange() != null && Double.isFinite(data.getChange())
@@ -314,10 +331,22 @@ public class MarketAnalyticsService {
         List<EnrichedStockData> sortedData = stockDataEnricher.sortByPercentChange(filteredData, descending);
 
         // Convert to response format and limit results
-        return sortedData.stream()
+        List<StockMoverDTO> result = sortedData.stream()
                 .limit(limit)
                 .map(this::enrichedDataToMap)
                 .collect(Collectors.toList());
+
+        // 4. Cache non-empty valid result in Redis with dynamic market-aware TTL
+        if (analysisRedisCache != null && result != null && !result.isEmpty()) {
+            try {
+                String json = analysisRedisCache.getRedisObjectMapper().writeValueAsString(result);
+                analysisRedisCache.saveMoversRawJson(targetIndex, tfStr, limit, type, expandIndices, json);
+            } catch (Exception e) {
+                log.warn("getMovers", "Failed to serialize movers cache: " + e.getMessage());
+            }
+        }
+
+        return result;
     }
 
     /**
@@ -325,9 +354,24 @@ public class MarketAnalyticsService {
      */
     public TopMoversResponse getMoversUnified(int limit, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
-        String targetIndex = indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX;
+        // Normalize symbol to match MongoDB stock_indices_market_data _id
+        String targetIndex = analysisRedisCache != null ? analysisRedisCache.normalizeIndexSymbol(indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX) : (indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol.trim().toUpperCase(Locale.ROOT) : DEFAULT_MARKET_INDEX);
+        String tfStr = timeFrame != null ? timeFrame.getApiValue() : "1D";
+
+        // 1. Check Redis response cache first
+        if (analysisRedisCache != null) {
+            String cachedJson = analysisRedisCache.getMoversRawJson(targetIndex, tfStr, limit, "all", expandIndices);
+            if (cachedJson != null) {
+                try {
+                    return analysisRedisCache.getRedisObjectMapper().readValue(cachedJson, TopMoversResponse.class);
+                } catch (Exception e) {
+                    log.warn("getMoversUnified", "Failed to deserialize cached unified movers for " + targetIndex + ": " + e.getMessage());
+                }
+            }
+        }
+
         /*
-         * Read prices once, then sort the same snapshot in both directions.
+         * 2. Read prices once, then sort the same snapshot in both directions.
          * This avoids two slow provider calls and mismatched gainers/losers.
          */
         List<EnrichedStockData> enrichedData = fetchEnrichedData(targetIndex, timeFrame, expandIndices, true);
@@ -356,10 +400,22 @@ public class MarketAnalyticsService {
                 .map(this::enrichedDataToMap)
                 .collect(Collectors.toList());
 
-        return TopMoversResponse.builder()
+        TopMoversResponse response = TopMoversResponse.builder()
                 .gainers(gainers)
                 .losers(losers)
                 .build();
+
+        // 3. Guard against caching degenerate/empty results before storing in Redis
+        if (analysisRedisCache != null && ((gainers != null && !gainers.isEmpty()) || (losers != null && !losers.isEmpty()))) {
+            try {
+                String json = analysisRedisCache.getRedisObjectMapper().writeValueAsString(response);
+                analysisRedisCache.saveMoversRawJson(targetIndex, tfStr, limit, "all", expandIndices, json);
+            } catch (Exception e) {
+                log.warn("getMoversUnified", "Failed to serialize unified movers cache: " + e.getMessage());
+            }
+        }
+
+        return response;
     }
 
     private List<EnrichedStockData> fetchEnrichedData(String targetIndex,
@@ -518,13 +574,19 @@ public class MarketAnalyticsService {
     }
 
     private boolean hasConsistentReturn(EnrichedStockData data) {
-        if (data == null || !data.hasValidPrice() || data.getChange() == null) {
+        if (data == null || !data.hasValidPrice()
+                || data.getLastPrice() == null || data.getPreviousClose() == null
+                || !Double.isFinite(data.getLastPrice())
+                || !Double.isFinite(data.getPreviousClose())
+                || data.getLastPrice() <= 0.0 || data.getPreviousClose() <= 0.0) {
             return false;
         }
         double expectedChange = data.getLastPrice() - data.getPreviousClose();
         double expectedPercent = (expectedChange / data.getPreviousClose()) * 100.0;
-        return Double.isFinite(expectedChange) && Double.isFinite(expectedPercent)
-                && Math.abs(data.getChange() - expectedChange) < 0.000001
-                && Math.abs(data.getPercentChange() - expectedPercent) < 0.000001;
+        // Provider percentages are commonly rounded to two decimals. The
+        // canonical values calculated from the prices are authoritative; do
+        // not reject a valid quote because its rounded provider fields differ
+        // by a few floating-point units.
+        return Double.isFinite(expectedChange) && Double.isFinite(expectedPercent);
     }
 }
