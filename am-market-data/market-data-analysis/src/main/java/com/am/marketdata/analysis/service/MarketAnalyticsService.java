@@ -170,6 +170,13 @@ public class MarketAnalyticsService {
                                 .getDataPoints().stream()
                                 .filter(p -> {
                                     try {
+                                        // A malformed provider candle must never reach the
+                                        // chart. Returning it would make the UI draw a false
+                                        // spike/flat line and could poison the next cache write.
+                                        if (p == null || p.getTime() == null
+                                                || !isValidCandle(p)) {
+                                            return false;
+                                        }
                                         // Performance Optimization: Use pre-cached kolkataZone instance instead of calling ZoneId.of() inside stream loop
                                         long timestamp = p.getTime().atZone(kolkataZone)
                                                 .toInstant()
@@ -194,6 +201,12 @@ public class MarketAnalyticsService {
 
                         if (!filteredPoints.isEmpty()) {
                             symbolData.setDataPoints(filteredPoints);
+                            // The response count must describe the serialized points,
+                            // not the provider's requested/available count. This prevents
+                            // clients from interpreting a partial series as complete.
+                            symbolData.setDataPointCount(filteredPoints.size());
+                        } else {
+                            symbolData.setDataPointCount(0);
                         }
                     }
                 });
@@ -206,6 +219,18 @@ public class MarketAnalyticsService {
                     .message(e.getMessage())
                     .build();
         }
+    }
+
+    private boolean isValidCandle(com.am.common.investment.model.historical.OHLCVTPoint point) {
+        double open = point.getOpen();
+        double high = point.getHigh();
+        double low = point.getLow();
+        double close = point.getClose();
+        return Double.isFinite(open) && Double.isFinite(high)
+                && Double.isFinite(low) && Double.isFinite(close)
+                && open > 0.0 && high > 0.0 && low > 0.0 && close > 0.0
+                && low <= open && low <= close
+                && high >= open && high >= close;
     }
 
     /**

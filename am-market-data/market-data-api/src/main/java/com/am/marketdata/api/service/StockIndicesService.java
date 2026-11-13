@@ -164,7 +164,10 @@ public class StockIndicesService {
                     boolean isWebSocketActive = "UPSTOX".equalsIgnoreCase(redisCacheService.getActiveProvider());
                     boolean isMarketHours = isMarketOpen();
 
-                    boolean providerRefreshRequired = forceRefresh || isMarketHours;
+                    // A missing live quote is unsafe to satisfy from an older historical
+                    // candle, even after the NSE session has closed.  The provider's
+                    // latest quote is the source of truth for the current/last session.
+                    boolean providerRefreshRequired = true;
                     if (isWebSocketActive && isMarketHours) {
                         log.warn(methodName, "Live cache is missing/stale for " + missingSymbols.size()
                                 + " symbols; using bounded provider fallback instead of returning stale index metadata");
@@ -476,14 +479,10 @@ public class StockIndicesService {
                             isStale = true;
                         }
 
-                        if (isStale) {
-                            if (!isMarketOpen()) {
-                                isStale = false; // Outside market hours, consider it fresh
-                            }
-                        }
-
-                        // Add to results regardless of staleness to avoid blocking. 
-                        // Enrichment will provide latest prices from Redis anyway.
+                        // A stale membership snapshot must remain stale outside market
+                        // hours.  The last official close still has to be refreshed;
+                        // treating an old snapshot as fresh caused yesterday's prices to
+                        // be served as today's close.
                         finalResults.add(doc);
                         foundSymbols.add(doc.getIndexSymbol());
 
