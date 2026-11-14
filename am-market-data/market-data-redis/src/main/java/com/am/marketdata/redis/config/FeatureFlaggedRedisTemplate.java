@@ -175,7 +175,25 @@ public class FeatureFlaggedRedisTemplate<K, V> extends RedisTemplate<K, V> {
         if (growthBookService == null) {
             return true;
         }
-        boolean enabled = growthBookService.isOn(flagKey);
+        if (!growthBookService.isConnected()) {
+            if (lastState == null || !lastState) {
+                lastState = true;
+                log.info("[Redis-FF] GrowthBook SSE disconnected; keeping Redis caching ENABLED by default.");
+            }
+            return true;
+        }
+        final boolean enabled;
+        try {
+            enabled = growthBookService.isOn(flagKey);
+        } catch (Exception exception) {
+            // Redis is an accelerator, but disabling it on a feature-flag transport
+            // failure turns every request into an expensive database/provider request.
+            // Keep Redis enabled when the flag service is unavailable; Redis itself is
+            // still protected by RedisAvailabilityGuard.
+            log.warn("[Redis-FF] GrowthBook unavailable; defaulting Redis to ENABLED", exception);
+            lastState = true;
+            return true;
+        }
         if (lastState == null || lastState != enabled) {
             lastState = enabled;
             if (enabled) {
