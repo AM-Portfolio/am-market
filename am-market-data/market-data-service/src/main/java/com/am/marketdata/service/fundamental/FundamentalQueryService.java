@@ -43,6 +43,41 @@ public class FundamentalQueryService {
     // Fast in-memory resolution cache for static Symbol -> ISIN mappings (zero-cost RAM footprint < 50KB)
     private final Map<String, String> isinCache = new ConcurrentHashMap<>(1024);
 
+    private final Map<String, String> isinAliasMap = new ConcurrentHashMap<>();
+    private final Map<String, String> symbolAliasMap = new ConcurrentHashMap<>();
+
+    @jakarta.annotation.PostConstruct
+    public void initAliases() {
+        try {
+            org.springframework.core.io.ClassPathResource resource = new org.springframework.core.io.ClassPathResource("symbol_aliases.json");
+            if (resource.exists()) {
+                ObjectMapper mapper = new ObjectMapper();
+                try (java.io.InputStream is = resource.getInputStream()) {
+                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(is);
+                    com.fasterxml.jackson.databind.JsonNode isinAliases = root.path("isinAliases");
+                    if (isinAliases.isObject()) {
+                        isinAliases.fields().forEachRemaining(entry ->
+                                isinAliasMap.put(entry.getKey().toUpperCase(), entry.getValue().asText().toUpperCase()));
+                    }
+                    com.fasterxml.jackson.databind.JsonNode symAliases = root.path("symbolAliases");
+                    if (symAliases.isObject()) {
+                        symAliases.fields().forEachRemaining(entry ->
+                                symbolAliasMap.put(entry.getKey().toUpperCase(), entry.getValue().asText().toUpperCase()));
+                    }
+                }
+                log.info("FundamentalQueryService loaded {} isinAliases and {} symbolAliases from classpath",
+                        isinAliasMap.size(), symbolAliasMap.size());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to load symbol_aliases.json in FundamentalQueryService: {}", e.getMessage());
+        }
+    }
+
+    public String resolveSymbolAlias(String symbol) {
+        if (symbol == null || symbol.isBlank()) return symbol;
+        return symbolAliasMap.getOrDefault(symbol.trim().toUpperCase(), symbol.trim().toUpperCase());
+    }
+
     /**
      * Resolves a stock symbol or ISIN string to a validated ISIN code.
      * Supports case-insensitive trading symbols (e.g. "tcs", "TCS", "Itc", "HDFCBANK")
@@ -67,7 +102,8 @@ public class FundamentalQueryService {
 
         // Direct ISIN detection: 12-char starting with IN / 2-letter country code
         if (cleaned.toUpperCase().matches("^[A-Z]{2}[A-Z0-9]{10}$")) {
-            return cleaned.toUpperCase();
+            String candidateIsin = cleaned.toUpperCase();
+            return isinAliasMap.getOrDefault(candidateIsin, candidateIsin);
         }
 
         String cacheKey = cleaned.toUpperCase();
@@ -75,9 +111,15 @@ public class FundamentalQueryService {
             return isinCache.get(cacheKey);
         }
 
+        // Apply symbol alias normalization (e.g. ZOMATO -> ETERNAL)
+        String normalizedSymbol = symbolAliasMap.getOrDefault(cleaned.toUpperCase(), cleaned.toUpperCase());
+
         // Generate candidate variations for robust fuzzy matching (handles spaces, hyphens, underscores, dots)
         List<String> candidates = new ArrayList<>();
         candidates.add(cleaned);
+        if (!cleaned.equalsIgnoreCase(normalizedSymbol)) {
+            candidates.add(normalizedSymbol);
+        }
 
         String compact = cleaned.replaceAll("[\\s\\-_.]+", "");
         if (!compact.isEmpty() && !candidates.contains(compact)) {
@@ -106,6 +148,7 @@ public class FundamentalQueryService {
         for (String candidate : candidates) {
             String isin = queryIsinByExactSymbol(candidate);
             if (isin != null) {
+                isin = isinAliasMap.getOrDefault(isin, isin);
                 isinCache.put(cacheKey, isin);
                 return isin;
             }
@@ -114,6 +157,7 @@ public class FundamentalQueryService {
         // Fallback 1: Match by Company Name prefix/exact in fundamental_analysis & securities
         String isinByCompany = queryIsinByCompanyName(cleaned);
         if (isinByCompany != null) {
+            isinByCompany = isinAliasMap.getOrDefault(isinByCompany, isinByCompany);
             isinCache.put(cacheKey, isinByCompany);
             return isinByCompany;
         }
@@ -320,6 +364,30 @@ public class FundamentalQueryService {
                     }
                 }
             }
+
+            // Upstock_instruments fallback for unmapped ISINs (e.g. newly listed or corporate actions)
+            Set<String> missing = new HashSet<>(cleanIsins);
+            missing.removeAll(map.keySet());
+            if (!missing.isEmpty()) {
+                try {
+                    org.bson.Document query = new org.bson.Document("isin", new org.bson.Document("$in", missing));
+                    for (org.bson.Document instDoc : mongoTemplate.getCollection("upstock_instruments").find(query)) {
+                        String isin = instDoc.getString("isin");
+                        String symbol = instDoc.getString("trading_symbol");
+                        String name = instDoc.getString("name");
+                        if (isin != null && symbol != null) {
+                            isin = isin.toUpperCase();
+                            SecurityDocument sec = SecurityDocument.builder()
+                                    .key(SecurityDocument.SecurityKey.builder().isin(isin).symbol(symbol.trim()).build())
+                                    .metadata(SecurityDocument.SecurityMetadata.builder().companyName(name).build())
+                                    .build();
+                            map.putIfAbsent(isin, sec);
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.debug("Fallback upstock_instruments resolution note: {}", ex.getMessage());
+                }
+            }
             return map;
         } catch (Exception e) {
             log.warn("Failed batched security lookup: {}", e.getMessage());
@@ -398,6 +466,15 @@ public class FundamentalQueryService {
                             }
                         }
                     }
+                }
+            }
+            if (symbol.equals(isin)) {
+                // Fallback to upstock_instruments
+                org.bson.Document instQuery = new org.bson.Document("isin", isin);
+                org.bson.Document instDoc = mongoTemplate.getCollection("upstock_instruments").find(instQuery).first();
+                if (instDoc != null) {
+                    if (instDoc.getString("trading_symbol") != null) symbol = instDoc.getString("trading_symbol").trim();
+                    if (instDoc.getString("name") != null) companyName = instDoc.getString("name").trim();
                 }
             }
         } catch (Exception e) {
@@ -560,7 +637,7 @@ public class FundamentalQueryService {
 
     private void updateDocumentSection(String isin, String sectionName, java.util.function.Consumer<FundamentalData> updater) {
         try {
-            Optional<FundamentalData> docOpt = fundamentalDataRepository.findByIsin(isin);
+            Optional<FundamentalData> docOpt = fundamentalDataRepository.findFirstByIsin(isin);
             Instant now = Instant.now();
             FundamentalData doc = docOpt.orElseGet(() -> FundamentalData.builder()
                     .isin(isin)
@@ -625,7 +702,7 @@ public class FundamentalQueryService {
                 log.debug("Async analytics computation note for {}: {}", isin, e.getMessage());
             }
 
-            Optional<FundamentalData> existingOpt = fundamentalDataRepository.findByIsin(isin);
+            Optional<FundamentalData> existingOpt = fundamentalDataRepository.findFirstByIsin(isin);
             Instant now = Instant.now();
             FundamentalData doc = existingOpt.orElseGet(() -> FundamentalData.builder()
                     .isin(isin)

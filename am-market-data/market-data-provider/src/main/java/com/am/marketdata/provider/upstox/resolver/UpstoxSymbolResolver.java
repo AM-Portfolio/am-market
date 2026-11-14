@@ -58,14 +58,43 @@ public class UpstoxSymbolResolver implements SymbolResolver {
 
     @jakarta.annotation.PostConstruct
     public void loadAliases() {
+        isinRemapCache.clear();
+        symbolAliasCache.clear();
+        loadBaselineJsonAliases();
+        loadDbAliases();
+    }
+
+    private void loadBaselineJsonAliases() {
+        try (java.io.InputStream is = getClass().getClassLoader().getResourceAsStream("symbol_aliases.json")) {
+            if (is == null) {
+                log.info("UpstoxSymbolResolver", "No symbol_aliases.json found on classpath");
+                return;
+            }
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(is);
+            if (root.has("symbolAliases")) {
+                root.get("symbolAliases").fields().forEachRemaining(entry -> {
+                    symbolAliasCache.put(entry.getKey().trim().toUpperCase(), entry.getValue().asText().trim().toUpperCase());
+                });
+            }
+            if (root.has("isinAliases")) {
+                root.get("isinAliases").fields().forEachRemaining(entry -> {
+                    isinRemapCache.put(entry.getKey().trim().toUpperCase(), entry.getValue().asText().trim().toUpperCase());
+                });
+            }
+            log.info("UpstoxSymbolResolver", "Loaded baseline " + symbolAliasCache.size() + " symbol aliases and " + isinRemapCache.size() + " ISIN aliases from symbol_aliases.json");
+        } catch (Exception e) {
+            log.warn("UpstoxSymbolResolver", "Could not load symbol_aliases.json: " + e.getMessage());
+        }
+    }
+
+    private void loadDbAliases() {
         if (symbolAliasRepository == null) {
             return;
         }
         try {
             List<com.am.marketdata.common.model.SymbolAlias> aliases = symbolAliasRepository.findAll();
             if (aliases != null) {
-                isinRemapCache.clear();
-                symbolAliasCache.clear();
                 for (com.am.marketdata.common.model.SymbolAlias alias : aliases) {
                     if (alias.getId() == null || alias.getTarget() == null) {
                         continue;
@@ -76,7 +105,7 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                         symbolAliasCache.put(alias.getId().trim().toUpperCase(), alias.getTarget().trim().toUpperCase());
                     }
                 }
-                log.info("UpstoxSymbolResolver", "Loaded " + isinRemapCache.size() + " ISIN remaps and " + symbolAliasCache.size() + " symbol aliases from DB");
+                log.info("UpstoxSymbolResolver", "Merged aliases from DB into cache. Current total: " + isinRemapCache.size() + " ISIN remaps, " + symbolAliasCache.size() + " symbol aliases");
             }
         } catch (Exception e) {
             log.warn("UpstoxSymbolResolver", "Could not load symbol aliases from DB: " + e.getMessage());
@@ -299,6 +328,9 @@ public class UpstoxSymbolResolver implements SymbolResolver {
 
             if (cleaned.matches("^[A-Z]{2}[A-Z0-9]{10}$")) {
                 isinSymbols.add(cleaned);
+                if (isinRemapCache.containsKey(cleaned)) {
+                    isinSymbols.add(isinRemapCache.get(cleaned));
+                }
             } else {
                 allTradingSymbols.add(cleaned);
             }
@@ -366,7 +398,8 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                 String candSymbol = candidate.getTradingSymbol();
                 String candIsin = candidate.getIsin();
                 boolean symbolMatches = (candSymbol != null && candSymbol.equalsIgnoreCase(cleanSymbol))
-                        || (candIsin != null && candIsin.equalsIgnoreCase(cleanSymbol));
+                        || (candIsin != null && candIsin.equalsIgnoreCase(cleanSymbol))
+                        || (candIsin != null && isinRemapCache.containsKey(cleanSymbol) && candIsin.equalsIgnoreCase(isinRemapCache.get(cleanSymbol)));
 
                 if (!symbolMatches) {
                     continue;
@@ -477,7 +510,19 @@ public class UpstoxSymbolResolver implements SymbolResolver {
             }
             cleaned = cleaned.substring(delimiter + 1).trim();
         }
-        return symbolAliasCache.getOrDefault(cleaned, cleaned);
+        String target = symbolAliasCache.get(cleaned);
+        if (target == null && symbolAliasRepository != null) {
+            try {
+                java.util.Optional<com.am.marketdata.common.model.SymbolAlias> found = symbolAliasRepository.findById(cleaned);
+                if (found.isPresent() && found.get().getTarget() != null) {
+                    target = found.get().getTarget().trim().toUpperCase();
+                    symbolAliasCache.put(cleaned, target);
+                }
+            } catch (Exception e) {
+                log.debug("UpstoxSymbolResolver", "Dynamic alias DB lookup note for " + cleaned + ": " + e.getMessage());
+            }
+        }
+        return target != null ? target : cleaned;
     }
 
     @Override

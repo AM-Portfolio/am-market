@@ -615,12 +615,28 @@ public class SmartStockService {
         }
 
         // A baseline equal to LTP may be a real flat day, or it may be today's
-        // close copied into previousClose. Verify it independently before ranking.
+        // close copied into previousClose. If a quote has an explicit non-zero change
+        // or a derived previousClose (e.g. from Upstox net_change), do NOT reset it.
         quotes.forEach((symbol, quote) -> {
             if (hasSamePositiveLastAndPreviousClose(quote)) {
+                if (quote.getChange() != null && quote.getChange() != 0.0) {
+                    // Derive previousClose from lastPrice - change
+                    double derived = quote.getLastPrice() - quote.getChange();
+                    if (Double.isFinite(derived) && derived > 0.0) {
+                        quote.setPreviousClose(Math.round(derived * 100.0) / 100.0);
+                        return;
+                    }
+                }
                 log.info("backfillPreviousCloseForDay",
                         "Verifying unchanged-looking previous close against history symbol={}", symbol);
                 quote.setPreviousClose(0.0);
+            } else if (needsPreviousClose(quote) && quote.getLastPrice() > 0.0
+                    && quote.getChange() != null && quote.getChange() != 0.0) {
+                // If previousClose is missing or 0, but change is provided, derive it
+                double derived = quote.getLastPrice() - quote.getChange();
+                if (Double.isFinite(derived) && derived > 0.0) {
+                    quote.setPreviousClose(Math.round(derived * 100.0) / 100.0);
+                }
             }
         });
 

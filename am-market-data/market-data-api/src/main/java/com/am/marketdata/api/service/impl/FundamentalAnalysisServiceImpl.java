@@ -602,20 +602,26 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             String description = peer.getDescription();
             String cleanName = rawName;
 
+            SecurityDocument sec = (isin != null) ? secMap.get(isin) : null;
+            if ((cleanName == null || cleanName.isBlank() || cleanName.matches("^[A-Z]{2}[A-Z0-9]{10}$"))
+                    && sec != null && sec.getMetadata() != null && sec.getMetadata().getCompanyName() != null) {
+                cleanName = sec.getMetadata().getCompanyName();
+            }
+
             // If stored companyName is actually a paragraph description (from old database records), fix it gracefully at runtime
-            if (rawName != null && rawName.length() > 60) {
+            if (cleanName != null && cleanName.length() > 60) {
                 if (description == null) {
-                    description = rawName;
+                    description = cleanName;
                 }
-                int isIndex = rawName.indexOf(" is ");
+                int isIndex = cleanName.indexOf(" is ");
                 if (isIndex > 0 && isIndex < 50) {
-                    cleanName = rawName.substring(0, isIndex).trim();
+                    cleanName = cleanName.substring(0, isIndex).trim();
                 } else {
-                    int firstDot = rawName.indexOf('.');
+                    int firstDot = cleanName.indexOf('.');
                     if (firstDot > 0 && firstDot < 80) {
-                        cleanName = rawName.substring(0, firstDot).trim();
+                        cleanName = cleanName.substring(0, firstDot).trim();
                     } else {
-                        cleanName = rawName.length() > 50 ? rawName.substring(0, 50).trim() : rawName.trim();
+                        cleanName = cleanName.length() > 50 ? cleanName.substring(0, 50).trim() : cleanName.trim();
                     }
                 }
             }
@@ -630,11 +636,8 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                     .sector(peer.getSector());
 
             String resolvedSymbol = null;
-            if (isin != null && secMap.containsKey(isin)) {
-                SecurityDocument sec = secMap.get(isin);
-                if (sec != null && sec.getKey() != null) {
-                    resolvedSymbol = sec.getKey().getSymbol();
-                }
+            if (sec != null && sec.getKey() != null) {
+                resolvedSymbol = fundamentalQueryService.resolveSymbolAlias(sec.getKey().getSymbol());
             }
 
             if (isin != null) {
@@ -654,7 +657,7 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
 
                 if (peerData != null) {
                     if (resolvedSymbol == null) {
-                        resolvedSymbol = peerData.getSymbol();
+                        resolvedSymbol = fundamentalQueryService.resolveSymbolAlias(peerData.getSymbol());
                     }
 
                     KeyRatios keyRatios = peerData.getKeyRatios();
@@ -682,14 +685,14 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
             resolvedSymbols.add(resolvedSymbol);
         }
 
-        // Pass 2: Bulk fetch live prices in parallel with a 750ms SLA budget to guarantee response < 1s
+        // Pass 2: Bulk fetch live prices in parallel with a 2500ms SLA budget
         Map<String, Double[]> pricesMap = Collections.emptyMap();
         try {
             pricesMap = java.util.concurrent.CompletableFuture
                     .supplyAsync(() -> fetchLivePricesBulk(symbolsToFetch, exchange))
-                    .orTimeout(750, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .orTimeout(2500, java.util.concurrent.TimeUnit.MILLISECONDS)
                     .exceptionally(ex -> {
-                        log.warn("Peer live price bulk fetch timed out (>750ms); returning peer fundamentals without price delay");
+                        log.warn("Peer live price bulk fetch timed out (>2500ms); returning peer fundamentals without price delay");
                         return Collections.emptyMap();
                     })
                     .get();
