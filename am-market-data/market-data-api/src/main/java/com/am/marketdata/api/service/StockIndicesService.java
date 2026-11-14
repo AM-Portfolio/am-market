@@ -274,6 +274,14 @@ public class StockIndicesService {
                          */
                         double dailyPreviousClose = priceQuote.getPreviousClose();
 
+                        // If previousClose is not provided directly by quote, derive from change if present (previousClose = lastPrice - change)
+                        if (dailyPreviousClose == 0.0 && priceQuote.getChange() != null && priceQuote.getChange() != 0.0) {
+                            double derived = lastPrice - priceQuote.getChange();
+                            if (Double.isFinite(derived) && derived > 0.0) {
+                                dailyPreviousClose = Math.round(derived * 100.0) / 100.0;
+                            }
+                        }
+
                         if (dailyPreviousClose == 0.0) {
                                 Double cachedPrevClose = redisCacheService.getPreviousClose(symbol);
                                 if (cachedPrevClose != null && cachedPrevClose != 0.0) {
@@ -531,6 +539,10 @@ public class StockIndicesService {
                 return false;
             }
             String symbol = stock.getSymbol().trim().toUpperCase(java.util.Locale.ROOT);
+            // Exclude parent index header or embedded index benchmark names from constituent stocks list
+            if (isParentIndexHeader(indexData.getIndexSymbol(), symbol)) {
+                continue;
+            }
             var previous = uniqueMembers.putIfAbsent(symbol, stock);
             if (previous != null) {
                 String previousIsin = previous.getIsin() == null ? "" : previous.getIsin().trim();
@@ -562,6 +574,19 @@ public class StockIndicesService {
 
     private boolean isStandaloneIndex(String indexSymbol) {
         return indexSymbol != null && "INDIA VIX".equalsIgnoreCase(indexSymbol.trim());
+    }
+
+    private boolean isParentIndexHeader(String indexSymbol, String constituentSymbol) {
+        if (constituentSymbol == null || constituentSymbol.isBlank()) {
+            return false;
+        }
+        String normConst = constituentSymbol.trim().toUpperCase(java.util.Locale.ROOT);
+        String normIndex = indexSymbol != null ? indexSymbol.trim().toUpperCase(java.util.Locale.ROOT) : "";
+        if (normConst.equals(normIndex)) {
+            return true;
+        }
+        return normConst.startsWith("NIFTY ") || normConst.startsWith("SENSEX")
+                || "NIFTY50".equals(normConst) || "NIFTY100".equals(normConst) || "NIFTY500".equals(normConst);
     }
 
     private int minimumMembershipSize(String indexName) {
@@ -672,6 +697,14 @@ public class StockIndicesService {
                 double high = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getHigh() : 0.0;
                 double low = priceQuote.getOhlc() != null ? priceQuote.getOhlc().getLow() : 0.0;
                 double previousClose = priceQuote.getPreviousClose();
+
+                // If previousClose is not provided directly by quote, derive from change if present (previousClose = lastPrice - change)
+                if (previousClose == 0.0 && priceQuote.getChange() != null && priceQuote.getChange() != 0.0) {
+                    double derived = lastPrice - priceQuote.getChange();
+                    if (Double.isFinite(derived) && derived > 0.0) {
+                        previousClose = Math.round(derived * 100.0) / 100.0;
+                    }
+                }
 
                 if (previousClose == 0.0) {
                     Double cachedPrevClose = redisCacheService.getPreviousClose(symbol);

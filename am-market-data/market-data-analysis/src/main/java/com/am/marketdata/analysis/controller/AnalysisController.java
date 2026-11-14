@@ -160,11 +160,12 @@ public class AnalysisController {
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) String indexSymbol,
             @RequestParam(required = false) String timeFrame,
-            @RequestParam(defaultValue = "false") boolean expandIndices) {
+            @RequestParam(defaultValue = "false") boolean expandIndices,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
 
         String index = indexSymbol != null ? indexSymbol : "NIFTY 50";
         try (FlowSpan span = flowLogger.start("analysis.movers", "type", type, "index", index, "timeFrame",
-                timeFrame)) {
+                timeFrame, "forceRefresh", forceRefresh)) {
             try {
                 TimeFrame tf;
                 try {
@@ -175,11 +176,11 @@ public class AnalysisController {
                 }
 
                 if ("all".equalsIgnoreCase(type)) {
-                    TopMoversResponse result = marketAnalyticsService.getMoversUnified(limit, index, tf, expandIndices);
+                    TopMoversResponse result = marketAnalyticsService.getMoversUnified(limit, index, tf, expandIndices, forceRefresh);
                     flowLogger.complete(span);
                     return ResponseEntity.ok(result);
                 } else {
-                    List<StockMoverDTO> result = marketAnalyticsService.getMovers(limit, type, index, tf, expandIndices);
+                    List<StockMoverDTO> result = marketAnalyticsService.getMovers(limit, type, index, tf, expandIndices, forceRefresh);
                     flowLogger.complete(span);
                     return ResponseEntity.ok(result);
                 }

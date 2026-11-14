@@ -323,12 +323,17 @@ public class MarketAnalyticsService {
      */
     public List<StockMoverDTO> getMovers(int limit, String type, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
+        return getMovers(limit, type, indexSymbol, timeFrame, expandIndices, false);
+    }
+
+    public List<StockMoverDTO> getMovers(int limit, String type, String indexSymbol,
+            com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices, boolean forceRefresh) {
         // Normalize symbol (e.g. "NSE:NIFTY 50" -> "NIFTY 50") to match MongoDB stock_indices_market_data _id
         String targetIndex = analysisRedisCache != null ? analysisRedisCache.normalizeIndexSymbol(indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX) : (indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol.trim().toUpperCase(Locale.ROOT) : DEFAULT_MARKET_INDEX);
         String tfStr = timeFrame != null ? timeFrame.getApiValue() : "1D";
 
-        // 1. Check Redis response cache first
-        if (analysisRedisCache != null) {
+        // 1. Check Redis response cache first (bypass if forceRefresh is true)
+        if (!forceRefresh && analysisRedisCache != null) {
             String cachedJson = analysisRedisCache.getMoversRawJson(targetIndex, tfStr, limit, type, expandIndices);
             if (cachedJson != null) {
                 try {
@@ -379,12 +384,17 @@ public class MarketAnalyticsService {
      */
     public TopMoversResponse getMoversUnified(int limit, String indexSymbol,
             com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices) {
+        return getMoversUnified(limit, indexSymbol, timeFrame, expandIndices, false);
+    }
+
+    public TopMoversResponse getMoversUnified(int limit, String indexSymbol,
+            com.am.marketdata.common.model.TimeFrame timeFrame, boolean expandIndices, boolean forceRefresh) {
         // Normalize symbol to match MongoDB stock_indices_market_data _id
         String targetIndex = analysisRedisCache != null ? analysisRedisCache.normalizeIndexSymbol(indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol : DEFAULT_MARKET_INDEX) : (indexSymbol != null && !indexSymbol.isEmpty() ? indexSymbol.trim().toUpperCase(Locale.ROOT) : DEFAULT_MARKET_INDEX);
         String tfStr = timeFrame != null ? timeFrame.getApiValue() : "1D";
 
-        // 1. Check Redis response cache first
-        if (analysisRedisCache != null) {
+        // 1. Check Redis response cache first (bypass if forceRefresh is true)
+        if (!forceRefresh && analysisRedisCache != null) {
             String cachedJson = analysisRedisCache.getMoversRawJson(targetIndex, tfStr, limit, "all", expandIndices);
             if (cachedJson != null) {
                 try {
