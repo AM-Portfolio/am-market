@@ -643,9 +643,21 @@ public class AnalysisService {
                     if (quote == null) {
                         quote = dayQuotes.get("NSE:" + sym);
                     }
-                    if (quote != null && isValidPrice(quote.getLastPrice()) && isValidPrice(quote.getPreviousClose())) {
-                        double change = (quote.getLastPrice() - quote.getPreviousClose()) / quote.getPreviousClose() * 100.0;
-                        heatmap.put(sym, round2(change));
+                    if (quote != null && isValidPrice(quote.getLastPrice())) {
+                        double prevClose = quote.getPreviousClose();
+                        if (!isValidPrice(prevClose) || Math.abs(quote.getLastPrice() - prevClose) < 0.0001) {
+                            Double cachedPrevClose = marketDataService.getPreviousClose(sym);
+                            if (cachedPrevClose == null && sym.contains(":")) {
+                                cachedPrevClose = marketDataService.getPreviousClose(sym.substring(sym.indexOf(":") + 1));
+                            }
+                            if (cachedPrevClose != null && isValidPrice(cachedPrevClose)) {
+                                prevClose = cachedPrevClose;
+                            }
+                        }
+                        if (isValidPrice(prevClose)) {
+                            double change = (quote.getLastPrice() - prevClose) / prevClose * 100.0;
+                            heatmap.put(sym, round2(change));
+                        }
                     }
                 }
             }

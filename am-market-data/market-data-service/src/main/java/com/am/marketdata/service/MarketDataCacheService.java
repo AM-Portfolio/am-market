@@ -169,10 +169,13 @@ public class MarketDataCacheService {
         if (previousCloseRepository != null) {
             try {
                 Optional<PreviousCloseDocument> docOpt = previousCloseRepository.findById(normalizedSymbol);
-                if (expectedQuoteDate != null && docOpt.isPresent() && docOpt.get().getPreviousClose() != null
-                        && docOpt.get().getPreviousClose() > 0
-                        && expectedQuoteDate.toString().equals(docOpt.get().getTradeDate())) {
+                if (docOpt.isPresent() && docOpt.get().getPreviousClose() != null
+                        && docOpt.get().getPreviousClose() > 0) {
                     Double dbValue = docOpt.get().getPreviousClose();
+                    if (expectedQuoteDate != null && !expectedQuoteDate.toString().equals(docOpt.get().getTradeDate())) {
+                        log.debug("getPreviousClose: date mismatch for symbol {} (expected={}, doc={}), using recorded baseline {}",
+                                symbol, expectedQuoteDate, docOpt.get().getTradeDate(), dbValue);
+                    }
                     return dbValue;
                 }
             } catch (Exception mongoEx) {

@@ -150,7 +150,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                     }
 
                     // 2. Save Indian index ticks only to the market_index measurement.
-                    saveIndexQuotes(indexQuotes);
+                    saveIndexQuotes(indexQuotes, provider);
 
                     // 3. Keep global index ticks on the isolated global_market_index path.
                     saveGlobalQuotes(globalQuotes);
@@ -275,15 +275,34 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         return globalQuotes;
     }
 
-    private void saveIndexQuotes(Map<String, OHLCQuote> indexQuotes) {
+    private void saveIndexQuotes(Map<String, OHLCQuote> indexQuotes, String provider) {
+        if (!isLiveProvider(provider)) {
+            log.debug("Skipping persistence to market_index: provider '{}' is not an authenticated real-time live market feed", provider);
+            return;
+        }
+
+        if (!isIndianMarketTradingHours()) {
+            log.debug("Skipping persistence to market_index: outside Indian market trading hours (Mon-Fri 09:15-15:30 IST)");
+            return;
+        }
+
         for (Map.Entry<String, OHLCQuote> entry : indexQuotes.entrySet()) {
             OHLCQuote quote = entry.getValue();
-            if (quote == null) {
+            if (quote == null || quote.getLastPrice() == 0.0 || !Double.isFinite(quote.getLastPrice()) || quote.getLastPrice() < 0.0) {
                 continue;
             }
 
             String symbol = normalizeSymbol(entry.getKey());
             double previousClose = quote.getPreviousClose();
+
+            // Circuit limit / outlier price sanity guard: reject ticks with extreme divergence (>15%) from previous close
+            if (previousClose > 0.0 && Math.abs(quote.getLastPrice() - previousClose) / previousClose > 0.15) {
+                log.warn("Discarding outlier index tick for {}: lastPrice={}, previousClose={}, deviation={}%",
+                        symbol, quote.getLastPrice(), previousClose,
+                        String.format("%.1f", (Math.abs(quote.getLastPrice() - previousClose) / previousClose) * 100.0));
+                continue;
+            }
+
             double change = quote.getChange() != null
                     ? quote.getChange()
                     : quote.getLastPrice() - previousClose;
@@ -315,6 +334,25 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         if (!indexQuotes.isEmpty()) {
             log.debug("Saved {} index ticks to market_index", indexQuotes.size());
         }
+    }
+
+    private boolean isLiveProvider(String provider) {
+        if (provider == null || provider.isBlank()) {
+            return false;
+        }
+        String p = provider.trim().toUpperCase(Locale.ROOT);
+        return !p.contains("FALLBACK") && !p.contains("CACHE") && !p.contains("NSE_SCRAPER")
+                && !p.contains("MOCK") && !p.contains("STATIC") && !p.contains("SCRAPER");
+    }
+
+    private boolean isIndianMarketTradingHours() {
+        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
+        java.time.DayOfWeek day = now.getDayOfWeek();
+        if (day == java.time.DayOfWeek.SATURDAY || day == java.time.DayOfWeek.SUNDAY) {
+            return false;
+        }
+        java.time.LocalTime time = now.toLocalTime();
+        return !time.isBefore(java.time.LocalTime.of(9, 15)) && !time.isAfter(java.time.LocalTime.of(15, 30));
     }
 
     private void saveGlobalQuotes(Map<String, OHLCQuote> globalQuotes) {

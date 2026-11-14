@@ -419,6 +419,15 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                     score = 1;
                 }
 
+                // Heavily favor candidates with a valid pipe instrument key (not null/None)
+                if (candidate.getInstrumentKey() != null && candidate.getInstrumentKey().contains("|")) {
+                    score += 10;
+                }
+                // Favor active ISINs (not deprecated in isinRemapCache)
+                if (candIsin != null && !isinRemapCache.containsKey(candIsin.trim().toUpperCase())) {
+                    score += 5;
+                }
+
                 if (score > bestScore) {
                     bestScore = score;
                     bestInst = candidate;

@@ -518,6 +518,14 @@ public class MarketDataService {
         }
     }
 
+    public MarketDataCacheService getCacheService() {
+        return cacheService;
+    }
+
+    public Double getPreviousClose(String symbol) {
+        return cacheService != null ? cacheService.getPreviousClose(symbol) : null;
+    }
+
     public List<Instrument> getAllSymbols(String providerName) {
         Timer.Sample timer = Timer.start(meterRegistry);
         try {

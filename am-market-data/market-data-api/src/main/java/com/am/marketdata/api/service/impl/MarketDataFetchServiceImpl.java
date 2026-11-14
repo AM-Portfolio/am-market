@@ -26,6 +26,7 @@ import org.springframework.beans.factory.annotation.Value;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -396,17 +397,24 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                     }
                 });
 
-                Map<String, HistoricalData> batchResult = new java.util.HashMap<>();
-                if (!indexSymbols.isEmpty()) {
-                    batchResult.putAll(marketDataService.getHistoricalDataBatch(
-                            new ArrayList<>(indexSymbols), fromDate, toDate, interval, false, queryParams, null,
-                            true, forceRefresh && allowProviderFallback, allowProviderFallback, allowCache));
-                }
-                if (!stockSymbols.isEmpty()) {
-                    batchResult.putAll(marketDataService.getHistoricalDataBatch(
-                            new ArrayList<>(stockSymbols), fromDate, toDate, interval, false, queryParams, null,
-                            false, forceRefresh && allowProviderFallback, allowProviderFallback, allowCache));
-                }
+                Map<String, HistoricalData> batchResult = new java.util.concurrent.ConcurrentHashMap<>();
+                CompletableFuture<Void> indexFuture = !indexSymbols.isEmpty()
+                        ? CompletableFuture.runAsync(() -> {
+                            batchResult.putAll(marketDataService.getHistoricalDataBatch(
+                                    new ArrayList<>(indexSymbols), fromDate, toDate, interval, false, queryParams, null,
+                                    true, forceRefresh && allowProviderFallback, allowProviderFallback, allowCache));
+                        })
+                        : CompletableFuture.completedFuture(null);
+
+                CompletableFuture<Void> stockFuture = !stockSymbols.isEmpty()
+                        ? CompletableFuture.runAsync(() -> {
+                            batchResult.putAll(marketDataService.getHistoricalDataBatch(
+                                    new ArrayList<>(stockSymbols), fromDate, toDate, interval, false, queryParams, null,
+                                    false, forceRefresh && allowProviderFallback, allowProviderFallback, allowCache));
+                        })
+                        : CompletableFuture.completedFuture(null);
+
+                CompletableFuture.allOf(indexFuture, stockFuture).join();
 
                 int successCount = 0;
                 int totalDataPoints = 0;
