@@ -527,8 +527,7 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                     target = found.get().getTarget().trim().toUpperCase();
                     symbolAliasCache.put(cleaned, target);
                 }
-            } catch (Exception e) {
-                log.debug("UpstoxSymbolResolver", "Dynamic alias DB lookup note for " + cleaned + ": " + e.getMessage());
+            } catch (Exception ignored) {
             }
         }
         return target != null ? target : cleaned;

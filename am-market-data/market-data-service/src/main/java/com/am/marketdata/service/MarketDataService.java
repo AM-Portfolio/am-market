@@ -696,7 +696,6 @@ public class MarketDataService {
                 .toArray(String[]::new);
 
         // Get OHLC data from provider with retry mechanism
-        log.debug("[DATA_SOURCE] Calling provider.getLTP with instrument IDs: {}", (Object) symbols);
         Map<String, LTPQuote> ltpData;
         try {
             MarketDataProvider provider = providerFactory.getProvider(providerName);
@@ -706,7 +705,6 @@ public class MarketDataService {
             log.error("Error fetching OHLC data from provider: {}", e.getMessage(), e);
             return Collections.emptyList();
         }
-        log.debug("[DATA_SOURCE] Provider returned {} OHLC quotes", ltpData != null ? ltpData.size() : 0);
 
         if (ltpData == null || ltpData.isEmpty()) {
             log.warn("Provider returned empty OHLC data");
@@ -1090,7 +1088,6 @@ public class MarketDataService {
         if (!forceRefresh) {
             Map<String, Object> cached = cacheService.getOptionChainFromCache(underlyingSymbol, formattedExpiry);
             if (cached != null && !cached.isEmpty()) {
-                log.debug("Serving option chain from cache for symbol={} expiry={}", underlyingSymbol, formattedExpiry);
                 return cached;
             }
 

@@ -61,7 +61,6 @@ public class AnalysisRedisCache {
             String key = getSeasonalityKey(response.getSymbol(), interval.name());
             String json = redisObjectMapper.writeValueAsString(response);
             redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
-            log.debug("saveSeasonality", "Cached seasonality for " + response.getSymbol());
         } catch (Exception e) {
             log.error("saveSeasonality",
                     "Error caching seasonality for " + response.getSymbol() + ": " + e.getMessage());
@@ -94,7 +93,6 @@ public class AnalysisRedisCache {
         try {
             String key = getIndexHeatmapKey(symbol, interval);
             redisTemplate.delete(key);
-            log.debug("deleteIndexHeatmap", "Deleted index heatmap cache for " + symbol + " " + interval);
         } catch (Exception e) {
             log.error("deleteIndexHeatmap",
                     "Error deleting index heatmap for " + symbol + ": " + e.getMessage());
@@ -108,7 +106,6 @@ public class AnalysisRedisCache {
             String key = getHeatmapKey(response.getSymbol(), year);
             String json = redisObjectMapper.writeValueAsString(response);
             redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
-            log.debug("saveHeatmap", "Cached heatmap for " + response.getSymbol());
         } catch (Exception e) {
             log.error("saveHeatmap", "Error caching heatmap for " + response.getSymbol() + ": " + e.getMessage());
         }
@@ -124,7 +121,6 @@ public class AnalysisRedisCache {
             String tf = interval == null ? "" : interval.trim().toUpperCase();
             long ttl = "1D".equals(tf) ? Math.min(analysisTtlSeconds, 3600L) : analysisTtlSeconds;
             redisTemplate.opsForValue().set(key, json, ttl, TimeUnit.SECONDS);
-            log.debug("saveIndexHeatmap", "Cached index heatmap for " + symbol + " ttlSec=" + ttl);
         } catch (Exception e) {
             log.error("saveIndexHeatmap",
                     "Error caching index heatmap for " + symbol + ": " + e.getMessage());
@@ -168,7 +164,6 @@ public class AnalysisRedisCache {
             String key = getTechnicalKey(response.getSymbol(), interval.name());
             String json = redisObjectMapper.writeValueAsString(response);
             redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
-            log.debug("saveTechnical", "Cached technical for " + response.getSymbol());
         } catch (Exception e) {
             log.error("saveTechnical", "Error caching technical for " + response.getSymbol() + ": " + e.getMessage());
         }
@@ -209,7 +204,6 @@ public class AnalysisRedisCache {
                 }
                 return null;
             });
-            log.debug("saveSeasonalityBatch", "Cached batch seasonality for " + responses.size() + " items");
 
         } catch (Exception e) {
             log.error("saveSeasonalityBatch", "Error batch caching seasonality: " + e.getMessage());
@@ -229,11 +223,9 @@ public class AnalysisRedisCache {
         if (response == null)
             return;
         if (!isRedisFeatureEnabled()) {
-            log.debug("saveHistoricalPerformance", "Redis feature is disabled; skipping cache write");
             return;
         }
         if (!redisCircuitBreaker.allowRequest()) {
-            log.debug("saveHistoricalPerformance", "Redis circuit is open; skipping analysis cache write");
             return;
         }
         try {
@@ -241,7 +233,6 @@ public class AnalysisRedisCache {
             String json = redisObjectMapper.writeValueAsString(response);
             redisTemplate.opsForValue().set(key, json, historicalPerformanceTtlSeconds, TimeUnit.SECONDS);
             redisCircuitBreaker.recordSuccess();
-            log.debug("saveHistoricalPerformance", "Cached historical performance for " + response.getSymbol());
         } catch (Exception e) {
             redisCircuitBreaker.recordFailure("analysis-write", e);
             log.error("saveHistoricalPerformance",
@@ -252,11 +243,9 @@ public class AnalysisRedisCache {
     public com.am.marketdata.common.model.analysis.HistoricalPerformanceResponse getHistoricalPerformance(String symbol,
             int years, boolean detailed) {
         if (!isRedisFeatureEnabled()) {
-            log.debug("getHistoricalPerformance", "Redis feature is disabled; treating analysis cache as unavailable");
             return null;
         }
         if (!redisCircuitBreaker.allowRequest()) {
-            log.debug("getHistoricalPerformance", "Redis circuit is open; treating analysis cache as unavailable");
             return null;
         }
         try {
@@ -296,8 +285,6 @@ public class AnalysisRedisCache {
             String key = getIndicesHistoryKey(years);
             String json = redisObjectMapper.writeValueAsString(response);
             redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
-            log.debug("saveIndicesHistoricalPerformance",
-                    "Cached indices historical performance for " + years + " years");
         } catch (Exception e) {
             log.error("saveIndicesHistoricalPerformance",
                     "Error caching indices historical performance: " + e.getMessage());
@@ -338,8 +325,6 @@ public class AnalysisRedisCache {
             String key = getConstituentsHistoryKey(indexSymbol, years);
             String json = redisObjectMapper.writeValueAsString(response);
             redisTemplate.opsForValue().set(key, json, analysisTtlSeconds, TimeUnit.SECONDS);
-            log.debug("saveConstituentsHistoricalPerformance",
-                    "Cached constituents historical performance for " + indexSymbol + " / " + years + "y");
         } catch (Exception e) {
             log.error("saveConstituentsHistoricalPerformance",
                     "Error caching constituents historical performance: " + e.getMessage());
@@ -442,7 +427,6 @@ public class AnalysisRedisCache {
             long ttl = calculateMoversTtlSeconds();
             redisTemplate.opsForValue().set(key, json, ttl, TimeUnit.SECONDS);
             redisCircuitBreaker.recordSuccess();
-            log.debug("saveMoversRawJson", "Cached movers for " + key + " with ttlSec=" + ttl);
         } catch (Exception e) {
             redisCircuitBreaker.recordFailure("movers-write", e);
             log.error("saveMoversRawJson", "Error caching movers: " + e.getMessage());

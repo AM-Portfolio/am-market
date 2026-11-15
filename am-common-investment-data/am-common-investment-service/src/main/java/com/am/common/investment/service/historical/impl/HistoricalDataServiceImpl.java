@@ -43,9 +43,6 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
 
     @Override
     public Optional<HistoricalData> getHistoricalData(String tradingSymbol, Instant fromDate, Instant toDate, String interval, boolean isIndexSymbol) {
-        logger.debug("Retrieving historical data for symbol: {}, from: {}, to: {}, interval: {}, isIndexSymbol: {}", 
-                tradingSymbol, fromDate, toDate, interval, isIndexSymbol);
-        
         long startTime = System.currentTimeMillis();
         
         List<EquityPrice> prices;
@@ -134,7 +131,7 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         }
 
         if (prices.isEmpty()) {
-            logger.debug("No historical data found for symbol: {}", tradingSymbol);
+            logger.info("No historical data found for symbol: {}", tradingSymbol);
             return Optional.empty();
         }
         
@@ -146,7 +143,6 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         if (rawIndianIndex || interval == null || interval.isEmpty()) {
             processedPrices = processDataByInterval(prices, interval, rawIndianIndex);
         } else {
-            logger.debug("Data pre-aggregated via InfluxDB aggregateWindow for interval {}; bypassing Java processDataByInterval", interval);
             processedPrices = prices;
         }
         
@@ -208,9 +204,6 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
     
     @Override
     public Optional<HistoricalData> getRecentHistoricalData(String tradingSymbol, int lookbackPeriod, String interval) {
-        logger.debug("Retrieving recent historical data for symbol: {}, lookback: {}, interval: {}", 
-                tradingSymbol, lookbackPeriod, interval);
-        
         Instant toDate = Instant.now();
         Instant fromDate = calculateFromDate(toDate, lookbackPeriod, interval);
         
@@ -330,9 +323,6 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         
         // Sort the result by time
         Collections.sort(result, (p1, p2) -> p1.getTime().compareTo(p2.getTime()));
-        
-        logger.debug("Resampled {} raw data points to {} {} intervals", 
-                prices.size(), result.size(), interval);
         
         return result;
     }

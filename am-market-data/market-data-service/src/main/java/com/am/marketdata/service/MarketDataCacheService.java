@@ -171,12 +171,7 @@ public class MarketDataCacheService {
                 Optional<PreviousCloseDocument> docOpt = previousCloseRepository.findById(normalizedSymbol);
                 if (docOpt.isPresent() && docOpt.get().getPreviousClose() != null
                         && docOpt.get().getPreviousClose() > 0) {
-                    Double dbValue = docOpt.get().getPreviousClose();
-                    if (expectedQuoteDate != null && !expectedQuoteDate.toString().equals(docOpt.get().getTradeDate())) {
-                        log.debug("getPreviousClose: date mismatch for symbol {} (expected={}, doc={}), using recorded baseline {}",
-                                symbol, expectedQuoteDate, docOpt.get().getTradeDate(), dbValue);
-                    }
-                    return dbValue;
+                    return docOpt.get().getPreviousClose();
                 }
             } catch (Exception mongoEx) {
                 log.warn("getPreviousClose", "Failed to get previous close from MongoDB for symbol: " + symbol, mongoEx);
@@ -429,14 +424,10 @@ public class MarketDataCacheService {
                 stockCacheService.cacheIntradayBars(batchStockBars);
             }
 
-            // Smart logging: if keys are huge (>1000), show only count in INFO and one sample in DEBUG
+            // Smart logging: if keys are huge (>1000), show only count in INFO
             if (cachedKeys.size() > 1000) {
                 log.info("cacheOHLCData", "Cached {} symbols with timeframe: {} for date: {} ({} key-value pairs)",
                         ohlcData.size(), interval, today, cachedKeys.size());
-
-                if (!cachedKeys.isEmpty()) {
-                    log.debug("cacheOHLCData", "Sample key pattern: {}", cachedKeys.get(0));
-                }
             } else {
                 List<String> sampleKeys = cachedKeys.subList(0, Math.min(3, cachedKeys.size()));
                 log.info("cacheOHLCData", "Cached {} symbols with timeframe: {} for date: {}. Sample keys: {}",
@@ -446,7 +437,6 @@ public class MarketDataCacheService {
             // Also persist lastPrice + previousClose to market:latest-price:*
             try {
                 cacheLatestPrices(ohlcData);
-                log.debug("cacheOHLCData", "Also cached latest prices (incl. previousClose) for {} symbols", ohlcData.size());
             } catch (Exception latestEx) {
                 log.warn("cacheOHLCData", "Failed to cache latest prices alongside OHLC data: {}", latestEx.getMessage());
             }
@@ -601,7 +591,6 @@ public class MarketDataCacheService {
                     .collect(Collectors.toList());
 
             if (cleanSymbols.isEmpty()) {
-                log.debug("getOHLCFromCache", "All symbols were empty or invalid, skipping cache lookup");
                 return Collections.emptyMap();
             }
 
@@ -611,20 +600,10 @@ public class MarketDataCacheService {
             String today = (resolvedSession != null ? resolvedSession : LocalDate.now())
                     .format(DateTimeFormatter.ISO_LOCAL_DATE);
 
-            // Log the cache retrieval operation
-            List<String> expectedKeys = new ArrayList<>();
-            for (String symbol : cleanSymbols) {
-                String redisKey = String.format("stock:intraday:%s:%s:%s", symbol.toUpperCase(),
-                        timeFrame.getApiValue(), today);
-                expectedKeys.add(symbol + " -> " + redisKey);
-            }
-
             log.info("[INTERVAL_TRACE]", String.format(
                     "MarketDataCacheService.getOHLCFromCache: Attempting to retrieve OHLC data from cache for %d symbols with timeFrame: %s (enum: %s, apiValue: %s) on date: %s",
                     cleanSymbols.size(), timeFrame, timeFrame != null ? timeFrame.name() : "null",
                     timeFrame.getApiValue(), today));
-
-            log.debug("getOHLCFromCache", "Expected Redis keys: {}", expectedKeys);
 
             // Try to get data from cache
             Map<String, StockBars> cachedBars = stockCacheService.getMultiSymbolBarsWithStats(cleanSymbols,
@@ -634,10 +613,6 @@ public class MarketDataCacheService {
                     cachedBars != null ? cachedBars.size() : 0, cleanSymbols.size());
 
             if (cachedBars == null || cachedBars.isEmpty()) {
-                if (cachedBars == null || cachedBars.isEmpty()) {
-                    log.debug("getOHLCFromCache", "No OHLC data found in cache for the requested symbols");
-                    return Collections.emptyMap();
-                }
                 return Collections.emptyMap();
             }
 
@@ -674,7 +649,6 @@ public class MarketDataCacheService {
             if (!result.isEmpty()) {
                 // Log the cache hits with values
                 log.info("getOHLCFromCache", "Retrieved OHLC data from cache for {} symbols", result.size());
-                log.debug("getOHLCFromCache", "Retrieved values: {}", cacheHits);
 
                 // Note: overlayLatestPrices is now called once at the orchestrator layer (MarketDataService) 
                 // to avoid duplicate Redis MGET queries on cache hits while ensuring all paths are covered.
@@ -984,8 +958,6 @@ public class MarketDataCacheService {
                             log.warn("overlayLatestPrices", "Failed async self-healing previousClose fallback: " + selfHealEx.getMessage());
                         }
                     }, cacheBackfillExecutor);
-                } else {
-                    log.debug("overlayLatestPrices", "cacheBackfillExecutor null; skipping blocking self-healing fallback for " + finalMissingSymbols.size() + " symbols");
                 }
             }
         }
@@ -1081,10 +1053,6 @@ public class MarketDataCacheService {
                 log.info("[BATCH_CACHE]",
                         String.format("Retrieved historical data from cache for %d/%d symbols with timeFrame: %s",
                                 result.size(), symbols.size(), timeFrame.getApiValue()));
-            } else {
-                log.debug("[BATCH_CACHE]",
-                        String.format("No historical data found in cache for any of the %d symbols with timeFrame: %s",
-                                symbols.size(), timeFrame.getApiValue()));
             }
 
             return result;
@@ -1158,10 +1126,6 @@ public class MarketDataCacheService {
             String cacheKey = String.format("index:historical:%s:%s:%s:%s",
                     indexSymbol.toUpperCase(), timeFrame.getApiValue(), fromDate, toDate);
 
-            log.debug("[INDEX_CACHE]", String.format(
-                    "Attempting to retrieve index historical data from cache for %s (key: %s)",
-                    indexSymbol, cacheKey));
-
             Map<String, String> hashData = stockCacheService.getIndexHistoricalData(cacheKey);
 
             if (hashData != null && !hashData.isEmpty()) {
@@ -1187,7 +1151,6 @@ public class MarketDataCacheService {
                 }
             }
 
-            log.debug("[INDEX_CACHE]", "No index historical data found in cache for: " + indexSymbol);
             return null;
         } catch (Exception e) {
             CacheLoggingUtil.logCacheException(log, "GET_INDEX_HISTORICAL_CACHE", indexSymbol,
@@ -1213,13 +1176,6 @@ public class MarketDataCacheService {
     public HistoricalData getHistoricalDataFromCache(String symbol, TimeFrame timeFrame, String fromDate,
             String toDate) {
         try {
-            // Log the cache retrieval attempt
-            // Log the cache retrieval attempt
-            log.debug("[INTERVAL_TRACE]", String.format(
-                    "MarketDataCacheService.getHistoricalDataFromCache: Attempting to retrieve historical data from cache for symbol: %s, timeFrame: %s (enum: %s, apiValue: %s), from: %s, to: %s",
-                    symbol, timeFrame, timeFrame != null ? timeFrame.name() : "null",
-                    timeFrame != null ? timeFrame.getApiValue() : "null", fromDate, toDate));
-
             // Parse dates
             LocalDate from = LocalDate.parse(fromDate, DateTimeFormatter.ISO_LOCAL_DATE);
             LocalDate to = LocalDate.parse(toDate, DateTimeFormatter.ISO_LOCAL_DATE);
@@ -1263,12 +1219,6 @@ public class MarketDataCacheService {
                                     "Retrieved %d historical data points from cache for symbol: %s (%d cache hits)",
                                     points.size(), symbol, cacheHits.size()));
 
-                    // Log detailed values in DEBUG mode
-                    if (!cacheHits.isEmpty()) {
-                        log.debug("getHistoricalDataFromCache",
-                                String.format("Retrieved values: %s", cacheHits));
-                    }
-
                     return convertToHistoricalData(symbol, points);
                 }
             } else {
@@ -1287,21 +1237,10 @@ public class MarketDataCacheService {
                             String.format("Retrieved %d intraday data points from cache for symbol: %s with key: %s",
                                     bars.size(), symbol, cacheKey));
 
-                    // Log detailed data at debug level
-                    for (OHLCV bar : bars) {
-                        log.debug("getHistoricalDataFromCache", String.format(
-                                "Retrieved data point: time=%s, open=%.2f, high=%.2f, low=%.2f, close=%.2f, volume=%d",
-                                bar.getTime(), bar.getOpen(), bar.getHigh(), bar.getLow(), bar.getClose(),
-                                bar.getVolume()));
-                    }
-
                     return convertToHistoricalData(symbol, bars);
                 }
             }
 
-            log.debug("getHistoricalDataFromCache",
-                    String.format("No historical data found in cache for symbol: %s with timeFrame: %s", symbol,
-                            timeFrame.getApiValue()));
             return null;
         } catch (Exception e) {
             // Use the specialized exception logging
@@ -1360,11 +1299,6 @@ public class MarketDataCacheService {
         // last price fallback and must not turn a cache hit into a provider call.
         quote.setOhlc(ohlc);
         quote.setLastPrice(bar.getLastPrice() != null ? bar.getLastPrice() : bar.getClose());
-
-        // Log at debug level
-        log.debug("createOHLCQuoteFromBar",
-                String.format("Converted OHLC data point: time=%s, O=%.2f, H=%.2f, L=%.2f, C=%.2f",
-                        bar.getTime(), bar.getOpen(), bar.getHigh(), bar.getLow(), bar.getClose()));
 
         return quote;
     }
@@ -1446,11 +1380,7 @@ public class MarketDataCacheService {
         // Market closure alone does not make a recent exchange snapshot stale.
         // The timestamp check prevents an old order book from being shown as current.
         long maxAgeMillis = TimeUnit.SECONDS.toMillis(marketDepthMaxAgeSeconds);
-        boolean fresh = MarketDepthFreshness.isFresh(quote.getQuoteTimestamp(), maxAgeMillis);
-        if (!fresh) {
-            log.debug("getQuotes", "Omitted market depth because its quote timestamp is stale symbol={}", symbol);
-        }
-        return fresh;
+        return MarketDepthFreshness.isFresh(quote.getQuoteTimestamp(), maxAgeMillis);
     }
 
     public void setActiveProvider(String providerName) {
@@ -1795,7 +1725,6 @@ public class MarketDataCacheService {
                         try {
                             quote.setQuoteTimestamp(Instant.parse(timestamp));
                         } catch (RuntimeException ignored) {
-                            log.debug("getLatestPrices", "Ignoring invalid quote timestamp for {}", cleanSymbol);
                         }
                     }
 

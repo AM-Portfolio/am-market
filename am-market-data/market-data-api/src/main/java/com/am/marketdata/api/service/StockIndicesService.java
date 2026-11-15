@@ -239,7 +239,6 @@ public class StockIndicesService {
                                     }
                                     if (earliest != null) {
                                         basePrices.put(entry.getKey(), earliest.getClose());
-                                        log.debug(methodName, "Timeframe " + normalizedTimeframe + " base price for " + entry.getKey() + " is " + earliest.getClose());
                                     }
                                 }
                             }
@@ -348,8 +347,6 @@ public class StockIndicesService {
                             }
                             docsToSave.add(data);
                         }
-
-                        log.debug(methodName, "Enriched index " + symbol + " from latest prices. Price=" + lastPrice);
                     }
                 }
 

@@ -143,10 +143,8 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
                     // 1. Save only individual stocks to the equity measurement.
                     if (!equityQuotes.isEmpty()) {
-                        log.debug("Saving {} equity OHLC data points to database", equityQuotes.size());
                         List<EquityPrice> equityPrices = ohlcMapper.toEquityPriceList(equityQuotes, provider);
                         equityService.saveAllPrices(equityPrices);
-                        log.debug("Successfully saved {} equity prices to database", equityPrices.size());
                     }
 
                     // 2. Save Indian index ticks only to the market_index measurement.
@@ -157,7 +155,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
                     // 4. Update the cache with default timeframe (1D for current day data)
                     marketDataCacheService.cacheOHLCData(ohlcData, TimeFrame.DAY);
-                    log.debug("Successfully cached OHLC data for {} symbols", ohlcData.size());
 
                     // 5. Keep the document used by the index API in sync.
                     updateStockIndicesIfNecessary(indexQuotes);
@@ -237,7 +234,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
                     // Save back to permanent DB
                     stockIndicesMarketDataService.save(indexData);
-                    log.debug("Unified Persistence: Updated permanent Index DB for symbol: {}", symbol);
                 }
             } catch (Exception e) {
                 log.warn("Failed to update permanent Index DB for symbol: {}. Error: {}", symbol, e.getMessage());
@@ -277,12 +273,10 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
     private void saveIndexQuotes(Map<String, OHLCQuote> indexQuotes, String provider) {
         if (!isLiveProvider(provider)) {
-            log.debug("Skipping persistence to market_index: provider '{}' is not an authenticated real-time live market feed", provider);
             return;
         }
 
         if (!isIndianMarketTradingHours()) {
-            log.debug("Skipping persistence to market_index: outside Indian market trading hours (Mon-Fri 09:15-15:30 IST)");
             return;
         }
 
@@ -331,9 +325,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
             marketIndexIndicesService.save(indexData);
         }
-        if (!indexQuotes.isEmpty()) {
-            log.debug("Saved {} index ticks to market_index", indexQuotes.size());
-        }
     }
 
     private boolean isLiveProvider(String provider) {
@@ -361,9 +352,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                 globalIndexCacheWriter.writeTick(entry.getKey(), entry.getValue());
             }
         }
-        if (!globalQuotes.isEmpty()) {
-            log.debug("Saved {} global index ticks to global_market_index", globalQuotes.size());
-        }
     }
 
     private String normalizeSymbol(String rawSymbol) {
@@ -386,17 +374,14 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
         return CompletableFuture.runAsync(() -> {
             try {
                 // First save to database
-                log.debug("Saving historical data to database for symbol: {}", symbol);
                 if (isIndianIndexSymbol(symbol)) {
                     saveHistoricalIndexData(symbol, historicalData);
                 } else {
                     historicalDataService.saveHistoricalData(historicalData);
                 }
-                log.debug("Successfully saved historical data for symbol: {}", symbol);
 
                 // Then update the cache
                 marketDataCacheService.cacheHistoricalData(symbol, interval, historicalData);
-                log.debug("Successfully cached historical data for symbol: {}", symbol);
             } catch (Exception e) {
                 log.error("Error saving historical data for symbol {}: {}", symbol, e.getMessage(), e);
                 throw new RuntimeException("Failed to save historical data", e);
@@ -466,7 +451,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                     .collect(Collectors.toList());
 
             if (filteredSymbols.isEmpty()) {
-                log.debug("All symbols were indices, returning empty result");
                 return Collections.emptyMap();
             }
 
@@ -480,8 +464,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                 // Try cache first
                 Map<String, OHLCQuote> cachedData = marketDataCacheService.getOHLCFromCache(tradingSymbols, timeFrame);
                 if (cachedData != null && !cachedData.isEmpty()) {
-                    log.debug("Retrieved {} OHLC data from cache with timeFrame {}",
-                            cachedData.size(), tfValue);
                     result.putAll(cachedData);
 
                     // Remove found symbols
@@ -489,9 +471,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                         String symbol = key.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", "");
                         remainingSymbols.remove(symbol);
                     });
-
-                    log.debug("{} symbols remaining after cache lookup for timeFrame {}",
-                            remainingSymbols.size(), tfValue);
 
                     if (remainingSymbols.isEmpty()) {
                         return result;
@@ -501,10 +480,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
             // If we have remaining symbols or forceRefresh is true, try database
             if (!remainingSymbols.isEmpty() || forceRefresh) {
-                log.debug("{} OHLC data from database for {} symbols with timeFrame {}",
-                        forceRefresh ? "Forcing refresh of" : "Fetching missing",
-                        remainingSymbols.size(), tfValue);
-
                 // Clean symbols (remove NSE: prefix if present)
                 List<String> cleanSymbols = remainingSymbols.stream()
                         .map(symbol -> symbol.replaceAll("(?i)^(NSE_EQ\\||NSE_INDEX\\||BSE_EQ\\||BSE_INDEX\\||NSE_EQ:|BSE_EQ:|NSE:|BSE:)", ""))
@@ -536,9 +511,6 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                         // Remove found symbols from the remaining set
                         remainingSymbols.remove(price.getSymbol());
                     }
-
-                    log.debug("Retrieved OHLC data from database for {} symbols with timeFrame {}",
-                            equityPrices.size(), tfValue);
                 }
             }
 
@@ -647,16 +619,12 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
             if (cachedData != null && cachedData.getDataPoints() != null && !cachedData.getDataPoints().isEmpty()) {
                 // Verify that the cached data actually covers the requested date range
                 if (validateDateRangeCoverage(cachedData, from, to)) {
-                    log.debug("Retrieved historical data from cache for symbol: {}", symbol);
                     return cachedData;
                 } else {
                     log.info("Cached data for symbol {} exists but does not cover the requested range ({} to {}). Bypassing cache to query database.", 
                             symbol, fromDate, toDate);
                 }
             }
-
-            // If not in cache or cache range is invalid, try to get from database
-            log.debug("No valid historical data found in cache, fetching from database for symbol: {}", symbol);
 
             // Map interval to the format expected by the database service (e.g. "5m", "1H") rather than enum name ("five_minute")
             String mappedInterval = interval.getApiValue();
@@ -675,11 +643,9 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
 
             if (historicalData != null && historicalData.getDataPoints() != null
                     && !historicalData.getDataPoints().isEmpty()) {
-                log.debug("Retrieved historical data from database for symbol: {}", symbol);
                 return historicalData;
             }
 
-            log.debug("No historical data found in database for symbol: {}", symbol);
             return null;
         } catch (Exception e) {
             log.error("Error retrieving historical data for symbol {}: {}", symbol, e.getMessage(), e);

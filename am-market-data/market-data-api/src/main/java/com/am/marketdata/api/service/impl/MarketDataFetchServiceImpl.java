@@ -183,7 +183,6 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             // provider timestamp is recent, and omit it once that snapshot ages out.
             if (!freshTimestamp || marketDepthMaxAgeSeconds <= 0) {
                 quote.setMarketDepth(null);
-                log.debug("Omitted stale market depth symbol={} ageMillis={}", symbol, ageMillis);
             }
         });
     }
@@ -501,15 +500,11 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
     @Override
     public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate, boolean forceRefresh) {
-        log.debug(
-                "Fetching option chain for symbol={} expiryDate={} forceRefresh={}",
-                underlyingSymbol, expiryDate, forceRefresh);
         return marketDataService.getOptionChain(underlyingSymbol, expiryDate, null, forceRefresh);
     }
 
     @Override
     public Map<String, Object> getMutualFundDetails(String schemeCode, boolean forceRefresh) {
-        log.debug("Fetching mutual fund details for schemeCode={}", schemeCode);
         // Mutual fund functionality not yet migrated to MarketDataService
         Map<String, Object> result = new HashMap<>();
         result.put("error", "Mutual fund details not yet supported");
@@ -518,8 +513,6 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
     @Override
     public Map<String, Object> getMutualFundNavHistory(String schemeCode, Date from, Date to, boolean forceRefresh) {
-        log.debug(
-                "Fetching mutual fund NAV history for schemeCode={} from={} to={}", schemeCode, from, to);
         // Mutual fund functionality not yet migrated to MarketDataService
         Map<String, Object> result = new HashMap<>();
         result.put("error", "Mutual fund NAV history not yet supported");
@@ -855,8 +848,6 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     }
 
     public List<String> findMissingSymbols(List<String> indexSymbols, List<String> symbolsToCheck) {
-        log.debug("Finding symbols not included in the passed list: {}", symbolsToCheck);
-
         if (symbolsToCheck == null || symbolsToCheck.isEmpty()) {
             return Collections.emptyList();
         }

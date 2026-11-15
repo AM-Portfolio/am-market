@@ -48,7 +48,7 @@ market-data:
 logging:
   level:
     root: INFO
-    com.marketdata.service.zerodha: DEBUG
-    com.marketdata.config: DEBUG
-    com.marketdata.common: DEBUG
+    com.marketdata.service.zerodha: INFO
+    com.marketdata.config: INFO
+    com.marketdata.common: INFO
     org.springframework.web: INFO

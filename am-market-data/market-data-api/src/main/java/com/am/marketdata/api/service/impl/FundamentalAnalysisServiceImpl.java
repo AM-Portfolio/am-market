@@ -505,8 +505,7 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                     }
                 }
             }
-        } catch (Exception e) {
-            log.debug("Live price lookup failed for symbol={} exchange={}: {}", symbol, targetExchange, e.getMessage());
+        } catch (Exception ignored) {
         }
         log.warn("[EXCHANGE_DIAG] fetchLivePrice: no price found for symbol={} exchange={}, returning empty array",
                 symbol, targetExchange);
@@ -547,7 +546,7 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                 }
             }
         } catch (Exception e) {
-            log.debug("Bulk live price lookup failed for exchange={}: {}", targetExchange, e.getMessage());
+            log.warn("Bulk live price lookup failed for exchange={}: {}", targetExchange, e.getMessage());
         }
         return result;
     }
@@ -650,8 +649,7 @@ public class FundamentalAnalysisServiceImpl implements FundamentalAnalysisServic
                             peerDataMap.put(isin, peerData);
                             log.info("On-demand peer ratio seeding completed and saved to MongoDB for isin={}", isin);
                         }
-                    } catch (Exception e) {
-                        log.debug("Peer ratio seeding note for isin={}: {}", isin, e.getMessage());
+                    } catch (Exception ignored) {
                     }
                 }
 
