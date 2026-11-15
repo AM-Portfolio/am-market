@@ -326,8 +326,8 @@ public class StreamerManager implements StreamerListener {
                 publisher.publish(update);
             }
 
-            // Also process for Kafka / persistence
-            processor.processUpdate(ohlcData);
+            // Also process for Kafka / persistence with explicit FALLBACK provider so closed-market fallback data is never saved as live ticks
+            processor.processUpdate(ohlcData, "FALLBACK");
         } catch (Exception e) {
             log.error("StreamerManager", "Error processing fallback data for persistence/Kafka", e);
         }

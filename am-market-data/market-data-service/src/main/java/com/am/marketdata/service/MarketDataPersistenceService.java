@@ -66,6 +66,13 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
     @Value("${market-data.historical.influx.max-concurrency:4}")
     private int historicalInfluxMaxConcurrency;
 
+    @Autowired(required = false)
+    private MarketHoursService marketHoursService;
+
+    public void setMarketHoursService(MarketHoursService marketHoursService) {
+        this.marketHoursService = marketHoursService;
+    }
+
     /**
      * Backward-compatible constructor for existing tests and callers that do not
      * need to provide the registry explicitly.
@@ -337,6 +344,13 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
     }
 
     private boolean isIndianMarketTradingHours() {
+        if (marketHoursService != null) {
+            try {
+                return marketHoursService.isMarketOpen();
+            } catch (Exception e) {
+                log.warn("Market hours check via MarketHoursService failed: {}", e.getMessage());
+            }
+        }
         java.time.ZonedDateTime now = java.time.ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
         java.time.DayOfWeek day = now.getDayOfWeek();
         if (day == java.time.DayOfWeek.SATURDAY || day == java.time.DayOfWeek.SUNDAY) {

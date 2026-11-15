@@ -146,6 +146,11 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             processedPrices = prices;
         }
         
+        if (processedPrices == null || processedPrices.isEmpty()) {
+            logger.info("No processed historical data found for symbol: {}", tradingSymbol);
+            return Optional.empty();
+        }
+        
         // Convert to OHLCVTPoint objects
         List<OHLCVTPoint> dataPoints = OHLCVTMapper.toOHLCVTPoints(processedPrices);
         
@@ -244,6 +249,16 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         }
 
         if (rawIndianIndex && unit.isTimeBased()) {
+            // Retain only ticks falling within the market session (09:15-15:35 IST) before computing
+            // statistics or candles. Discarding overnight/off-hours flat heartbeats prevents them
+            // from poisoning the day's median price and causing real session points to be rejected.
+            orderedPrices = orderedPrices.stream()
+                    .filter(p -> p != null && p.getTime() != null && getIndianIndexBucketKey(p.getTime(), amount, unit) != null)
+                    .toList();
+            if (orderedPrices.isEmpty()) {
+                return Collections.emptyList();
+            }
+
             orderedPrices = removeConflictingIndexSamplesAtSameTime(orderedPrices, interval);
             if (orderedPrices.isEmpty()) {
                 return Collections.emptyList();
