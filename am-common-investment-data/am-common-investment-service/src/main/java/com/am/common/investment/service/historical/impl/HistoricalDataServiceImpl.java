@@ -370,29 +370,39 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
     }
 
     /**
-     * Index timestamps are persisted as UTC instants representing market-wall
-     * clock values; OHLCVTMapper converts them back to UTC LocalDateTime for the
-     * existing chart contract. Bucket on that same wall clock and align intraday
-     * intervals to the NSE 09:15 session open.
+     * InfluxDB timestamps are stored as true UTC instants (09:15 AM IST is 03:45:00 UTC).
+     * Convert to Asia/Kolkata for session boundary calculations and bucket alignment,
+     * then convert back to UTC Instant.
      */
     private Instant getIndianIndexBucketKey(Instant timestamp, int amount, ChronoUnit unit) {
-        java.time.LocalDateTime marketWallTime = java.time.LocalDateTime.ofInstant(timestamp,
-                java.time.ZoneOffset.UTC);
+        if (timestamp == null || unit == null || amount <= 0) {
+            return null;
+        }
+
+        java.time.ZoneId istZone = java.time.ZoneId.of("Asia/Kolkata");
+        java.time.ZonedDateTime marketWallTime = timestamp.atZone(istZone);
         java.time.LocalDate date = marketWallTime.toLocalDate();
 
         if (unit == ChronoUnit.MINUTES || unit == ChronoUnit.HOURS) {
             java.time.LocalTime sessionOpen = java.time.LocalTime.of(9, 15);
-            java.time.LocalTime sessionClose = java.time.LocalTime.of(15, 30);
             java.time.LocalTime pointTime = marketWallTime.toLocalTime();
-            if (pointTime.isBefore(sessionOpen) || pointTime.isAfter(sessionClose)) {
+
+            // Discard pre-market observations (before 09:15:00 IST)
+            if (pointTime.isBefore(sessionOpen)) {
+                return null;
+            }
+            // Allow post-close ticks up to 15:35:00 IST so official settlement ticks
+            // update the final 15:25-15:30 closing candle, but discard late evening noise.
+            if (pointTime.isAfter(java.time.LocalTime.of(15, 35))) {
                 return null;
             }
 
             long bucketMinutes = unit == ChronoUnit.HOURS ? amount * 60L : amount;
             long minutesFromOpen = java.time.Duration.between(sessionOpen, pointTime).toMinutes();
-            long lastBucketStart = ((375L - 1L) / bucketMinutes) * bucketMinutes;
-            long bucketStart = Math.min((minutesFromOpen / bucketMinutes) * bucketMinutes, lastBucketStart);
-            return date.atTime(sessionOpen).plusMinutes(bucketStart).toInstant(java.time.ZoneOffset.UTC);
+            // Clamp minutesFromOpen to sessionClose (374 minutes from open -> 15:25 candle)
+            minutesFromOpen = Math.min(minutesFromOpen, 375L - 1L);
+            long bucketStart = (minutesFromOpen / bucketMinutes) * bucketMinutes;
+            return date.atTime(sessionOpen).plusMinutes(bucketStart).atZone(istZone).toInstant();
         }
 
         java.time.LocalDate bucketDate;
@@ -418,7 +428,7 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             return timestamp;
         }
 
-        return bucketDate.atTime(9, 15).toInstant(java.time.ZoneOffset.UTC);
+        return bucketDate.atTime(9, 15).atZone(istZone).toInstant();
     }
 
     /** Build sampled intraday OHLC from index last-price observations, prioritizing

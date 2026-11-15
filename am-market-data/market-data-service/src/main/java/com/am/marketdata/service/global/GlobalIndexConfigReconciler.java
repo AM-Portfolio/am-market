@@ -16,14 +16,13 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * One-time, opt-in reconciliation for existing global-index configuration rows.
- * Enable with {@code global.index-config.reconcile=true} for a controlled run,
- * then disable it. Sync state and historical data are deliberately preserved.
+ * Reconciles global index configurations with global-market-schedule.yml.
+ * Runs on startup by default (can be disabled via global.index-config.reconcile=false).
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "global.index-config.reconcile", havingValue = "true")
+@ConditionalOnProperty(name = "global.index-config.reconcile", havingValue = "true", matchIfMissing = true)
 @Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class GlobalIndexConfigReconciler implements ApplicationRunner {
 
@@ -32,13 +31,34 @@ public class GlobalIndexConfigReconciler implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        Map<String, GlobalMarketScheduleService.MarketEntry> sourceBySymbol = scheduleService.getMarkets().stream()
-                .collect(Collectors.toMap(GlobalMarketScheduleService.MarketEntry::symbol, Function.identity()));
+        Map<String, GlobalIndexConfigDocument> existingConfigs = configRepository.findAll().stream()
+                .collect(Collectors.toMap(GlobalIndexConfigDocument::getSymbol, Function.identity(), (a, b) -> a));
         int updated = 0;
-        for (GlobalIndexConfigDocument config : configRepository.findAll()) {
-            GlobalMarketScheduleService.MarketEntry source = sourceBySymbol.get(config.getSymbol());
-            if (source == null) continue;
+        int inserted = 0;
+
+        for (GlobalMarketScheduleService.MarketEntry source : scheduleService.getMarkets()) {
+            if (source == null || source.symbol() == null) continue;
+            String symbol = source.symbol();
             String newKey = source.hasInstrument() ? source.instrumentKey() : null;
+
+            GlobalIndexConfigDocument config = existingConfigs.get(symbol);
+            if (config == null) {
+                config = GlobalIndexConfigDocument.builder()
+                        .symbol(symbol)
+                        .name(source.name())
+                        .instrumentKey(newKey)
+                        .exchange(source.exchange())
+                        .timezone(source.timezone())
+                        .marketOpenTime(source.marketOpen())
+                        .marketCloseTime(source.marketClose())
+                        .influxAggregateOffset(source.influxAggregateOffset())
+                        .build();
+                configRepository.save(config);
+                inserted++;
+                log.info("[GlobalIndexConfigReconciler] Seeded missing config for {}: key={}", symbol, newKey);
+                continue;
+            }
+
             boolean changed = !java.util.Objects.equals(config.getInstrumentKey(), newKey)
                     || !java.util.Objects.equals(config.getTimezone(), source.timezone())
                     || !java.util.Objects.equals(config.getMarketOpenTime(), source.marketOpen())
@@ -50,6 +70,7 @@ public class GlobalIndexConfigReconciler implements ApplicationRunner {
             log.info("[GlobalIndexConfigReconciler] Updating routing/session config for {}: instrumentKey {} -> {}",
                     config.getSymbol(), config.getInstrumentKey(), newKey);
             config.setInstrumentKey(newKey);
+            config.setName(source.name());
             config.setExchange(source.exchange());
             config.setTimezone(source.timezone());
             config.setMarketOpenTime(source.marketOpen());
@@ -58,6 +79,6 @@ public class GlobalIndexConfigReconciler implements ApplicationRunner {
             configRepository.save(config);
             updated++;
         }
-        log.warn("[GlobalIndexConfigReconciler] Completed opt-in reconciliation: updated {} rows. Disable global.index-config.reconcile after this run.", updated);
+        log.info("[GlobalIndexConfigReconciler] Global index reconciliation complete: updated={}, inserted={}", updated, inserted);
     }
 }

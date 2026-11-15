@@ -452,6 +452,33 @@ public class AnalysisRedisCache {
         return null;
     }
 
+    public void saveChartRawJson(String key, String json, long ttlSeconds) {
+        if (key == null || json == null || json.isBlank()) return;
+        if (!isRedisFeatureEnabled() || !redisCircuitBreaker.allowRequest()) return;
+        try {
+            redisTemplate.opsForValue().set(key, json, ttlSeconds, TimeUnit.SECONDS);
+            redisCircuitBreaker.recordSuccess();
+        } catch (Exception e) {
+            redisCircuitBreaker.recordFailure("chart-write", e);
+            log.error("saveChartRawJson", "Error caching chart: " + e.getMessage());
+        }
+    }
+
+    public String getChartRawJson(String key) {
+        if (key == null || !isRedisFeatureEnabled() || !redisCircuitBreaker.allowRequest()) return null;
+        try {
+            String json = redisTemplate.opsForValue().get(key);
+            if (json != null) {
+                redisCircuitBreaker.recordSuccess();
+                return json;
+            }
+        } catch (Exception e) {
+            redisCircuitBreaker.recordFailure("chart-read", e);
+            log.error("getChartRawJson", "Error retrieving chart cache: " + e.getMessage());
+        }
+        return null;
+    }
+
     public com.fasterxml.jackson.databind.ObjectMapper getRedisObjectMapper() {
         return this.redisObjectMapper;
     }
