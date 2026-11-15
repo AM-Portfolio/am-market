@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Implementation of the HistoricalDataService that uses EquityService
@@ -42,9 +43,6 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
 
     @Override
     public Optional<HistoricalData> getHistoricalData(String tradingSymbol, Instant fromDate, Instant toDate, String interval, boolean isIndexSymbol) {
-        logger.debug("Retrieving historical data for symbol: {}, from: {}, to: {}, interval: {}, isIndexSymbol: {}", 
-                tradingSymbol, fromDate, toDate, interval, isIndexSymbol);
-        
         long startTime = System.currentTimeMillis();
         
         List<EquityPrice> prices;
@@ -133,7 +131,7 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         }
 
         if (prices.isEmpty()) {
-            logger.debug("No historical data found for symbol: {}", tradingSymbol);
+            logger.info("No historical data found for symbol: {}", tradingSymbol);
             return Optional.empty();
         }
         
@@ -145,7 +143,6 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         if (rawIndianIndex || interval == null || interval.isEmpty()) {
             processedPrices = processDataByInterval(prices, interval, rawIndianIndex);
         } else {
-            logger.debug("Data pre-aggregated via InfluxDB aggregateWindow for interval {}; bypassing Java processDataByInterval", interval);
             processedPrices = prices;
         }
         
@@ -167,10 +164,19 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             Instant toDate, String interval, boolean isIndexSymbol) {
         if (tradingSymbols == null || tradingSymbols.isEmpty()) return Collections.emptyMap();
         if (isIndexSymbol) {
-            // Index history uses separate sources and identity rules. Preserve its
-            // established path until those stores expose a compatible batch query.
-            return HistoricalDataService.super.getHistoricalDataBatch(
-                    tradingSymbols, fromDate, toDate, interval, true);
+            // Index history queries InfluxDB per index symbol. Parallelize concurrent symbols
+            // to eliminate sequential multi-symbol blocking latency.
+            Map<String, HistoricalData> result = new java.util.concurrent.ConcurrentHashMap<>();
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            for (String symbol : tradingSymbols) {
+                if (symbol == null || symbol.isBlank()) continue;
+                futures.add(CompletableFuture.runAsync(() -> {
+                    getHistoricalData(symbol, fromDate, toDate, interval, true)
+                            .ifPresent(data -> result.put(symbol, data));
+                }));
+            }
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            return result;
         }
 
         List<EquityPrice> prices = equityService.getPriceHistoryBySymbols(
@@ -198,9 +204,6 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
     
     @Override
     public Optional<HistoricalData> getRecentHistoricalData(String tradingSymbol, int lookbackPeriod, String interval) {
-        logger.debug("Retrieving recent historical data for symbol: {}, lookback: {}, interval: {}", 
-                tradingSymbol, lookbackPeriod, interval);
-        
         Instant toDate = Instant.now();
         Instant fromDate = calculateFromDate(toDate, lookbackPeriod, interval);
         
@@ -244,6 +247,32 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             orderedPrices = removeConflictingIndexSamplesAtSameTime(orderedPrices, interval);
             if (orderedPrices.isEmpty()) {
                 return Collections.emptyList();
+            }
+
+            // Outlier Guard: Reject points that deviate >1.5% from the day's median price before calculating candles
+            List<Double> validPrices = orderedPrices.stream()
+                    .map(this::getValidIndexPriceSample)
+                    .filter(java.util.Objects::nonNull)
+                    .sorted()
+                    .toList();
+            if (!validPrices.isEmpty()) {
+                double median = validPrices.get(validPrices.size() / 2);
+                orderedPrices = orderedPrices.stream()
+                        .filter(p -> {
+                            Double val = getValidIndexPriceSample(p);
+                            if (val == null) return false;
+                            double deviation = Math.abs(val - median) / median;
+                            if (deviation > 0.015) {
+                                logger.warn("Rejected outlier index point: symbol={}, time={}, price={}, median={}, dev={}%",
+                                        p.getSymbol(), p.getTime(), val, median, String.format("%.2f", deviation * 100));
+                                return false;
+                            }
+                            return true;
+                        })
+                        .toList();
+                if (orderedPrices.isEmpty()) {
+                    return Collections.emptyList();
+                }
             }
         }
         
@@ -294,9 +323,6 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         
         // Sort the result by time
         Collections.sort(result, (p1, p2) -> p1.getTime().compareTo(p2.getTime()));
-        
-        logger.debug("Resampled {} raw data points to {} {} intervals", 
-                prices.size(), result.size(), interval);
         
         return result;
     }
@@ -395,8 +421,8 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         return bucketDate.atTime(9, 15).toInstant(java.time.ZoneOffset.UTC);
     }
 
-    /** Build sampled intraday OHLC from index last-price observations, not the
-     * running day-level open/high/low snapshots stored on each live tick. */
+    /** Build sampled intraday OHLC from index last-price observations, prioritizing
+     * verified provider 1-minute historical candles over sub-second tick noise when present. */
     private EquityPrice aggregateIndianIndexPriceSamples(List<EquityPrice> prices, Instant bucketTime) {
         List<Double> samples = prices.stream()
                 .map(this::getValidIndexPriceSample)
@@ -407,10 +433,49 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         }
 
         EquityPrice reference = prices.get(0);
-        double open = samples.get(0);
-        double close = samples.get(samples.size() - 1);
-        double high = samples.stream().mapToDouble(Double::doubleValue).max().orElse(close);
-        double low = samples.stream().mapToDouble(Double::doubleValue).min().orElse(close);
+
+        // Check if provider 1-minute historical candles exist in this bucket (seconds % 60 == 0, zero nano, valid ohlcv)
+        List<EquityPrice> minuteCandles = prices.stream()
+                .filter(p -> p.getTime() != null
+                        && p.getTime().getEpochSecond() % 60 == 0
+                        && p.getTime().getNano() == 0
+                        && p.getOhlcv() != null
+                        && p.getOhlcv().getOpen() != null && p.getOhlcv().getOpen() > 0)
+                .sorted(Comparator.comparing(EquityPrice::getTime))
+                .toList();
+
+        double open;
+        double close;
+        double high;
+        double low;
+
+        if (!minuteCandles.isEmpty()) {
+            // Prefer 1-minute historical candles over sub-second tick noise
+            EquityPrice firstMinute = minuteCandles.get(0);
+            open = firstMinute.getOhlcv().getOpen();
+            high = minuteCandles.stream().mapToDouble(c -> c.getOhlcv().getHigh()).max().orElse(open);
+            low = minuteCandles.stream().mapToDouble(c -> c.getOhlcv().getLow()).min().orElse(open);
+
+            EquityPrice lastMinute = minuteCandles.get(minuteCandles.size() - 1);
+            Instant lastMinuteTime = lastMinute.getTime();
+            Double baseClose = lastMinute.getOhlcv().getClose() != null ? lastMinute.getOhlcv().getClose() : lastMinute.getLastPrice();
+
+            // If a live tick arrived strictly after the last minute candle, use its last price for close (in-progress live minute)
+            Double latestSubSecondTick = prices.stream()
+                    .filter(p -> p.getTime() != null && p.getTime().isAfter(lastMinuteTime))
+                    .map(this::getValidIndexPriceSample)
+                    .filter(java.util.Objects::nonNull)
+                    .reduce((first, second) -> second)
+                    .orElse(null);
+
+            close = latestSubSecondTick != null ? latestSubSecondTick : baseClose;
+        } else {
+            open = samples.get(0);
+            close = samples.get(samples.size() - 1);
+            high = samples.stream().mapToDouble(Double::doubleValue).max().orElse(close);
+            low = samples.stream().mapToDouble(Double::doubleValue).min().orElse(close);
+        }
+
         return EquityPrice.builder()
                 .symbol(reference.getSymbol())
                 .isin(reference.getIsin())

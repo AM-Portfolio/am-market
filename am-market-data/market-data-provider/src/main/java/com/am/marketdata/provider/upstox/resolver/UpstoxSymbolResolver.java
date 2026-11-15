@@ -419,6 +419,15 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                     score = 1;
                 }
 
+                // Heavily favor candidates with a valid pipe instrument key (not null/None)
+                if (candidate.getInstrumentKey() != null && candidate.getInstrumentKey().contains("|")) {
+                    score += 10;
+                }
+                // Favor active ISINs (not deprecated in isinRemapCache)
+                if (candIsin != null && !isinRemapCache.containsKey(candIsin.trim().toUpperCase())) {
+                    score += 5;
+                }
+
                 if (score > bestScore) {
                     bestScore = score;
                     bestInst = candidate;
@@ -518,8 +527,7 @@ public class UpstoxSymbolResolver implements SymbolResolver {
                     target = found.get().getTarget().trim().toUpperCase();
                     symbolAliasCache.put(cleaned, target);
                 }
-            } catch (Exception e) {
-                log.debug("UpstoxSymbolResolver", "Dynamic alias DB lookup note for " + cleaned + ": " + e.getMessage());
+            } catch (Exception ignored) {
             }
         }
         return target != null ? target : cleaned;

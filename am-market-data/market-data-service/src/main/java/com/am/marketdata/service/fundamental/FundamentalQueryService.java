@@ -179,8 +179,7 @@ public class FundamentalQueryService {
                         }
                     }
                 }
-            } catch (Exception e) {
-                log.debug("Error in search lookup for {}: {}", candidate, e.getMessage());
+            } catch (Exception ignored) {
             }
         }
 
@@ -208,8 +207,7 @@ public class FundamentalQueryService {
                     log.info("Found isin={} for symbolCandidate={} in securities, but marked DELISTED. Searching active survivor...", isin, symbolCandidate);
                 }
             }
-        } catch (Exception e) {
-            log.debug("Direct MongoDB symbol lookup note for {}: {}", symbolCandidate, e.getMessage());
+        } catch (Exception ignored) {
         }
 
         // 2. Check 'stock_indices_market_data' collection
@@ -231,8 +229,7 @@ public class FundamentalQueryService {
                     }
                 }
             }
-        } catch (Exception e) {
-            log.debug("stock_indices_market_data symbol lookup note for {}: {}", symbolCandidate, e.getMessage());
+        } catch (Exception ignored) {
         }
 
         // 3. Check 'fundamental_analysis' collection
@@ -244,8 +241,7 @@ public class FundamentalQueryService {
                 log.info("Resolved symbolCandidate={} to isin={} via fundamental_analysis collection", symbolCandidate, isin);
                 return isin;
             }
-        } catch (Exception e) {
-            log.debug("Direct fundamental_analysis lookup note for {}: {}", symbolCandidate, e.getMessage());
+        } catch (Exception ignored) {
         }
 
         return null;
@@ -263,8 +259,7 @@ public class FundamentalQueryService {
                 log.info("Resolved nameCandidate='{}' to isin={} via companyName in fundamental_analysis", nameCandidate, isin);
                 return isin;
             }
-        } catch (Exception e) {
-            log.debug("Company name lookup note for {}: {}", nameCandidate, e.getMessage());
+        } catch (Exception ignored) {
         }
 
         return null;
@@ -300,7 +295,6 @@ public class FundamentalQueryService {
         // 1. Direct MongoDB Query (Fast B-Tree Indexed Lookup on 'isin')
         Optional<FundamentalData> mongoDataOpt = fundamentalDataRepository.findFirstByIsin(cleanIsin);
         if (mongoDataOpt.isPresent()) {
-            log.debug("MongoDB HIT for fundamentals isin={}", cleanIsin);
             return mongoDataOpt;
         }
 
@@ -335,8 +329,7 @@ public class FundamentalQueryService {
         }
         try {
             return Optional.ofNullable(securityRepository.findByIsin(isin.trim().toUpperCase()));
-        } catch (Exception e) {
-            log.debug("Failed to lookup security document for isin={}: {}", isin, e.getMessage());
+        } catch (Exception ignored) {
             return Optional.empty();
         }
     }
@@ -384,8 +377,7 @@ public class FundamentalQueryService {
                             map.putIfAbsent(isin, sec);
                         }
                     }
-                } catch (Exception ex) {
-                    log.debug("Fallback upstock_instruments resolution note: {}", ex.getMessage());
+                } catch (Exception ignored) {
                 }
             }
             return map;
@@ -477,8 +469,7 @@ public class FundamentalQueryService {
                     if (instDoc.getString("name") != null) companyName = instDoc.getString("name").trim();
                 }
             }
-        } catch (Exception e) {
-            log.debug("Security resolution note for isin={}: {}", isin, e.getMessage());
+        } catch (Exception ignored) {
         }
 
         CompanyProfile profile = provider.getCompanyProfile(isin);
@@ -672,22 +663,22 @@ public class FundamentalQueryService {
             if (provider == null) return;
 
             List<IncomeStatementEntry> income = null;
-            try { income = provider.getIncomeStatement(isin, true, "yearly"); } catch (Exception e) { log.debug("Async income note for {}: {}", isin, e.getMessage()); }
+            try { income = provider.getIncomeStatement(isin, true, "yearly"); } catch (Exception ignored) {}
 
             List<BalanceSheetEntry> balance = null;
-            try { balance = provider.getBalanceSheet(isin, true); } catch (Exception e) { log.debug("Async balance note for {}: {}", isin, e.getMessage()); }
+            try { balance = provider.getBalanceSheet(isin, true); } catch (Exception ignored) {}
 
             List<CashFlowEntry> cashFlow = null;
-            try { cashFlow = provider.getCashFlow(isin, true); } catch (Exception e) { log.debug("Async cashflow note for {}: {}", isin, e.getMessage()); }
+            try { cashFlow = provider.getCashFlow(isin, true); } catch (Exception ignored) {}
 
             List<ShareholdingQuarterEntry> shareholding = null;
-            try { shareholding = provider.getShareHoldings(isin); } catch (Exception e) { log.debug("Async shareholding note for {}: {}", isin, e.getMessage()); }
+            try { shareholding = provider.getShareHoldings(isin); } catch (Exception ignored) {}
 
             List<CorporateActionEntry> actions = null;
-            try { actions = provider.getCorporateActions(isin); } catch (Exception e) { log.debug("Async actions note for {}: {}", isin, e.getMessage()); }
+            try { actions = provider.getCorporateActions(isin); } catch (Exception ignored) {}
 
             List<CompetitorPeer> peers = null;
-            try { peers = provider.getCompetitors(isin); } catch (Exception e) { log.debug("Async peers note for {}: {}", isin, e.getMessage()); }
+            try { peers = provider.getCompetitors(isin); } catch (Exception ignored) {}
 
             // Compute analytics metrics
             FundamentalAnalytics analytics = null;
@@ -698,9 +689,7 @@ public class FundamentalQueryService {
                         cashFlow != null ? cashFlow : Collections.emptyList(),
                         null, null, null, null, null
                 );
-            } catch (Exception e) {
-                log.debug("Async analytics computation note for {}: {}", isin, e.getMessage());
-            }
+            } catch (Exception ignored) {}
 
             Optional<FundamentalData> existingOpt = fundamentalDataRepository.findFirstByIsin(isin);
             Instant now = Instant.now();

@@ -761,7 +761,6 @@ public class SmartStockService {
                                 if (Double.isFinite(quote.getLastPrice()) && quote.getLastPrice() > 0) {
                                     quotesToCache.put(symbol, quote);
                                 }
-                                log.debug("backfillPreviousCloseForDay", "Resolved historical previousClose symbol={}", symbol);
                             }
                         }
                     }

@@ -26,6 +26,7 @@ import org.springframework.beans.factory.annotation.Value;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -182,7 +183,6 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
             // provider timestamp is recent, and omit it once that snapshot ages out.
             if (!freshTimestamp || marketDepthMaxAgeSeconds <= 0) {
                 quote.setMarketDepth(null);
-                log.debug("Omitted stale market depth symbol={} ageMillis={}", symbol, ageMillis);
             }
         });
     }
@@ -396,17 +396,24 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                     }
                 });
 
-                Map<String, HistoricalData> batchResult = new java.util.HashMap<>();
-                if (!indexSymbols.isEmpty()) {
-                    batchResult.putAll(marketDataService.getHistoricalDataBatch(
-                            new ArrayList<>(indexSymbols), fromDate, toDate, interval, false, queryParams, null,
-                            true, forceRefresh && allowProviderFallback, allowProviderFallback, allowCache));
-                }
-                if (!stockSymbols.isEmpty()) {
-                    batchResult.putAll(marketDataService.getHistoricalDataBatch(
-                            new ArrayList<>(stockSymbols), fromDate, toDate, interval, false, queryParams, null,
-                            false, forceRefresh && allowProviderFallback, allowProviderFallback, allowCache));
-                }
+                Map<String, HistoricalData> batchResult = new java.util.concurrent.ConcurrentHashMap<>();
+                CompletableFuture<Void> indexFuture = !indexSymbols.isEmpty()
+                        ? CompletableFuture.runAsync(() -> {
+                            batchResult.putAll(marketDataService.getHistoricalDataBatch(
+                                    new ArrayList<>(indexSymbols), fromDate, toDate, interval, false, queryParams, null,
+                                    true, forceRefresh && allowProviderFallback, allowProviderFallback, allowCache));
+                        })
+                        : CompletableFuture.completedFuture(null);
+
+                CompletableFuture<Void> stockFuture = !stockSymbols.isEmpty()
+                        ? CompletableFuture.runAsync(() -> {
+                            batchResult.putAll(marketDataService.getHistoricalDataBatch(
+                                    new ArrayList<>(stockSymbols), fromDate, toDate, interval, false, queryParams, null,
+                                    false, forceRefresh && allowProviderFallback, allowProviderFallback, allowCache));
+                        })
+                        : CompletableFuture.completedFuture(null);
+
+                CompletableFuture.allOf(indexFuture, stockFuture).join();
 
                 int successCount = 0;
                 int totalDataPoints = 0;
@@ -493,15 +500,11 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
     @Override
     public Map<String, Object> getOptionChain(String underlyingSymbol, Date expiryDate, boolean forceRefresh) {
-        log.debug(
-                "Fetching option chain for symbol={} expiryDate={} forceRefresh={}",
-                underlyingSymbol, expiryDate, forceRefresh);
         return marketDataService.getOptionChain(underlyingSymbol, expiryDate, null, forceRefresh);
     }
 
     @Override
     public Map<String, Object> getMutualFundDetails(String schemeCode, boolean forceRefresh) {
-        log.debug("Fetching mutual fund details for schemeCode={}", schemeCode);
         // Mutual fund functionality not yet migrated to MarketDataService
         Map<String, Object> result = new HashMap<>();
         result.put("error", "Mutual fund details not yet supported");
@@ -510,8 +513,6 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
 
     @Override
     public Map<String, Object> getMutualFundNavHistory(String schemeCode, Date from, Date to, boolean forceRefresh) {
-        log.debug(
-                "Fetching mutual fund NAV history for schemeCode={} from={} to={}", schemeCode, from, to);
         // Mutual fund functionality not yet migrated to MarketDataService
         Map<String, Object> result = new HashMap<>();
         result.put("error", "Mutual fund NAV history not yet supported");
@@ -847,8 +848,6 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
     }
 
     public List<String> findMissingSymbols(List<String> indexSymbols, List<String> symbolsToCheck) {
-        log.debug("Finding symbols not included in the passed list: {}", symbolsToCheck);
-
         if (symbolsToCheck == null || symbolsToCheck.isEmpty()) {
             return Collections.emptyList();
         }

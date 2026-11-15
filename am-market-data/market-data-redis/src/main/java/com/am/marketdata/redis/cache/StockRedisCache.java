@@ -90,7 +90,6 @@ public class StockRedisCache {
             return false;
         }
         if (!isRedisFeatureEnabled()) {
-            log.debug("saveIntradayBars", "Redis caching is disabled; skipping pipeline write");
             return false;
         }
 
@@ -149,7 +148,6 @@ public class StockRedisCache {
      */
     public boolean saveIntradayBars(String symbol, String interval, String date, List<OHLCV> bars) {
         if (!isRedisFeatureEnabled()) {
-            log.debug("saveIntradayBars", "Redis caching is disabled; skipping write");
             return false;
         }
         validateInterval(interval);
@@ -165,9 +163,6 @@ public class StockRedisCache {
             long ttlSeconds = calculateIntradayTtl(date);
 
             redisTemplate.opsForValue().set(key, json, ttlSeconds, TimeUnit.SECONDS);
-            log.debug("saveIntradayBars",
-                    String.format("Saved %d intraday bars for %s, interval: %s, date: %s, TTL: %d seconds",
-                            bars.size(), symbol, interval, date, ttlSeconds));
             return true;
         } catch (JsonProcessingException e) {
             log.error("saveIntradayBars", "Failed to serialize stock bars for " + symbol + ": " + e.getMessage());
@@ -196,11 +191,9 @@ public class StockRedisCache {
             return false;
         }
         if (!isRedisFeatureEnabled()) {
-            log.debug("saveHistoricalBar", "Redis caching is disabled; skipping pipeline write");
             return false;
         }
         if (!redisCircuitBreaker.allowRequest()) {
-            log.debug("saveHistoricalBar", "Redis circuit is open; skipping historical cache write");
             return false;
         }
 
@@ -253,9 +246,6 @@ public class StockRedisCache {
             }
 
             redisCircuitBreaker.recordSuccess();
-            log.debug("saveHistoricalBar", "Executed pipeline for " + stockBarsList.size()
-                    + " stock bar sets and queued " + queuedWrites[0] + " writes"
-                    + " (pipelineResults=" + (pipelineResults == null ? 0 : pipelineResults.size()) + ")");
             return true;
         } catch (Exception e) {
             redisCircuitBreaker.recordFailure("historical-write", e);
@@ -277,12 +267,10 @@ public class StockRedisCache {
         validateDate(date);
 
         if (!isRedisFeatureEnabled()) {
-            log.debug("saveHistoricalBar", "Redis caching is disabled; skipping write for " + symbol);
             return false;
         }
 
         if (!redisCircuitBreaker.allowRequest()) {
-            log.debug("saveHistoricalBar", "Redis circuit is open; skipping historical cache write for " + symbol);
             return false;
         }
 
@@ -295,8 +283,6 @@ public class StockRedisCache {
 
             redisTemplate.opsForValue().set(key, json, ttlSeconds, TimeUnit.SECONDS);
             redisCircuitBreaker.recordSuccess();
-            log.debug("saveHistoricalBar",
-                    String.format("Saved historical bar for %s, date: %s, TTL: %d seconds", symbol, date, ttlSeconds));
             return true;
         } catch (JsonProcessingException e) {
             redisCircuitBreaker.recordSkipped();
@@ -327,8 +313,6 @@ public class StockRedisCache {
         try {
             String json = redisTemplate.opsForValue().get(key);
             if (json == null) {
-                log.debug("getBars",
-                        String.format("No data found for %s, interval: %s, date: %s", symbol, interval, date));
                 return null;
             }
 
@@ -378,12 +362,10 @@ public class StockRedisCache {
         Set<String> keys = redisTemplate.keys(pattern);
 
         if (keys == null || keys.isEmpty()) {
-            log.debug("clearIntradayDataForDate", "No intraday data found for date: {}", date);
             return 0;
         }
 
         Long deletedCount = redisTemplate.delete(keys);
-        log.debug("clearIntradayDataForDate", "Deleted {} intraday keys for date: {}", deletedCount, date);
 
         return deletedCount != null ? deletedCount : 0;
     }
@@ -430,8 +412,6 @@ public class StockRedisCache {
         }
 
         // Log first 3 keys for debugging
-        log.debug("getMultiSymbolBars", "[REDIS_TRACE] Fetching {} keys from Redis. First 3 keys: {}",
-                keys.size(), keys.subList(0, Math.min(3, keys.size())));
 
         // Fetch all values in a single Redis operation
         List<String> jsonValues = redisTemplate.opsForValue().multiGet(keys);
@@ -443,8 +423,6 @@ public class StockRedisCache {
 
         // Count how many values were found
         long foundCount = jsonValues.stream().filter(Objects::nonNull).count();
-        log.debug("getMultiSymbolBars", "[REDIS_TRACE] Redis returned {} non-null values out of {} keys",
-                foundCount, keys.size());
 
         Map<String, StockBars> result = new HashMap<>();
 
@@ -454,10 +432,6 @@ public class StockRedisCache {
             if (json != null) {
                 try {
                     String symbol = symbols.get(i);
-
-                    log.debug("getMultiSymbolBars",
-                            "[REDIS_PARSE] Processing symbol {} ({}/{}), JSON length: {}",
-                            symbol, i + 1, symbols.size(), json.length());
 
                     // Reconstruct StockBars - use PREFIX (date-aware) NOT interval type
                     if (prefix.equals(HISTORICAL_PREFIX)) {
@@ -471,8 +445,6 @@ public class StockRedisCache {
                                 .bars(Collections.singletonList(bar))
                                 .build();
                         result.put(symbol, stockBars);
-                        log.debug("getMultiSymbolBars", "[REDIS_PARSE] Successfully parsed HISTORICAL data for {}",
-                                symbol);
                     } else {
                         // For intraday data, we stored a List<OHLCV>
                         List<OHLCV> bars = redisObjectMapper.readValue(json,
@@ -486,9 +458,6 @@ public class StockRedisCache {
                                 .bars(bars)
                                 .build();
                         result.put(symbol, stockBars);
-                        log.debug("getMultiSymbolBars",
-                                "[REDIS_PARSE] Successfully parsed INTRADAY data for {} with {} bars",
-                                symbol, bars.size());
 
                     }
                 } catch (JsonProcessingException e) {
@@ -524,7 +493,6 @@ public class StockRedisCache {
             return Collections.emptyMap();
         }
         if (!redisCircuitBreaker.allowRequest()) {
-            log.debug("getMultiSymbolHistoricalBars", "Redis circuit is open; treating historical cache as unavailable");
             return Collections.emptyMap();
         }
 
@@ -733,7 +701,6 @@ public class StockRedisCache {
             return;
         }
         if (!isRedisFeatureEnabled()) {
-            log.debug("setActiveProvider", "Redis caching is disabled; skipping active-provider write");
             return;
         }
         try {
@@ -783,7 +750,6 @@ public class StockRedisCache {
      */
     public void cacheIndexHistoricalData(String cacheKey, Map<String, String> hashData) {
         if (!redisCircuitBreaker.allowRequest()) {
-            log.debug("cacheIndexHistoricalData", "Redis circuit is open; skipping index cache write");
             return;
         }
         try {
@@ -817,7 +783,6 @@ public class StockRedisCache {
      */
     public Map<String, String> getIndexHistoricalData(String cacheKey) {
         if (!redisCircuitBreaker.allowRequest()) {
-            log.debug("getIndexHistoricalData", "Redis circuit is open; treating index cache as unavailable");
             return null;
         }
         try {
@@ -827,7 +792,6 @@ public class StockRedisCache {
                 // An empty hash is a healthy cache miss, not a Redis failure.
                 // Close a half-open recovery probe in this case as well.
                 redisCircuitBreaker.recordSuccess();
-                log.debug("[INDEX_CACHE]", "No index data found for key: " + cacheKey);
                 return null;
             }
 

@@ -70,7 +70,21 @@ public class MarketAnalyticsService {
                 break;
             case "1D":
                 interval = "5m";
-                from = to.minusDays(1);
+                java.time.ZonedDateTime istNowTrading = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                java.time.DayOfWeek dayOfWeek = istNowTrading.getDayOfWeek();
+                java.time.LocalDate tradingDate = istNowTrading.toLocalDate();
+                if (dayOfWeek == java.time.DayOfWeek.SATURDAY) {
+                    tradingDate = tradingDate.minusDays(1);
+                } else if (dayOfWeek == java.time.DayOfWeek.SUNDAY) {
+                    tradingDate = tradingDate.minusDays(2);
+                } else if (istNowTrading.toLocalTime().isBefore(java.time.LocalTime.of(9, 15))) {
+                    tradingDate = tradingDate.minusDays(1);
+                    if (tradingDate.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+                        tradingDate = tradingDate.minusDays(2);
+                    }
+                }
+                from = tradingDate.atStartOfDay();
+                to = tradingDate.plusDays(1).atStartOfDay();
                 break;
             case "1W":
                 // [Upstox Compatible Interval Mapping]
