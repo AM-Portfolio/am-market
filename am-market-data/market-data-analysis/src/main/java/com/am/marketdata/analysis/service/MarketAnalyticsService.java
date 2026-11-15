@@ -42,6 +42,20 @@ public class MarketAnalyticsService {
         boolean isIndexSymbol = resolveChartSymbolType(symbols, requestedIndexSymbol);
         String rangeKey = range == null || range.isBlank() ? "1Y" : range.trim().toUpperCase(Locale.ROOT);
 
+        String chartCacheKey = "analysis:charts:" + (symbols != null ? symbols.trim().toUpperCase(Locale.ROOT) : "")
+                + ":" + rangeKey + ":" + isIndexSymbol;
+        if (analysisRedisCache != null) {
+            try {
+                String cachedJson = analysisRedisCache.getChartRawJson(chartCacheKey);
+                if (cachedJson != null && !cachedJson.isBlank()) {
+                    return analysisRedisCache.getRedisObjectMapper().readValue(
+                            cachedJson, com.am.marketdata.api.model.HistoricalDataResponseV1.class);
+                }
+            } catch (Exception e) {
+                log.warn("getHistoricalCharts", "Redis cache read failed for " + chartCacheKey + ": " + e.getMessage());
+            }
+        }
+
         String interval = "1D";
         java.time.LocalDateTime to = java.time.LocalDateTime.now();
         java.time.LocalDateTime from = to.minusDays(1);
@@ -71,19 +85,9 @@ public class MarketAnalyticsService {
             case "1D":
                 interval = "5m";
                 java.time.ZonedDateTime istNowTrading = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                java.time.DayOfWeek dayOfWeek = istNowTrading.getDayOfWeek();
                 java.time.LocalDate tradingDate = istNowTrading.toLocalDate();
-                if (dayOfWeek == java.time.DayOfWeek.SATURDAY) {
-                    tradingDate = tradingDate.minusDays(1);
-                } else if (dayOfWeek == java.time.DayOfWeek.SUNDAY) {
-                    tradingDate = tradingDate.minusDays(2);
-                } else if (istNowTrading.toLocalTime().isBefore(java.time.LocalTime.of(9, 15))) {
-                    tradingDate = tradingDate.minusDays(1);
-                    if (tradingDate.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
-                        tradingDate = tradingDate.minusDays(2);
-                    }
-                }
-                from = tradingDate.atStartOfDay();
+                // Query 5 days of 5-minute candles to guarantee coverage on weekends and market holidays
+                from = tradingDate.minusDays(5).atStartOfDay();
                 to = tradingDate.plusDays(1).atStartOfDay();
                 break;
             case "1W":
@@ -191,8 +195,9 @@ public class MarketAnalyticsService {
                                                 || !isValidCandle(p)) {
                                             return false;
                                         }
-                                        // Performance Optimization: Use pre-cached kolkataZone instance instead of calling ZoneId.of() inside stream loop
-                                        long timestamp = p.getTime().atZone(kolkataZone)
+                                        // OHLCVTMapper stores UTC LocalDateTime in OHLCVTPoint.time.
+                                        // Convert from UTC to Instant to get true epoch milliseconds matching minTime/maxTime.
+                                        long timestamp = p.getTime().atZone(java.time.ZoneOffset.UTC)
                                                 .toInstant()
                                                 .toEpochMilli();
                                         return timestamp >= minTime && timestamp <= maxTime;
@@ -213,6 +218,34 @@ public class MarketAnalyticsService {
                                 .values().stream()
                                 .collect(Collectors.toList());
 
+                        if ("1D".equalsIgnoreCase(range) && filteredPoints.isEmpty() && !symbolData.getDataPoints().isEmpty()) {
+                            // Edge case: Target date had no trading session (e.g. market holiday).
+                            // Find the most recent active session date available in data points.
+                            java.time.LocalDate latestTradingDate = symbolData.getDataPoints().stream()
+                                    .filter(this::isValidCandle)
+                                    .map(pt -> pt.getTime().atZone(java.time.ZoneOffset.UTC).toLocalDate())
+                                    .max(java.util.Comparator.naturalOrder())
+                                    .orElse(null);
+                            if (latestTradingDate != null) {
+                                long fallbackMin = latestTradingDate.atTime(9, 15).atZone(kolkataZone).toInstant().toEpochMilli();
+                                long fallbackMax = latestTradingDate.atTime(15, 30).atZone(kolkataZone).toInstant().toEpochMilli();
+                                filteredPoints = symbolData.getDataPoints().stream()
+                                        .filter(p -> {
+                                            if (p == null || p.getTime() == null || !isValidCandle(p)) return false;
+                                            long ts = p.getTime().atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
+                                            return ts >= fallbackMin && ts <= fallbackMax;
+                                        })
+                                        .sorted(Comparator.comparing(com.am.common.investment.model.historical.OHLCVTPoint::getTime))
+                                        .collect(Collectors.toMap(
+                                                com.am.common.investment.model.historical.OHLCVTPoint::getTime,
+                                                p -> p,
+                                                (first, last) -> last,
+                                                LinkedHashMap::new))
+                                        .values().stream()
+                                        .collect(Collectors.toList());
+                            }
+                        }
+
                         if (!filteredPoints.isEmpty()) {
                             symbolData.setDataPoints(filteredPoints);
                             // The response count must describe the serialized points,
@@ -224,6 +257,21 @@ public class MarketAnalyticsService {
                         }
                     }
                 });
+            }
+
+            // Cache non-empty valid result in Redis with dynamic market-aware TTL
+            if (analysisRedisCache != null && response != null && response.getData() != null && !response.getData().isEmpty()) {
+                boolean hasPoints = response.getData().values().stream()
+                        .anyMatch(sd -> sd != null && sd.getDataPoints() != null && !sd.getDataPoints().isEmpty());
+                if (hasPoints) {
+                    try {
+                        long ttlSeconds = calculateChartTtlSeconds(rangeKey);
+                        String json = analysisRedisCache.getRedisObjectMapper().writeValueAsString(response);
+                        analysisRedisCache.saveChartRawJson(chartCacheKey, json, ttlSeconds);
+                    } catch (Exception e) {
+                        log.warn("getHistoricalCharts", "Redis cache write error for " + chartCacheKey + ": " + e.getMessage());
+                    }
+                }
             }
             return response;
         } catch (Exception e) {
@@ -245,6 +293,20 @@ public class MarketAnalyticsService {
                 && open > 0.0 && high > 0.0 && low > 0.0 && close > 0.0
                 && low <= open && low <= close
                 && high >= open && high >= close;
+    }
+
+    private long calculateChartTtlSeconds(String rangeKey) {
+        boolean isIntraday = Set.of("10M", "15M", "30M", "1H", "4H", "1D").contains(rangeKey);
+        if (!isIntraday) {
+            return 300L;
+        }
+        java.time.ZonedDateTime nowIst = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+        java.time.DayOfWeek day = nowIst.getDayOfWeek();
+        boolean isWeekday = day != java.time.DayOfWeek.SATURDAY && day != java.time.DayOfWeek.SUNDAY;
+        java.time.LocalTime time = nowIst.toLocalTime();
+        boolean isMarketHours = isWeekday && !time.isBefore(java.time.LocalTime.of(9, 15))
+                && !time.isAfter(java.time.LocalTime.of(15, 35));
+        return isMarketHours ? 15L : 300L;
     }
 
     /**

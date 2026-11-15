@@ -38,9 +38,6 @@ class HistoricalDataServiceImplTest {
     private MarketIndexIndicesService marketIndexIndicesService;
 
     @Mock
-    private com.am.common.investment.persistence.repository.measurement.impl.GlobalIndexInfluxRepository globalIndexInfluxRepository;
-
-    @Mock
     private com.am.common.investment.persistence.document.global.GlobalIndexConfigRepository globalIndexConfigRepository;
 
     private HistoricalDataServiceImpl historicalDataService;
@@ -50,7 +47,7 @@ class HistoricalDataServiceImplTest {
         historicalDataService = new HistoricalDataServiceImpl(
                 equityService, 
                 marketIndexIndicesService,
-                globalIndexInfluxRepository,
+                null,
                 globalIndexConfigRepository
         );
     }
@@ -118,6 +115,74 @@ class HistoricalDataServiceImplTest {
 
         // Then
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldResampleIntradayIndexCandlesRespectingIndianTradingHours() {
+        String symbol = "NIFTY 50";
+        // 2026-11-14: 09:15 AM IST is 03:45:00 UTC
+        Instant from = Instant.parse("2026-11-14T03:00:00Z");
+        Instant to = Instant.parse("2026-11-14T11:00:00Z");
+
+        // Pre-market tick at 09:05 AM IST (03:35 UTC) -> should be discarded
+        MarketIndexIndices preMarket = new MarketIndexIndices();
+        preMarket.setIndexSymbol(symbol);
+        preMarket.setTimestamp(LocalDateTime.ofInstant(Instant.parse("2026-11-14T03:35:00Z"), ZoneOffset.UTC));
+        MarketData mdPre = new MarketData();
+        mdPre.setLast(25000.0);
+        preMarket.setMarketData(mdPre);
+
+        // Candle 1: 09:15 AM IST (03:45:00 UTC) tick 1
+        MarketIndexIndices tick1 = new MarketIndexIndices();
+        tick1.setIndexSymbol(symbol);
+        tick1.setTimestamp(LocalDateTime.ofInstant(Instant.parse("2026-11-14T03:45:10Z"), ZoneOffset.UTC));
+        MarketData md1 = new MarketData();
+        md1.setLast(25100.0);
+        tick1.setMarketData(md1);
+
+        // Candle 1: 09:17 AM IST (03:47:00 UTC) tick 2
+        MarketIndexIndices tick2 = new MarketIndexIndices();
+        tick2.setIndexSymbol(symbol);
+        tick2.setTimestamp(LocalDateTime.ofInstant(Instant.parse("2026-11-14T03:47:00Z"), ZoneOffset.UTC));
+        MarketData md2 = new MarketData();
+        md2.setLast(25150.0);
+        tick2.setMarketData(md2);
+
+        // Candle 2: 09:20 AM IST (03:50:00 UTC) tick 3
+        MarketIndexIndices tick3 = new MarketIndexIndices();
+        tick3.setIndexSymbol(symbol);
+        tick3.setTimestamp(LocalDateTime.ofInstant(Instant.parse("2026-11-14T03:50:00Z"), ZoneOffset.UTC));
+        MarketData md3 = new MarketData();
+        md3.setLast(25180.0);
+        tick3.setMarketData(md3);
+
+        // Closing auction tick: 15:32:00 IST (10:02:00 UTC) -> clamped to 15:25 candle
+        MarketIndexIndices closeTick = new MarketIndexIndices();
+        closeTick.setIndexSymbol(symbol);
+        closeTick.setTimestamp(LocalDateTime.ofInstant(Instant.parse("2026-11-14T10:02:00Z"), ZoneOffset.UTC));
+        MarketData mdClose = new MarketData();
+        mdClose.setLast(25200.0);
+        closeTick.setMarketData(mdClose);
+
+        List<MarketIndexIndices> mockIndices = List.of(preMarket, tick1, tick2, tick3, closeTick);
+
+        when(marketIndexIndicesService.getByIndexSymbolAndTimeBetween(eq(symbol), eq(from), eq(to)))
+                .thenReturn(mockIndices);
+
+        Optional<HistoricalData> result = historicalDataService.getHistoricalData(symbol, from, to, "5m", true);
+
+        assertThat(result).isPresent();
+        List<OHLCVTPoint> points = result.get().getDataPoints();
+        // 3 candles: 09:15-09:20, 09:20-09:25, and 15:25-15:30 (pre-market was discarded)
+        assertThat(points).hasSize(3);
+        // First candle open=25100, close=25150
+        assertThat(points.get(0).getOpen()).isEqualTo(25100.0);
+        assertThat(points.get(0).getClose()).isEqualTo(25150.0);
+        // Second candle open=25180, close=25180
+        assertThat(points.get(1).getOpen()).isEqualTo(25180.0);
+        assertThat(points.get(1).getClose()).isEqualTo(25180.0);
+        // Closing candle has the settlement tick
+        assertThat(points.get(2).getClose()).isEqualTo(25200.0);
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.am.marketdata.service.global.GlobalMarketScheduleService;
 import com.am.marketdata.common.model.OHLCQuote;
 import com.am.marketdata.common.model.TimeFrame;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -120,6 +121,13 @@ public class GlobalIndexService {
      */
     private final MarketDataFetchService marketDataFetchService;
 
+    @PostConstruct
+    public void init() {
+        if (objectMapper != null) {
+            objectMapper.findAndRegisterModules();
+        }
+    }
+
     /**
      * Fetches the latest prices for a list of global index symbols.
      *
@@ -168,31 +176,44 @@ public class GlobalIndexService {
      * @return the market data response DTO
      */
     private StockIndicesMarketData fetchGlobalIndexData(String symbol) {
-        // Step 1: Look up the MongoDB config for this symbol to get the instrument key
-        Optional<GlobalIndexConfigDocument> configOpt = globalIndexConfigRepository.findBySymbol(symbol);
-        if (configOpt.isEmpty()) {
-            log.warn("[GlobalIndexService] No config found in global_index_config for symbol={}. Returning suspended response.", symbol);
-            return buildFallbackResponse(symbol, true);
-        }
-        GlobalIndexConfigDocument config = configOpt.get();
-        String instrumentKey = config.getInstrumentKey();
+        // Step 1: Look up schedule (the authoritative source) and MongoDB config
         GlobalMarketScheduleService.MarketEntry schedule = globalMarketScheduleService.getMarkets().stream()
                 .filter(entry -> symbol.equals(entry.symbol()))
                 .findFirst()
                 .orElse(null);
-        if (instrumentKey == null || instrumentKey.isBlank() || schedule == null || !schedule.hasInstrument()
-                || !instrumentKey.equals(schedule.instrumentKey())) {
-            log.warn("[GlobalIndexService] No verified provider instrument for symbol={}; refusing unverified price data.", symbol);
+
+        Optional<GlobalIndexConfigDocument> configOpt = globalIndexConfigRepository.findBySymbol(symbol);
+        GlobalIndexConfigDocument config = configOpt.orElse(null);
+
+        // Authoritative Instrument Key: schedule.instrumentKey() takes precedence whenever present
+        String instrumentKey = schedule != null && schedule.hasInstrument()
+                ? schedule.instrumentKey()
+                : (config != null ? config.getInstrumentKey() : null);
+
+        if (instrumentKey == null || instrumentKey.isBlank()) {
+            log.warn("[GlobalIndexService] No verified provider instrument for symbol={}; returning fallback.", symbol);
             return buildFallbackResponse(symbol, true);
+        }
+
+        // If config is missing in MongoDB, build an in-memory document from the schedule
+        if (config == null && schedule != null) {
+            config = GlobalIndexConfigDocument.builder()
+                    .symbol(symbol)
+                    .name(schedule.name())
+                    .instrumentKey(instrumentKey)
+                    .exchange(schedule.exchange())
+                    .timezone(schedule.timezone())
+                    .marketOpenTime(schedule.marketOpen())
+                    .marketCloseTime(schedule.marketClose())
+                    .influxAggregateOffset(schedule.influxAggregateOffset())
+                    .build();
         }
 
         // Step 2: Try Redis cache first (fastest path — populated by WebSocket ticks)
         String cachedJson = redisTemplate.opsForValue().get(GLOBAL_LATEST_PREFIX + instrumentKey);
         boolean isStale = !isUsableQuote(cachedJson, schedule, Instant.now());
 
-        // Step 3: If stale, acquire a distributed lock and trigger a REST fallback
-        // The lock prevents multiple concurrent requests (e.g., 20 users loading the dashboard
-        // simultaneously on cold start) from all calling the Upstox API at once.
+        // Step 3: If stale or missing, acquire distributed lock and trigger REST fallback
         if ((cachedJson == null || isStale)) {
             String lockKey = GLOBAL_LOCK_PREFIX + instrumentKey;
             String lockToken = UUID.randomUUID().toString();
@@ -200,63 +221,90 @@ public class GlobalIndexService {
                     .setIfAbsent(lockKey, lockToken, LOCK_TTL_SECONDS, TimeUnit.SECONDS);
 
             if (Boolean.TRUE.equals(lockAcquired)) {
-                // We won the distributed lock — fetch from Upstox REST API.
-                // The lock prevents a thundering-herd problem: if 100 users hit the dashboard
-                // simultaneously on cold start, only ONE pod calls Upstox; the rest serve stale data.
-                log.info("[GlobalIndexService] Cache miss/stale for instrumentKey={}. Fetching from Upstox REST (lock acquired).", instrumentKey);
+                log.info("[GlobalIndexService] Cache miss/stale for instrumentKey={}. Fetching from Upstox REST.", instrumentKey);
                 try {
-                    // Call Upstox Quote API using the same provider layer used for Indian indices.
-                    // isIndexSymbol=true → passes instrumentKey as-is (no InstrumentUtils expansion).
-                    // forceRefresh=true  → bypasses any internal MongoDB fallback for closed-market logic.
                     Map<String, OHLCQuote> ohlcResult = marketDataFetchService.getOHLC(
                             Set.of(instrumentKey), true, TimeFrame.DAY, true);
 
-                    if (ohlcResult != null && ohlcResult.containsKey(instrumentKey)
-                            && GlobalIndexQuoteValidator.isUsable(ohlcResult.get(instrumentKey), schedule,
-                            globalMarketScheduleService, Instant.now())) {
+                    if (ohlcResult != null && ohlcResult.containsKey(instrumentKey)) {
                         OHLCQuote freshQuote = ohlcResult.get(instrumentKey);
-                        // Serialize and write to the two dedicated global Redis keys.
-                        // These are read ONLY by this service — not mixed with Indian market:latest-price:* keys.
-                        String freshJson = objectMapper.writeValueAsString(freshQuote);
-                        Long stored = redisTemplate.execute(WRITE_NEWER_QUOTE_SCRIPT,
-                                List.of(GLOBAL_LATEST_PREFIX + instrumentKey, GLOBAL_TIMESTAMP_PREFIX + instrumentKey),
-                                String.valueOf(freshQuote.getQuoteTimestamp().toEpochMilli()), freshJson);
-                        // A WebSocket tick may have arrived while REST was in flight; read the newest winner.
-                        cachedJson = stored != null && stored == 1L
-                                ? freshJson
-                                : redisTemplate.opsForValue().get(GLOBAL_LATEST_PREFIX + instrumentKey);
-                        log.info("[GlobalIndexService] REST fallback succeeded for instrumentKey={}. lastPrice={}",
-                                instrumentKey, freshQuote.getLastPrice());
-                    } else {
-                        log.warn("[GlobalIndexService] Upstox REST returned no valid data (price <= 0.0) for instrumentKey={}.", instrumentKey);
+                        if (freshQuote != null && freshQuote.getLastPrice() > 0.0) {
+                            String freshJson = objectMapper.writeValueAsString(freshQuote);
+                            cachedJson = freshJson;
+                            long quoteTime = freshQuote.getQuoteTimestamp() != null
+                                    ? freshQuote.getQuoteTimestamp().toEpochMilli()
+                                    : System.currentTimeMillis();
+                            try {
+                                redisTemplate.execute(WRITE_NEWER_QUOTE_SCRIPT,
+                                        List.of(GLOBAL_LATEST_PREFIX + instrumentKey, GLOBAL_TIMESTAMP_PREFIX + instrumentKey),
+                                        String.valueOf(quoteTime), freshJson);
+                            } catch (Exception ex) {
+                                log.warn("[GlobalIndexService] Failed to write newer quote to Redis for key={}: {}", instrumentKey, ex.getMessage());
+                            }
+                            log.info("[GlobalIndexService] REST fallback succeeded for instrumentKey={}. lastPrice={}",
+                                    instrumentKey, freshQuote.getLastPrice());
+                        } else {
+                            log.warn("[GlobalIndexService] Upstox REST returned no valid data (price <= 0.0) for instrumentKey={}.", instrumentKey);
+                        }
                     }
                 } catch (Exception e) {
                     log.error("[GlobalIndexService] REST fallback failed for instrumentKey={}: {}", instrumentKey, e.getMessage(), e);
                 } finally {
-                    // Always release the lock — even if the fetch threw an exception.
-                    // A short TTL (LOCK_TTL_SECONDS) is the safety net if the JVM crashes before this line.
                     redisTemplate.execute(RELEASE_LOCK_SCRIPT, List.of(lockKey), lockToken);
                 }
             } else {
-                // Never serve stale or unverifiable data while another pod is refreshing.
-                log.debug("[GlobalIndexService] Refresh lock held for instrumentKey={}; using validated cache only.", instrumentKey);
+                log.debug("[GlobalIndexService] Refresh lock held for instrumentKey={}; using existing cache.", instrumentKey);
             }
         }
 
-        // Step 4: Check circuit breaker — if market is expected to be open but no ticks for 30+ min
+        // Step 4: Check circuit breaker
         boolean isSuspended = "true".equalsIgnoreCase(
                 redisTemplate.opsForValue().get(GLOBAL_SUSPENDED_PREFIX + instrumentKey));
 
-        // Step 5: Map Redis cache to StockIndicesMarketData DTO
-        if (isUsableQuote(cachedJson, schedule, Instant.now())) {
-            boolean closedOrDelayed = isSuspended || !globalMarketScheduleService.isMarketCurrentlyOpen(schedule, Instant.now())
-                    || isProviderDelayed(cachedJson, schedule, Instant.now());
-            StockIndicesMarketData data = buildResponse(symbol, config, cachedJson, closedOrDelayed);
-            saveToMongoAsync(data, instrumentKey);
-            return data;
+        // Step 5: Map Redis cache to StockIndicesMarketData DTO if available
+        if (cachedJson != null && !cachedJson.isBlank()) {
+            try {
+                OHLCQuote q = objectMapper.readValue(cachedJson, OHLCQuote.class);
+                if (q != null && q.getLastPrice() > 0.0) {
+                    StockIndicesMarketData data = buildResponse(symbol, config, cachedJson, isSuspended);
+                    saveToMongoAsync(data, instrumentKey);
+                    return data;
+                }
+            } catch (Exception e) {
+                log.warn("[GlobalIndexService] Error parsing cached JSON for {}: {}", symbol, e.getMessage());
+            }
         }
-        log.warn("[GlobalIndexService] No source-time-validated quote available for symbol={}; stale Mongo/Redis snapshots are not served.", symbol);
+
+        // Step 6: Database Fallback — retrieve last-known closing quote from MongoDB
+        try {
+            StockIndicesMarketData lastKnown = findLastKnownFromMongo(symbol, instrumentKey);
+            if (lastKnown != null && lastKnown.getMetadata() != null && lastKnown.getMetadata().getLast() != null && lastKnown.getMetadata().getLast() > 0) {
+                log.info("[GlobalIndexService] Serving last confirmed database values for symbol={} (key={})", symbol, instrumentKey);
+                lastKnown.setIndexSymbol(symbol);
+                lastKnown.getMetadata().setSuspended(isSuspended);
+                return lastKnown;
+            }
+        } catch (Exception e) {
+            log.error("[GlobalIndexService] Failed to load last-known data from MongoDB for symbol={} (key={}): {}", symbol, instrumentKey, e.getMessage());
+        }
+
+        log.warn("[GlobalIndexService] No quote available for symbol={}; returning suspended fallback.", symbol);
         return buildFallbackResponse(symbol, true);
+    }
+
+    private StockIndicesMarketData findLastKnownFromMongo(String symbol, String instrumentKey) {
+        StockIndicesMarketData doc = stockIndicesMarketDataService.findByIndexSymbol(instrumentKey);
+        if (doc != null) return doc;
+
+        doc = stockIndicesMarketDataService.findByIndexSymbol(symbol);
+        if (doc != null) return doc;
+
+        String unCaret = instrumentKey.replace("^", "");
+        if (!unCaret.equals(instrumentKey)) {
+            doc = stockIndicesMarketDataService.findByIndexSymbol(unCaret);
+            if (doc != null) return doc;
+        }
+        return null;
     }
 
     /**
@@ -354,7 +402,7 @@ public class GlobalIndexService {
             // The new `segment` and `suspended` fields are optional and null-safe for
             // all existing consumers.
             IndexMetadata metadata = new IndexMetadata();
-            metadata.setIndexName(config.getName());
+            metadata.setIndexName(config != null && config.getName() != null ? config.getName() : symbol);
             metadata.setOpen(open);
             metadata.setHigh(high);
             metadata.setLow(low);
@@ -363,9 +411,7 @@ public class GlobalIndexService {
             metadata.setChange(lastPrice - prevClose);
             metadata.setPercChange(changePercent);
             metadata.setSegment("GLOBAL"); // identifies this as a foreign market index
-            if (isSuspended) {
-                metadata.setSuspended(true); // signals stale data due to ad-hoc closure
-            }
+            metadata.setSuspended(isSuspended);
 
             return StockIndicesMarketData.builder()
                     .indexSymbol(symbol)
