@@ -30,6 +30,9 @@ public class MarketAnalyticsService {
     private final com.am.marketdata.api.service.MarketDataFetchService marketDataFetchService;
     private final com.am.marketdata.redis.cache.AnalysisRedisCache analysisRedisCache;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.am.marketdata.service.calendar.MarketCalendarService marketCalendarService;
+
     // Default broad index for "entire market" analytics
     private static final String DEFAULT_MARKET_INDEX = "NIFTY 50";
 
@@ -60,6 +63,16 @@ public class MarketAnalyticsService {
         java.time.LocalDateTime to = java.time.LocalDateTime.now();
         java.time.LocalDateTime from = to.minusDays(1);
 
+        // Detect if today is a weekend, holiday, or before market open. If so, roll back to the previous active trading day.
+        java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+        java.time.LocalDate candidateDate = istNow.toLocalDate();
+        java.time.LocalTime time = istNow.toLocalTime();
+        boolean isBeforeMarketOpen = time.isBefore(java.time.LocalTime.of(9, 15));
+        if (isBeforeMarketOpen) {
+            candidateDate = candidateDate.minusDays(1);
+        }
+        java.time.LocalDate targetDate = adjustToLastTradingDay(candidateDate);
+
         // Determine Interval and From Time based on Range
         switch (rangeKey) {
             case "10M":
@@ -84,11 +97,11 @@ public class MarketAnalyticsService {
                 break;
             case "1D":
                 interval = "5m";
-                java.time.ZonedDateTime istNowTrading = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                java.time.LocalDate tradingDate = istNowTrading.toLocalDate();
-                // Query 5 days of 5-minute candles to guarantee coverage on weekends and market holidays
-                from = tradingDate.minusDays(5).atStartOfDay();
-                to = tradingDate.plusDays(1).atStartOfDay();
+                // Target exactly the active trading day from 00:00:00 to 23:59:59.
+                // InfluxDB will query only ~75 five-minute candles for the single day,
+                // avoiding the multi-second penalty of scanning 6+ calendar days.
+                from = targetDate.atStartOfDay();
+                to = targetDate.atTime(23, 59, 59);
                 break;
             case "1W":
                 // [Upstox Compatible Interval Mapping]
@@ -147,43 +160,48 @@ public class MarketAnalyticsService {
                 return response;
             }
 
+            if ("1D".equalsIgnoreCase(rangeKey) && response.getData() != null && !response.getData().isEmpty()
+                    && response.getData().values().stream().allMatch(d -> d == null || d.getDataPoints() == null || d.getDataPoints().isEmpty())) {
+                // Rare edge case: targetDate had no trading candles (e.g. exchange holiday).
+                // Fall back to querying previous 4 days so the chart is never blank.
+                log.info("getHistoricalCharts", "1D targetDate " + targetDate + " had no candles (holiday/closed); falling back to lookback window");
+                com.am.marketdata.api.dto.HistoricalDataRequest fallbackRequest = com.am.marketdata.api.dto.HistoricalDataRequest
+                        .builder()
+                        .symbols(symbols)
+                        .from(targetDate.minusDays(4).toString())
+                        .to(targetDate.plusDays(1).toString())
+                        .interval(com.am.marketdata.common.model.TimeFrame.fromApiValue(interval))
+                        .filterType("price")
+                        .indexSymbol(isIndexSymbol)
+                        .build();
+                response = marketDataFetchService.processHistoricalDataRequest(fallbackRequest, true, !intradayChart);
+            }
+
             // Filter data points by time range for each symbol
             if (response.getData() != null) {
-                // [1D Timeframe Chart Optimization]
-                // 1. Detect if today is a weekend or before market open. If so, roll back the query date target to the previous trading day.
-                //    This prevents the chart from being empty when viewed on a Saturday, Sunday, or early morning before open.
-                java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
-                java.time.DayOfWeek day = istNow.getDayOfWeek();
-                java.time.LocalDate targetDate = istNow.toLocalDate();
-                java.time.LocalTime time = istNow.toLocalTime();
-                
-                boolean isBeforeMarketOpen = time.isBefore(java.time.LocalTime.of(9, 15));
-                if (day == java.time.DayOfWeek.SATURDAY) {
-                    targetDate = targetDate.minusDays(1);
-                } else if (day == java.time.DayOfWeek.SUNDAY) {
-                    targetDate = targetDate.minusDays(2);
-                } else if (isBeforeMarketOpen) {
-                    // It's a weekday, but before market opens. Roll back to the previous trading day.
-                    targetDate = targetDate.minusDays(1);
-                    if (targetDate.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
-                        targetDate = targetDate.minusDays(2);
-                    }
-                }
-
-                // 2. Bound the filter to the starting bell of the active market session (9:15 AM IST).
-                //    By using 9:15 AM today/Friday/yesterday instead of "now - 24 hours" (which points to yesterday afternoon),
-                //    we preserve the complete intraday chart progression rather than stripping out all daily candles.
-                java.time.LocalDateTime filterFrom = "1D".equalsIgnoreCase(range)
+                // Bound the filter to the starting bell of the active market session (9:15 AM IST).
+                // By using 9:15 AM targetDate instead of "now - 24 hours" (which points to yesterday afternoon),
+                // we preserve the complete intraday chart progression rather than stripping out all daily candles.
+                java.time.LocalDateTime filterFrom = "1D".equalsIgnoreCase(rangeKey)
                         ? targetDate.atTime(9, 15)
                         : from;
                 java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
                 long minTime = filterFrom.atZone(kolkataZone).toInstant().toEpochMilli();
-                long maxTime = "1D".equalsIgnoreCase(range)
+                long maxTime = "1D".equalsIgnoreCase(rangeKey)
                         ? targetDate.atTime(15, 30).atZone(kolkataZone).toInstant().toEpochMilli()
                         : Long.MAX_VALUE;
 
+                final java.time.LocalDateTime queryFrom = from;
                 response.getData().forEach((s, symbolData) -> {
                     if (symbolData != null && symbolData.getDataPoints() != null) {
+                        boolean isGlobal = isGlobalIndexSymbol(s);
+                        long symMinTime = isGlobal
+                                ? queryFrom.atZone(kolkataZone).toInstant().toEpochMilli()
+                                : minTime;
+                        long symMaxTime = isGlobal
+                                ? Long.MAX_VALUE
+                                : maxTime;
+
                         List<com.am.common.investment.model.historical.OHLCVTPoint> filteredPoints = symbolData
                                 .getDataPoints().stream()
                                 .filter(p -> {
@@ -200,7 +218,7 @@ public class MarketAnalyticsService {
                                         long timestamp = p.getTime().atZone(java.time.ZoneOffset.UTC)
                                                 .toInstant()
                                                 .toEpochMilli();
-                                        return timestamp >= minTime && timestamp <= maxTime;
+                                        return timestamp >= symMinTime && timestamp <= symMaxTime;
                                     } catch (Exception e) {
                                         return true;
                                     }
@@ -219,22 +237,36 @@ public class MarketAnalyticsService {
                                 .collect(Collectors.toList());
 
                         if ("1D".equalsIgnoreCase(range) && filteredPoints.isEmpty() && !symbolData.getDataPoints().isEmpty()) {
-                            // Edge case: Target date had no trading session (e.g. market holiday).
-                            // Find the most recent active session date available in data points.
-                            java.time.LocalDate latestTradingDate = symbolData.getDataPoints().stream()
-                                    .filter(this::isValidCandle)
-                                    .map(pt -> pt.getTime().atZone(java.time.ZoneOffset.UTC).toLocalDate())
-                                    .max(java.util.Comparator.naturalOrder())
-                                    .orElse(null);
-                            if (latestTradingDate != null) {
-                                long fallbackMin = latestTradingDate.atTime(9, 15).atZone(kolkataZone).toInstant().toEpochMilli();
-                                long fallbackMax = latestTradingDate.atTime(15, 30).atZone(kolkataZone).toInstant().toEpochMilli();
+                            if (!isGlobal) {
+                                // Edge case: Target date had no trading session (e.g. market holiday).
+                                // Find the most recent active session date available in data points.
+                                java.time.LocalDate latestTradingDate = symbolData.getDataPoints().stream()
+                                        .filter(this::isValidCandle)
+                                        .map(pt -> pt.getTime().atZone(java.time.ZoneOffset.UTC).toLocalDate())
+                                        .max(java.util.Comparator.naturalOrder())
+                                        .orElse(null);
+                                if (latestTradingDate != null) {
+                                    long fallbackMin = latestTradingDate.atTime(9, 15).atZone(kolkataZone).toInstant().toEpochMilli();
+                                    long fallbackMax = latestTradingDate.atTime(15, 30).atZone(kolkataZone).toInstant().toEpochMilli();
+                                    filteredPoints = symbolData.getDataPoints().stream()
+                                            .filter(p -> {
+                                                if (p == null || p.getTime() == null || !isValidCandle(p)) return false;
+                                                long ts = p.getTime().atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
+                                                return ts >= fallbackMin && ts <= fallbackMax;
+                                            })
+                                            .sorted(Comparator.comparing(com.am.common.investment.model.historical.OHLCVTPoint::getTime))
+                                            .collect(Collectors.toMap(
+                                                    com.am.common.investment.model.historical.OHLCVTPoint::getTime,
+                                                    p -> p,
+                                                    (first, last) -> last,
+                                                    LinkedHashMap::new))
+                                            .values().stream()
+                                            .collect(Collectors.toList());
+                                }
+                            } else {
+                                // For global indices, retain all available candles without Indian session bounding
                                 filteredPoints = symbolData.getDataPoints().stream()
-                                        .filter(p -> {
-                                            if (p == null || p.getTime() == null || !isValidCandle(p)) return false;
-                                            long ts = p.getTime().atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
-                                            return ts >= fallbackMin && ts <= fallbackMax;
-                                        })
+                                        .filter(this::isValidCandle)
                                         .sorted(Comparator.comparing(com.am.common.investment.model.historical.OHLCVTPoint::getTime))
                                         .collect(Collectors.toMap(
                                                 com.am.common.investment.model.historical.OHLCVTPoint::getTime,
@@ -309,6 +341,17 @@ public class MarketAnalyticsService {
         return isMarketHours ? 15L : 300L;
     }
 
+    private boolean isGlobalIndexSymbol(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            return false;
+        }
+        String up = symbol.toUpperCase(Locale.ROOT).trim();
+        return up.startsWith("GLOBAL_INDEX|") || up.startsWith("GLOBAL_INDEX:") || up.startsWith("GLOBAL_")
+                || Set.of("DJI", "^DJI", "DOW", "DOW FUTURES", "SPX", "^GSPC", "S&P 500", "IXIC", "NASDAQ",
+                        "FTSE", "^FTSE", "GDAXI", "^GDAXI", "DAX", "FCHI", "^FCHI", "CAC", "N225", "^N225", "NIKKEI",
+                        "HSI", "^HSI", "HANG SENG", "SGX NIFTY").contains(up);
+    }
+
     /**
      * Chooses the chart retrieval path only when an older client omitted the flag.
      *
@@ -330,6 +373,18 @@ public class MarketAnalyticsService {
         if (requestedSymbols.isEmpty()) {
             // Preserve the legacy default for invalid input. The normal request
             // validation below returns the existing empty/error response shape.
+            return true;
+        }
+
+        // Fast path: known index patterns or global ticker symbols resolve immediately without DB round-trips
+        boolean allMatchIndexPattern = requestedSymbols.stream().allMatch(s -> {
+            String up = s.toUpperCase(Locale.ROOT);
+            return up.startsWith("NIFTY") || up.startsWith("BANKNIFTY") || up.startsWith("FINNIFTY")
+                    || up.startsWith("MIDCPNIFTY") || up.startsWith("SENSEX") || up.startsWith("BSE")
+                    || up.startsWith("INDIA VIX") || up.startsWith("INDIAVIX")
+                    || Set.of("DJI", "SPX", "IXIC", "FTSE", "GDAXI", "FCHI", "N225", "HSI").contains(up);
+        });
+        if (allMatchIndexPattern) {
             return true;
         }
 
@@ -699,5 +754,37 @@ public class MarketAnalyticsService {
         // not reject a valid quote because its rounded provider fields differ
         // by a few floating-point units.
         return Double.isFinite(expectedChange) && Double.isFinite(expectedPercent);
+    }
+
+    /**
+     * Rolls back a date to the latest open trading session using exchange calendar rules (weekends and holidays).
+     */
+    private java.time.LocalDate adjustToLastTradingDay(java.time.LocalDate date) {
+        java.time.LocalDate current = date;
+        for (int i = 0; i < 15; i++) {
+            if (isTradingDay(current)) {
+                return current;
+            }
+            current = current.minusDays(1);
+        }
+        return current;
+    }
+
+    /**
+     * Checks if a date is an active exchange trading day according to MarketCalendarService.
+     */
+    private boolean isTradingDay(java.time.LocalDate date) {
+        if (marketCalendarService != null) {
+            try {
+                com.am.marketdata.service.calendar.MarketCalendarService.SessionTiming timings = marketCalendarService.getTimings("NSE", date);
+                if (timings != null) {
+                    return timings.open();
+                }
+            } catch (Exception e) {
+                log.warn("isTradingDay", "Market calendar lookup failed for " + date + ": " + e.getMessage());
+            }
+        }
+        java.time.DayOfWeek dow = date.getDayOfWeek();
+        return dow != java.time.DayOfWeek.SATURDAY && dow != java.time.DayOfWeek.SUNDAY;
     }
 }

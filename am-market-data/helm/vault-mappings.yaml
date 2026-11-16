@@ -15,6 +15,7 @@ vault:
     influxdb:
       # The CSI driver injects individual mappings. It does not execute shell templates.
       mappings:
+        INFLUXDB_URL: "url"
         INFLUXDB_HOST: "host"
         INFLUXDB_PORT: "port"
         INFLUXDB_TOKEN: "token"
