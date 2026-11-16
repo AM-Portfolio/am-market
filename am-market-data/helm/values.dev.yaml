@@ -13,10 +13,9 @@ env:
   SCHEDULER_INGESTION_POLL_ENABLED: "false"
   SCHEDULER_INGESTION_POLL_HISTORICAL: "false"
   SCHEDULER_INGESTION_USE_WEBSOCKET: "true"
-  # InfluxDB endpoint configuration for dev
-  INFLUXDB_URL: "https://influx.asrax.in"
-  INFLUXDB_ORG: "influxdata"
-  INFLUXDB_BUCKET: "am"
+  # TODO: Deploy a dedicated InfluxDB instance for dev.
+  # InfluxDB URL and endpoint are supplied by Vault at runtime.
+  # The dev deployment must not override them with a hardcoded URL.
 
 environment: dev
 replicaCount: 1

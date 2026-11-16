@@ -100,8 +100,9 @@ public class TracedInfluxDBConfig {
             );
         }
 
+        String effectiveUrl = resolveEffectiveUrl(url);
         InfluxDBClientOptions options = InfluxDBClientOptions.builder()
-                .url(url)
+                .url(effectiveUrl)
                 .authenticateToken(token.toCharArray())
                 .org(org)
                 .bucket(bucket)
@@ -117,5 +118,16 @@ public class TracedInfluxDBConfig {
 
     public String getOrg() {
         return org;
+    }
+
+    private String resolveEffectiveUrl(String rawUrl) {
+        if (rawUrl == null) {
+            return null;
+        }
+        String trimmed = rawUrl.trim();
+        if (trimmed.startsWith("http://") && (trimmed.endsWith(":443") || trimmed.contains(":443/"))) {
+            return "https://" + trimmed.substring("http://".length()).replace(":443", "");
+        }
+        return trimmed;
     }
 }

@@ -23,7 +23,8 @@ public class InfluxDBConfig {
 
     @Bean
     public InfluxDBClient influxDBClient() {
-        return InfluxDBClientFactory.create(url, token.toCharArray(), org, bucket);
+        String effectiveUrl = resolveEffectiveUrl(url);
+        return InfluxDBClientFactory.create(effectiveUrl, token.toCharArray(), org, bucket);
     }
     
     public String getBucket() {
@@ -32,5 +33,16 @@ public class InfluxDBConfig {
     
     public String getOrg() {
         return org;
+    }
+
+    private String resolveEffectiveUrl(String rawUrl) {
+        if (rawUrl == null) {
+            return null;
+        }
+        String trimmed = rawUrl.trim();
+        if (trimmed.startsWith("http://") && (trimmed.endsWith(":443") || trimmed.contains(":443/"))) {
+            return "https://" + trimmed.substring("http://".length()).replace(":443", "");
+        }
+        return trimmed;
     }
 }
