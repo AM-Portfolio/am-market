@@ -161,14 +161,11 @@ public class MarketDataOrchestrator {
     /**
      * Morning Stock Indices Fetch (e.g., 9:30 AM)
      */
-    /**
-     * Morning Stock Indices Fetch (e.g., 9:30 AM)
-     */
-    // @Scheduled(cron = "${scheduler.stock-indices.morning-fetch:0 30 9 * * *}", zone = "Asia/Kolkata")
+    @Scheduled(cron = "${scheduler.stock-indices.morning-fetch:0 30 9 * * *}", zone = "Asia/Kolkata")
+    @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketOrchestrator_morningFetch", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void triggerMorningStockIndicesFetch() {
         log.info("Orchestrator: Triggering Morning Stock Indices Fetch");
         if (stockIndicesSchedulerService.isPresent()) {
-            // Uncommented to trigger morning fetch of stock indices data
             stockIndicesSchedulerService.get().executeMorningStockIndicesFetch();
         } else {
             log.warn("Orchestrator: StockIndicesSchedulerService is not present, skipping Morning Stock Indices Fetch");

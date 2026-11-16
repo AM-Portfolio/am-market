@@ -161,6 +161,18 @@ public class StreamerManager implements StreamerListener {
         // login logic will trigger connection via scheduler or user action
     }
 
+    /**
+     * When a new pod is deployed / restarted during active market hours, reconcile
+     * immediately instead of waiting up to 5 minutes for the scheduled fixedRate task.
+     */
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void onApplicationReady() {
+        if (isMarketWindowOpen()) {
+            log.info("StreamerManager", "New pod ready during active market window; reconciling stream connection immediately.");
+            reconcileWebSocketConnection();
+        }
+    }
+
     public void refreshSubscriptions() {
         Set<String> symbols = symbolService.findDistinctSymbols();
         if (symbols == null) {

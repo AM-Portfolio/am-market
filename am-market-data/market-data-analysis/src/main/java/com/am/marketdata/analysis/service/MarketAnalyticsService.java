@@ -148,11 +148,8 @@ public class MarketAnalyticsService {
         try {
             boolean intradayChart = Set.of("10M", "15M", "30M", "1H", "4H", "1D").contains(rangeKey);
             // Intraday charts consume the WebSocket data already persisted by the
-            // stream pipeline. A chart GET must not create a provider fetch or a
-            // hidden Kafka backfill when the stored series is empty or partial.
-            // Intraday chart data is already persisted by the stream pipeline.
-            // Allow the existing historical-data cache to serve warm requests,
-            // while keeping provider fallback disabled for live chart reads.
+            // stream pipeline. Allow the existing historical-data cache to serve warm requests,
+            // while keeping provider fallback disabled for routine live chart reads.
             com.am.marketdata.api.model.HistoricalDataResponseV1 response = marketDataFetchService
                     .processHistoricalDataRequest(request, true, !intradayChart);
 
@@ -160,8 +157,23 @@ public class MarketAnalyticsService {
                 return response;
             }
 
-            if ("1D".equalsIgnoreCase(rangeKey) && response.getData() != null && !response.getData().isEmpty()
-                    && response.getData().values().stream().allMatch(d -> d == null || d.getDataPoints() == null || d.getDataPoints().isEmpty())) {
+            boolean hasNoCandles = response.getData() == null || response.getData().isEmpty()
+                    || response.getData().values().stream().allMatch(d -> d == null || d.getDataPoints() == null || d.getDataPoints().isEmpty());
+
+            // If 1D chart returned 0 candles (e.g. cold start after a mid-session pod restart/deployment),
+            // allow a single bounded provider fallback for targetDate so the chart self-heals immediately.
+            if ("1D".equalsIgnoreCase(rangeKey) && hasNoCandles) {
+                log.info("getHistoricalCharts", "1D chart had no cached candles for targetDate " + targetDate + "; attempting bounded provider fallback");
+                try {
+                    response = marketDataFetchService.processHistoricalDataRequest(request, true, true);
+                    hasNoCandles = response.getData() == null || response.getData().isEmpty()
+                            || response.getData().values().stream().allMatch(d -> d == null || d.getDataPoints() == null || d.getDataPoints().isEmpty());
+                } catch (Exception ex) {
+                    log.warn("getHistoricalCharts", "Provider fallback failed for targetDate " + targetDate + ": " + ex.getMessage());
+                }
+            }
+
+            if ("1D".equalsIgnoreCase(rangeKey) && hasNoCandles) {
                 // Rare edge case: targetDate had no trading candles (e.g. exchange holiday).
                 // Fall back to querying previous 4 days so the chart is never blank.
                 log.info("getHistoricalCharts", "1D targetDate " + targetDate + " had no candles (holiday/closed); falling back to lookback window");
@@ -174,7 +186,7 @@ public class MarketAnalyticsService {
                         .filterType("price")
                         .indexSymbol(isIndexSymbol)
                         .build();
-                response = marketDataFetchService.processHistoricalDataRequest(fallbackRequest, true, !intradayChart);
+                response = marketDataFetchService.processHistoricalDataRequest(fallbackRequest, true, true);
             }
 
             // Filter data points by time range for each symbol
