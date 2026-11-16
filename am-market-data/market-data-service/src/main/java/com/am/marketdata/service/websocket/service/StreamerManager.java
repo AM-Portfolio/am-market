@@ -507,9 +507,43 @@ public class StreamerManager implements StreamerListener {
         }, delay, TimeUnit.MILLISECONDS);
     }
 
+    /**
+     * Clean graceful shutdown hook triggered when Kubernetes sends SIGTERM to this pod.
+     * 
+     * Key responsibilities:
+     * 1. Explicitly disconnect the Upstox WebSocket stream so the active TCP socket is closed.
+     *    This releases the Upstox broker connection session immediately, allowing the newly
+     *    deployed replacement pod to establish its WebSocket connection without "concurrent connection" conflicts.
+     * 2. Prevent Kubernetes container rollout hangs where the terminating pod remains stuck in 'Terminating'
+     *    status waiting for open background network sockets to time out.
+     * 3. Cancel any pending reconnect schedules and terminate the reconnect executor thread pool cleanly.
+     */
     @PreDestroy
-    public void shutdownReconnectExecutor() {
-        reconnectExecutor.shutdownNow();
+    public void shutdown() {
+        log.info("StreamerManager", "PreDestroy hook invoked: cleanly shutting down market data streamer.");
+        streamingDesired = false;
+        reconnectScheduled.set(false);
+        connectionAttemptInFlight.set(false);
+        streamReady.set(false);
+
+        // Explicitly close the WebSocket connection to Upstox to release the network socket immediately
+        if (streamer != null && streamer.isConnected()) {
+            try {
+                log.info("StreamerManager", "Disconnecting active Upstox WebSocket session before pod termination.");
+                streamer.disconnect();
+            } catch (Exception e) {
+                log.warn("StreamerManager", "Error while disconnecting streamer during shutdown: " + e.getMessage());
+            }
+        }
+
+        // Terminate background reconnect executor threads
+        if (reconnectExecutor != null) {
+            try {
+                reconnectExecutor.shutdownNow();
+            } catch (Exception e) {
+                log.warn("StreamerManager", "Error shutting down reconnect executor: " + e.getMessage());
+            }
+        }
     }
 
     // --- StreamerListener Implementation ---
