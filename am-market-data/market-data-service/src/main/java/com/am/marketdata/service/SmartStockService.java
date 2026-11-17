@@ -64,8 +64,12 @@ public class SmartStockService {
     @Value("${market.data.movers.refresh-lock.ttl-seconds:30}")
     private long refreshLockTtlSeconds;
 
-    @Value("${market.data.movers.refresh-lock.wait-ms:500}")
+    @Value("${market.data.movers.refresh-lock.wait-ms:8000}")
     private long refreshLockWaitMs;
+
+    // TTL for the negative-noop sentinel written when recovery yields 0 valid prices.
+    // Prevents repeated Upstox calls during off-hours / holidays (market closed).
+    private static final long RECOVERY_NOOP_TTL_SECONDS = 60L;
 
     /**
      * Get the latest quotes for a list of symbols with TimeFrame support.
@@ -444,8 +448,17 @@ public class SmartStockService {
                     ownerToken,
                     String.valueOf(Math.max(5, refreshLockTtlSeconds)));
         } catch (Exception e) {
-            // Fail closed: a Redis outage must not turn every app pod into a provider caller.
-            log.warn("getSmartQuotes", "Could not acquire shared per-symbol quote leases; skipping provider batch", e);
+            // Fail closed: Redis is down → N pods would all call Upstox simultaneously with no
+            // coordination possible. Even if one pod recovered quotes it cannot cache them
+            // (Redis is down), so the next pod would hit Upstox again immediately.
+            // The correct behaviour is to serve whatever the Tier-1 mover cache (analysis:movers:*)
+            // already holds. That cache is managed by MarketAnalyticsService and survives short
+            // Redis blips. If it is also gone, returning empty movers is acceptable and expected
+            // during a Redis outage — that is a larger infrastructure incident.
+            log.warn("getSmartQuotes",
+                    "Redis unavailable — cannot coordinate quote recovery for {} symbols; "
+                            + "serving Tier-1 mover cache or empty (no provider call made)",
+                    missingSymbols.size(), e);
             return;
         }
 
@@ -483,6 +496,7 @@ public class SmartStockService {
             if (recoveredQuotes == null || recoveredQuotes.isEmpty()) {
                 log.warn("getSmartQuotes", "Batched OHLC recovery returned no quotes for {} leased symbols",
                         ownedIdentities.size());
+                writeRecoveryNoop(lockKeys);
                 return;
             }
 
@@ -518,12 +532,25 @@ public class SmartStockService {
                 marketDataCacheService.cacheLatestPrices(verifiedQuotesToCache);
                 cacheWriteCalls = 1;
             }
+            if (recoveredCount == 0) {
+                // Upstox returned data but every entry had LTP ≤ 0 (market closed, holiday,
+                // or provider stub). Write a noop sentinel so waiting pods stop polling and
+                // return partial quotes immediately instead of burning the full wait budget.
+                log.warn("getSmartQuotes",
+                        "Batched OHLC recovery produced 0 valid prices for {} leased symbols "
+                                + "(market closed or provider stub); writing recovery-noop sentinel",
+                        ownedIdentities.size());
+                writeRecoveryNoop(lockKeys);
+            }
             log.info("getSmartQuotes",
                     "Batched OHLC recovery completed requested={} recovered={} cacheSymbols={} cacheWriteCalls={}",
                     ownedIdentities.size(), recoveredCount, verifiedQuotesToCache.size(), cacheWriteCalls);
         } catch (Exception e) {
             log.warn("getSmartQuotes", "Batched OHLC recovery failed for {} leased symbols",
                     ownedIdentities.size(), e);
+            // Signal waiting pods immediately — the lock-holder failed so they should stop
+            // polling and return whatever partial quotes they already have.
+            writeRecoveryNoop(lockKeys);
         } finally {
             try {
                 stringRedisTemplate.execute(RELEASE_REFRESH_LOCKS, ownedLockKeys, ownerToken);
@@ -543,6 +570,19 @@ public class SmartStockService {
         do {
             try {
                 Thread.sleep(Math.min(100, Math.max(1, deadline - System.currentTimeMillis())));
+
+                // Check whether the lock-holder signalled it could not produce valid prices
+                // (market closed, holiday, provider stub, or exception). Waiters must stop
+                // polling immediately — no data will appear and burning the full budget wastes
+                // an HTTP thread for nothing.
+                if (isRecoveryNoopSignalled(symbols)) {
+                    log.info("getSmartQuotes",
+                            "Recovery-noop sentinel detected for {} symbols; "
+                                    + "lock-holder yielded 0 valid prices — returning partial quotes",
+                            symbols.size());
+                    return;
+                }
+
                 // Provider recovery writes market:latest-price, not intraday bars.
                 // Re-read the same cache that the owner pod populated.
                 Map<String, OHLCQuote> cached = marketDataCacheService.getLatestPrices(symbols);
@@ -566,8 +606,81 @@ public class SmartStockService {
                 return;
             }
         } while (System.currentTimeMillis() < deadline);
-        log.warn("getSmartQuotes", "Shared quote recovery did not populate all {} symbols before wait timeout",
-                symbols.size());
+        log.warn("getSmartQuotes", "Shared quote recovery did not populate all {} symbols before {}ms wait timeout",
+                symbols.size(), refreshLockWaitMs);
+    }
+
+    /**
+     * Returns true when the lock-holder for this symbol set has written a noop sentinel,
+     * meaning it finished its Upstox call but produced 0 valid prices (market closed /
+     * holiday / provider stub / exception). Waiters use this to exit early instead of
+     * burning the remaining wait budget polling for data that will never arrive.
+     *
+     * <p>The sentinel key is derived from the SHA-256 of the sorted symbol list so that
+     * any pod watching the same set of symbols sees the same key.
+     */
+    private boolean isRecoveryNoopSignalled(Set<String> symbols) {
+        if (stringRedisTemplate == null || symbols == null || symbols.isEmpty()) {
+            return false;
+        }
+        try {
+            String noopKey = recoveryNoopKey(symbols);
+            return Boolean.TRUE.equals(stringRedisTemplate.hasKey(noopKey));
+        } catch (Exception e) {
+            // Redis read failure — assume not signalled; keep polling until deadline.
+            return false;
+        }
+    }
+
+    /**
+     * Writes the recovery-noop sentinel for this lock batch. Called by the lock-holder
+     * when it finishes recovery but produced 0 valid prices (all reasons: empty response,
+     * all-zero LTPs, or an exception). The key expires after {@code RECOVERY_NOOP_TTL_SECONDS}
+     * so off-hours / holiday requests stop hammering Upstox on every call.
+     */
+    private void writeRecoveryNoop(List<String> lockKeys) {
+        if (stringRedisTemplate == null || lockKeys == null || lockKeys.isEmpty()) {
+            return;
+        }
+        try {
+            // Derive the noop key from the same sorted lock-key list so any waiter with
+            // the same symbol set sees the same noop key without extra coordination.
+            String noopKey = recoveryNoopKeyFromLockKeys(lockKeys);
+            stringRedisTemplate.opsForValue().set(noopKey, "1",
+                    Duration.ofSeconds(RECOVERY_NOOP_TTL_SECONDS));
+            log.info("getSmartQuotes",
+                    "Wrote recovery-noop sentinel key={} ttlSeconds={} symbolCount={}",
+                    noopKey, RECOVERY_NOOP_TTL_SECONDS, lockKeys.size());
+        } catch (Exception e) {
+            // Non-critical — the waiter will simply burn its full wait budget then return.
+            log.warn("getSmartQuotes", "Could not write recovery-noop sentinel; waiters will time out normally", e);
+        }
+    }
+
+    /** Derives the noop key from a set of plain symbol strings (waiter side). */
+    private String recoveryNoopKey(Set<String> symbols) {
+        List<String> sorted = symbols.stream().sorted().toList();
+        String joined = String.join(",", sorted);
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(joined.getBytes(StandardCharsets.UTF_8));
+            return "market:movers:recovery-noop:" + java.util.HexFormat.of().formatHex(digest, 0, 12);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+
+    /** Derives the noop key from the already-computed lock keys (lock-holder side). */
+    private String recoveryNoopKeyFromLockKeys(List<String> lockKeys) {
+        List<String> sorted = lockKeys.stream().sorted().toList();
+        String joined = String.join(",", sorted);
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(joined.getBytes(StandardCharsets.UTF_8));
+            return "market:movers:recovery-noop:" + java.util.HexFormat.of().formatHex(digest, 0, 12);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
     }
 
     private String refreshLockKey(InstrumentIdentity identity) {
