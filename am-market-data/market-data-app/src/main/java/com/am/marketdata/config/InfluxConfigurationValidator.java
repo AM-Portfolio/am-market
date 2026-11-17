@@ -43,7 +43,20 @@ public class InfluxConfigurationValidator {
         }
         try {
             URI uri = new URI(url);
-            return uri.getScheme() != null && uri.getHost() != null && uri.getPort() > 0;
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            if (scheme == null || host == null) {
+                return false;
+            }
+            int port = uri.getPort();
+            if (port <= 0) {
+                if ("http".equalsIgnoreCase(scheme)) {
+                    port = 80;
+                } else if ("https".equalsIgnoreCase(scheme)) {
+                    port = 443;
+                }
+            }
+            return port > 0;
         } catch (URISyntaxException ignored) {
             return false;
         }
