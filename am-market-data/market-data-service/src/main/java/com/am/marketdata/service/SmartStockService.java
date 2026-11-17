@@ -485,7 +485,16 @@ public class SmartStockService {
             }
         }
 
-        if (ownedIdentities.isEmpty()) {
+        // If Redis coordination yielded null (connection error / circuit breaker open / single pod),
+        // there is no peer pod executing recovery. Do NOT wait for a nonexistent peer —
+        // assume ownership of all symbols and execute direct provider recovery.
+        if (acquiredIndexes == null) {
+            log.info("getSmartQuotes",
+                    "Redis lock coordination returned null; executing direct provider recovery for {} symbols",
+                    orderedIdentities.size());
+            ownedIdentities = new ArrayList<>(orderedIdentities);
+            waitingSymbols.clear();
+        } else if (ownedIdentities.isEmpty()) {
             waitForSharedQuoteRecovery(waitingSymbols, quotes);
             return;
         }
@@ -608,6 +617,55 @@ public class SmartStockService {
         } while (System.currentTimeMillis() < deadline);
         log.warn("getSmartQuotes", "Shared quote recovery did not populate all {} symbols before {}ms wait timeout",
                 symbols.size(), refreshLockWaitMs);
+
+        // Fallback self-recovery: If waiting for a peer timed out and symbols remain missing,
+        // do not return empty quotes — recover the remaining missing symbols directly.
+        List<InstrumentIdentity> stillMissing = symbols.stream()
+                .filter(symbol -> quotes.keySet().stream()
+                        .noneMatch(key -> canonicalTradingSymbol(key).equals(canonicalTradingSymbol(symbol))))
+                .map(this::tickerOnlyIdentity)
+                .toList();
+        if (!stillMissing.isEmpty()) {
+            log.info("getSmartQuotes",
+                    "Self-recovering {} unpopulated symbols directly after shared recovery timeout",
+                    stillMissing.size());
+            executeProviderRecovery(stillMissing, quotes);
+        }
+    }
+
+    private void executeProviderRecovery(List<InstrumentIdentity> identities, Map<String, OHLCQuote> quotes) {
+        if (identities == null || identities.isEmpty()) {
+            return;
+        }
+        try {
+            Map<String, OHLCQuote> recoveredQuotes = marketDataService.getOHLCForIdentities(identities, null);
+            if (recoveredQuotes == null || recoveredQuotes.isEmpty()) {
+                return;
+            }
+            Set<String> targetSymbols = identities.stream().map(InstrumentIdentity::symbol).collect(Collectors.toSet());
+            Map<String, OHLCQuote> verifiedQuotesToCache = new LinkedHashMap<>();
+            for (Map.Entry<String, OHLCQuote> entry : recoveredQuotes.entrySet()) {
+                OHLCQuote quote = entry.getValue();
+                if (quote == null || entry.getKey() == null || !Double.isFinite(quote.getLastPrice())
+                        || quote.getLastPrice() <= 0.0) {
+                    continue;
+                }
+                String returnedSymbol = canonicalTradingSymbol(entry.getKey());
+                String requestedSymbol = targetSymbols.stream()
+                        .filter(symbol -> canonicalTradingSymbol(symbol).equals(returnedSymbol))
+                        .findFirst()
+                        .orElse(null);
+                if (requestedSymbol != null) {
+                    quotes.put(requestedSymbol, quote);
+                    verifiedQuotesToCache.put(requestedSymbol, quote);
+                }
+            }
+            if (marketDataCacheService != null && !verifiedQuotesToCache.isEmpty()) {
+                marketDataCacheService.cacheLatestPrices(verifiedQuotesToCache);
+            }
+        } catch (Exception e) {
+            log.warn("getSmartQuotes", "Self-recovery failed for {} symbols", identities.size(), e);
+        }
     }
 
     /**
