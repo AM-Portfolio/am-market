@@ -322,8 +322,10 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                     .percentChange(changePercent)
                     .build();
 
+            // Persist using canonical index symbol (e.g. "NIFTY 50", "NIFTY BANK") so key, index,
+            // and indexSymbol tags match historical candles and dashboard queries identically.
             MarketIndexIndices indexData = MarketIndexIndices.builder()
-                    .key(entry.getKey())
+                    .key(symbol)
                     .index(symbol)
                     .indexSymbol(symbol)
                     .marketData(marketData)

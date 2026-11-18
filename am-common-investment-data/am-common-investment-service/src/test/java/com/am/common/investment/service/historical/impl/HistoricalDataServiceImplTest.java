@@ -186,6 +186,71 @@ class HistoricalDataServiceImplTest {
     }
 
     @Test
+    void shouldSupportAllTimeframesMultipliedToFiveMinutes() {
+        String symbol = "NIFTY 50";
+        // 2026-11-18: 09:15 IST is 03:45:00 UTC, 15:30 IST is 10:00:00 UTC
+        Instant from = Instant.parse("2026-11-18T03:45:00Z");
+        Instant to = Instant.parse("2026-11-18T10:00:00Z");
+
+        // Generate 375 1-minute index samples across the entire trading session (09:15 to 15:30 IST)
+        List<MarketIndexIndices> fullSessionIndices = new java.util.ArrayList<>();
+        for (int i = 0; i < 375; i++) {
+            Instant minuteTime = from.plus(i, ChronoUnit.MINUTES);
+            MarketIndexIndices item = new MarketIndexIndices();
+            item.setIndexSymbol(symbol);
+            item.setTimestamp(LocalDateTime.ofInstant(minuteTime, ZoneOffset.UTC));
+
+            double basePrice = 24000.0 + (i * 0.5); // Slow upward trend
+            MarketData md = new MarketData();
+            md.setOpen(basePrice);
+            md.setHigh(basePrice + 5.0);
+            md.setLow(basePrice - 5.0);
+            md.setLast(basePrice + 2.0);
+            item.setMarketData(md);
+            fullSessionIndices.add(item);
+        }
+
+        when(marketIndexIndicesService.getByIndexSymbolAndTimeBetween(eq(symbol), eq(from), eq(to)))
+                .thenReturn(fullSessionIndices);
+
+        // Test 5m: 375 / 5 = 75 candles
+        Optional<HistoricalData> res5m = historicalDataService.getHistoricalData(symbol, from, to, "5m", true);
+        assertThat(res5m).isPresent();
+        assertThat(res5m.get().getDataPoints()).hasSize(75);
+
+        // Test 10m: 375 / 10 = 37.5 -> 38 candles (09:15, 09:25, ..., 15:25)
+        Optional<HistoricalData> res10m = historicalDataService.getHistoricalData(symbol, from, to, "10m", true);
+        assertThat(res10m).isPresent();
+        assertThat(res10m.get().getDataPoints()).hasSize(38);
+
+        // Test 15m: 375 / 15 = 25 candles (09:15, 09:30, ..., 15:15)
+        Optional<HistoricalData> res15m = historicalDataService.getHistoricalData(symbol, from, to, "15m", true);
+        assertThat(res15m).isPresent();
+        assertThat(res15m.get().getDataPoints()).hasSize(25);
+
+        // Test 30m: 375 / 30 = 12.5 -> 13 candles (09:15, 09:45, ..., 15:15)
+        Optional<HistoricalData> res30m = historicalDataService.getHistoricalData(symbol, from, to, "30m", true);
+        assertThat(res30m).isPresent();
+        assertThat(res30m.get().getDataPoints()).hasSize(13);
+
+        // Test 1H: 375 / 60 = 6.25 -> 7 candles (6 60-minute candles + 1 closing 15-minute candle)
+        Optional<HistoricalData> res1h = historicalDataService.getHistoricalData(symbol, from, to, "1H", true);
+        assertThat(res1h).isPresent();
+        assertThat(res1h.get().getDataPoints()).hasSize(7);
+
+        // Verify OHLC integrity on 15m candle 0 (covers minutes 0 through 14)
+        OHLCVTPoint first15mCandle = res15m.get().getDataPoints().get(0);
+        // First minute open was 24000.0
+        assertThat(first15mCandle.getOpen()).isEqualTo(24000.0);
+        // Max high was minute 14 high: 24000.0 + (14 * 0.5) + 5.0 = 24012.0
+        assertThat(first15mCandle.getHigh()).isEqualTo(24012.0);
+        // Min low was minute 0 low: 24000.0 - 5.0 = 23995.0
+        assertThat(first15mCandle.getLow()).isEqualTo(23995.0);
+        // Close was minute 14 close/last: 24000.0 + (14 * 0.5) + 2.0 = 24009.0
+        assertThat(first15mCandle.getClose()).isEqualTo(24009.0);
+    }
+
+    @Test
     void shouldBuildBatchHistoricalDataFromOneEquityBatchRead() {
         Instant from = Instant.parse("2026-06-01T00:00:00Z");
         Instant to = Instant.parse("2026-06-03T00:00:00Z");

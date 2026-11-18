@@ -207,6 +207,7 @@ public class MarketAnalyticsService {
                 response.getData().forEach((s, symbolData) -> {
                     if (symbolData != null && symbolData.getDataPoints() != null) {
                         boolean isGlobal = isGlobalIndexSymbol(s);
+                        java.time.ZoneId pointZone = isGlobal ? java.time.ZoneOffset.UTC : kolkataZone;
                         long symMinTime = isGlobal
                                 ? queryFrom.atZone(kolkataZone).toInstant().toEpochMilli()
                                 : minTime;
@@ -225,9 +226,9 @@ public class MarketAnalyticsService {
                                                 || !isValidCandle(p)) {
                                             return false;
                                         }
-                                        // OHLCVTMapper stores UTC LocalDateTime in OHLCVTPoint.time.
-                                        // Convert from UTC to Instant to get true epoch milliseconds matching minTime/maxTime.
-                                        long timestamp = p.getTime().atZone(java.time.ZoneOffset.UTC)
+                                        // For global instruments, candle timestamps are UTC.
+                                        // For Indian stocks/indices, candle timestamps are IST (Asia/Kolkata).
+                                        long timestamp = p.getTime().atZone(pointZone)
                                                 .toInstant()
                                                 .toEpochMilli();
                                         return timestamp >= symMinTime && timestamp <= symMaxTime;
@@ -254,7 +255,7 @@ public class MarketAnalyticsService {
                                 // Find the most recent active session date available in data points.
                                 java.time.LocalDate latestTradingDate = symbolData.getDataPoints().stream()
                                         .filter(this::isValidCandle)
-                                        .map(pt -> pt.getTime().atZone(java.time.ZoneOffset.UTC).toLocalDate())
+                                        .map(pt -> pt.getTime().atZone(pointZone).toLocalDate())
                                         .max(java.util.Comparator.naturalOrder())
                                         .orElse(null);
                                 if (latestTradingDate != null) {
@@ -263,7 +264,7 @@ public class MarketAnalyticsService {
                                     filteredPoints = symbolData.getDataPoints().stream()
                                             .filter(p -> {
                                                 if (p == null || p.getTime() == null || !isValidCandle(p)) return false;
-                                                long ts = p.getTime().atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
+                                                long ts = p.getTime().atZone(pointZone).toInstant().toEpochMilli();
                                                 return ts >= fallbackMin && ts <= fallbackMax;
                                             })
                                             .sorted(Comparator.comparing(com.am.common.investment.model.historical.OHLCVTPoint::getTime))

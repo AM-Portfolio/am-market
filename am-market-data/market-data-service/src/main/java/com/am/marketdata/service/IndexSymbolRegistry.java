@@ -102,10 +102,22 @@ public class IndexSymbolRegistry {
                 "BSE_INDEX|", "BSE_INDEX:", "NSE_EQ|", "BSE_EQ|", "NSE_EQ:", "BSE_EQ:",
                 "NSE:", "BSE:")) {
             if (symbol.startsWith(prefix)) {
-                return symbol.substring(prefix.length()).trim();
+                symbol = symbol.substring(prefix.length()).trim();
+                break;
             }
         }
-        return symbol;
+
+        // Canonical alias normalization:
+        // Upstox streamer maps derivative indices to shorthand abbreviations ("NIFTY", "BANKNIFTY").
+        // Normalizing them to official canonical names ensures all incoming live ticks land in the
+        // same series that the UI dashboards and historical sync query.
+        return switch (symbol) {
+            case "NIFTY", "NIFTY50" -> "NIFTY 50";
+            case "BANKNIFTY", "NIFTYBANK" -> "NIFTY BANK";
+            case "FINNIFTY" -> "NIFTY FIN SERVICES";
+            case "MIDCPNIFTY", "NIFTY MID SELECT" -> "NIFTY MIDCAP 50";
+            default -> symbol;
+        };
     }
 
     Set<String> getConfiguredIndexSymbols() {
