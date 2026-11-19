@@ -17,6 +17,8 @@ env:
   LOG_LEVEL: "INFO"
   ETF_LIST_CACHE_MINUTES: "60"
   ETF_HOLDINGS_CACHE_DAYS: "1"
+  # Platform DB + mf_catalog schema; populate via MF catalog job before expecting NAV
+  AM_MARKET_MF_JDBC_URL: "jdbc:postgresql://postgres.asrax.in:5432/user_platform?currentSchema=mf_catalog"
 
 ingress:
   enabled: true
@@ -50,3 +52,5 @@ vault:
       path: "apps/data/prod/services/am-identity"
     service-oauth:
       path: "apps/data/prod/services/am-parser"
+    postgres:
+      path: "apps/data/prod/infra/postgres"

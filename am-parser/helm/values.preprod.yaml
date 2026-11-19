@@ -4,6 +4,8 @@ env:
   LOG_LEVEL: "INFO"
   ETF_LIST_CACHE_MINUTES: "60"
   ETF_HOLDINGS_CACHE_DAYS: "1"
+  # Platform DB + mf_catalog schema (same shape as dig); populate via MF catalog job before expecting NAV
+  AM_MARKET_MF_JDBC_URL: "jdbc:postgresql://postgres.asrax.in:5432/user_platform_preprod?currentSchema=mf_catalog"
 
 environment: preprod
 
@@ -24,7 +26,7 @@ probes:
 replicaCount: 1
 
 
-# Vault configuration
+# Vault configuration (paths also set in the vault: block below — keep in sync)
 vault:
   secretPaths:
     auth:
@@ -41,6 +43,8 @@ vault:
       path: "apps/data/preprod/services/am-identity"
     service-oauth:
       path: "apps/data/preprod/services/am-parser"
+    postgres:
+      path: "apps/data/preprod/infra/postgres"
 
 
 resources:
@@ -84,4 +88,7 @@ vault:
     identity-oidc:
       path: "apps/data/preprod/services/am-identity"
     service-oauth:
-      path: "apps/data/preprod/services/am-parser" 
+      path: "apps/data/preprod/services/am-parser"
+    postgres:
+      path: "apps/data/preprod/infra/postgres"
+

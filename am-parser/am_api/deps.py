@@ -1,5 +1,5 @@
 """FastAPI dependencies for am-parser services."""
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Generator
 
 from am_etf.holdings_service import ETFHoldingsService, create_etf_holdings_service
 from am_etf.lookup_service import EtfLookupService
@@ -12,6 +12,7 @@ from am_etf.smart_holdings_service import (
     SmartETFHoldingsService,
     create_smart_etf_holdings_service,
 )
+from am_mf_catalog.service import MfCatalogService, create_mf_catalog_service
 
 
 async def get_etf_service() -> AsyncGenerator[ETFService, None]:
@@ -55,3 +56,11 @@ async def get_fund_performance_service() -> AsyncGenerator[FundPerformanceServic
         yield service
     finally:
         await service.close()
+
+
+def get_mf_catalog_service() -> Generator[MfCatalogService, None, None]:
+    service = create_mf_catalog_service()
+    try:
+        yield service
+    finally:
+        service.close()
