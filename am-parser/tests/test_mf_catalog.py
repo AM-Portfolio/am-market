@@ -53,6 +53,7 @@ def test_search_maps_camel_case_and_price_type():
         "u",
         "p",
     )
+    # Full enriched + returns + sip row shape from _SEARCH_SELECT_ENRICHED
     row = (
         "SC1",
         "HDFC Flexi",
@@ -63,11 +64,26 @@ def test_search_maps_camel_case_and_price_type():
         "Y",
         123.45,
         date(2026, 11, 5),
+        "1000",
+        5000.0,
+        0.45,
+        "MODERATE",
+        "Equity",
+        "Flexi Cap",
+        1.2,
+        3.4,
+        12.5,
+        None,
+        None,
+        "HDFC Mutual Fund",
+        "500",
+        "amfi",
     )
     cur = MagicMock()
     cur.fetchall.return_value = [row]
     cur.__enter__ = MagicMock(return_value=cur)
     cur.__exit__ = MagicMock(return_value=False)
+    cur.connection = MagicMock()
     conn = MagicMock()
     conn.cursor.return_value = cur
     conn.__enter__ = MagicMock(return_value=conn)
@@ -84,6 +100,69 @@ def test_search_maps_camel_case_and_price_type():
     assert item["nav"] == 123.45
     assert item["navDate"] == "2026-11-05"
     assert item["priceType"] == PRICE_TYPE
+    assert item["newPurchaseMinAmount"] == "1000"
+    assert item["aum"] == 5000.0
+    assert item["expenseRatio"] == 0.45
+    assert item["returnsPct"]["1Y"] == 12.5
+    assert item["amcName"] == "HDFC Mutual Fund"
+    assert item["minSip"] == "500"
+    assert item["enrichmentSource"] == "amfi"
+
+
+def test_empty_query_order_by_avoids_scheme_name_only():
+    from am_mf_catalog.service import _search_order_by, _SEARCH_SELECT_ENRICH_ONLY
+
+    order = _search_order_by(
+        empty_query=True, alias="s.", select_sql=_SEARCH_SELECT_ENRICH_ONLY
+    )
+    assert "e.aum" in order
+    assert "s.amc_code" in order
+    typed = _search_order_by(
+        empty_query=False, alias="s.", select_sql=_SEARCH_SELECT_ENRICH_ONLY
+    )
+    assert typed.strip().startswith("ORDER BY s.scheme_name")
+
+
+def test_search_degrades_when_enrichment_missing():
+    svc = MfCatalogService(
+        "jdbc:postgresql://localhost:5432/db?currentSchema=mf_catalog",
+        "u",
+        "p",
+    )
+    basic = (
+        "SC1",
+        "SBI Bluechip",
+        "INF999",
+        "SBI",
+        "Open",
+        "Growth",
+        "Y",
+        50.0,
+        date(2026, 11, 5),
+        "500",
+    )
+    cur = MagicMock()
+    cur.connection = MagicMock()
+
+    def execute(sql, params=None):
+        if "mf_scheme_enrichment" in sql or "mf_scheme_returns" in sql or "mf_sip_rule" in sql:
+            raise Exception('relation "mf_scheme_enrichment" does not exist')
+        cur.fetchall.return_value = [basic]
+
+    cur.execute.side_effect = execute
+    cur.__enter__ = MagicMock(return_value=cur)
+    cur.__exit__ = MagicMock(return_value=False)
+    conn = MagicMock()
+    conn.cursor.return_value = cur
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=False)
+
+    with patch.object(svc, "_connect", return_value=conn):
+        out = svc.search_schemes("SBI", None, None, 5)
+
+    assert out["count"] == 1
+    assert out["items"][0]["schemeName"] == "SBI Bluechip"
+    assert out["items"][0]["newPurchaseMinAmount"] == "500"
 
 
 def test_details_orders_by_scheme_code():
@@ -121,6 +200,7 @@ def test_details_orders_by_scheme_code():
         None,
         None,
         None,
+        "amfi",
     )
     cur = MagicMock()
     cur.fetchone.return_value = basic
@@ -137,6 +217,7 @@ def test_details_orders_by_scheme_code():
     assert out is not None
     assert out["schemeCode"] == "SC1"
     assert out["source"] == SOURCE
+    assert out.get("enrichmentSource") == "amfi"
     sql = cur.execute.call_args[0][0]
     assert "ORDER BY" in sql.upper()
     assert "scheme_code" in sql.lower()

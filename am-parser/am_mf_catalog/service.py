@@ -20,7 +20,7 @@ SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_t
        s.switch_allowed, s.purchase_transaction_mode, s.new_purchase_min_amount,
        s.redemption_transaction_mode, s.rta_agent_code, s.latest_nav, s.latest_nav_date,
        s.exit_load_flag, s.exit_load, s.lock_in_period_flag, s.lock_in_period,
-       e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category
+       e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source
 FROM mf_scheme s
 LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin
 WHERE s.scheme_code = %s OR s.isin = %s
@@ -51,6 +51,37 @@ SELECT nav_date, nav FROM mf_nav_eod
 WHERE scheme_code = %s OR isin = %s
 ORDER BY nav_date ASC
 """
+
+# Explore search: SCH identity + min invest + enrichment (+ optional returns denorm / SIP).
+_SEARCH_SELECT_ENRICHED = (
+    "SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
+    "s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
+    "e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, "
+    "r.ret_1m, r.ret_3m, r.ret_1y, r.ret_3y, r.ret_5y, "
+    "sip.amc_name, sip.sip_min_installment_amount, e.source "
+    "FROM mf_scheme s "
+    "LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin "
+    "LEFT JOIN mf_scheme_returns r ON r.isin = s.isin "
+    "LEFT JOIN LATERAL ("
+    "  SELECT amc_name, sip_min_installment_amount FROM mf_sip_rule "
+    "  WHERE scheme_code = s.scheme_code OR scheme_isin = s.isin "
+    "  ORDER BY scheme_code LIMIT 1"
+    ") sip ON TRUE "
+)
+
+_SEARCH_SELECT_BASIC = (
+    "SELECT scheme_code, scheme_name, isin, amc_code, scheme_type, plan_type, "
+    "purchase_allowed, latest_nav, latest_nav_date, new_purchase_min_amount "
+    "FROM mf_scheme "
+)
+
+_SEARCH_SELECT_ENRICH_ONLY = (
+    "SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
+    "s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
+    "e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source "
+    "FROM mf_scheme s "
+    "LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin "
+)
 
 
 class MfCatalogService:
@@ -101,48 +132,12 @@ class MfCatalogService:
             return out
 
         capped = max(1, min(limit if limit and limit > 0 else 50, 200))
-        sql = (
-            "SELECT scheme_code, scheme_name, isin, amc_code, scheme_type, plan_type, "
-            "purchase_allowed, latest_nav, latest_nav_date "
-            "FROM mf_scheme WHERE 1=1 "
-        )
-        params: list[Any] = []
-        if query and query.strip():
-            sql += (
-                "AND (LOWER(scheme_name) LIKE %s OR LOWER(scheme_code) LIKE %s "
-                "OR LOWER(isin) LIKE %s) "
-            )
-            q = f"%{query.strip().lower()}%"
-            params.extend([q, q, q])
-        if amc and amc.strip():
-            sql += "AND UPPER(amc_code) = %s "
-            params.append(amc.strip().upper())
-        if purchase_allowed and purchase_allowed.strip():
-            sql += "AND UPPER(purchase_allowed) = %s "
-            params.append(purchase_allowed.strip().upper())
-        sql += "ORDER BY scheme_name LIMIT %s"
-        params.append(capped)
 
         items: list[dict[str, Any]] = []
         try:
             with self._connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(sql, params)
-                    for row in cur.fetchall():
-                        items.append(
-                            {
-                                "schemeCode": row[0],
-                                "schemeName": row[1],
-                                "isin": row[2],
-                                "amcCode": row[3],
-                                "schemeType": row[4],
-                                "planType": row[5],
-                                "purchaseAllowed": row[6],
-                                "nav": float(row[7]) if row[7] is not None else None,
-                                "navDate": _date_str(row[8]),
-                                "priceType": PRICE_TYPE,
-                            }
-                        )
+                    items = _run_search(cur, query, amc, purchase_allowed, capped)
         except Exception as e:
             log.error(
                 "MF catalog search failed q=%s target=%s err=%s",
@@ -346,6 +341,144 @@ def _pct_return(
     return ((end_nav - start_nav) / start_nav) * 100.0
 
 
+def _search_where(
+    query: Optional[str],
+    amc: Optional[str],
+    purchase_allowed: Optional[str],
+    *,
+    alias: str = "",
+) -> tuple[str, list[Any]]:
+    """Build WHERE clause. Use alias='s.' for joined queries, '' for basic."""
+    prefix = alias
+    sql = "WHERE 1=1 "
+    params: list[Any] = []
+    if query and query.strip():
+        sql += (
+            f"AND (LOWER({prefix}scheme_name) LIKE %s OR LOWER({prefix}scheme_code) LIKE %s "
+            f"OR LOWER({prefix}isin) LIKE %s) "
+        )
+        q = f"%{query.strip().lower()}%"
+        params.extend([q, q, q])
+    if amc and amc.strip():
+        sql += f"AND UPPER({prefix}amc_code) = %s "
+        params.append(amc.strip().upper())
+    if purchase_allowed and purchase_allowed.strip():
+        sql += f"AND UPPER({prefix}purchase_allowed) = %s "
+        params.append(purchase_allowed.strip().upper())
+    return sql, params
+
+
+def _run_search(
+    cur: Any,
+    query: Optional[str],
+    amc: Optional[str],
+    purchase_allowed: Optional[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Try full JOIN search, then enrichment-only, then basic SCH — degrade gracefully."""
+    attempts = (
+        (_SEARCH_SELECT_ENRICHED, "s."),
+        (_SEARCH_SELECT_ENRICH_ONLY, "s."),
+        (_SEARCH_SELECT_BASIC, ""),
+    )
+    last_err: Exception | None = None
+    empty_query = not (query and query.strip())
+    for select_sql, alias in attempts:
+        where, params = _search_where(query, amc, purchase_allowed, alias=alias)
+        order = _search_order_by(empty_query=empty_query, alias=alias, select_sql=select_sql)
+        sql = select_sql + where + order
+        try:
+            try:
+                cur.connection.rollback()
+            except Exception:
+                pass
+            cur.execute(sql, list(params) + [limit])
+            return [_map_search_row(row) for row in cur.fetchall()]
+        except Exception as e:
+            last_err = e
+            msg = str(e).lower()
+            if any(
+                t in msg
+                for t in (
+                    "mf_scheme_enrichment",
+                    "mf_scheme_returns",
+                    "mf_sip_rule",
+                    "does not exist",
+                    "undefinedtable",
+                )
+            ):
+                log.warning("MF search join degraded: %s", e)
+                continue
+            raise
+    if last_err:
+        raise last_err
+    return []
+
+
+def _search_order_by(*, empty_query: bool, alias: str, select_sql: str) -> str:
+    """Empty Explore must not ORDER BY scheme_name (360 ONE alphabetical wall)."""
+    has_enrich = "mf_scheme_enrichment" in select_sql
+    if empty_query and has_enrich and alias:
+        return (
+            "ORDER BY (e.aum IS NULL), e.aum DESC, s.amc_code, s.scheme_name LIMIT %s"
+        )
+    if empty_query and alias:
+        return "ORDER BY s.amc_code, s.scheme_name LIMIT %s"
+    if empty_query:
+        return "ORDER BY amc_code, scheme_name LIMIT %s"
+    if alias:
+        return "ORDER BY s.scheme_name LIMIT %s"
+    return "ORDER BY scheme_name LIMIT %s"
+
+
+def _map_search_row(row: tuple) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "schemeCode": row[0],
+        "schemeName": row[1],
+        "isin": row[2],
+        "amcCode": row[3],
+        "schemeType": row[4],
+        "planType": row[5],
+        "purchaseAllowed": row[6],
+        "nav": float(row[7]) if row[7] is not None else None,
+        "navDate": _date_str(row[8]),
+        "priceType": PRICE_TYPE,
+    }
+    if len(row) > 9:
+        item["newPurchaseMinAmount"] = row[9]
+    # enrich-only: cols 10-14 + source at 15
+    # full: cols 10-14 enrich, 15-19 returns, 20-21 sip, 22 source
+    if len(row) > 14:
+        item["aum"] = float(row[10]) if row[10] is not None else None
+        item["expenseRatio"] = float(row[11]) if row[11] is not None else None
+        item["riskometer"] = row[12]
+        item["sebiCategory"] = row[13]
+        item["sebiSubCategory"] = row[14]
+    if len(row) == 16:
+        # enrich-only + source
+        if row[15]:
+            item["enrichmentSource"] = row[15]
+    if len(row) > 19:
+        returns: dict[str, Optional[float]] = {
+            "1M": float(row[15]) if row[15] is not None else None,
+            "3M": float(row[16]) if row[16] is not None else None,
+            "1Y": float(row[17]) if row[17] is not None else None,
+            "3Y": float(row[18]) if row[18] is not None else None,
+            "5Y": float(row[19]) if row[19] is not None else None,
+        }
+        if any(v is not None for v in returns.values()):
+            item["returnsPct"] = returns
+    if len(row) > 21:
+        if row[20]:
+            item["amcName"] = row[20]
+        if row[21] is not None:
+            item["sipMinAmount"] = row[21]
+            item["minSip"] = row[21]
+    if len(row) > 22 and row[22]:
+        item["enrichmentSource"] = row[22]
+    return item
+
+
 def _map_scheme_row_basic(row: tuple) -> dict[str, Any]:
     return {
         "schemeCode": row[0],
@@ -380,4 +513,6 @@ def _map_scheme_row_enriched(row: tuple) -> dict[str, Any]:
     m["riskometer"] = row[24]
     m["sebiCategory"] = row[25]
     m["sebiSubCategory"] = row[26]
+    if len(row) > 27 and row[27]:
+        m["enrichmentSource"] = row[27]
     return m
