@@ -59,7 +59,7 @@ config:
     cookie:
       enabled: false
     stockIndices:
-      enabled: false
+      enabled: true
     ingestion:
       enabled: true
       provider: "UPSTOX"

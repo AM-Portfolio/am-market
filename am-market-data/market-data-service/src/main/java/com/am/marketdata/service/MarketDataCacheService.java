@@ -987,9 +987,10 @@ public class MarketDataCacheService {
 
             Map<String, HistoricalData> result = new HashMap<>();
 
-            // For daily/weekly/monthly/yearly data
+            // For daily/weekly/monthly/yearly data or multi-day date ranges
+            boolean isMultiDay = fromDate != null && toDate != null && !fromDate.equals(toDate);
             if (timeFrame == TimeFrame.DAY || timeFrame == TimeFrame.WEEK || timeFrame == TimeFrame.MONTH
-                    || timeFrame == TimeFrame.YEAR) {
+                    || timeFrame == TimeFrame.YEAR || isMultiDay) {
 
                 // Use the date range method to get all data in a single call
                 Map<String, List<StockBars>> batchBars = stockCacheService.getHistoricalBarsWithStats(symbols,
@@ -1858,6 +1859,71 @@ public class MarketDataCacheService {
             redisTemplate.delete(lockKey);
         } catch (Exception e) {
             log.warn("releaseOptionChainLock", "Failed to release lock: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieve cached timeframe base prices (e.g. 1W, 1M, 1Y) for indices from Redis.
+     */
+    public Map<String, Double> getIndexBasePrices(String timeframe, Set<String> symbols) {
+        if (symbols == null || symbols.isEmpty() || timeframe == null) {
+            return Collections.emptyMap();
+        }
+        Map<String, Double> result = new HashMap<>();
+        try {
+            LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+            List<String> symbolList = new ArrayList<>(symbols);
+            List<String> keys = symbolList.stream()
+                    .map(s -> "index:base-price:" + timeframe + ":" + today + ":" + normalizeSymbol(s))
+                    .collect(Collectors.toList());
+            List<String> values = redisTemplate.opsForValue().multiGet(keys);
+            if (values != null) {
+                for (int i = 0; i < symbolList.size(); i++) {
+                    String val = values.get(i);
+                    if (val != null) {
+                        try {
+                            double price = Double.parseDouble(val);
+                            if (Double.isFinite(price) && price > 0.0) {
+                                result.put(symbolList.get(i), price);
+                            }
+                        } catch (NumberFormatException ignored) {}
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("getIndexBasePrices", "Failed to retrieve index base prices from Redis: " + ex.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * Cache computed timeframe base prices in Redis with a 24-hour TTL.
+     */
+    public void cacheIndexBasePrices(String timeframe, Map<String, Double> basePrices) {
+        if (basePrices == null || basePrices.isEmpty() || timeframe == null) {
+            return;
+        }
+        try {
+            LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+            Map<String, String> writes = new HashMap<>();
+            for (Map.Entry<String, Double> entry : basePrices.entrySet()) {
+                if (entry.getValue() != null && entry.getValue() > 0.0) {
+                    String key = "index:base-price:" + timeframe + ":" + today + ":" + normalizeSymbol(entry.getKey());
+                    writes.put(key, String.valueOf(entry.getValue()));
+                }
+            }
+            if (!writes.isEmpty()) {
+                redisTemplate.executePipelined((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
+                    for (Map.Entry<String, String> e : writes.entrySet()) {
+                        byte[] keyBytes = redisTemplate.getStringSerializer().serialize(e.getKey());
+                        byte[] valBytes = redisTemplate.getStringSerializer().serialize(e.getValue());
+                        connection.setEx(keyBytes, 24 * 3600, valBytes);
+                    }
+                    return null;
+                });
+            }
+        } catch (Exception ex) {
+            log.warn("cacheIndexBasePrices", "Failed to cache index base prices in Redis: " + ex.getMessage());
         }
     }
 }

@@ -182,9 +182,10 @@ public class StockIndicesService {
                     try {
                         // get(timeout) does not cancel the underlying provider request. The
                         // in-flight entry remains coalesced until that request really finishes.
-                        Map<String, OHLCQuote> recovered = recoveryFuture.get(1500, TimeUnit.MILLISECONDS);
+                        Map<String, OHLCQuote> recovered = recoveryFuture.get(3500, TimeUnit.MILLISECONDS);
                         if (recovered != null && !recovered.isEmpty()) {
                             latestPrices.putAll(recovered);
+                            redisCacheService.cacheLatestPrices(recovered);
                         }
                     } catch (TimeoutException timeout) {
                         log.warn(methodName, "Timed out recovering live prices for {} symbols", missingSymbolList.size());
@@ -206,45 +207,72 @@ public class StockIndicesService {
                  */
                 Map<String, Double> basePrices = new java.util.HashMap<>();
                 if (!isDailyTimeframe) {
-                    java.time.ZoneId exchangeZone = java.time.ZoneId.of("Asia/Kolkata");
-                    java.time.LocalDate startDate = java.time.LocalDate.now(exchangeZone);
-                    if ("1M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(1);
-                    else if ("3M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(3);
-                    else if ("6M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(6);
-                    else if ("1Y".equals(normalizedTimeframe)) startDate = startDate.minusYears(1);
-                    else if ("5Y".equals(normalizedTimeframe)) startDate = startDate.minusYears(5);
-                    else if ("1W".equals(normalizedTimeframe)) startDate = startDate.minusWeeks(1);
+                    Map<String, Double> cachedBasePrices = redisCacheService.getIndexBasePrices(normalizedTimeframe, requestedSymbols);
+                    if (cachedBasePrices != null && !cachedBasePrices.isEmpty()) {
+                        basePrices.putAll(cachedBasePrices);
+                    }
+                    Set<String> missingBaseSymbols = requestedSymbols.stream()
+                            .filter(sym -> !basePrices.containsKey(sym))
+                            .collect(Collectors.toSet());
 
-                    // A small window finds the first trading day after a holiday.
-                    java.time.LocalDate endDate = startDate.plusDays(7);
-                    java.util.Date fromD = java.util.Date.from(startDate.atStartOfDay(exchangeZone).toInstant());
-                    java.util.Date toD = java.util.Date.from(endDate.atStartOfDay(exchangeZone).toInstant());
-                    try {
-                        com.am.marketdata.api.model.HistoricalDataResponseV1 histResp = marketDataCacheService.getHistoricalDataMultipleSymbols(
-                                requestedSymbols, fromD, toD, com.am.marketdata.common.model.TimeFrame.DAY, "INDEX", new java.util.HashMap<>(), false, false);
-                        if (histResp != null && histResp.getData() != null) {
-                            for (Map.Entry<String, com.am.common.investment.model.historical.HistoricalData> entry : histResp.getData().entrySet()) {
-                                java.util.List<com.am.common.investment.model.historical.OHLCVTPoint> points = entry.getValue().getDataPoints();
-                                if (points != null && !points.isEmpty()) {
-                                    // Cache order can vary, so use the earliest valid close as the base.
-                                    com.am.common.investment.model.historical.OHLCVTPoint earliest = null;
-                                    for (com.am.common.investment.model.historical.OHLCVTPoint point : points) {
-                                        if (point == null || point.getClose() <= 0.0) {
-                                            continue;
+                    if (!missingBaseSymbols.isEmpty()) {
+                        java.time.ZoneId exchangeZone = java.time.ZoneId.of("Asia/Kolkata");
+                        java.time.LocalDate startDate = java.time.LocalDate.now(exchangeZone);
+                        if ("1M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(1);
+                        else if ("3M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(3);
+                        else if ("6M".equals(normalizedTimeframe)) startDate = startDate.minusMonths(6);
+                        else if ("1Y".equals(normalizedTimeframe)) startDate = startDate.minusYears(1);
+                        else if ("5Y".equals(normalizedTimeframe)) startDate = startDate.minusYears(5);
+                        else if ("1W".equals(normalizedTimeframe)) startDate = startDate.minusWeeks(1);
+
+                        // Look back 7 days on or before target date to find the preceding trading session close
+                        java.time.LocalDate lookbackStart = startDate.minusDays(7);
+                        java.util.Date fromD = java.util.Date.from(lookbackStart.atStartOfDay(exchangeZone).toInstant());
+                        java.util.Date toD = java.util.Date.from(startDate.plusDays(1).atStartOfDay(exchangeZone).toInstant());
+                        try {
+                            com.am.marketdata.api.model.HistoricalDataResponseV1 histResp = marketDataCacheService.getHistoricalDataMultipleSymbols(
+                                    missingBaseSymbols, fromD, toD, com.am.marketdata.common.model.TimeFrame.DAY, "INDEX", new java.util.HashMap<>(), false, false);
+                            if (histResp != null && histResp.getData() != null) {
+                                Map<String, Double> newlyResolved = new java.util.HashMap<>();
+                                for (Map.Entry<String, com.am.common.investment.model.historical.HistoricalData> entry : histResp.getData().entrySet()) {
+                                    java.util.List<com.am.common.investment.model.historical.OHLCVTPoint> points = entry.getValue().getDataPoints();
+                                    if (points != null && !points.isEmpty()) {
+                                        // Pick the latest trading day on or before target date (industry standard)
+                                        com.am.common.investment.model.historical.OHLCVTPoint best = null;
+                                        for (com.am.common.investment.model.historical.OHLCVTPoint point : points) {
+                                            if (point == null || point.getClose() <= 0.0) {
+                                                continue;
+                                            }
+                                            java.time.LocalDate pointDate = point.getTime() != null ? point.getTime().toLocalDate() : null;
+                                            if (pointDate != null && !pointDate.isAfter(startDate)) {
+                                                if (best == null || (best.getTime() != null && pointDate.isAfter(best.getTime().toLocalDate()))) {
+                                                    best = point;
+                                                }
+                                            }
                                         }
-                                        if (earliest == null || (point.getTime() != null &&
-                                                (earliest.getTime() == null || point.getTime().isBefore(earliest.getTime())))) {
-                                            earliest = point;
+                                        // Fallback if all points are after startDate
+                                        if (best == null) {
+                                            for (com.am.common.investment.model.historical.OHLCVTPoint point : points) {
+                                                if (point != null && point.getClose() > 0.0) {
+                                                    if (best == null || (point.getTime() != null && best.getTime() != null && point.getTime().isBefore(best.getTime()))) {
+                                                        best = point;
+                                                    }
+                                                }
+                                            }
                                         }
-                                    }
-                                    if (earliest != null) {
-                                        basePrices.put(entry.getKey(), earliest.getClose());
+                                        if (best != null) {
+                                            basePrices.put(entry.getKey(), best.getClose());
+                                            newlyResolved.put(entry.getKey(), best.getClose());
+                                        }
                                     }
                                 }
+                                if (!newlyResolved.isEmpty()) {
+                                    redisCacheService.cacheIndexBasePrices(normalizedTimeframe, newlyResolved);
+                                }
                             }
+                        } catch (Exception ex) {
+                            log.error(methodName, "Error fetching timeframe base prices", ex);
                         }
-                    } catch (Exception ex) {
-                        log.error(methodName, "Error fetching timeframe base prices", ex);
                     }
                 }
 

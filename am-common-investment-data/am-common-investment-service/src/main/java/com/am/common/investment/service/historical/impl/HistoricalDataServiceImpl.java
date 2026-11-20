@@ -249,11 +249,17 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         }
 
         if (rawIndianIndex && unit.isTimeBased()) {
+            // Determine series timezone convention once from the session's first observation:
+            // If the day's first point arrives at UTC hour < 9 (e.g. 03:45Z = 09:15 IST), the series
+            // uses true UTC. If it starts at UTC hour >= 9 (e.g. 09:15Z), it was written in market wall-clock time.
+            // Determining this per-session avoids corrupting afternoon UTC points (09:00-10:00Z = 14:30-15:30 IST).
+            final boolean isWallClockSeries = orderedPrices.get(0).getTime().atZone(java.time.ZoneOffset.UTC).getHour() >= 9;
+
             // Retain only ticks falling within the market session (09:15-15:35 IST) before computing
             // statistics or candles. Discarding overnight/off-hours flat heartbeats prevents them
             // from poisoning the day's median price and causing real session points to be rejected.
             orderedPrices = orderedPrices.stream()
-                    .filter(p -> p != null && p.getTime() != null && getIndianIndexBucketKey(p.getTime(), amount, unit) != null)
+                    .filter(p -> p != null && p.getTime() != null && getIndianIndexBucketKey(p.getTime(), amount, unit, isWallClockSeries) != null)
                     .toList();
             if (orderedPrices.isEmpty()) {
                 return Collections.emptyList();
@@ -298,11 +304,12 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
         java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
         java.time.ZonedDateTime firstZoned = firstTimestamp.atZone(zone);
         boolean isDateUnit = !unit.isTimeBased();
+        final boolean isWallClockSeries = rawIndianIndex && orderedPrices.get(0).getTime().atZone(java.time.ZoneOffset.UTC).getHour() >= 9;
         
         for (EquityPrice price : orderedPrices) {
             Instant bucketKey;
             if (rawIndianIndex) {
-                bucketKey = getIndianIndexBucketKey(price.getTime(), amount, unit);
+                bucketKey = getIndianIndexBucketKey(price.getTime(), amount, unit, isWallClockSeries);
                 if (bucketKey == null) {
                     continue;
                 }
@@ -390,12 +397,21 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
      * then convert back to UTC Instant.
      */
     private Instant getIndianIndexBucketKey(Instant timestamp, int amount, ChronoUnit unit) {
+        boolean isAlreadyWallClock = timestamp != null && timestamp.atZone(java.time.ZoneOffset.UTC).getHour() >= 9;
+        return getIndianIndexBucketKey(timestamp, amount, unit, isAlreadyWallClock);
+    }
+
+    private Instant getIndianIndexBucketKey(Instant timestamp, int amount, ChronoUnit unit, boolean isWallClockSeries) {
         if (timestamp == null || unit == null || amount <= 0) {
             return null;
         }
 
         java.time.ZoneId istZone = java.time.ZoneId.of("Asia/Kolkata");
-        java.time.ZonedDateTime marketWallTime = timestamp.atZone(istZone);
+        // InfluxDB market_index points written by NSE scraper store Indian market wall-clock time
+        // (09:15-15:30) with UTC tag (e.g. 09:15Z). Test mocks or Upstox streaming feeds provide true UTC (03:45Z).
+        // If the session uses wall-clock time, keep UTC; otherwise convert true UTC to Asia/Kolkata.
+        java.time.ZoneId effectiveZone = isWallClockSeries ? java.time.ZoneOffset.UTC : istZone;
+        java.time.ZonedDateTime marketWallTime = timestamp.atZone(effectiveZone);
         java.time.LocalDate date = marketWallTime.toLocalDate();
 
         if (unit == ChronoUnit.MINUTES || unit == ChronoUnit.HOURS) {
@@ -417,7 +433,7 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             // Clamp minutesFromOpen to sessionClose (374 minutes from open -> 15:25 candle)
             minutesFromOpen = Math.min(minutesFromOpen, 375L - 1L);
             long bucketStart = (minutesFromOpen / bucketMinutes) * bucketMinutes;
-            return date.atTime(sessionOpen).plusMinutes(bucketStart).atZone(istZone).toInstant();
+            return date.atTime(sessionOpen).plusMinutes(bucketStart).atZone(effectiveZone).toInstant();
         }
 
         java.time.LocalDate bucketDate;
@@ -443,7 +459,7 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
             return timestamp;
         }
 
-        return bucketDate.atTime(9, 15).atZone(istZone).toInstant();
+        return bucketDate.atTime(9, 15).atZone(effectiveZone).toInstant();
     }
 
     /** Build sampled intraday OHLC from index last-price observations, prioritizing

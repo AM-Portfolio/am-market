@@ -197,6 +197,18 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
                                         tradingSymbol = tradingSymbol.substring(tradingSymbol.indexOf("|") + 1);
                                     }
                                 }
+                                // Canonical index normalization:
+                                // Map derivative abbreviations to canonical names so WebSocket broadcast,
+                                // Redis latest-price cache, and InfluxDB persistence all match the UI series.
+                                if ("NIFTY".equalsIgnoreCase(tradingSymbol) || "NIFTY50".equalsIgnoreCase(tradingSymbol)) {
+                                    tradingSymbol = "NIFTY 50";
+                                } else if ("BANKNIFTY".equalsIgnoreCase(tradingSymbol) || "NIFTYBANK".equalsIgnoreCase(tradingSymbol)) {
+                                    tradingSymbol = "NIFTY BANK";
+                                } else if ("FINNIFTY".equalsIgnoreCase(tradingSymbol)) {
+                                    tradingSymbol = "NIFTY FIN SERVICES";
+                                } else if ("MIDCPNIFTY".equalsIgnoreCase(tradingSymbol) || "NIFTY MID SELECT".equalsIgnoreCase(tradingSymbol)) {
+                                    tradingSymbol = "NIFTY MIDCAP 50";
+                                }
                                 mappedQuotes.put(tradingSymbol, entry.getValue());
                             }
                             log.debug("UpstoxStreamer",
