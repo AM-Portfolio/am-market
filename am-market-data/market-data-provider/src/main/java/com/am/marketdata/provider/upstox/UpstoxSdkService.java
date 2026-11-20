@@ -391,6 +391,51 @@ public class UpstoxSdkService {
         }
     }
 
+    private static List<List<Object>> fetchCandlesFromUrl(String urlStr, String token) {
+        try {
+            java.net.URL url = new java.net.URL(urlStr);
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Authorization", "Bearer " + token);
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            conn.setConnectTimeout(4000);
+            conn.setReadTimeout(5000);
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode == 200) {
+                try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()))) {
+                    String inputLine;
+                    StringBuilder response = new StringBuilder();
+                    while ((inputLine = in.readLine()) != null) {
+                        response.append(inputLine);
+                    }
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(response.toString());
+                    com.fasterxml.jackson.databind.JsonNode candlesNode = rootNode.path("data").path("candles");
+                    List<List<Object>> candlesList = new java.util.ArrayList<>();
+                    if (candlesNode.isArray()) {
+                        for (com.fasterxml.jackson.databind.JsonNode candle : candlesNode) {
+                            List<Object> candleData = new java.util.ArrayList<>();
+                            for (com.fasterxml.jackson.databind.JsonNode val : candle) {
+                                if (val.isNumber()) {
+                                    candleData.add(val.doubleValue());
+                                } else {
+                                    candleData.add(val.asText());
+                                }
+                            }
+                            candlesList.add(candleData);
+                        }
+                    }
+                    return candlesList;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to fetch candles from URL: {} - {}", urlStr, e.getMessage());
+        }
+        return java.util.Collections.emptyList();
+    }
+
     /**
      * Bypasses the Upstox SDK to directly query the REST API for index symbols.
      * This avoids SDK path parameter encoding issues where spaces are encoded as '+' instead of '%20'.
@@ -409,68 +454,45 @@ public class UpstoxSdkService {
 
             log.info("Directly fetching historical data from URL: {}", urlStr);
 
-            java.net.URL url = new java.net.URL(urlStr);
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "Bearer " + token);
-            conn.setRequestProperty("Accept", "application/json");
+            List<List<Object>> candlesList = new java.util.ArrayList<>(fetchCandlesFromUrl(urlStr, token));
+            boolean useDateRange = fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate);
 
-            int responseCode = conn.getResponseCode();
-            if (responseCode == 200) {
-                java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()));
-                String inputLine;
-                StringBuilder response = new StringBuilder();
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
+            // FALLBACK: If querying today's intraday returned 0 candles (e.g. Nifty 500 is not supported on live endpoint),
+            // fallback to querying the historical range endpoint for today's date.
+            if (candlesList.isEmpty() && isQueryingToday && "minutes".equalsIgnoreCase(unit) && !useDateRange) {
+                log.info("Intraday endpoint returned 0 candles for index: {}. Falling back to historical range endpoint for date: {}", normalizedKey, toDate);
+                return fetchHistoricalCandleDirect(normalizedKey, unit, interval, toDate, toDate, false);
+            }
 
-                // Deserialize JSON response manually
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(response.toString());
-
-                com.am.marketdata.provider.upstox.model.HistoricalDataResponse res = new com.am.marketdata.provider.upstox.model.HistoricalDataResponse();
-                res.setStatus(rootNode.path("status").asText());
-
-                com.fasterxml.jackson.databind.JsonNode candlesNode = rootNode.path("data").path("candles");
-                List<List<Object>> candlesList = new java.util.ArrayList<>();
-                if (candlesNode.isArray()) {
-                    for (com.fasterxml.jackson.databind.JsonNode candle : candlesNode) {
-                        List<Object> candleData = new java.util.ArrayList<>();
-                        for (com.fasterxml.jackson.databind.JsonNode val : candle) {
-                            if (val.isNumber()) {
-                                candleData.add(val.doubleValue());
-                            } else {
-                                candleData.add(val.asText());
-                            }
-                        }
-                        candlesList.add(candleData);
+            // STITCHING: If querying a multi-day minute range up to today (e.g. 1W with 30m),
+            // Upstox historical range endpoint only includes past days up to yesterday.
+            // Fetch today's intraday candles and prepend them to provide a complete, unbroken series up to now.
+            if (isQueryingToday && "minutes".equalsIgnoreCase(unit) && useDateRange) {
+                java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+                String todayPrefix = today.toString();
+                boolean hasToday = candlesList.stream().anyMatch(c -> c != null && !c.isEmpty() && String.valueOf(c.get(0)).startsWith(todayPrefix));
+                if (!hasToday) {
+                    String singularUnit = unit != null && unit.endsWith("s")
+                            ? unit.substring(0, unit.length() - 1)
+                            : unit;
+                    int intVal = interval != null ? interval : 1;
+                    String intradayUrl = String.format("https://api.upstox.com/v2/historical-candle/intraday/%s/%s",
+                            encodedKey, intVal + singularUnit);
+                    List<List<Object>> todayCandles = fetchCandlesFromUrl(intradayUrl, token);
+                    if (!todayCandles.isEmpty()) {
+                        log.info("Stitched {} today's intraday candles into historical multi-day range for {}", todayCandles.size(), normalizedKey);
+                        candlesList.addAll(0, todayCandles);
                     }
                 }
-
-                // FALLBACK: If querying today's intraday returned 0 candles (e.g. Nifty 500 is not supported on live endpoint),
-                // fallback to querying the historical range endpoint for today's date.
-                if (candlesList.isEmpty() && isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
-                    log.info("Intraday endpoint returned 0 candles for index: {}. Falling back to historical range endpoint for date: {}", normalizedKey, toDate);
-                    return fetchHistoricalCandleDirect(normalizedKey, unit, interval, toDate, toDate, false);
-                }
-
-                com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload dataPayload = 
-                        new com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload();
-                dataPayload.setCandles(candlesList);
-                res.setData(dataPayload);
-                return res;
-            } else {
-                java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getErrorStream() != null ? conn.getErrorStream() : conn.getInputStream()));
-                String inputLine;
-                StringBuilder errorResponse = new StringBuilder();
-                while ((inputLine = in.readLine()) != null) {
-                    errorResponse.append(inputLine);
-                }
-                in.close();
-                log.error("Direct fetch failed. Code={}, Response={}", responseCode, errorResponse.toString());
-                throw new RuntimeException("Direct fetch failed with code: " + responseCode);
             }
+
+            com.am.marketdata.provider.upstox.model.HistoricalDataResponse res = new com.am.marketdata.provider.upstox.model.HistoricalDataResponse();
+            res.setStatus("success");
+            com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload dataPayload = 
+                    new com.am.marketdata.provider.upstox.model.HistoricalDataResponse.DataPayload();
+            dataPayload.setCandles(candlesList);
+            res.setData(dataPayload);
+            return res;
         } catch (Exception e) {
             log.error("Error fetching historical candle direct for key: " + normalizedKey, e);
             throw new RuntimeException("Error fetching historical candle direct", e);
@@ -497,7 +519,8 @@ public class UpstoxSdkService {
                     : v3Path;
         }
 
-        if (isQueryingToday && "minutes".equalsIgnoreCase(unit)) {
+        boolean useDateRange = fromDate != null && !fromDate.isBlank() && !fromDate.equals(toDate);
+        if (isQueryingToday && "minutes".equalsIgnoreCase(unit) && !useDateRange) {
             return String.format(V2_INTRADAY_CANDLE_URL, encodedKey);
         }
 

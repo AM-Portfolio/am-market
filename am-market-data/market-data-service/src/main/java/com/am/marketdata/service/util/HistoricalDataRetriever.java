@@ -134,30 +134,50 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
             long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
             
-            // [Flexible Start Check - Intraday]
-            // We disable start-time checks for intraday intervals to show whatever data exists,
+            // [Flexible Start Check - Intraday & Multi-Day]
+            // We disable start-time checks for single-day intraday intervals to show whatever data exists,
             // preventing discards if the ingestion starts slightly late.
+            // For multi-day intervals (e.g. 1W with 30m), we verify start date coverage.
             // For daily/weekly/monthly charts, we keep the original tolerance check.
+            java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
+            boolean isMultiDay = fromDate.toInstant().atZone(kolkataZone).toLocalDate()
+                    .isBefore(toDate.toInstant().atZone(kolkataZone).toLocalDate());
             boolean missingEarlyData;
-            if (isIntraday) {
+            if (isMultiDay) {
+                java.time.LocalDate firstCandleDate = firstPointTime.toLocalDate();
+                java.time.LocalDate expectedStartDate = java.time.Instant.ofEpochMilli(validationStartMs)
+                        .atZone(kolkataZone).toLocalDate();
+                missingEarlyData = firstCandleDate.isAfter(expectedStartDate);
+            } else if (isIntraday) {
                 missingEarlyData = false;
             } else {
                 missingEarlyData = dataStartMs > (validationStartMs + toleranceMs);
             }
 
-            // [Intraday Recent-Data Check - Date Comparison]
-            // The DB scheduler saves only 1-2 candles per day (morning snapshot).
-            // So the last 5m or 1H candle may be at 09:38 AM even though market closes at 15:30.
-            // Comparing raw timestamps would flag this as missing (gap = 5h52m > any small tolerance).
-            // Fix: for intraday intervals, check only the DATE of the last candle vs the validation target date.
-            //   - Last candle from correct trading date -> valid, no matter what time -> accept.
-            //   - Last candle from a previous date -> genuinely stale -> reject, fallback to Upstox.
+            // [Intraday Recent-Data Check - Date Comparison & Session Completion]
+            // During market hours, any candle from the target date is accepted.
+            // But after market close (past 15:35 IST), an Indian market session must have
+            // completed all candles up to the closing bell (~15:25 IST).
+            // If the series ended prematurely (e.g. stream dropped at 14:55), mark as missing
+            // so provider fallback fetches the full 75-candle finalized session from Upstox.
             boolean missingRecentData;
             if (isIntraday) {
                 java.time.LocalDate lastCandleDate = lastPointTime.toLocalDate();
                 java.time.LocalDate validationEndDate = java.time.Instant.ofEpochMilli(validationEndMs)
-                        .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
-                missingRecentData = lastCandleDate.isBefore(validationEndDate);
+                        .atZone(kolkataZone).toLocalDate();
+                if (lastCandleDate.isBefore(validationEndDate)) {
+                    missingRecentData = true;
+                } else {
+                    java.time.ZonedDateTime nowIst = java.time.ZonedDateTime.now(kolkataZone);
+                    boolean sessionEnded = nowIst.toLocalDate().isAfter(validationEndDate)
+                            || (nowIst.toLocalDate().isEqual(validationEndDate)
+                                    && !nowIst.toLocalTime().isBefore(java.time.LocalTime.of(15, 35)));
+                    if (sessionEnded && lastPointTime.toLocalTime().isBefore(java.time.LocalTime.of(15, 20))) {
+                        missingRecentData = true;
+                    } else {
+                        missingRecentData = false;
+                    }
+                }
             } else {
                 // For daily/weekly/monthly candles: use 7-day tolerance timestamp comparison
                 missingRecentData = dataEndMs < (validationEndMs - toleranceMs);
@@ -204,11 +224,21 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
      * instrument resolve + Upstox candle fetch (cold dig often exceeds 1.5s).
      */
     static long providerTimeoutMsForInterval(TimeFrame interval) {
+        return providerTimeoutMsForInterval(interval, null, null);
+    }
+
+    static long providerTimeoutMsForInterval(TimeFrame interval, Date fromDate, Date toDate) {
         if (interval == null) {
             return 15_000L;
         }
+        boolean isMultiDay = false;
+        if (fromDate != null && toDate != null) {
+            java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
+            isMultiDay = fromDate.toInstant().atZone(zone).toLocalDate()
+                    .isBefore(toDate.toInstant().atZone(zone).toLocalDate());
+        }
         String val = interval.getApiValue() != null ? interval.getApiValue().toLowerCase() : "";
-        boolean intraday = val.contains("m") || val.contains("h");
+        boolean intraday = (val.contains("m") || val.contains("h")) && !isMultiDay;
         return intraday ? 3_000L : 15_000L;
     }
 
@@ -264,29 +294,53 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                 long dataEndMs = lastPointTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
                 long validationStartMs = getFirstExpectedCandleTimeMs(requiredStartMs);
                 long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
-                boolean missingEarlyData = !isIntraday && dataStartMs > validationStartMs + toleranceMs;
+
+                java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
+                boolean isMultiDay = fromDate.toInstant().atZone(kolkataZone).toLocalDate()
+                        .isBefore(toDate.toInstant().atZone(kolkataZone).toLocalDate());
+                boolean missingEarlyData;
+                if (isMultiDay) {
+                    java.time.LocalDate firstCandleDate = firstPointTime.toLocalDate();
+                    java.time.LocalDate expectedStartDate = java.time.Instant.ofEpochMilli(validationStartMs)
+                            .atZone(kolkataZone).toLocalDate();
+                    missingEarlyData = firstCandleDate.isAfter(expectedStartDate);
+                } else if (isIntraday) {
+                    missingEarlyData = false;
+                } else {
+                    missingEarlyData = dataStartMs > validationStartMs + toleranceMs;
+                }
+
                 boolean missingRecentData;
                 if (isIntraday) {
                     java.time.LocalDate validationEndDate = java.time.Instant.ofEpochMilli(validationEndMs)
-                            .atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
-                    missingRecentData = lastPointTime.toLocalDate().isBefore(validationEndDate);
+                            .atZone(kolkataZone).toLocalDate();
+                    if (lastPointTime.toLocalDate().isBefore(validationEndDate)) {
+                        missingRecentData = true;
+                    } else {
+                        java.time.ZonedDateTime nowIst = java.time.ZonedDateTime.now(kolkataZone);
+                        boolean sessionEnded = nowIst.toLocalDate().isAfter(validationEndDate)
+                                || (nowIst.toLocalDate().isEqual(validationEndDate)
+                                        && !nowIst.toLocalTime().isBefore(java.time.LocalTime.of(15, 35)));
+                        missingRecentData = sessionEnded && lastPointTime.toLocalTime().isBefore(java.time.LocalTime.of(15, 20));
+                    }
                 } else {
                     missingRecentData = dataEndMs < validationEndMs - toleranceMs;
                 }
 
-                // Preserve real stored points. Only normal retrievals may schedule
-                // repair; chart-only reads must not start hidden provider/Kafka work.
-                result.put(symbol, data);
-                remainingSymbols.remove(symbol);
                 if (missingEarlyData || missingRecentData) {
                     if (retrievalOrder.contains(DataSourceType.PROVIDER)) {
-                        log.info("[DATABASE_PARTIAL_HIT] Partial history for {} ({} points); scheduling single-flight backfill",
-                                symbol, points.size());
-                        triggerSingleFlightBackfill(symbol, fromDateStr, toDateStr);
+                        log.info("[DATABASE_PARTIAL_HIT] Incomplete history for {} ({} points, earlyMissing={}, recentMissing={}); falling back to provider",
+                                symbol, points.size(), missingEarlyData, missingRecentData);
+                        // Do not put in result or remove from remainingSymbols so provider fetches complete series
                     } else {
                         log.debug("[DATABASE_PARTIAL_HIT] Returning stored partial data for {} without provider backfill",
                                 symbol);
+                        result.put(symbol, data);
+                        remainingSymbols.remove(symbol);
                     }
+                } else {
+                    result.put(symbol, data);
+                    remainingSymbols.remove(symbol);
                 }
             } catch (Exception e) {
                 log.warn("[DATABASE] Error validating batch history for {}: {}", symbol, e.getMessage());
@@ -334,8 +388,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                 }
 
                 // Daily/weekly/monthly candles often need a cold Upstox round-trip + key resolve.
-                // Keep a short budget for intraday; allow a longer budget for session bars.
-                long providerBudgetMs = providerTimeoutMsForInterval(interval);
+                // Keep a short budget for intraday; allow a longer budget for session bars or multi-day ranges.
+                long providerBudgetMs = providerTimeoutMsForInterval(interval, fromDate, toDate);
                 java.util.concurrent.CompletableFuture<HistoricalData> fetchFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
                         provider.getHistoricalData(symbol, fromDate, toDate, interval, continuous, additionalParams)
                 ).orTimeout(providerBudgetMs, java.util.concurrent.TimeUnit.MILLISECONDS);

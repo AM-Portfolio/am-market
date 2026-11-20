@@ -41,3 +41,8 @@ nse:
     - "FINNIFTY"
     - "MIDCPNIFTY"
     - "SENSEX"
+    - "BANKEX"
+    - "NIFTY50"
+    - "NIFTYBANK"
+    - "NIFTY FIN SERVICE"
+    - "NIFTY MID SELECT"

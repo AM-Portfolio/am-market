@@ -1111,10 +1111,16 @@ public class UpstoxMarketDataProvider implements MarketDataProvider {
                 String clean = underlyingSymbol.toUpperCase().trim();
                 if (clean.equals("NIFTY") || clean.equals("NIFTY 50") || clean.equals("NIFTY50")) {
                     instrumentKey = "NSE_INDEX|Nifty 50";
-                } else if (clean.equals("BANKNIFTY") || clean.equals("NIFTY BANK")) {
+                } else if (clean.equals("BANKNIFTY") || clean.equals("NIFTY BANK") || clean.equals("NIFTYBANK")) {
                     instrumentKey = "NSE_INDEX|Nifty Bank";
-                } else if (clean.equals("FINNIFTY") || clean.equals("NIFTY FIN SERVICE")) {
+                } else if (clean.equals("FINNIFTY") || clean.equals("NIFTY FIN SERVICE") || clean.equals("NIFTY FIN SERVICES")) {
                     instrumentKey = "NSE_INDEX|Nifty Fin Service";
+                } else if (clean.equals("MIDCPNIFTY") || clean.equals("NIFTY MID SELECT") || clean.equals("NIFTY MIDCAP 50")) {
+                    instrumentKey = "NSE_INDEX|NIFTY MID SELECT";
+                } else if (clean.equals("SENSEX") || clean.equals("BSE:SENSEX") || clean.equals("BSESENSEX")) {
+                    instrumentKey = "BSE_INDEX|SENSEX";
+                } else if (clean.equals("BANKEX") || clean.equals("BSE:BANKEX") || clean.equals("BSEBANKEX")) {
+                    instrumentKey = "BSE_INDEX|BANKEX";
                 } else {
                     instrumentKey = "NSE_EQ|" + clean;
                 }

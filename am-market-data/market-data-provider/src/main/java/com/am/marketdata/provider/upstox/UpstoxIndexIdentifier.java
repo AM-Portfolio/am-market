@@ -60,6 +60,16 @@ public class UpstoxIndexIdentifier {
                 indexKeyMap.put("NIFTY FIN SERVICES", "NSE_INDEX|Nifty Fin Service");
                 indexKeyMap.put("NIFTY FIN SERVICE", "NSE_INDEX|Nifty Fin Service");
                 indexKeyMap.put("NIFTY CONSR DURABLE", "NSE_INDEX|NIFTY CONSR DURBL");
+                indexKeyMap.put("NIFTY", "NSE_INDEX|Nifty 50");
+                indexKeyMap.put("NIFTY50", "NSE_INDEX|Nifty 50");
+                indexKeyMap.put("BANKNIFTY", "NSE_INDEX|Nifty Bank");
+                indexKeyMap.put("NIFTYBANK", "NSE_INDEX|Nifty Bank");
+                indexKeyMap.put("FINNIFTY", "NSE_INDEX|Nifty Fin Service");
+                indexKeyMap.put("MIDCPNIFTY", "NSE_INDEX|NIFTY MID SELECT");
+                indexKeyMap.put("NIFTY MID SELECT", "NSE_INDEX|NIFTY MID SELECT");
+                indexKeyMap.put("NIFTY MIDCAP 50", "NSE_INDEX|NIFTY MID SELECT");
+                indexKeyMap.put("SENSEX", "BSE_INDEX|SENSEX");
+                indexKeyMap.put("BANKEX", "BSE_INDEX|BANKEX");
 
                 log.info("Loaded {} Upstox Index Identifiers", indexKeyMap.size());
             }

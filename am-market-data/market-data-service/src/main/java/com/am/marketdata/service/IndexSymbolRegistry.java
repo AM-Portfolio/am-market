@@ -114,8 +114,26 @@ public class IndexSymbolRegistry {
         return switch (symbol) {
             case "NIFTY", "NIFTY50" -> "NIFTY 50";
             case "BANKNIFTY", "NIFTYBANK" -> "NIFTY BANK";
-            case "FINNIFTY" -> "NIFTY FIN SERVICES";
-            case "MIDCPNIFTY", "NIFTY MID SELECT" -> "NIFTY MIDCAP 50";
+            case "FINNIFTY", "NIFTY FIN SERVICE", "NIFTY FINANCIAL SERVICES", "NIFTY FINANCIAL" -> "NIFTY FIN SERVICES";
+            case "MIDCPNIFTY", "NIFTY MID SELECT", "NIFTY MIDCAP SELECT", "MIDCAPNIFTY", "NIFTY SELECT" -> "NIFTY MIDCAP 50";
+            case "NIFTYNXT50", "NIFTY NEXT50", "NIFTY JR", "NIFTYJUNIOR" -> "NIFTY NEXT 50";
+            case "NIFTY100" -> "NIFTY 100";
+            case "NIFTY200" -> "NIFTY 200";
+            case "NIFTY500" -> "NIFTY 500";
+            case "NIFTYMIDCAP100", "NIFTY MID 100" -> "NIFTY MIDCAP 100";
+            case "NIFTYSMALLCAP100", "NIFTY SMLCAP 100", "NIFTY SML 100" -> "NIFTY SMALLCAP 100";
+            case "NIFTYAUTO" -> "NIFTY AUTO";
+            case "NIFTYIT" -> "NIFTY IT";
+            case "NIFTYPHARMA", "NIFTY PHARMACEUTICALS" -> "NIFTY PHARMA";
+            case "NIFTYMETAL" -> "NIFTY METAL";
+            case "NIFTYFMCG" -> "NIFTY FMCG";
+            case "NIFTYENERGY" -> "NIFTY ENERGY";
+            case "NIFTYREALTY" -> "NIFTY REALTY";
+            case "NIFTYPSUBANK" -> "NIFTY PSU BANK";
+            case "NIFTYPVTBANK", "NIFTY PRIVATE BANK" -> "NIFTY PVT BANK";
+            case "BSESENSEX", "BSE SENSEX", "SENSEX 30" -> "SENSEX";
+            case "BSEBANKEX", "BSE BANKEX" -> "BANKEX";
+            case "INDIAVIX", "VIX" -> "INDIA VIX";
             default -> symbol;
         };
     }
