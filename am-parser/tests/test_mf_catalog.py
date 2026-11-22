@@ -172,6 +172,7 @@ def test_details_orders_by_scheme_code():
         "u",
         "p",
     )
+    # 0..24 SCH (+ face/cutoffs), 25..30 enrich (+ source), optional vendor after.
     basic = (
         "SC1",
         "Fund",
@@ -195,11 +196,14 @@ def test_details_orders_by_scheme_code():
         None,
         "N",
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
+        "10",  # face_value
+        "14:30",  # purchase_cutoff_time
+        "14:30",  # redemption_cutoff_time
+        12000.0,  # aum
+        0.55,  # expense_ratio
+        "VERY HIGH",
+        "Equity",
+        "Flexi Cap",
         "amfi",
     )
     cur = MagicMock()

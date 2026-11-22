@@ -20,7 +20,10 @@ SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_t
        s.switch_allowed, s.purchase_transaction_mode, s.new_purchase_min_amount,
        s.redemption_transaction_mode, s.rta_agent_code, s.latest_nav, s.latest_nav_date,
        s.exit_load_flag, s.exit_load, s.lock_in_period_flag, s.lock_in_period,
-       e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source
+       s.face_value, s.purchase_cutoff_time, s.redemption_cutoff_time,
+       e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source,
+       e.benchmark_name, e.benchmark_code, e.rating_crisil, e.rating_morningstar,
+       e.rating_value_research, e.holdings_json
 FROM mf_scheme s
 LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin
 WHERE s.scheme_code = %s OR s.isin = %s
@@ -33,10 +36,27 @@ SELECT scheme_code, scheme_name, isin, amc_code, scheme_type, plan_type,
        purchase_allowed, redemption_allowed, sip_allowed, stp_enabled, swp_enabled,
        switch_allowed, purchase_transaction_mode, new_purchase_min_amount,
        redemption_transaction_mode, rta_agent_code, latest_nav, latest_nav_date,
-       exit_load_flag, exit_load, lock_in_period_flag, lock_in_period
+       exit_load_flag, exit_load, lock_in_period_flag, lock_in_period,
+       face_value, purchase_cutoff_time, redemption_cutoff_time
 FROM mf_scheme
 WHERE scheme_code = %s OR isin = %s
 ORDER BY scheme_code
+LIMIT 1
+"""
+
+# Fallback when vendor enrichment columns are not migrated yet.
+_DETAILS_SQL_LEGACY = """
+SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type,
+       s.purchase_allowed, s.redemption_allowed, s.sip_allowed, s.stp_enabled, s.swp_enabled,
+       s.switch_allowed, s.purchase_transaction_mode, s.new_purchase_min_amount,
+       s.redemption_transaction_mode, s.rta_agent_code, s.latest_nav, s.latest_nav_date,
+       s.exit_load_flag, s.exit_load, s.lock_in_period_flag, s.lock_in_period,
+       s.face_value, s.purchase_cutoff_time, s.redemption_cutoff_time,
+       e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source
+FROM mf_scheme s
+LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin
+WHERE s.scheme_code = %s OR s.isin = %s
+ORDER BY s.scheme_code
 LIMIT 1
 """
 
@@ -168,14 +188,31 @@ class MfCatalogService:
                             return None
                         m = _map_scheme_row_enriched(row)
                     except Exception as e:
-                        if "mf_scheme_enrichment" not in str(e).lower():
-                            raise
+                        err = str(e).lower()
                         conn.rollback()
-                        cur.execute(_DETAILS_BASIC_SQL, (scheme_code, scheme_code))
-                        row = cur.fetchone()
-                        if row is None:
-                            return None
-                        m = _map_scheme_row_basic(row)
+                        if "mf_scheme_enrichment" in err:
+                            cur.execute(_DETAILS_BASIC_SQL, (scheme_code, scheme_code))
+                            row = cur.fetchone()
+                            if row is None:
+                                return None
+                            m = _map_scheme_row_basic(row)
+                        elif any(
+                            c in err
+                            for c in (
+                                "benchmark_name",
+                                "rating_crisil",
+                                "holdings_json",
+                                "face_value",
+                                "purchase_cutoff",
+                            )
+                        ):
+                            cur.execute(_DETAILS_SQL_LEGACY, (scheme_code, scheme_code))
+                            row = cur.fetchone()
+                            if row is None:
+                                return None
+                            m = _map_scheme_row_enriched(row)
+                        else:
+                            raise
         except Exception as e:
             log.error(
                 "MF catalog details failed schemeCode=%s target=%s err=%s",
@@ -480,7 +517,7 @@ def _map_search_row(row: tuple) -> dict[str, Any]:
 
 
 def _map_scheme_row_basic(row: tuple) -> dict[str, Any]:
-    return {
+    m: dict[str, Any] = {
         "schemeCode": row[0],
         "schemeName": row[1],
         "isin": row[2],
@@ -504,15 +541,41 @@ def _map_scheme_row_basic(row: tuple) -> dict[str, Any]:
         "lockInPeriodFlag": row[20],
         "lockInPeriod": row[21],
     }
+    # SCH trading fields (face value / cutoffs) when selected.
+    if len(row) > 22:
+        m["faceValue"] = row[22]
+    if len(row) > 23:
+        m["purchaseCutoffTime"] = row[23]
+    if len(row) > 24:
+        m["redemptionCutoffTime"] = row[24]
+    return m
 
 
 def _map_scheme_row_enriched(row: tuple) -> dict[str, Any]:
-    m = _map_scheme_row_basic(row[:22])
-    m["aum"] = float(row[22]) if row[22] is not None else None
-    m["expenseRatio"] = float(row[23]) if row[23] is not None else None
-    m["riskometer"] = row[24]
-    m["sebiCategory"] = row[25]
-    m["sebiSubCategory"] = row[26]
-    if len(row) > 27 and row[27]:
-        m["enrichmentSource"] = row[27]
+    # basic = 0..24 (25 cols), enrich starts at 25
+    basic_n = 25 if len(row) >= 25 else 22
+    m = _map_scheme_row_basic(row[:basic_n])
+    if len(row) <= basic_n:
+        return m
+    base = basic_n
+    m["aum"] = float(row[base]) if row[base] is not None else None
+    m["expenseRatio"] = float(row[base + 1]) if row[base + 1] is not None else None
+    m["riskometer"] = row[base + 2]
+    m["sebiCategory"] = row[base + 3]
+    m["sebiSubCategory"] = row[base + 4]
+    if len(row) > base + 5 and row[base + 5]:
+        m["enrichmentSource"] = row[base + 5]
+    # Vendor analytics (optional; only after V3 / AMFI-extended CSV).
+    if len(row) > base + 6 and row[base + 6]:
+        m["benchmarkName"] = row[base + 6]
+    if len(row) > base + 7 and row[base + 7]:
+        m["benchmarkCode"] = row[base + 7]
+    if len(row) > base + 8 and row[base + 8]:
+        m["ratingCrisil"] = row[base + 8]
+    if len(row) > base + 9 and row[base + 9]:
+        m["ratingMorningstar"] = row[base + 9]
+    if len(row) > base + 10 and row[base + 10]:
+        m["ratingValueResearch"] = row[base + 10]
+    if len(row) > base + 11 and row[base + 11]:
+        m["holdingsJson"] = row[base + 11]
     return m
