@@ -7,6 +7,11 @@ vault:
     market:
       mappings:
         MARKET_DATA_API_URL: "URL"
+    # MF catalog Postgres (same infra secret as am-market-data); URL is non-secret in values.{env}.yaml
+    postgres:
+      mappings:
+        AM_MARKET_MF_JDBC_USER: "username"
+        AM_MARKET_MF_JDBC_PASSWORD: "password"
     mongodb:
       mappings:
         MONGO_URI: "url"

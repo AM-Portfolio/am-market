@@ -93,6 +93,12 @@ class Settings(BaseSettings):
         "?isin={isin}&key=Stocks"
     )
 
+    # ==================== MF catalog (Postgres; Helm/Vault per env) ====================
+    # Same env var names in dig/preprod/prod — never hardcode host/DB here.
+    am_market_mf_jdbc_url: str = ""
+    am_market_mf_jdbc_user: str = ""
+    am_market_mf_jdbc_password: str = ""
+
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE) if _ENV_FILE.exists() else None,
         env_file_encoding="utf-8",
