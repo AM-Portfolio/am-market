@@ -42,17 +42,20 @@ public class MarketAnalyticsService {
     public com.am.marketdata.api.model.HistoricalDataResponseV1 getHistoricalCharts(
             String symbols, String range, Boolean requestedIndexSymbol) {
 
-        boolean isIndexSymbol = resolveChartSymbolType(symbols, requestedIndexSymbol);
+        String canonicalSymbols = canonicalizeChartSymbols(symbols);
+        boolean isIndexSymbol = resolveChartSymbolType(canonicalSymbols, requestedIndexSymbol);
         String rangeKey = range == null || range.isBlank() ? "1Y" : range.trim().toUpperCase(Locale.ROOT);
 
-        String chartCacheKey = "analysis:charts:" + (symbols != null ? symbols.trim().toUpperCase(Locale.ROOT) : "")
+        String chartCacheKey = "analysis:charts:" + (canonicalSymbols != null ? canonicalSymbols.trim().toUpperCase(Locale.ROOT) : "")
                 + ":" + rangeKey + ":" + isIndexSymbol;
         if (analysisRedisCache != null) {
             try {
                 String cachedJson = analysisRedisCache.getChartRawJson(chartCacheKey);
                 if (cachedJson != null && !cachedJson.isBlank()) {
-                    return analysisRedisCache.getRedisObjectMapper().readValue(
+                    com.am.marketdata.api.model.HistoricalDataResponseV1 cached = analysisRedisCache.getRedisObjectMapper().readValue(
                             cachedJson, com.am.marketdata.api.model.HistoricalDataResponseV1.class);
+                    ensureRequestedSymbolAliases(cached, symbols, canonicalSymbols);
+                    return cached;
                 }
             } catch (Exception e) {
                 log.warn("getHistoricalCharts", "Redis cache read failed for " + chartCacheKey + ": " + e.getMessage());
@@ -109,33 +112,33 @@ public class MarketAnalyticsService {
                 // '1H' is not supported by Upstox v2/v3 and causes 0 data points.
                 // Using '30m' provides rich 30-minute historical candle progression for the 1-week window across both Stocks & Indices.
                 interval = "30m";
-                from = to.minusWeeks(1);
+                from = to.minusWeeks(1).toLocalDate().atStartOfDay();
                 break;
             case "1M":
                 interval = "1D";
-                from = to.minusMonths(1);
+                from = to.minusMonths(1).toLocalDate().atStartOfDay();
                 break;
             case "3M":
                 interval = "1D";
-                from = to.minusMonths(3);
+                from = to.minusMonths(3).toLocalDate().atStartOfDay();
                 break;
             case "6M":
                 interval = "1D";
-                from = to.minusMonths(6);
+                from = to.minusMonths(6).toLocalDate().atStartOfDay();
                 break;
             case "5Y":
                 interval = "1W";
-                from = to.minusYears(5);
+                from = to.minusYears(5).toLocalDate().atStartOfDay();
                 break;
             default: // Default 1Y
                 interval = "1D";
-                from = to.minusYears(1);
+                from = to.minusYears(1).toLocalDate().atStartOfDay();
         }
 
         // Construct Request
         com.am.marketdata.api.dto.HistoricalDataRequest request = com.am.marketdata.api.dto.HistoricalDataRequest
                 .builder()
-                .symbols(symbols)
+                .symbols(canonicalSymbols)
                 .from(from.toLocalDate().toString())
                 .to(to.toLocalDate().toString())
                 .interval(com.am.marketdata.common.model.TimeFrame.fromApiValue(interval)) // Convert string to
@@ -148,11 +151,8 @@ public class MarketAnalyticsService {
         try {
             boolean intradayChart = Set.of("10M", "15M", "30M", "1H", "4H", "1D").contains(rangeKey);
             // Intraday charts consume the WebSocket data already persisted by the
-            // stream pipeline. A chart GET must not create a provider fetch or a
-            // hidden Kafka backfill when the stored series is empty or partial.
-            // Intraday chart data is already persisted by the stream pipeline.
-            // Allow the existing historical-data cache to serve warm requests,
-            // while keeping provider fallback disabled for live chart reads.
+            // stream pipeline. Allow the existing historical-data cache to serve warm requests,
+            // while keeping provider fallback disabled for routine live chart reads.
             com.am.marketdata.api.model.HistoricalDataResponseV1 response = marketDataFetchService
                     .processHistoricalDataRequest(request, true, !intradayChart);
 
@@ -160,21 +160,36 @@ public class MarketAnalyticsService {
                 return response;
             }
 
-            if ("1D".equalsIgnoreCase(rangeKey) && response.getData() != null && !response.getData().isEmpty()
-                    && response.getData().values().stream().allMatch(d -> d == null || d.getDataPoints() == null || d.getDataPoints().isEmpty())) {
+            boolean hasNoCandles = response.getData() == null || response.getData().isEmpty()
+                    || response.getData().values().stream().allMatch(d -> d == null || d.getDataPoints() == null || d.getDataPoints().isEmpty());
+
+            // If 1D chart returned 0 candles (e.g. cold start after a mid-session pod restart/deployment),
+            // allow a single bounded provider fallback for targetDate so the chart self-heals immediately.
+            if ("1D".equalsIgnoreCase(rangeKey) && hasNoCandles) {
+                log.info("getHistoricalCharts", "1D chart had no cached candles for targetDate " + targetDate + "; attempting bounded provider fallback");
+                try {
+                    response = marketDataFetchService.processHistoricalDataRequest(request, true, true);
+                    hasNoCandles = response.getData() == null || response.getData().isEmpty()
+                            || response.getData().values().stream().allMatch(d -> d == null || d.getDataPoints() == null || d.getDataPoints().isEmpty());
+                } catch (Exception ex) {
+                    log.warn("getHistoricalCharts", "Provider fallback failed for targetDate " + targetDate + ": " + ex.getMessage());
+                }
+            }
+
+            if ("1D".equalsIgnoreCase(rangeKey) && hasNoCandles) {
                 // Rare edge case: targetDate had no trading candles (e.g. exchange holiday).
                 // Fall back to querying previous 4 days so the chart is never blank.
                 log.info("getHistoricalCharts", "1D targetDate " + targetDate + " had no candles (holiday/closed); falling back to lookback window");
                 com.am.marketdata.api.dto.HistoricalDataRequest fallbackRequest = com.am.marketdata.api.dto.HistoricalDataRequest
                         .builder()
-                        .symbols(symbols)
+                        .symbols(canonicalSymbols)
                         .from(targetDate.minusDays(4).toString())
                         .to(targetDate.plusDays(1).toString())
                         .interval(com.am.marketdata.common.model.TimeFrame.fromApiValue(interval))
                         .filterType("price")
                         .indexSymbol(isIndexSymbol)
                         .build();
-                response = marketDataFetchService.processHistoricalDataRequest(fallbackRequest, true, !intradayChart);
+                response = marketDataFetchService.processHistoricalDataRequest(fallbackRequest, true, true);
             }
 
             // Filter data points by time range for each symbol
@@ -195,6 +210,7 @@ public class MarketAnalyticsService {
                 response.getData().forEach((s, symbolData) -> {
                     if (symbolData != null && symbolData.getDataPoints() != null) {
                         boolean isGlobal = isGlobalIndexSymbol(s);
+                        java.time.ZoneId pointZone = isGlobal ? java.time.ZoneOffset.UTC : kolkataZone;
                         long symMinTime = isGlobal
                                 ? queryFrom.atZone(kolkataZone).toInstant().toEpochMilli()
                                 : minTime;
@@ -213,9 +229,9 @@ public class MarketAnalyticsService {
                                                 || !isValidCandle(p)) {
                                             return false;
                                         }
-                                        // OHLCVTMapper stores UTC LocalDateTime in OHLCVTPoint.time.
-                                        // Convert from UTC to Instant to get true epoch milliseconds matching minTime/maxTime.
-                                        long timestamp = p.getTime().atZone(java.time.ZoneOffset.UTC)
+                                        // For global instruments, candle timestamps are UTC.
+                                        // For Indian stocks/indices, candle timestamps are IST (Asia/Kolkata).
+                                        long timestamp = p.getTime().atZone(pointZone)
                                                 .toInstant()
                                                 .toEpochMilli();
                                         return timestamp >= symMinTime && timestamp <= symMaxTime;
@@ -242,7 +258,7 @@ public class MarketAnalyticsService {
                                 // Find the most recent active session date available in data points.
                                 java.time.LocalDate latestTradingDate = symbolData.getDataPoints().stream()
                                         .filter(this::isValidCandle)
-                                        .map(pt -> pt.getTime().atZone(java.time.ZoneOffset.UTC).toLocalDate())
+                                        .map(pt -> pt.getTime().atZone(pointZone).toLocalDate())
                                         .max(java.util.Comparator.naturalOrder())
                                         .orElse(null);
                                 if (latestTradingDate != null) {
@@ -251,7 +267,7 @@ public class MarketAnalyticsService {
                                     filteredPoints = symbolData.getDataPoints().stream()
                                             .filter(p -> {
                                                 if (p == null || p.getTime() == null || !isValidCandle(p)) return false;
-                                                long ts = p.getTime().atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
+                                                long ts = p.getTime().atZone(pointZone).toInstant().toEpochMilli();
                                                 return ts >= fallbackMin && ts <= fallbackMax;
                                             })
                                             .sorted(Comparator.comparing(com.am.common.investment.model.historical.OHLCVTPoint::getTime))
@@ -305,6 +321,7 @@ public class MarketAnalyticsService {
                     }
                 }
             }
+            ensureRequestedSymbolAliases(response, symbols, canonicalSymbols);
             return response;
         } catch (Exception e) {
             log.error("getHistoricalCharts", "Error fetching historical charts: " + e.getMessage());
@@ -352,6 +369,75 @@ public class MarketAnalyticsService {
                         "HSI", "^HSI", "HANG SENG", "SGX NIFTY").contains(up);
     }
 
+    static String canonicalizeChartSymbols(String symbols) {
+        if (symbols == null || symbols.isBlank()) {
+            return "";
+        }
+        return java.util.Arrays.stream(symbols.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(MarketAnalyticsService::canonicalizeIndexSymbol)
+                .collect(Collectors.joining(","));
+    }
+
+    static String canonicalizeIndexSymbol(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            return "";
+        }
+        String clean = symbol.trim().toUpperCase(Locale.ROOT);
+        for (String prefix : List.of("GLOBAL_INDEX|", "GLOBAL_INDEX:", "NSE_INDEX|", "NSE_INDEX:",
+                "BSE_INDEX|", "BSE_INDEX:", "NSE_EQ|", "BSE_EQ|", "NSE_EQ:", "BSE_EQ:",
+                "NSE:", "BSE:")) {
+            if (clean.startsWith(prefix)) {
+                clean = clean.substring(prefix.length()).trim();
+                break;
+            }
+        }
+        return switch (clean) {
+            case "NIFTY", "NIFTY50" -> "NIFTY 50";
+            case "BANKNIFTY", "NIFTYBANK" -> "NIFTY BANK";
+            case "FINNIFTY", "NIFTY FIN SERVICE", "NIFTY FINANCIAL SERVICES", "NIFTY FINANCIAL" -> "NIFTY FIN SERVICES";
+            case "MIDCPNIFTY", "NIFTY MID SELECT", "NIFTY MIDCAP SELECT", "MIDCAPNIFTY", "NIFTY SELECT" -> "NIFTY MIDCAP 50";
+            case "NIFTYNXT50", "NIFTY NEXT50", "NIFTY JR", "NIFTYJUNIOR" -> "NIFTY NEXT 50";
+            case "NIFTY100" -> "NIFTY 100";
+            case "NIFTY200" -> "NIFTY 200";
+            case "NIFTY500" -> "NIFTY 500";
+            case "NIFTYMIDCAP100", "NIFTY MID 100" -> "NIFTY MIDCAP 100";
+            case "NIFTYSMALLCAP100", "NIFTY SMLCAP 100", "NIFTY SML 100" -> "NIFTY SMALLCAP 100";
+            case "NIFTYAUTO" -> "NIFTY AUTO";
+            case "NIFTYIT" -> "NIFTY IT";
+            case "NIFTYPHARMA", "NIFTY PHARMACEUTICALS" -> "NIFTY PHARMA";
+            case "NIFTYMETAL" -> "NIFTY METAL";
+            case "NIFTYFMCG" -> "NIFTY FMCG";
+            case "NIFTYENERGY" -> "NIFTY ENERGY";
+            case "NIFTYREALTY" -> "NIFTY REALTY";
+            case "NIFTYPSUBANK" -> "NIFTY PSU BANK";
+            case "NIFTYPVTBANK", "NIFTY PRIVATE BANK" -> "NIFTY PVT BANK";
+            case "BSESENSEX", "BSE SENSEX", "SENSEX 30" -> "SENSEX";
+            case "BSEBANKEX", "BSE BANKEX" -> "BANKEX";
+            case "INDIAVIX", "VIX" -> "INDIA VIX";
+            default -> clean;
+        };
+    }
+
+    private void ensureRequestedSymbolAliases(com.am.marketdata.api.model.HistoricalDataResponseV1 response,
+            String requestedSymbols, String canonicalSymbols) {
+        if (response == null || response.getData() == null || requestedSymbols == null || canonicalSymbols == null
+                || requestedSymbols.equalsIgnoreCase(canonicalSymbols)) {
+            return;
+        }
+        List<String> reqList = new ArrayList<>(splitChartSymbols(requestedSymbols));
+        List<String> canList = new ArrayList<>(splitChartSymbols(canonicalSymbols));
+        for (int i = 0; i < reqList.size() && i < canList.size(); i++) {
+            String req = reqList.get(i);
+            String can = canList.get(i);
+            if (!req.equalsIgnoreCase(can) && response.getData().containsKey(can)
+                    && !response.getData().containsKey(req)) {
+                response.getData().put(req, response.getData().get(can));
+            }
+        }
+    }
+
     /**
      * Chooses the chart retrieval path only when an older client omitted the flag.
      *
@@ -380,7 +466,7 @@ public class MarketAnalyticsService {
         boolean allMatchIndexPattern = requestedSymbols.stream().allMatch(s -> {
             String up = s.toUpperCase(Locale.ROOT);
             return up.startsWith("NIFTY") || up.startsWith("BANKNIFTY") || up.startsWith("FINNIFTY")
-                    || up.startsWith("MIDCPNIFTY") || up.startsWith("SENSEX") || up.startsWith("BSE")
+                    || up.startsWith("MIDCPNIFTY") || up.startsWith("SENSEX") || up.startsWith("BANKEX") || up.startsWith("BSE")
                     || up.startsWith("INDIA VIX") || up.startsWith("INDIAVIX")
                     || Set.of("DJI", "SPX", "IXIC", "FTSE", "GDAXI", "FCHI", "N225", "HSI").contains(up);
         });

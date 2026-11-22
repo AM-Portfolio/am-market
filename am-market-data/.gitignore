@@ -247,3 +247,13 @@ market-data-service/src/test/resources/nseindices.yml
 !market-data-service/src/test/java/com/am/marketdata/service/ipo/IpoSyncServiceTest.java
 !market-data-api/src/test/java/com/am/marketdata/api/controller/
 !market-data-api/src/test/java/com/am/marketdata/api/controller/UpstoxIpoControllerTest.java
+
+# Keep Influx configuration validation regression tests under version control.
+!market-data-app/src/test/
+!market-data-app/src/test/java/
+!market-data-app/src/test/java/com/
+!market-data-app/src/test/java/com/am/
+!market-data-app/src/test/java/com/am/marketdata/
+!market-data-app/src/test/java/com/am/marketdata/config/
+!market-data-app/src/test/java/com/am/marketdata/config/InfluxConfigurationValidatorTest.java
+
