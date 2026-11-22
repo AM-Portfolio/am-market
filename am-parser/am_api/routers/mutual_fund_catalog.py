@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from am_api.deps import get_mf_catalog_service
 from am_common.logging.request_logging import get_logger
+from am_mf_catalog.holdings import parse_holdings_json, scheme_details_to_fund_document
 from am_mf_catalog.service import MfCatalogService
 
 log = get_logger("mf_catalog_api")
@@ -80,6 +81,49 @@ def scheme_performance(
             detail={"error": "Scheme not found", "schemeId": scheme_id},
         )
     return result
+
+
+@router.get("/{scheme_id}/holdings")
+def scheme_holdings(
+    scheme_id: str,
+    catalog: MfCatalogService = Depends(get_mf_catalog_service),
+):
+    """Scheme portfolio lookthrough for heatmap expand (by scheme code or ISIN)."""
+    if not catalog.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "Mutual fund catalog not configured"},
+        )
+    details = catalog.get_scheme_details(scheme_id)
+    if details is None:
+        return {
+            "available": False,
+            "schemeId": scheme_id,
+            "source": "UNAVAILABLE",
+            "holdings": [],
+        }
+    holdings = parse_holdings_json(details.get("holdingsJson"))
+    if not holdings:
+        return {
+            "available": False,
+            "schemeId": scheme_id,
+            "isin": details.get("isin"),
+            "schemeName": details.get("schemeName"),
+            "source": "MF_CATALOG",
+            "holdings": [],
+            "message": "No holdingsJson enrichment for this scheme",
+        }
+    fund = scheme_details_to_fund_document(details) or {}
+    return {
+        "available": True,
+        "schemeId": scheme_id,
+        "isin": details.get("isin"),
+        "schemeName": details.get("schemeName"),
+        "source": "MF_CATALOG",
+        "holdingsCount": len(holdings),
+        "holdings": holdings,
+        "fund": fund,
+    }
 
 
 @router.get("/{scheme_id}")

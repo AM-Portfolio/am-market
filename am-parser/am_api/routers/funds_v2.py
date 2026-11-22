@@ -10,6 +10,7 @@ from am_api.deps import (
     get_etf_service,
     get_fund_performance_service,
     get_holdings_service,
+    get_mf_catalog_service,
 )
 from am_api.schemas.fund_v2 import (
     FundDocument,
@@ -26,6 +27,8 @@ from am_etf.holdings_service import ETFHoldingsService
 from am_etf.lookup_service import EtfLookupService
 from am_etf.performance_service import FundPerformanceService
 from am_etf.service import ETFService
+from am_mf_catalog.holdings import scheme_details_to_fund_document
+from am_mf_catalog.service import MfCatalogService
 
 log = get_logger("funds_v2_api")
 router = APIRouter(tags=["Funds v2"])
@@ -85,17 +88,42 @@ def _etf_dict_to_fund(etf: dict, perf: Optional[dict] = None) -> FundDocument:
     )
 
 
+def _resolve_mf_funds(
+    items: List[str],
+    catalog: MfCatalogService,
+) -> tuple[List[FundDocument], List[str]]:
+    """Resolve open-ended schemes via mf_catalog enrichment holdings_json."""
+    funds: List[FundDocument] = []
+    not_found: List[str] = []
+    if not catalog.is_configured():
+        return funds, list(dict.fromkeys([s.strip() for s in items if s and s.strip()]))
+
+    for raw in items:
+        key = (raw or "").strip()
+        if not key:
+            continue
+        details = catalog.get_scheme_details(key)
+        mapped = scheme_details_to_fund_document(details) if details else None
+        if not mapped:
+            not_found.append(key)
+            continue
+        funds.append(FundDocument.model_validate(mapped))
+    return funds, not_found
+
+
 @router.post("/holdings", response_model=FundHoldingsLookupResponse)
 async def post_fund_holdings_lookup(
     body: FundHoldingsLookupRequest,
     lookup: EtfLookupService = Depends(get_etf_lookup_service),
     perf_svc: FundPerformanceService = Depends(get_fund_performance_service),
+    catalog: MfCatalogService = Depends(get_mf_catalog_service),
 ):
     types = _default_product_types(body.product_types)
     log.info("POST /v2/funds/holdings items=%s productTypes=%s", body.items, types)
 
     funds: List[FundDocument] = []
     not_found: List[str] = []
+    deduped_items = list(dict.fromkeys([s.strip() for s in body.items if s and s.strip()]))
 
     if _wants_etf(types):
         try:
@@ -134,14 +162,22 @@ async def post_fund_holdings_lookup(
                     fund.sparkline_closes = perf.sparkline_closes
             except Exception:
                 log.exception("v2 holdings performance batch failed — fail-open without returns")
-    elif _wants_mf(types):
-        # MF stub: accept productType, return empty with notFound
-        not_found = list(
-            dict.fromkeys([s.strip() for s in body.items if s and s.strip()])
-        )
+
+    if _wants_mf(types):
+        # Items still missing after ETF resolve (or MF-only request).
+        pending = not_found if _wants_etf(types) else deduped_items
+        if not _wants_etf(types):
+            not_found = []
+        mf_funds, mf_miss = _resolve_mf_funds(pending, catalog)
+        funds.extend(mf_funds)
+        if _wants_etf(types):
+            # Replace ETF not_found with remaining MF misses.
+            not_found = mf_miss
+        else:
+            not_found = mf_miss
 
     return FundHoldingsLookupResponse(
-        items=list(dict.fromkeys([s.strip() for s in body.items if s and s.strip()])),
+        items=deduped_items,
         totalFound=len(funds),
         funds=funds,
         notFound=not_found,
