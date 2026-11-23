@@ -400,8 +400,14 @@ def _search_where(
         sql += f"AND UPPER({prefix}amc_code) = %s "
         params.append(amc.strip().upper())
     if purchase_allowed and purchase_allowed.strip():
+        token = purchase_allowed.strip().upper()
+        # Clients sometimes send true/false; dig stores Y/N on mf_scheme.
+        if token in {"TRUE", "1", "YES"}:
+            token = "Y"
+        elif token in {"FALSE", "0", "NO"}:
+            token = "N"
         sql += f"AND UPPER({prefix}purchase_allowed) = %s "
-        params.append(purchase_allowed.strip().upper())
+        params.append(token)
     return sql, params
 
 
