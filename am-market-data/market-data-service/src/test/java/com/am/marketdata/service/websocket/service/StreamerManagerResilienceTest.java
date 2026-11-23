@@ -18,6 +18,8 @@ import com.am.marketdata.service.SymbolOrchestratorService;
 import com.am.marketdata.service.global.GlobalIndexCacheWriter;
 import com.am.marketdata.service.global.GlobalMarketScheduleService;
 import com.am.marketdata.service.websocket.processor.MarketDataProcessor;
+import com.am.marketdata.provider.upstox.converter.UpstoxV3FeedConverter;
+import com.upstox.feeder.MarketUpdateV3;
 import java.util.concurrent.Executor;
 import java.util.Map;
 import java.time.Instant;
@@ -56,6 +58,8 @@ class StreamerManagerResilienceTest {
     private GlobalMarketScheduleService globalMarketScheduleService;
     @Mock
     private MarketHoursService marketHoursService;
+    @Mock
+    private UpstoxV3FeedConverter v3FeedConverter;
     private StreamerManager manager;
 
     @BeforeEach
@@ -80,7 +84,8 @@ class StreamerManagerResilienceTest {
                 globalIndexConfigRepository,
                 globalMarketScheduleService,
                 marketHoursService,
-                Runnable::run);
+                Runnable::run,
+                v3FeedConverter);
         ReflectionTestUtils.setField(manager, "ingestionEnabled", true);
         ReflectionTestUtils.setField(manager, "reconnectInitialDelayMs", 1000L);
         ReflectionTestUtils.setField(manager, "reconnectMaxDelayMs", 5000L);
@@ -212,6 +217,28 @@ class StreamerManagerResilienceTest {
         verify(publisher).publish(published.capture());
         org.junit.jupiter.api.Assertions.assertNull(
                 published.getValue().getQuotes().get("TCS").getChangePercent());
+    }
+
+    @Test
+    void marketUpdateV3UsesTheSameEnrichmentAndPersistencePath() {
+        when(cacheService.getPreviousClose("NIFTY 500")).thenReturn(24000.0);
+        when(cacheService.cacheLatestPrices(any())).thenReturn(true);
+        OHLCQuote quote = OHLCQuote.builder()
+                .lastPrice(23852.55)
+                .quoteTimestamp(Instant.now())
+                .build();
+        when(v3FeedConverter.convert(any(MarketUpdateV3.class)))
+                .thenReturn(Map.of("NIFTY 500", quote));
+
+        manager.onMessage(org.mockito.Mockito.mock(MarketUpdateV3.class));
+
+        org.junit.jupiter.api.Assertions.assertEquals(-147.45, quote.getChange(), 0.001);
+        org.junit.jupiter.api.Assertions.assertEquals(-0.614375, quote.getChangePercent(), 0.000001);
+        ArgumentCaptor<MarketDataUpdate> published = ArgumentCaptor.forClass(MarketDataUpdate.class);
+        verify(publisher).publish(published.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(-0.614375,
+                published.getValue().getQuotes().get("NIFTY 500").getChangePercent(), 0.000001);
+        verify(processor).processUpdate(any());
     }
 
     @Test

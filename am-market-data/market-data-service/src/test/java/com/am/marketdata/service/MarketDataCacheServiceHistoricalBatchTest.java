@@ -3,6 +3,8 @@ package com.am.marketdata.service;
 import com.am.common.investment.model.historical.HistoricalData;
 import com.am.common.investment.model.historical.OHLCVTPoint;
 import com.am.marketdata.common.model.TimeFrame;
+import com.am.marketdata.common.model.OHLCQuote;
+import com.marketdata.common.MarketDataProvider;
 import com.am.marketdata.redis.model.StockBars;
 import com.am.marketdata.redis.service.StockCacheService;
 import com.am.marketdata.service.model.PreviousCloseDocument;
@@ -21,6 +23,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -62,6 +65,27 @@ class MarketDataCacheServiceHistoricalBatchTest {
                 mock(StockCacheService.class), new ObjectMapper(), redis, repository, null, null);
 
         assertNull(cache.getPreviousClose("TCS"));
+    }
+
+    @Test
+    void providerFallbackRunsOnceThenUsesTheHotSessionBaseline() {
+        @SuppressWarnings("unchecked")
+        RedisTemplate<String, String> redis = mock(RedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.multiGet(anyList())).thenReturn(Arrays.asList(null, null));
+        when(values.get(anyString())).thenReturn(null);
+        MarketDataProvider provider = mock(MarketDataProvider.class);
+        when(provider.getOHLC(anyList(), eq(TimeFrame.DAY))).thenReturn(Map.of(
+                "TCS", OHLCQuote.builder().lastPrice(2450.0).previousClose(2400.0).build()));
+        MarketDataCacheService cache = new MarketDataCacheService(
+                mock(StockCacheService.class), new ObjectMapper(), redis, null, null, null);
+        ReflectionTestUtils.setField(cache, "upstoxMarketDataProvider", provider);
+
+        assertEquals(2400.0, cache.getPreviousClose("TCS"));
+        assertEquals(2400.0, cache.getPreviousClose("TCS"));
+        verify(provider, times(1)).getOHLC(anyList(), eq(TimeFrame.DAY));
     }
 
     @Test
