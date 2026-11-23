@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import com.am.marketdata.common.model.MarketDataUpdate;
 import com.upstox.feeder.MarketUpdateV3;
+import com.am.marketdata.provider.upstox.converter.UpstoxV3FeedConverter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import java.util.HashMap;
@@ -61,6 +62,7 @@ public class StreamerManager implements StreamerListener {
     private final GlobalMarketScheduleService globalMarketScheduleService;
     private final com.am.marketdata.service.MarketHoursService marketHoursService;
     private final Executor cacheBackfillExecutor;
+    private final UpstoxV3FeedConverter v3FeedConverter;
 
     @Value("${market.websocket.reconnect-initial-delay-ms:5000}")
     private long reconnectInitialDelayMs;
@@ -139,7 +141,8 @@ public class StreamerManager implements StreamerListener {
             GlobalIndexConfigRepository globalIndexConfigRepository,
             GlobalMarketScheduleService globalMarketScheduleService,
             com.am.marketdata.service.MarketHoursService marketHoursService,
-            @Qualifier("cacheBackfillExecutor") Executor cacheBackfillExecutor) {
+            @Qualifier("cacheBackfillExecutor") Executor cacheBackfillExecutor,
+            UpstoxV3FeedConverter v3FeedConverter) {
         this.streamer = streamer;
         this.persistenceService = persistenceService;
         this.processor = processor;
@@ -153,6 +156,7 @@ public class StreamerManager implements StreamerListener {
         this.globalMarketScheduleService = globalMarketScheduleService;
         this.marketHoursService = marketHoursService;
         this.cacheBackfillExecutor = cacheBackfillExecutor;
+        this.v3FeedConverter = v3FeedConverter;
     }
 
     // @PostConstruct
@@ -313,8 +317,17 @@ public class StreamerManager implements StreamerListener {
                     double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
                     double close = quote.getOhlc() != null ? quote.getOhlc().getClose() : 0.0;
                     double prevClose = quote.getPreviousClose();
-                    double change = lastPrice - prevClose;
-                    double changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0.0;
+                    Double change = null;
+                    Double changePercent = null;
+                    if (Double.isFinite(prevClose) && prevClose > 0.0) {
+                        change = lastPrice - prevClose;
+                        changePercent = (change / prevClose) * 100;
+                        quote.setChange(change);
+                        quote.setChangePercent(changePercent);
+                    } else {
+                        quote.setChange(null);
+                        quote.setChangePercent(null);
+                    }
 
                     quotes.put(symbol, MarketDataUpdate.QuoteChange.builder()
                             .lastPrice(lastPrice)
@@ -322,7 +335,7 @@ public class StreamerManager implements StreamerListener {
                             .high(high)
                             .low(low)
                             .close(close)
-                            .previousClose(prevClose)
+                            .previousClose(prevClose > 0.0 ? prevClose : null)
                             .change(change)
                             .changePercent(changePercent)
                             .build());
@@ -580,10 +593,17 @@ public class StreamerManager implements StreamerListener {
         // 1. Publish to WebSocket (UI) - expects MarketUpdateV3 or Map<String, OHLCQuote>
         if (message instanceof MarketUpdateV3) {
             try {
-                processUpdateForPublisher((MarketUpdateV3) message);
+                // Normalize provider-specific V3 feeds into the existing common
+                // OHLC path. This keeps one enrichment, cache, publish, and
+                // persistence flow for every WebSocket message type.
+                Map<String, OHLCQuote> converted = v3FeedConverter.convert((MarketUpdateV3) message);
+                if (!converted.isEmpty()) {
+                    onMessage(converted);
+                }
             } catch (Exception e) {
                 log.error("StreamerManager", "Error broadcasting to UI", e);
             }
+            return;
         } else if (message instanceof Map) {
             try {
                 @SuppressWarnings("unchecked")
@@ -624,19 +644,30 @@ public class StreamerManager implements StreamerListener {
                         Double prevClose = cacheService.getPreviousClose(symbol);
                         
                         // 2. Fall back to the streaming tick's previousClose if the cache is empty
-                        if (prevClose == null || prevClose == 0.0) {
+                        if (prevClose == null || !Double.isFinite(prevClose) || prevClose <= 0.0) {
                             prevClose = quote.getPreviousClose();
                             // Dynamically populate Redis so subsequent updates don't hit the fallback logic
-                            if (prevClose != null && prevClose != 0.0) {
+                            if (prevClose != null && Double.isFinite(prevClose) && prevClose > 0.0) {
                                 cacheService.setPreviousClose(symbol, prevClose);
                             }
-                        } else {
-                            // Sync the correct close value back into the quote object
+                        }
+                        if (prevClose != null && Double.isFinite(prevClose) && prevClose > 0.0) {
+                            // The same common quote proceeds to Redis/Mongo and Kafka below.
+                            // Set the resolved baseline before either path can serialize it.
                             quote.setPreviousClose(prevClose);
                         }
 
-                        double change = lastPrice - prevClose;
-                        double changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0.0;
+                        Double change = null;
+                        Double changePercent = null;
+                        if (prevClose != null && Double.isFinite(prevClose) && prevClose > 0.0) {
+                            change = lastPrice - prevClose;
+                            changePercent = (change / prevClose) * 100;
+                            quote.setChange(change);
+                            quote.setChangePercent(changePercent);
+                        } else {
+                            quote.setChange(null);
+                            quote.setChangePercent(null);
+                        }
 
                         MarketDataUpdate.QuoteChange changeObj = MarketDataUpdate.QuoteChange.builder()
                                 .lastPrice(lastPrice)
@@ -736,38 +767,6 @@ public class StreamerManager implements StreamerListener {
     private record VoteSnapshot(boolean indianOpen, boolean globalOpen, boolean readSuccessfully) {
         boolean anyOpen() {
             return indianOpen || globalOpen;
-        }
-    }
-
-    private void processUpdateForPublisher(MarketUpdateV3 update) {
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            // Use ObjectMapper to convert to Map to avoid direct getter dependency
-            java.util.Map<String, Object> map = mapper.convertValue(update, java.util.Map.class);
-
-            String symbol = (String) map.getOrDefault("instrument_key", map.get("instrumentKey"));
-            Object ltpObj = map.getOrDefault("ltp", map.get("lastPrice"));
-            Double ltp = null;
-            if (ltpObj instanceof Number) {
-                ltp = ((Number) ltpObj).doubleValue();
-            }
-
-            if (symbol != null && ltp != null) {
-                Map<String, MarketDataUpdate.QuoteChange> quotes = new HashMap<>();
-                MarketDataUpdate.QuoteChange set = MarketDataUpdate.QuoteChange.builder()
-                        .lastPrice(ltp)
-                        .build();
-                quotes.put(symbol, set);
-
-                MarketDataUpdate data = MarketDataUpdate.builder()
-                        .timestamp(System.currentTimeMillis())
-                        .quotes(quotes)
-                        .build();
-
-                publisher.publish(data);
-            }
-        } catch (Exception e) {
-            // log.warn("StreamerManager", "Error processing update for publisher", e);
         }
     }
 

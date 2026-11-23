@@ -42,6 +42,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.nio.charset.StandardCharsets;
 
@@ -66,6 +67,17 @@ public class MarketDataCacheService {
     private final PreviousCloseRepository previousCloseRepository;
     private final MarketHoursService marketHoursService;
     private final MarketCalendarService marketCalendarService;
+    private record SessionClose(LocalDate sessionDate, double price) {}
+    private static final long MISSING_CLOSE_RETRY_MILLIS = TimeUnit.SECONDS.toMillis(5);
+    private final Map<String, SessionClose> hotPreviousCloses = new ConcurrentHashMap<>();
+    private final Map<String, Long> missingCloseRetryAt = new ConcurrentHashMap<>();
+    /**
+     * Cold-start provider lookups are single-flight per exchange/symbol. This
+     * prevents a burst of websocket ticks (or several UI surfaces) from
+     * issuing the same provider request repeatedly while the baseline is being
+     * repaired.
+     */
+    private final Map<String, CompletableFuture<Double>> previousCloseProviderLoads = new ConcurrentHashMap<>();
 
     @Autowired(required = false)
     @org.springframework.beans.factory.annotation.Qualifier("upstoxMarketDataProvider")
@@ -129,14 +141,28 @@ public class MarketDataCacheService {
         return symbol.toUpperCase().trim();
     }
 
+    private static String canonicalExchange(String symbol) {
+        String prefix = symbol.contains(":") ? symbol.substring(0, symbol.indexOf(':'))
+                : (symbol.contains("|") ? symbol.substring(0, symbol.indexOf('|')) : "NSE");
+        String normalized = prefix.toUpperCase().trim();
+        if (normalized.startsWith("NSE")) return "NSE";
+        if (normalized.startsWith("BSE")) return "BSE";
+        return normalized;
+    }
+
     public Double getPreviousClose(String symbol) {
         String normalizedSymbol = normalizeSymbol(symbol);
         if (normalizedSymbol == null) {
             return null;
         }
-        String exchange = symbol.contains(":") ? symbol.substring(0, symbol.indexOf(':'))
-                : (symbol.contains("|") ? symbol.substring(0, symbol.indexOf('|')) : "NSE");
+        String exchange = canonicalExchange(symbol);
         LocalDate expectedQuoteDate = expectedQuoteSessionDate(exchange);
+        if (expectedQuoteDate == null) return null;
+        String hotKey = exchange + ":" + normalizedSymbol;
+        SessionClose hot = hotPreviousCloses.get(hotKey);
+        if (hot != null && expectedQuoteDate.equals(hot.sessionDate())) return hot.price();
+        Long retryAt = missingCloseRetryAt.get(hotKey);
+        if (retryAt != null && System.currentTimeMillis() < retryAt) return null;
         try {
             List<String> closeMetadata = redisTemplate.opsForValue().multiGet(List.of(
                     "market:prev-close:" + normalizedSymbol,
@@ -145,7 +171,11 @@ public class MarketDataCacheService {
             String closeDateValue = closeMetadata != null && closeMetadata.size() > 1 ? closeMetadata.get(1) : null;
             if (closeValue != null && expectedQuoteDate != null && expectedQuoteDate.toString().equals(closeDateValue)) {
                 double parsed = Double.parseDouble(closeValue);
-                if (Double.isFinite(parsed) && parsed > 0.0) return parsed;
+                if (Double.isFinite(parsed) && parsed > 0.0) {
+                    hotPreviousCloses.put(hotKey, new SessionClose(expectedQuoteDate, parsed));
+                    missingCloseRetryAt.remove(hotKey);
+                    return parsed;
+                }
             }
 
             // Fall back to the dated quote snapshot when scalar metadata is absent.
@@ -158,6 +188,8 @@ public class MarketDataCacheService {
                 boolean sessionMatches = quoteDate != null && expectedQuoteDate != null && quoteDate.equals(expectedQuoteDate);
                 boolean recentUndatedSnapshot = quoteDate == null && isRecent(updatedAt, marketQuoteMaxAgeMinutes);
                 if (previousClose != null && (sessionMatches || recentUndatedSnapshot)) {
+                    hotPreviousCloses.put(hotKey, new SessionClose(expectedQuoteDate, previousClose));
+                    missingCloseRetryAt.remove(hotKey);
                     return previousClose;
                 }
             }
@@ -170,13 +202,65 @@ public class MarketDataCacheService {
             try {
                 Optional<PreviousCloseDocument> docOpt = previousCloseRepository.findById(normalizedSymbol);
                 if (docOpt.isPresent() && docOpt.get().getPreviousClose() != null
-                        && docOpt.get().getPreviousClose() > 0) {
-                    return docOpt.get().getPreviousClose();
+                        && Double.isFinite(docOpt.get().getPreviousClose())
+                        && docOpt.get().getPreviousClose() > 0
+                        && expectedQuoteDate.toString().equals(docOpt.get().getTradeDate())) {
+                    double close = docOpt.get().getPreviousClose();
+                    hotPreviousCloses.put(hotKey, new SessionClose(expectedQuoteDate, close));
+                    missingCloseRetryAt.remove(hotKey);
+                    return close;
                 }
             } catch (Exception mongoEx) {
                 log.warn("getPreviousClose", "Failed to get previous close from MongoDB for symbol: " + symbol, mongoEx);
             }
         }
+
+        // The persisted baseline is missing or stale. Resolve it once from
+        // the configured provider before allowing the tick to be published.
+        // getOHLC is the existing provider path and preserves its instrument
+        // aliases and naming conventions; the result is written through the
+        // same setPreviousClose method used by the scheduler.
+        if (upstoxMarketDataProvider != null) {
+            CompletableFuture<Double> load = previousCloseProviderLoads.computeIfAbsent(hotKey,
+                    ignored -> CompletableFuture.supplyAsync(() -> {
+                        try {
+                            Map<String, OHLCQuote> providerQuotes = upstoxMarketDataProvider
+                                    .getOHLC(List.of(symbol), TimeFrame.DAY);
+                            if (providerQuotes != null) {
+                                for (OHLCQuote providerQuote : providerQuotes.values()) {
+                                    if (providerQuote == null) continue;
+                                    double candidate = providerQuote.getPreviousClose();
+                                    if (!(Double.isFinite(candidate) && candidate > 0.0)
+                                            && providerQuote.getChange() != null
+                                            && Double.isFinite(providerQuote.getChange())
+                                            && Double.isFinite(providerQuote.getLastPrice())
+                                            && providerQuote.getLastPrice() > 0.0) {
+                                        candidate = providerQuote.getLastPrice() - providerQuote.getChange();
+                                    }
+                                    if (Double.isFinite(candidate) && candidate > 0.0) {
+                                        setPreviousClose(symbol, candidate);
+                                        return candidate;
+                                    }
+                                }
+                            }
+                        } catch (Exception providerEx) {
+                            log.warn("getPreviousClose", "Provider baseline lookup failed for symbol: " + symbol,
+                                    providerEx);
+                        }
+                        return null;
+                    }, cacheBackfillExecutor != null ? cacheBackfillExecutor : CompletableFuture.delayedExecutor(0, TimeUnit.MILLISECONDS))
+                            .whenComplete((value, error) -> previousCloseProviderLoads.remove(hotKey)));
+            try {
+                Double providerClose = load.get(1500, TimeUnit.MILLISECONDS);
+                if (providerClose != null && Double.isFinite(providerClose) && providerClose > 0.0) {
+                    missingCloseRetryAt.remove(hotKey);
+                    return providerClose;
+                }
+            } catch (Exception providerWaitEx) {
+                log.warn("getPreviousClose", "Provider baseline lookup timed out for symbol: " + symbol);
+            }
+        }
+        missingCloseRetryAt.put(hotKey, System.currentTimeMillis() + MISSING_CLOSE_RETRY_MILLIS);
         return null;
     }
 
@@ -205,6 +289,20 @@ public class MarketDataCacheService {
         }
         log.warn("expectedQuoteSessionDate", "No open session found exchange={} around date={}", exchange, today);
         return null;
+    }
+
+    private LocalDate previousCloseWriteSessionDate(String exchange) {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        if (marketCalendarService != null) {
+            try {
+                MarketCalendarService.SessionTiming timing = marketCalendarService.getTimings(exchange, today);
+                if (timing != null && timing.open()) return today;
+            } catch (Exception calendarException) {
+                log.warn("previousCloseWriteSessionDate", "Calendar lookup failed exchange={} date={}", exchange, today);
+                return null;
+            }
+        }
+        return expectedQuoteSessionDate(exchange);
     }
 
     private static Double readPositiveNumber(Object value) {
@@ -292,21 +390,23 @@ public class MarketDataCacheService {
     }
 
     public void setPreviousClose(String symbol, double previousClose) {
-        if (previousClose <= 0) {
+        if (!Double.isFinite(previousClose) || previousClose <= 0) {
             return;
         }
         String normalizedSymbol = normalizeSymbol(symbol);
         if (normalizedSymbol == null) {
             return;
         }
-        String exchange = symbol.contains(":") ? symbol.substring(0, symbol.indexOf(':'))
-                : (symbol.contains("|") ? symbol.substring(0, symbol.indexOf('|')) : "NSE");
-        LocalDate quoteSessionDate = expectedQuoteSessionDate(exchange);
+        String exchange = canonicalExchange(symbol);
+        LocalDate quoteSessionDate = previousCloseWriteSessionDate(exchange);
         if (quoteSessionDate == null) {
             log.warn("setPreviousClose", "Skipping previous-close cache write without a verified session date symbol={} exchange={}",
                     symbol, exchange);
             return;
         }
+        String hotKey = exchange + ":" + normalizedSymbol;
+        hotPreviousCloses.put(hotKey, new SessionClose(quoteSessionDate, previousClose));
+        missingCloseRetryAt.remove(hotKey);
         // 1. Cache to Redis
         try {
             String redisKey = "market:prev-close:" + normalizedSymbol;
