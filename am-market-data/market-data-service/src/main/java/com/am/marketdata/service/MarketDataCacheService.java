@@ -71,6 +71,13 @@ public class MarketDataCacheService {
     private static final long MISSING_CLOSE_RETRY_MILLIS = TimeUnit.SECONDS.toMillis(5);
     private final Map<String, SessionClose> hotPreviousCloses = new ConcurrentHashMap<>();
     private final Map<String, Long> missingCloseRetryAt = new ConcurrentHashMap<>();
+    /**
+     * Cold-start provider lookups are single-flight per exchange/symbol. This
+     * prevents a burst of websocket ticks (or several UI surfaces) from
+     * issuing the same provider request repeatedly while the baseline is being
+     * repaired.
+     */
+    private final Map<String, CompletableFuture<Double>> previousCloseProviderLoads = new ConcurrentHashMap<>();
 
     @Autowired(required = false)
     @org.springframework.beans.factory.annotation.Qualifier("upstoxMarketDataProvider")
@@ -205,6 +212,52 @@ public class MarketDataCacheService {
                 }
             } catch (Exception mongoEx) {
                 log.warn("getPreviousClose", "Failed to get previous close from MongoDB for symbol: " + symbol, mongoEx);
+            }
+        }
+
+        // The persisted baseline is missing or stale. Resolve it once from
+        // the configured provider before allowing the tick to be published.
+        // getOHLC is the existing provider path and preserves its instrument
+        // aliases and naming conventions; the result is written through the
+        // same setPreviousClose method used by the scheduler.
+        if (upstoxMarketDataProvider != null) {
+            CompletableFuture<Double> load = previousCloseProviderLoads.computeIfAbsent(hotKey,
+                    ignored -> CompletableFuture.supplyAsync(() -> {
+                        try {
+                            Map<String, OHLCQuote> providerQuotes = upstoxMarketDataProvider
+                                    .getOHLC(List.of(symbol), TimeFrame.DAY);
+                            if (providerQuotes != null) {
+                                for (OHLCQuote providerQuote : providerQuotes.values()) {
+                                    if (providerQuote == null) continue;
+                                    double candidate = providerQuote.getPreviousClose();
+                                    if (!(Double.isFinite(candidate) && candidate > 0.0)
+                                            && providerQuote.getChange() != null
+                                            && Double.isFinite(providerQuote.getChange())
+                                            && Double.isFinite(providerQuote.getLastPrice())
+                                            && providerQuote.getLastPrice() > 0.0) {
+                                        candidate = providerQuote.getLastPrice() - providerQuote.getChange();
+                                    }
+                                    if (Double.isFinite(candidate) && candidate > 0.0) {
+                                        setPreviousClose(symbol, candidate);
+                                        return candidate;
+                                    }
+                                }
+                            }
+                        } catch (Exception providerEx) {
+                            log.warn("getPreviousClose", "Provider baseline lookup failed for symbol: " + symbol,
+                                    providerEx);
+                        }
+                        return null;
+                    }, cacheBackfillExecutor != null ? cacheBackfillExecutor : CompletableFuture.delayedExecutor(0, TimeUnit.MILLISECONDS))
+                            .whenComplete((value, error) -> previousCloseProviderLoads.remove(hotKey)));
+            try {
+                Double providerClose = load.get(1500, TimeUnit.MILLISECONDS);
+                if (providerClose != null && Double.isFinite(providerClose) && providerClose > 0.0) {
+                    missingCloseRetryAt.remove(hotKey);
+                    return providerClose;
+                }
+            } catch (Exception providerWaitEx) {
+                log.warn("getPreviousClose", "Provider baseline lookup timed out for symbol: " + symbol);
             }
         }
         missingCloseRetryAt.put(hotKey, System.currentTimeMillis() + MISSING_CLOSE_RETRY_MILLIS);
