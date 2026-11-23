@@ -459,16 +459,21 @@ def _run_search(
 
 
 def _search_order_by(*, empty_query: bool, alias: str, select_sql: str) -> str:
-    """Empty Explore must not ORDER BY scheme_name (360 ONE alphabetical wall)."""
+    """Empty Explore must not ORDER BY scheme_name (360 ONE alphabetical wall).
+
+    Prefer rows with latest_nav so SCH-only / new SIF (null NAV) do not fill the first page.
+    """
     has_enrich = "mf_scheme_enrichment" in select_sql
+    nav_null = f"({alias}latest_nav IS NULL)" if alias else "(latest_nav IS NULL)"
     if empty_query and has_enrich and alias:
         return (
-            "ORDER BY (e.aum IS NULL), e.aum DESC, s.amc_code, s.scheme_name LIMIT %s"
+            f"ORDER BY {nav_null}, (e.aum IS NULL), e.aum DESC, "
+            "s.amc_code, s.scheme_name LIMIT %s"
         )
     if empty_query and alias:
-        return "ORDER BY s.amc_code, s.scheme_name LIMIT %s"
+        return f"ORDER BY {nav_null}, s.amc_code, s.scheme_name LIMIT %s"
     if empty_query:
-        return "ORDER BY amc_code, scheme_name LIMIT %s"
+        return f"ORDER BY {nav_null}, amc_code, scheme_name LIMIT %s"
     if alias:
         return "ORDER BY s.scheme_name LIMIT %s"
     return "ORDER BY scheme_name LIMIT %s"
