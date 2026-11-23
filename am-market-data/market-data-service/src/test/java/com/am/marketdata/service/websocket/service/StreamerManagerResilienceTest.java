@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.am.common.investment.persistence.document.global.GlobalIndexConfigRepository;
 import com.am.marketdata.common.MarketDataStreamer;
 import com.am.marketdata.common.model.OHLCQuote;
+import com.am.marketdata.common.model.MarketDataUpdate;
 import com.am.marketdata.common.service.MarketDataPublisher;
 import com.am.marketdata.service.MarketDataCacheService;
 import com.am.marketdata.service.MarketDataPersistenceService;
@@ -27,6 +28,7 @@ import org.mockito.MockitoAnnotations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
 
 class StreamerManagerResilienceTest {
 
@@ -163,6 +165,53 @@ class StreamerManagerResilienceTest {
         manager.onMessage(Map.of("NIFTY 50", quote));
 
         org.junit.jupiter.api.Assertions.assertFalse(manager.isStreaming());
+    }
+
+    @Test
+    void savedBaselineEnrichesAnIndexQuoteBeforeCacheAndKafka() {
+        when(cacheService.getPreviousClose("NIFTY 500")).thenReturn(24000.0);
+        when(cacheService.cacheLatestPrices(any())).thenReturn(true);
+        OHLCQuote quote = OHLCQuote.builder()
+                .lastPrice(23852.55)
+                .quoteTimestamp(Instant.now())
+                .build();
+
+        manager.onMessage(Map.of("NIFTY 500", quote));
+
+        org.junit.jupiter.api.Assertions.assertEquals(24000.0, quote.getPreviousClose());
+        org.junit.jupiter.api.Assertions.assertEquals(-147.45, quote.getChange(), 0.001);
+        org.junit.jupiter.api.Assertions.assertEquals(-0.614375, quote.getChangePercent(), 0.000001);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, OHLCQuote>> kafkaInput = ArgumentCaptor.forClass(Map.class);
+        verify(processor).processUpdate(kafkaInput.capture());
+        org.junit.jupiter.api.Assertions.assertSame(quote, kafkaInput.getValue().get("NIFTY 500"));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, OHLCQuote>> cacheInput = ArgumentCaptor.forClass(Map.class);
+        verify(cacheService).cacheLatestPrices(cacheInput.capture());
+        org.junit.jupiter.api.Assertions.assertSame(quote, cacheInput.getValue().get("NIFTY 500"));
+        ArgumentCaptor<MarketDataUpdate> published = ArgumentCaptor.forClass(MarketDataUpdate.class);
+        verify(publisher).publish(published.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(-147.45,
+                published.getValue().getQuotes().get("NIFTY 500").getChange(), 0.001);
+    }
+
+    @Test
+    void missingBaselineRemainsUnavailableInsteadOfPublishingFalseZero() {
+        when(cacheService.getPreviousClose("TCS")).thenReturn(null);
+        when(cacheService.cacheLatestPrices(any())).thenReturn(true);
+        OHLCQuote quote = OHLCQuote.builder()
+                .lastPrice(2450.0)
+                .quoteTimestamp(Instant.now())
+                .build();
+
+        manager.onMessage(Map.of("TCS", quote));
+
+        org.junit.jupiter.api.Assertions.assertNull(quote.getChange());
+        org.junit.jupiter.api.Assertions.assertNull(quote.getChangePercent());
+        ArgumentCaptor<MarketDataUpdate> published = ArgumentCaptor.forClass(MarketDataUpdate.class);
+        verify(publisher).publish(published.capture());
+        org.junit.jupiter.api.Assertions.assertNull(
+                published.getValue().getQuotes().get("TCS").getChangePercent());
     }
 
     @Test

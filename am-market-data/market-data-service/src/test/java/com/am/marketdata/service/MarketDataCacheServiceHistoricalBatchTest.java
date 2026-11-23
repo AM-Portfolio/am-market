@@ -5,19 +5,64 @@ import com.am.common.investment.model.historical.OHLCVTPoint;
 import com.am.marketdata.common.model.TimeFrame;
 import com.am.marketdata.redis.model.StockBars;
 import com.am.marketdata.redis.service.StockCacheService;
+import com.am.marketdata.service.model.PreviousCloseDocument;
+import com.am.marketdata.service.repo.PreviousCloseRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.*;
 
 class MarketDataCacheServiceHistoricalBatchTest {
+
+    @Test
+    void usesOneDatedBaselineReadForIndexAliasesDuringAStreamBurst() {
+        @SuppressWarnings("unchecked")
+        RedisTemplate<String, String> redis = mock(RedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        String today = LocalDate.now(ZoneId.of("Asia/Kolkata")).toString();
+        when(values.multiGet(anyList())).thenReturn(Arrays.asList("24000.0", today));
+        MarketDataCacheService cache = new MarketDataCacheService(
+                mock(StockCacheService.class), new ObjectMapper(), redis, null, null, null);
+
+        assertEquals(24000.0, cache.getPreviousClose("NSE_INDEX|Nifty 500"));
+        assertEquals(24000.0, cache.getPreviousClose("NIFTY 500"));
+        verify(values, times(1)).multiGet(anyList());
+    }
+
+    @Test
+    void doesNotUseYesterdayMongoBaselineForTodayLiveQuote() {
+        @SuppressWarnings("unchecked")
+        RedisTemplate<String, String> redis = mock(RedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        PreviousCloseRepository repository = mock(PreviousCloseRepository.class);
+        when(repository.findById("TCS")).thenReturn(Optional.of(PreviousCloseDocument.builder()
+                .symbol("TCS")
+                .previousClose(24000.0)
+                .tradeDate(LocalDate.now(ZoneId.of("Asia/Kolkata")).minusDays(1).toString())
+                .build()));
+        MarketDataCacheService cache = new MarketDataCacheService(
+                mock(StockCacheService.class), new ObjectMapper(), redis, repository, null, null);
+
+        assertNull(cache.getPreviousClose("TCS"));
+    }
 
     @Test
     void convertsMultipleSymbolsAndSubmitsOneHistoricalRedisBatch() {

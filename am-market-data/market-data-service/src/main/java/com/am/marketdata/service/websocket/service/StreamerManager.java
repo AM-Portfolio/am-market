@@ -313,8 +313,17 @@ public class StreamerManager implements StreamerListener {
                     double low = quote.getOhlc() != null ? quote.getOhlc().getLow() : 0.0;
                     double close = quote.getOhlc() != null ? quote.getOhlc().getClose() : 0.0;
                     double prevClose = quote.getPreviousClose();
-                    double change = lastPrice - prevClose;
-                    double changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0.0;
+                    Double change = null;
+                    Double changePercent = null;
+                    if (Double.isFinite(prevClose) && prevClose > 0.0) {
+                        change = lastPrice - prevClose;
+                        changePercent = (change / prevClose) * 100;
+                        quote.setChange(change);
+                        quote.setChangePercent(changePercent);
+                    } else {
+                        quote.setChange(null);
+                        quote.setChangePercent(null);
+                    }
 
                     quotes.put(symbol, MarketDataUpdate.QuoteChange.builder()
                             .lastPrice(lastPrice)
@@ -322,7 +331,7 @@ public class StreamerManager implements StreamerListener {
                             .high(high)
                             .low(low)
                             .close(close)
-                            .previousClose(prevClose)
+                            .previousClose(prevClose > 0.0 ? prevClose : null)
                             .change(change)
                             .changePercent(changePercent)
                             .build());
@@ -624,19 +633,30 @@ public class StreamerManager implements StreamerListener {
                         Double prevClose = cacheService.getPreviousClose(symbol);
                         
                         // 2. Fall back to the streaming tick's previousClose if the cache is empty
-                        if (prevClose == null || prevClose == 0.0) {
+                        if (prevClose == null || !Double.isFinite(prevClose) || prevClose <= 0.0) {
                             prevClose = quote.getPreviousClose();
                             // Dynamically populate Redis so subsequent updates don't hit the fallback logic
-                            if (prevClose != null && prevClose != 0.0) {
+                            if (prevClose != null && Double.isFinite(prevClose) && prevClose > 0.0) {
                                 cacheService.setPreviousClose(symbol, prevClose);
                             }
-                        } else {
-                            // Sync the correct close value back into the quote object
+                        }
+                        if (prevClose != null && Double.isFinite(prevClose) && prevClose > 0.0) {
+                            // The same common quote proceeds to Redis/Mongo and Kafka below.
+                            // Set the resolved baseline before either path can serialize it.
                             quote.setPreviousClose(prevClose);
                         }
 
-                        double change = lastPrice - prevClose;
-                        double changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0.0;
+                        Double change = null;
+                        Double changePercent = null;
+                        if (prevClose != null && Double.isFinite(prevClose) && prevClose > 0.0) {
+                            change = lastPrice - prevClose;
+                            changePercent = (change / prevClose) * 100;
+                            quote.setChange(change);
+                            quote.setChangePercent(changePercent);
+                        } else {
+                            quote.setChange(null);
+                            quote.setChangePercent(null);
+                        }
 
                         MarketDataUpdate.QuoteChange changeObj = MarketDataUpdate.QuoteChange.builder()
                                 .lastPrice(lastPrice)

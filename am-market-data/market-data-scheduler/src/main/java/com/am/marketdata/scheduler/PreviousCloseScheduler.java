@@ -74,6 +74,7 @@ public class PreviousCloseScheduler {
     // Run at 6:00 PM IST on Weekdays (Monday to Friday). 
     // Shifted from 8:00 AM daily to 6:00 PM IST to ensure that the official broker daily close candles
     // are successfully retrieved and cached for the weekend, eliminating price-lag.
+    @Scheduled(cron = "0 5 9 * * MON-FRI", zone = "Asia/Kolkata")
     @Scheduled(cron = "0 0 18 * * MON-FRI", zone = "Asia/Kolkata")
     @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "previousCloseFetchJob", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void fetchAndCachePreviousClose() {
