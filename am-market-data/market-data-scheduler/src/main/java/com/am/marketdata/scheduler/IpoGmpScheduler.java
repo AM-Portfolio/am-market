@@ -15,6 +15,7 @@ public class IpoGmpScheduler {
 
     @Value("${market-data.ipo.gmp.enabled:true}") private boolean enabled;
 
+    /** Runs independently after the nightly IPO refresh window. */
     @Scheduled(cron = "${scheduler.ipo.gmp-cron:0 15 0 * * *}", zone = "Asia/Kolkata")
     @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "ipoGmpRefreshSchedulerJob", lockAtMostFor = "20m", lockAtLeastFor = "1m")
     public void refresh() {

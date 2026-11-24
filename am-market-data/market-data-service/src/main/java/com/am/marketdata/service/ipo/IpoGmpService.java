@@ -19,7 +19,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.List;
@@ -36,6 +35,10 @@ public class IpoGmpService {
     @Value("${market-data.ipo.gmp.api-key:}") private String apiKey;
     @Value("${market-data.ipo.gmp.base-url:https://www.ipoguru.in/api/v2}") private String baseUrl;
 
+    /**
+     * Performs one batch provider request. The job only enriches IPOs already
+     * present locally; it never creates an IPO from an external GMP row.
+     */
     public int refresh() {
         if (apiKey == null || apiKey.isBlank()) {
             log.warn("IPO Guru GMP refresh skipped: IPOGURU_API_KEY is not configured");
@@ -49,6 +52,8 @@ public class IpoGmpService {
                     .GET().build();
             HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) throw new IllegalStateException("IPO Guru HTTP " + response.statusCode());
+            // IPO Guru has returned both a top-level array and wrapped data in
+            // different API responses, so accept either shape.
             JsonNode root = objectMapper.readTree(response.body());
             JsonNode rows = root.isArray() ? root : root.path("data");
             if (!rows.isArray()) rows = root.path("ipos");
@@ -58,6 +63,8 @@ public class IpoGmpService {
                 String slug = text(row, "slug", "id");
                 String name = normalize(text(row, "name", "company_name", "companyName"));
                 if (name.isBlank()) continue;
+                // A normalized name is only a candidate key. Multiple local
+                // matches are deliberately skipped instead of risking a wrong GMP.
                 List<UpstoxIpoDocument> candidates = repository.findAll().stream()
                         .filter(doc -> normalize(doc.getCompanyName()).equals(name))
                         .collect(Collectors.toList());
@@ -78,6 +85,8 @@ public class IpoGmpService {
                             .updatedAt(providerUpdated).capturedAt(Instant.now(Clock.system(ZoneId.of("Asia/Kolkata")))).captureRunId(runId).build();
                     if (current == null) current = IpoGmp.builder().history(new ArrayList<>()).build();
                     if (current.getHistory() == null) current.setHistory(new ArrayList<>());
+                    // Replays of the same provider observation must be idempotent;
+                    // a changed provider timestamp/value is a new history point.
                     boolean duplicate = current.getHistory().stream().anyMatch(existing ->
                             same(existing.getProviderSlug(), slug)
                                     && sameInstant(existing.getUpdatedAt(), providerUpdated)
