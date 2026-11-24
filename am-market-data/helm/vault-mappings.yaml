@@ -39,6 +39,10 @@ vault:
         UPSTOX_SECRET_KEY: "UPSTOX_SECRET_KEY"
         UPSTOX_REDIRECT_URI: "UPSTOX_REDIRECT_URI"
         UPSTOX_ACCESS_TOKEN: "UPSTOCK_ACCESS_TOKEN"
+    ipo-guru:
+      mappings:
+        IPOGURU_API_KEY: "IPOGURU_API_KEY"
+        IPOGURU_BASE_URL: "IPOGURU_BASE_URL"
     scheduler-config:
       mappings:
         SCHEDULER_TIMEZONE: "scheduler_timezone"

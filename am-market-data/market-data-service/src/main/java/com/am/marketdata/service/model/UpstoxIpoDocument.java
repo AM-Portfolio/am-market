@@ -73,6 +73,9 @@ public class UpstoxIpoDocument {
     private String totalSubscription;
     private List<AsraxInvestorCategoryDto> eligibleInvestors;
 
+    /** Optional enrichment; Upstox writes must preserve this block. */
+    private IpoGmp gmp;
+
     /**
      * Timestamp when document was last updated in MongoDB.
      */
