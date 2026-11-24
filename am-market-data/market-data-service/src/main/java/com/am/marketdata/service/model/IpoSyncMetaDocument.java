@@ -33,4 +33,14 @@ public class IpoSyncMetaDocument {
     private String lastTrigger;
 
     private String source;
+
+    private Instant lastStartedAt;
+    private Instant lastCompletedAt;
+    private String lastStatus;
+    private Integer receivedCount;
+    private Integer matchedCount;
+    private Integer updatedCount;
+    private Integer duplicateCount;
+    private Integer unmatchedCount;
+    private Integer skippedCount;
 }

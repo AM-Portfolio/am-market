@@ -66,8 +66,9 @@ public class MarketDataAdminController {
     @PostMapping("/sync/ipo-gmp")
     public ResponseEntity<String> syncIpoGmp() {
         return submitAdminTask("IPO Guru GMP refresh", () -> {
-            int updated = ipoGmpService.refresh();
-            log.info("IPO Guru GMP manual refresh updated {} IPOs", updated);
+            var result = ipoGmpService.refresh();
+            log.info("IPO Guru GMP manual refresh {}: received={}, matched={}, updated={}, duplicates={}, unmatched={}, skipped={}",
+                    result.getStatus(), result.getReceived(), result.getMatched(), result.getUpdated(), result.getDuplicates(), result.getUnmatched(), result.getSkipped());
         }, "IPO Guru GMP refresh triggered in background");
     }
 
