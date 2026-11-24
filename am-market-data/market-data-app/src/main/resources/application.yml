@@ -156,6 +156,10 @@ market-data:
     subscription:
       max-concurrency: ${MARKET_DATA_IPO_BID_CONCURRENCY:3}
       max-retries: ${MARKET_DATA_IPO_BID_RETRIES:2}
+    gmp:
+      enabled: ${MARKET_DATA_IPO_GMP_ENABLED:true}
+      api-key: ${IPOGURU_API_KEY:}
+      base-url: ${IPOGURU_BASE_URL:https://www.ipoguru.in/api/v2}
   market:
     hours:
       start: ${MARKET_DATA_MARKET_HOURS_START:09:15}

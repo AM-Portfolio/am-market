@@ -21,6 +21,8 @@ import com.am.marketdata.common.model.ipo.AsraxIpoDetailsDto;
 import com.am.marketdata.common.model.ipo.AsraxIpoSummaryDto;
 import com.am.marketdata.common.provider.IpoDataProvider;
 import com.am.marketdata.service.model.UpstoxIpoDocument;
+import com.am.marketdata.service.model.IpoGmp;
+import com.am.marketdata.service.model.IpoGmpObservation;
 import com.am.marketdata.service.redis.UpstoxIpoCacheService;
 import com.am.marketdata.service.repo.UpstoxIpoMongoRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -649,6 +651,7 @@ public class UpstoxIpoService {
                     .registrarInfo(dto.getRegistrarInfo())
                     .totalSubscription(dto.getTotalSubscription())
                     .eligibleInvestors(dto.getEligibleInvestors())
+                    .gmp(mongoRepository.findById(dto.getId()).map(UpstoxIpoDocument::getGmp).orElse(null))
                     .updatedAt(Instant.now())
                     .build();
             mongoRepository.save(doc);
@@ -674,6 +677,7 @@ public class UpstoxIpoService {
                 .biddingEndDate(doc.getBiddingEndDate())
                 .totalSubscription(doc.getTotalSubscription())
                 .eligibleInvestors(doc.getEligibleInvestors())
+                .gmp(toGmpDto(doc.getGmp(), false))
                 .build();
     }
 
@@ -706,6 +710,28 @@ public class UpstoxIpoService {
                 .registrarInfo(doc.getRegistrarInfo())
                 .totalSubscription(doc.getTotalSubscription())
                 .eligibleInvestors(doc.getEligibleInvestors())
+                .gmp(toGmpDto(doc.getGmp(), true))
                 .build();
+    }
+
+    private com.am.marketdata.common.model.ipo.IpoGmpDto toGmpDto(IpoGmp gmp, boolean includeHistory) {
+        if (gmp == null || (gmp.getPrice() == null && gmp.getUpdatedAt() == null)) return null;
+        List<com.am.marketdata.common.model.ipo.IpoGmpObservationDto> history = null;
+        if (includeHistory && gmp.getHistory() != null) {
+            history = gmp.getHistory().stream().map(this::toObservationDto).collect(Collectors.toList());
+        }
+        return com.am.marketdata.common.model.ipo.IpoGmpDto.builder()
+                .provider(gmp.getProvider()).providerSlug(gmp.getProviderSlug()).price(gmp.getPrice())
+                .percentage(gmp.getPercentage()).kostak(gmp.getKostak()).subjectToSauda(gmp.getSubjectToSauda())
+                .estimatedListingPrice(gmp.getEstimatedListingPrice()).updatedAt(gmp.getUpdatedAt())
+                .capturedAt(gmp.getCapturedAt()).history(history).build();
+    }
+
+    private com.am.marketdata.common.model.ipo.IpoGmpObservationDto toObservationDto(IpoGmpObservation o) {
+        return com.am.marketdata.common.model.ipo.IpoGmpObservationDto.builder()
+                .provider(o.getProvider()).providerSlug(o.getProviderSlug()).price(o.getPrice())
+                .percentage(o.getPercentage()).kostak(o.getKostak()).subjectToSauda(o.getSubjectToSauda())
+                .estimatedListingPrice(o.getEstimatedListingPrice()).updatedAt(o.getUpdatedAt())
+                .capturedAt(o.getCapturedAt()).captureRunId(o.getCaptureRunId()).build();
     }
 }

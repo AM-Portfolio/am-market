@@ -61,6 +61,15 @@ public class MarketDataAdminController {
 
     private final com.am.marketdata.service.global.GlobalIndexHistoricalSyncService globalIndexSyncService;
     private final UpstoxInstrumentService upstoxInstrumentService;
+    private final com.am.marketdata.service.ipo.IpoGmpService ipoGmpService;
+
+    @PostMapping("/sync/ipo-gmp")
+    public ResponseEntity<String> syncIpoGmp() {
+        return submitAdminTask("IPO Guru GMP refresh", () -> {
+            int updated = ipoGmpService.refresh();
+            log.info("IPO Guru GMP manual refresh updated {} IPOs", updated);
+        }, "IPO Guru GMP refresh triggered in background");
+    }
 
     @GetMapping("/logs/{jobId}")
     public ResponseEntity<IngestionJobLog> getJobDetails(@PathVariable String jobId) {

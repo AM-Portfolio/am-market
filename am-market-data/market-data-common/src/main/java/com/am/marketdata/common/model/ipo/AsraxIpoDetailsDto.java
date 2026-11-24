@@ -152,4 +152,6 @@ public class AsraxIpoDetailsDto {
      * List of eligible investor category codes (e.g., IND, HNI, EMP, QIB).
      */
     private List<AsraxInvestorCategoryDto> eligibleInvestors;
+
+    private IpoGmpDto gmp;
 }
