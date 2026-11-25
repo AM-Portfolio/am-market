@@ -251,3 +251,41 @@ def test_history_requires_from_to_shape():
     assert out["count"] == 2
     assert out["priceType"] == PRICE_TYPE
     assert out["points"][1]["nav"] == 10.5
+
+
+def test_nav_batch_not_configured():
+    svc = MfCatalogService("", "", "")
+    out = svc.get_nav_batch(["INF123"])
+    assert out["error"] == "Mutual fund catalog not configured"
+    assert out["marks"] == []
+
+
+def test_nav_batch_maps_marks_and_missing():
+    svc = MfCatalogService(
+        "jdbc:postgresql://localhost:5432/db?currentSchema=mf_catalog",
+        "u",
+        "p",
+    )
+    cur = MagicMock()
+    cur.fetchall.return_value = [
+        ("INF247L01999", "Motilal Oswal Large Cap", 40.6665, date(2026, 11, 19), 40.513),
+    ]
+    cur.__enter__ = MagicMock(return_value=cur)
+    cur.__exit__ = MagicMock(return_value=False)
+    conn = MagicMock()
+    conn.cursor.return_value = cur
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=False)
+
+    with patch.object(svc, "_connect", return_value=conn):
+        out = svc.get_nav_batch(["inf247l01999", "INFMISSING", "inf247l01999"])
+
+    assert out["source"] == SOURCE
+    assert out["priceType"] == PRICE_TYPE
+    assert out["count"] == 1
+    mark = out["marks"][0]
+    assert mark["isin"] == "INF247L01999"
+    assert mark["nav"] == 40.6665
+    assert mark["previousNav"] == 40.513
+    assert mark["navDate"] == "2026-11-19"
+    assert out["missing"] == ["INFMISSING"]
