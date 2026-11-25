@@ -77,11 +77,11 @@ SELECT s.isin,
          FROM mf_nav_eod n
          WHERE (n.isin = s.isin OR n.scheme_code = s.scheme_code)
            AND s.latest_nav_date IS NOT NULL
-           AND n.nav_date < s.latest_nav_date
-           AND n.nav_date >= (s.latest_nav_date - INTERVAL '3 days')
+           AND n.nav_date::date < s.latest_nav_date::date
+           AND n.nav_date::date >= (s.latest_nav_date::date - INTERVAL '3 days')
            AND n.nav IS NOT NULL
            AND n.nav > 0
-         ORDER BY n.nav_date DESC
+         ORDER BY n.nav_date::date DESC
          LIMIT 1
        ) AS previous_nav
 FROM mf_scheme s
