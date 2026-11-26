@@ -182,7 +182,9 @@ public class StockIndicesService {
                     try {
                         // get(timeout) does not cancel the underlying provider request. The
                         // in-flight entry remains coalesced until that request really finishes.
-                        Map<String, OHLCQuote> recovered = recoveryFuture.get(3500, TimeUnit.MILLISECONDS);
+                        // Increased timeout from 3500ms to 12000ms: external Upstox broker calls can take 4-5s
+                        // under load. 12s provides sufficient headroom to complete without throwing TimeoutException.
+                        Map<String, OHLCQuote> recovered = recoveryFuture.get(12000, TimeUnit.MILLISECONDS);
                         if (recovered != null && !recovered.isEmpty()) {
                             latestPrices.putAll(recovered);
                             redisCacheService.cacheLatestPrices(recovered);
@@ -681,7 +683,18 @@ public class StockIndicesService {
             long nowMs = System.currentTimeMillis();
 
             for (String symbol : symbolsToProcess) {
+                // Multi-key lookup: handle exchange prefix variations ("NIFTY 50", "NSE:NIFTY 50", "NSE_INDEX|NIFTY 50")
                 OHLCQuote priceQuote = quotes.get(symbol);
+                if (priceQuote == null && !symbol.contains(":")) {
+                    priceQuote = quotes.get("NSE:" + symbol);
+                }
+                if (priceQuote == null && !symbol.contains("|")) {
+                    priceQuote = quotes.get("NSE_INDEX|" + symbol);
+                }
+                if (priceQuote == null && symbol.contains(":")) {
+                    String bare = symbol.substring(symbol.indexOf(":") + 1).trim();
+                    priceQuote = quotes.get(bare);
+                }
                 if (priceQuote == null || priceQuote.getLastPrice() == 0.0) {
                     log.warn(methodName, "No valid Upstox quote found for symbol: " + symbol);
                     continue;

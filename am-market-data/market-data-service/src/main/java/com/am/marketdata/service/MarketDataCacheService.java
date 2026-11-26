@@ -291,7 +291,14 @@ public class MarketDataCacheService {
         ZoneId zone = ZoneId.of("Asia/Kolkata");
         LocalDate today = LocalDate.now(zone);
         if (marketCalendarService == null) {
-            return today;
+            LocalDate d = today;
+            if (LocalTime.now(zone).isBefore(LocalTime.of(9, 15))) {
+                d = d.minusDays(1);
+            }
+            while (d.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || d.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+                d = d.minusDays(1);
+            }
+            return d;
         }
         try {
             // Walk calendar sessions, not weekdays: holidays and special closures matter.
@@ -347,6 +354,58 @@ public class MarketDataCacheService {
         return value instanceof Number number ? number.longValue() : 0L;
     }
 
+    private long readSnapshotTimestamp(Map<String, Object> map) {
+        if (map == null) return 0L;
+        Object quoteTs = map.get("quoteTimestamp");
+        if (quoteTs instanceof String str && !str.isBlank()) {
+            try {
+                return Instant.parse(str).toEpochMilli();
+            } catch (Exception ignored) {
+            }
+        }
+        long updatedAt = readLong(map.get("updatedAt"));
+        if (updatedAt > 0) return updatedAt;
+        LocalDate tradeDate = readDate(map.get("quoteTradeDate"));
+        if (tradeDate != null) {
+            return tradeDate.atStartOfDay(ZoneId.of("Asia/Kolkata")).toInstant().toEpochMilli();
+        }
+        return 0L;
+    }
+
+    /**
+     * FRESHNESS CONTROL FIX (Rule 1 & Rule 2): Resolves between primary key ("market:latest-price:EXCHANGE:SYMBOL")
+     * and fallback key ("market:latest-price:SYMBOL").
+     * If one snapshot is stale or belongs to a previous session (e.g. frozen test ghost key)
+     * and the other belongs to today's active session, the session-valid snapshot is selected.
+     * If both are valid, the snapshot with the newer epoch timestamp is chosen.
+     */
+    private String selectFreshestSnapshotJson(String primaryJson, String fallbackJson, String exchange) {
+        if (primaryJson == null) return fallbackJson;
+        if (fallbackJson == null) return primaryJson;
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> primaryMap = objectMapper.readValue(primaryJson, Map.class);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> fallbackMap = objectMapper.readValue(fallbackJson, Map.class);
+
+            boolean primaryUsable = isUsableLiveSnapshot(primaryMap, exchange);
+            boolean fallbackUsable = isUsableLiveSnapshot(fallbackMap, exchange);
+
+            if (fallbackUsable && !primaryUsable) {
+                return fallbackJson;
+            }
+            if (primaryUsable && !fallbackUsable) {
+                return primaryJson;
+            }
+
+            long primaryTs = readSnapshotTimestamp(primaryMap);
+            long fallbackTs = readSnapshotTimestamp(fallbackMap);
+            return (fallbackTs > primaryTs) ? fallbackJson : primaryJson;
+        } catch (Exception ex) {
+            return primaryJson;
+        }
+    }
+
     /**
      * A latest-price snapshot is a live quote only when it belongs to the
      * currently expected exchange session and is recent enough to represent
@@ -359,18 +418,7 @@ public class MarketDataCacheService {
             return false;
         }
 
-        boolean marketOpen = isLiveTickOverlayAllowed();
-        if (!marketOpen) {
-            // After the session, the last verified session close is valid until
-            // the next exchange session starts.
-            return true;
-        }
-
         LocalDate expectedDate = expectedQuoteSessionDate(exchange);
-        if (expectedDate == null) {
-            return false;
-        }
-
         LocalDate quoteDate = readDate(latestData.get("quoteTradeDate"));
         Object timestampValue = latestData.get("quoteTimestamp");
         Instant quoteTimestamp = null;
@@ -382,13 +430,34 @@ public class MarketDataCacheService {
             }
         }
 
-        if (quoteDate != null && !expectedDate.equals(quoteDate)) {
+        // Freshness Gate (Rule 3 & Rule 7): Even after market hours, a snapshot is only valid
+        // if it belongs to the expected session date (e.g. today's close or the last trading day's close).
+        // It must NEVER accept a ghost key from 2+ sessions ago as a valid quote.
+        if (expectedDate != null) {
+            if (quoteDate != null) {
+                if (!expectedDate.equals(quoteDate)) {
+                    return false;
+                }
+            } else if (quoteTimestamp != null) {
+                LocalDate tsDate = quoteTimestamp.atZone(ZoneId.of("Asia/Kolkata")).toLocalDate();
+                if (!expectedDate.equals(tsDate)) {
+                    return false;
+                }
+            }
+        }
+
+        boolean marketOpen = isLiveTickOverlayAllowed();
+        if (!marketOpen) {
+            // After the session, the last verified session close is valid until
+            // the next exchange session starts (as long as it matches expectedDate verified above).
+            return true;
+        }
+
+        if (expectedDate == null) {
             return false;
         }
+
         if (quoteTimestamp != null) {
-            if (!expectedDate.equals(quoteTimestamp.atZone(ZoneId.of("Asia/Kolkata")).toLocalDate())) {
-                return false;
-            }
             return isRecentMillis(quoteTimestamp.toEpochMilli(),
                     TimeUnit.MINUTES.toMillis(marketQuoteMaxAgeMinutes));
         }
@@ -860,10 +929,11 @@ public class MarketDataCacheService {
                     if (quote == null) continue;
 
                     // Populate only a quote snapshot that belongs to the expected session.
-                    String json = (jsonList != null && i < jsonList.size()) ? jsonList.get(i) : null;
-                    if (json == null && fallbackJsonList != null && i < fallbackJsonList.size()) {
-                        json = fallbackJsonList.get(i);
-                    }
+                    // Dual-key freshness resolution: resolves between prefixed (NSE:SYMBOL) and bare (SYMBOL)
+                    // and picks the freshest, session-valid snapshot, eliminating ghost key shadowing.
+                    String primaryJson = (jsonList != null && i < jsonList.size()) ? jsonList.get(i) : null;
+                    String fallbackJson = (fallbackJsonList != null && i < fallbackJsonList.size()) ? fallbackJsonList.get(i) : null;
+                    String json = selectFreshestSnapshotJson(primaryJson, fallbackJson, exchanges.get(i));
                     if (json != null) {
                         try {
                             @SuppressWarnings("unchecked")
@@ -872,7 +942,10 @@ public class MarketDataCacheService {
                             double prevClose = ((Number) latestData.getOrDefault("previousClose", 0.0)).doubleValue();
                             LocalDate quoteDate = readDate(latestData.get("quoteTradeDate"));
                             LocalDate expectedDate = expectedQuoteSessionDate(exchanges.get(i));
-                            if (!isUsableLiveSnapshot(latestData, exchanges.get(i))) {
+                            boolean usable = isUsableLiveSnapshot(latestData, exchanges.get(i));
+                            log.info("overlayLatestPrices", "Evaluating symbol={} latestPrice={} quoteDate={} expectedDate={} usable={}",
+                                    entries.get(i).getKey(), latestPrice, quoteDate, expectedDate, usable);
+                            if (!usable) {
                                 log.info("overlayLatestPrices", "Ignoring stale quote snapshot symbol={} quoteDate={} expectedDate={}",
                                         entries.get(i).getKey(), quoteDate, expectedDate);
                                 continue;
@@ -947,8 +1020,12 @@ public class MarketDataCacheService {
                                 quote.setMarketDepth(null);
                             }
                             if (latestPrice > 0) {
-                                if (overlayLiveLastPrice || quote.getLastPrice() == 0.0) {
-                                    quote.setLastPrice(latestPrice);
+                                // FRESHNESS FIX (Rule 4): Same-session live tick / snapshot ALWAYS takes
+                                // precedence over any cached intraday bar. Both during market hours and after hours,
+                                // the session's verified latest snapshot is the authoritative lastPrice.
+                                quote.setLastPrice(latestPrice);
+                                if (quote.getOhlc() != null) {
+                                    quote.getOhlc().setClose(latestPrice);
                                 }
                             }
                             // Populate OHLC from latest-price Redis JSON if missing or zeroes
@@ -1460,6 +1537,20 @@ public class MarketDataCacheService {
                     response.put("source", "cache");
                     return response;
                 }
+
+                // LATENCY OPTIMIZATION: When intraday bar cache is empty, check Redis latest-price snapshots
+                // before falling back to the slow external provider. If valid quotes exist for the requested
+                // symbols, return them directly (<2ms) without hitting Upstox.
+                Map<String, OHLCQuote> latestPrices = getLatestPrices(symbols);
+                if (!latestPrices.isEmpty()) {
+                    overlayLatestPrices(latestPrices);
+                    log.info("getQuotes", String.format("Retrieved quotes from latest-price cache for %d symbols",
+                            latestPrices.size()));
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("quotes", latestPrices);
+                    response.put("source", "cache");
+                    return response;
+                }
             }
 
             log.info("getQuotes", String.format("Fetching quotes from provider for %d symbols with timeFrame: %s",
@@ -1810,10 +1901,9 @@ public class MarketDataCacheService {
                         String[] parts = rawSymbol.split(":", 2);
                         exchange = parts[0];
                     }
-                    String json = values != null && index < values.size() ? values.get(index) : null;
-                    if (json == null && values != null && index + chunk.size() < values.size()) {
-                        json = values.get(index + chunk.size());
-                    }
+                    String primaryJson = values != null && index < values.size() ? values.get(index) : null;
+                    String fallbackJson = values != null && index + chunk.size() < values.size() ? values.get(index + chunk.size()) : null;
+                    String json = selectFreshestSnapshotJson(primaryJson, fallbackJson, exchange);
                     if (json != null) {
                     Map<String, Object> map = objectMapper.readValue(json, Map.class);
 

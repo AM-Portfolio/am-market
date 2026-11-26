@@ -107,7 +107,12 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
                 "symbolsCount", tradingSymbols.size(), "isIndex", isIndexSymbol, "timeFrame", timeFrame.getApiValue(),
                 "forceRefresh", forceRefresh) : null) {
 
-            boolean fetchIndexStocks = !isIndexSymbol;
+            // PHASE 1 HOTFIX: For quote endpoints (/quotes), NEVER expand index symbols
+            // into constituent stocks (fetchIndexStocks = false).
+            // When a client requests "NIFTY 50", they only need the index quote. Expanding 50 constituent
+            // stocks caused an 8.4-second delay and 50 synchronous DB writes, only for those 50 stocks
+            // to be immediately discarded at line 126.
+            boolean fetchIndexStocks = false;
             Set<String> symbols = instrumentUtils.resolveSymbols(new ArrayList<>(tradingSymbols), fetchIndexStocks);
             // Fixed SLF4J pattern: was log.info("methodName", "msg") which failed to log params
             log.info("Resolved {} symbols from {} input symbols fetchIndexStocks={}", symbols.size(),
