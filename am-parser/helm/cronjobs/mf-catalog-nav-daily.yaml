@@ -1,16 +1,9 @@
 # Dig CronJob: daily SCH/NAV ingest → Postgres mf_catalog (am-parser owns write).
 # See am-parser/docs/mf-catalog-nav-ownership.md
-# Secrets: Vault agent inject only — never plaintext NSE/JDBC passwords in git.
-# NSE: temporarily from apps/dev/services/am-mutual-fund until duplicated under parser Vault.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: am-parser-mf-catalog-job
-  namespace: am-apps-dev
-  labels:
-    app.kubernetes.io/name: am-parser-mf-catalog-job
-    app.kubernetes.io/part-of: am-parser
----
+#
+# Dig Contabo has NO Vault Agent Injector — use CSI-synced K8s Secrets instead:
+#   NSE_*  → am-mutual-fund-dev-synced-secrets
+#   JDBC   → am-parser-dev-synced-secrets (AM_MARKET_MF_JDBC_USER/PASSWORD)
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -26,7 +19,6 @@ spec:
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
   startingDeadlineSeconds: 3600
-  # Set false after first image publish + dig smoke; keep true until then to avoid empty runs.
   suspend: false
   jobTemplate:
     spec:
@@ -36,35 +28,8 @@ spec:
         metadata:
           labels:
             app.kubernetes.io/name: am-parser-mf-catalog-job
-          annotations:
-            vault.hashicorp.com/agent-inject: "true"
-            vault.hashicorp.com/agent-init-first: "true"
-            vault.hashicorp.com/auth-path: auth/jwt-nonprod
-            vault.hashicorp.com/role: am-backend-role-dev
-            # Temporary: NSE still lives under MF Vault path until duplicated for parser.
-            vault.hashicorp.com/agent-inject-secret-nse: apps/dev/services/am-mutual-fund
-            vault.hashicorp.com/agent-inject-template-nse: |
-              {{- with secret "apps/dev/services/am-mutual-fund" -}}
-              {{- with index .Data.data "nse_url" }}export NSE_URL="{{ . }}"{{ end }}
-              {{- with index .Data.data "nse_login" }}
-              export NSE_LOGIN="{{ . }}"{{ end }}
-              {{- with index .Data.data "nse_api_key" }}
-              export NSE_API_KEY="{{ . }}"{{ end }}
-              {{- with index .Data.data "nse_api_secret" }}
-              export NSE_API_SECRET="{{ . }}"{{ end }}
-              {{- with index .Data.data "nse_member" }}
-              export NSE_MEMBER="{{ . }}"{{ end }}
-              {{- end }}
-            vault.hashicorp.com/agent-inject-secret-jdbc: apps/dev/infra/postgres
-            vault.hashicorp.com/agent-inject-template-jdbc: |
-              {{- with secret "apps/dev/infra/postgres" -}}
-              {{- with index .Data.data "username" }}
-              export AM_MARKET_MF_JDBC_USER="{{ . }}"{{ end }}
-              {{- with index .Data.data "password" }}
-              export AM_MARKET_MF_JDBC_PASSWORD="{{ . }}"{{ end }}
-              {{- end }}
         spec:
-          serviceAccountName: am-parser-mf-catalog-job
+          serviceAccountName: am-backend-sa
           restartPolicy: OnFailure
           imagePullSecrets:
             - name: ghcr-creds
@@ -77,10 +42,8 @@ spec:
                 - -c
                 - |
                   set -e
-                  . /vault/secrets/nse 2>/dev/null || true
-                  . /vault/secrets/jdbc 2>/dev/null || true
                   if [ -z "$NSE_API_KEY" ] || [ -z "$AM_MARKET_MF_JDBC_PASSWORD" ]; then
-                    echo "FAIL: Vault secrets not injected (NSE or JDBC)"
+                    echo "FAIL: NSE or JDBC secrets missing from synced Secrets"
                     exit 1
                   fi
                   exec python mf_catalog_job/daily_job.py --fail-on-stale
@@ -91,6 +54,41 @@ spec:
                   value: "jdbc:postgresql://postgres.asrax.in:5432/user_platform_dev?currentSchema=mf_catalog"
                 - name: MF_CATALOG_PUSH_CHUNK
                   value: "100"
+                - name: NSE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-dev-synced-secrets
+                      key: NSE_URL
+                - name: NSE_LOGIN
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-dev-synced-secrets
+                      key: NSE_LOGIN
+                - name: NSE_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-dev-synced-secrets
+                      key: NSE_API_KEY
+                - name: NSE_API_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-dev-synced-secrets
+                      key: NSE_API_SECRET
+                - name: NSE_MEMBER
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-dev-synced-secrets
+                      key: NSE_MEMBER
+                - name: AM_MARKET_MF_JDBC_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-parser-dev-synced-secrets
+                      key: AM_MARKET_MF_JDBC_USER
+                - name: AM_MARKET_MF_JDBC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-parser-dev-synced-secrets
+                      key: AM_MARKET_MF_JDBC_PASSWORD
               resources:
                 requests:
                   cpu: 100m
@@ -128,34 +126,8 @@ spec:
         metadata:
           labels:
             app.kubernetes.io/name: am-parser-mf-catalog-job
-          annotations:
-            vault.hashicorp.com/agent-inject: "true"
-            vault.hashicorp.com/agent-init-first: "true"
-            vault.hashicorp.com/auth-path: auth/jwt-nonprod
-            vault.hashicorp.com/role: am-backend-role-dev
-            vault.hashicorp.com/agent-inject-secret-nse: apps/dev/services/am-mutual-fund
-            vault.hashicorp.com/agent-inject-template-nse: |
-              {{- with secret "apps/dev/services/am-mutual-fund" -}}
-              {{- with index .Data.data "nse_url" }}export NSE_URL="{{ . }}"{{ end }}
-              {{- with index .Data.data "nse_login" }}
-              export NSE_LOGIN="{{ . }}"{{ end }}
-              {{- with index .Data.data "nse_api_key" }}
-              export NSE_API_KEY="{{ . }}"{{ end }}
-              {{- with index .Data.data "nse_api_secret" }}
-              export NSE_API_SECRET="{{ . }}"{{ end }}
-              {{- with index .Data.data "nse_member" }}
-              export NSE_MEMBER="{{ . }}"{{ end }}
-              {{- end }}
-            vault.hashicorp.com/agent-inject-secret-jdbc: apps/dev/infra/postgres
-            vault.hashicorp.com/agent-inject-template-jdbc: |
-              {{- with secret "apps/dev/infra/postgres" -}}
-              {{- with index .Data.data "username" }}
-              export AM_MARKET_MF_JDBC_USER="{{ . }}"{{ end }}
-              {{- with index .Data.data "password" }}
-              export AM_MARKET_MF_JDBC_PASSWORD="{{ . }}"{{ end }}
-              {{- end }}
         spec:
-          serviceAccountName: am-parser-mf-catalog-job
+          serviceAccountName: am-backend-sa
           restartPolicy: OnFailure
           imagePullSecrets:
             - name: ghcr-creds
@@ -168,10 +140,8 @@ spec:
                 - -c
                 - |
                   set -e
-                  . /vault/secrets/nse 2>/dev/null || true
-                  . /vault/secrets/jdbc 2>/dev/null || true
                   if [ -z "$NSE_API_KEY" ] || [ -z "$AM_MARKET_MF_JDBC_PASSWORD" ]; then
-                    echo "FAIL: Vault secrets not injected (NSE or JDBC)"
+                    echo "FAIL: NSE or JDBC secrets missing from synced Secrets"
                     exit 1
                   fi
                   exec python mf_catalog_job/daily_job.py --fail-on-stale
@@ -182,6 +152,41 @@ spec:
                   value: "jdbc:postgresql://postgres.asrax.in:5432/user_platform_dev?currentSchema=mf_catalog"
                 - name: MF_CATALOG_PUSH_CHUNK
                   value: "100"
+                - name: NSE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-dev-synced-secrets
+                      key: NSE_URL
+                - name: NSE_LOGIN
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-dev-synced-secrets
+                      key: NSE_LOGIN
+                - name: NSE_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-dev-synced-secrets
+                      key: NSE_API_KEY
+                - name: NSE_API_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-dev-synced-secrets
+                      key: NSE_API_SECRET
+                - name: NSE_MEMBER
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-dev-synced-secrets
+                      key: NSE_MEMBER
+                - name: AM_MARKET_MF_JDBC_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-parser-dev-synced-secrets
+                      key: AM_MARKET_MF_JDBC_USER
+                - name: AM_MARKET_MF_JDBC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-parser-dev-synced-secrets
+                      key: AM_MARKET_MF_JDBC_PASSWORD
               resources:
                 requests:
                   cpu: 100m
