@@ -72,18 +72,25 @@ WHERE scheme_code = %s OR isin = %s
 ORDER BY nav_date ASC
 """
 
-# Explore search: SCH + enrichment + returns.
-# Do NOT LATERAL-join mf_sip_rule here — per-row OR lookup made limit=100 hang (>120s)
-# and Explore fell through to seed (null NAV). SIP mins stay on scheme details.
+# Explore search: rank+limit SCH(+enrich) first, then attach returns.
+# Joining returns/sip before LIMIT scanned the full purchaseAllowed universe and
+# made limit=100 hang past browser timeouts → BFF seed (null NAV).
 _SEARCH_SELECT_ENRICHED = (
-    "SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
-    "s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
-    "e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, "
-    "r.ret_1m, r.ret_3m, r.ret_1y, r.ret_3y, r.ret_5y, "
-    "e.source "
-    "FROM mf_scheme s "
-    "LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin "
-    "LEFT JOIN mf_scheme_returns r ON r.isin = s.isin "
+    "WITH base AS ("
+    "  SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
+    "  s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
+    "  e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source "
+    "  FROM mf_scheme s "
+    "  LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin "
+)
+# Closed after WHERE+ORDER+LIMIT in _run_search when using CTE.
+_SEARCH_SELECT_ENRICHED_TAIL = (
+    ") SELECT b.scheme_code, b.scheme_name, b.isin, b.amc_code, b.scheme_type, b.plan_type, "
+    "b.purchase_allowed, b.latest_nav, b.latest_nav_date, b.new_purchase_min_amount, "
+    "b.aum, b.expense_ratio, b.riskometer, b.sebi_category, b.sebi_sub_category, "
+    "r.ret_1m, r.ret_3m, r.ret_1y, r.ret_3y, r.ret_5y, b.source "
+    "FROM base b "
+    "LEFT JOIN mf_scheme_returns r ON r.isin = b.isin "
 )
 
 _SEARCH_SELECT_BASIC = (
@@ -425,18 +432,21 @@ def _run_search(
     purchase_allowed: Optional[str],
     limit: int,
 ) -> list[dict[str, Any]]:
-    """Try full JOIN search, then enrichment-only, then basic SCH — degrade gracefully."""
+    """Try enrich-only first (fast Explore), then returns CTE, then basic SCH."""
     attempts = (
-        (_SEARCH_SELECT_ENRICHED, "s."),
-        (_SEARCH_SELECT_ENRICH_ONLY, "s."),
-        (_SEARCH_SELECT_BASIC, ""),
+        (_SEARCH_SELECT_ENRICH_ONLY, "s.", False),
+        (_SEARCH_SELECT_ENRICHED, "s.", True),
+        (_SEARCH_SELECT_BASIC, "", False),
     )
     last_err: Exception | None = None
     empty_query = not (query and query.strip())
-    for select_sql, alias in attempts:
+    for select_sql, alias, use_cte in attempts:
         where, params = _search_where(query, amc, purchase_allowed, alias=alias)
         order = _search_order_by(empty_query=empty_query, alias=alias, select_sql=select_sql)
-        sql = select_sql + where + order
+        if use_cte:
+            sql = select_sql + where + order + _SEARCH_SELECT_ENRICHED_TAIL
+        else:
+            sql = select_sql + where + order
         try:
             try:
                 cur.connection.rollback()
@@ -444,7 +454,7 @@ def _run_search(
                 pass
             # Bound each join attempt so a slow plan cannot hang Explore → BFF seed.
             try:
-                cur.execute("SET LOCAL statement_timeout = '12s'")
+                cur.execute("SET LOCAL statement_timeout = '8s'")
             except Exception:
                 pass
             cur.execute(sql, list(params) + [limit])
