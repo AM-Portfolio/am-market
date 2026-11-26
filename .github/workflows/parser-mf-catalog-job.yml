@@ -1,0 +1,59 @@
+# Publish am-parser MF catalog CronJob image (NSE MASTER_DOWNLOAD → Postgres).
+name: Parser MF Catalog Job Publish
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "develop", "test/**", "feature/**", "hotfix/**", "fix/**"]
+    paths:
+      - "am-parser/mf_catalog_job/**"
+      - ".github/workflows/parser-mf-catalog-job.yml"
+  pull_request:
+    branches: ["main", "develop"]
+    paths:
+      - "am-parser/mf_catalog_job/**"
+      - ".github/workflows/parser-mf-catalog-job.yml"
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install + pytest
+        working-directory: am-parser
+        run: |
+          pip install -r mf_catalog_job/requirements-job.txt pytest
+          pytest mf_catalog_job/tests -q
+
+  publish:
+    name: Build and push image
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        working-directory: am-parser
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          # Nested under am-market (same plane as am-parser API image)
+          IMAGE_ID="ghcr.io/${OWNER}/am-market/am-parser-mf-catalog-job"
+          TAG="${{ github.sha }}"
+          echo "Building $IMAGE_ID:$TAG"
+          docker build -f mf_catalog_job/Dockerfile -t "$IMAGE_ID:$TAG" -t "$IMAGE_ID:latest" .
+          docker push "$IMAGE_ID:$TAG"
+          docker push "$IMAGE_ID:latest"

@@ -21,6 +21,9 @@ Flat `values*.yaml` files are merged by the universal chart at deploy time.
 - `values.yaml` — base (port, image, security)
 - `values.dev.yaml` / `values.preprod.yaml` / `values.prod.yaml` — environment overrides
 - `vault-mappings.yaml` — secret key mapping for the deploy pipeline
+- `cronjobs/mf-catalog-nav-daily.yaml` — dig NSE MASTER_DOWNLOAD → Postgres `mf_catalog` (writer)
+
+MF catalog ownership: [`../docs/mf-catalog-nav-ownership.md`](../docs/mf-catalog-nav-ownership.md). Apply CronJobs separately from the API Deployment (not via values merge).
 
 ## Local deploy
 
