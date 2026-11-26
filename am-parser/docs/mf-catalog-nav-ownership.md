@@ -62,8 +62,8 @@ Same pattern as the old MF job: **batch ingest → DB → cheap JDBC reads**.
 
 | Piece | Owner | Notes |
 | --- | --- | --- |
-| NSE broker secrets (`NSE_*`) | Vault; job injects them | Dig cutover may still read `apps/dev/services/am-mutual-fund` until duplicated under parser Vault path |
-| JDBC user/password | Vault `apps/.../infra/postgres` | Same as parser API (`AM_MARKET_MF_JDBC_*`) |
+| NSE broker secrets (`NSE_*`) | Dig: K8s Secret `am-mutual-fund-dev-synced-secrets` (CSI) | Dig has **no** Vault Agent Injector — do not rely on vault.hashicorp.com annotations |
+| JDBC user/password | Dig: `am-parser-dev-synced-secrets` (`AM_MARKET_MF_JDBC_*`) | Same keys the parser API already mounts |
 | JDBC URL (non-secret) | Helm / CronJob env | `...?currentSchema=mf_catalog` |
 | Schema / tables | Shared Postgres `mf_catalog` | `mf_scheme`, `mf_nav_eod`, `mf_scheme_returns`, … |
 | Daily / morning schedule | am-parser helm CronJobs | Weekday `14:00` + `04:00` UTC |
