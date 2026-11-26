@@ -19,6 +19,7 @@ SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_t
        s.purchase_allowed, s.redemption_allowed, s.sip_allowed, s.stp_enabled, s.swp_enabled,
        s.switch_allowed, s.purchase_transaction_mode, s.new_purchase_min_amount,
        s.redemption_transaction_mode, s.rta_agent_code, s.latest_nav, s.latest_nav_date,
+       s.prev_nav, s.prev_nav_date, s.change_1d_pct,
        s.exit_load_flag, s.exit_load, s.lock_in_period_flag, s.lock_in_period,
        s.face_value, s.purchase_cutoff_time, s.redemption_cutoff_time,
        e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source,
@@ -36,6 +37,7 @@ SELECT scheme_code, scheme_name, isin, amc_code, scheme_type, plan_type,
        purchase_allowed, redemption_allowed, sip_allowed, stp_enabled, swp_enabled,
        switch_allowed, purchase_transaction_mode, new_purchase_min_amount,
        redemption_transaction_mode, rta_agent_code, latest_nav, latest_nav_date,
+       prev_nav, prev_nav_date, change_1d_pct,
        exit_load_flag, exit_load, lock_in_period_flag, lock_in_period,
        face_value, purchase_cutoff_time, redemption_cutoff_time
 FROM mf_scheme
@@ -50,6 +52,7 @@ SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_t
        s.purchase_allowed, s.redemption_allowed, s.sip_allowed, s.stp_enabled, s.swp_enabled,
        s.switch_allowed, s.purchase_transaction_mode, s.new_purchase_min_amount,
        s.redemption_transaction_mode, s.rta_agent_code, s.latest_nav, s.latest_nav_date,
+       s.prev_nav, s.prev_nav_date, s.change_1d_pct,
        s.exit_load_flag, s.exit_load, s.lock_in_period_flag, s.lock_in_period,
        s.face_value, s.purchase_cutoff_time, s.redemption_cutoff_time,
        e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source
@@ -57,6 +60,20 @@ FROM mf_scheme s
 LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin
 WHERE s.scheme_code = %s OR s.isin = %s
 ORDER BY s.scheme_code
+LIMIT 1
+"""
+
+# Fallback when prev_nav columns are not migrated yet (pre-V4).
+_DETAILS_BASIC_SQL_NO_PREV = """
+SELECT scheme_code, scheme_name, isin, amc_code, scheme_type, plan_type,
+       purchase_allowed, redemption_allowed, sip_allowed, stp_enabled, swp_enabled,
+       switch_allowed, purchase_transaction_mode, new_purchase_min_amount,
+       redemption_transaction_mode, rta_agent_code, latest_nav, latest_nav_date,
+       exit_load_flag, exit_load, lock_in_period_flag, lock_in_period,
+       face_value, purchase_cutoff_time, redemption_cutoff_time
+FROM mf_scheme
+WHERE scheme_code = %s OR isin = %s
+ORDER BY scheme_code
 LIMIT 1
 """
 
@@ -73,7 +90,42 @@ ORDER BY nav_date ASC
 """
 
 # Explore search: SCH identity + min invest + enrichment (+ optional returns denorm / SIP).
+# Trailing trio: prev_nav, prev_nav_date, change_1d_pct (appended for stable mapping).
 _SEARCH_SELECT_ENRICHED = (
+    "SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
+    "s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
+    "e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, "
+    "r.ret_1m, r.ret_3m, r.ret_1y, r.ret_3y, r.ret_5y, "
+    "sip.amc_name, sip.sip_min_installment_amount, e.source, "
+    "s.prev_nav, s.prev_nav_date, s.change_1d_pct "
+    "FROM mf_scheme s "
+    "LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin "
+    "LEFT JOIN mf_scheme_returns r ON r.isin = s.isin "
+    "LEFT JOIN LATERAL ("
+    "  SELECT amc_name, sip_min_installment_amount FROM mf_sip_rule "
+    "  WHERE scheme_code = s.scheme_code OR scheme_isin = s.isin "
+    "  ORDER BY scheme_code LIMIT 1"
+    ") sip ON TRUE "
+)
+
+_SEARCH_SELECT_BASIC = (
+    "SELECT scheme_code, scheme_name, isin, amc_code, scheme_type, plan_type, "
+    "purchase_allowed, latest_nav, latest_nav_date, new_purchase_min_amount, "
+    "prev_nav, prev_nav_date, change_1d_pct "
+    "FROM mf_scheme "
+)
+
+_SEARCH_SELECT_ENRICH_ONLY = (
+    "SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
+    "s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
+    "e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source, "
+    "s.prev_nav, s.prev_nav_date, s.change_1d_pct "
+    "FROM mf_scheme s "
+    "LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin "
+)
+
+# Pre-V4 fallbacks (no prev_nav columns).
+_SEARCH_SELECT_ENRICHED_NO_PREV = (
     "SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
     "s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
     "e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, "
@@ -89,13 +141,13 @@ _SEARCH_SELECT_ENRICHED = (
     ") sip ON TRUE "
 )
 
-_SEARCH_SELECT_BASIC = (
+_SEARCH_SELECT_BASIC_NO_PREV = (
     "SELECT scheme_code, scheme_name, isin, amc_code, scheme_type, plan_type, "
     "purchase_allowed, latest_nav, latest_nav_date, new_purchase_min_amount "
     "FROM mf_scheme "
 )
 
-_SEARCH_SELECT_ENRICH_ONLY = (
+_SEARCH_SELECT_ENRICH_ONLY_NO_PREV = (
     "SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
     "s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
     "e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source "
@@ -190,8 +242,28 @@ class MfCatalogService:
                     except Exception as e:
                         err = str(e).lower()
                         conn.rollback()
-                        if "mf_scheme_enrichment" in err:
-                            cur.execute(_DETAILS_BASIC_SQL, (scheme_code, scheme_code))
+                        if any(
+                            c in err
+                            for c in ("prev_nav", "prev_nav_date", "change_1d_pct")
+                        ):
+                            cur.execute(
+                                _DETAILS_BASIC_SQL_NO_PREV, (scheme_code, scheme_code)
+                            )
+                            row = cur.fetchone()
+                            if row is None:
+                                return None
+                            m = _map_scheme_row_basic(row)
+                        elif "mf_scheme_enrichment" in err:
+                            try:
+                                cur.execute(
+                                    _DETAILS_BASIC_SQL, (scheme_code, scheme_code)
+                                )
+                            except Exception:
+                                conn.rollback()
+                                cur.execute(
+                                    _DETAILS_BASIC_SQL_NO_PREV,
+                                    (scheme_code, scheme_code),
+                                )
                             row = cur.fetchone()
                             if row is None:
                                 return None
@@ -421,8 +493,11 @@ def _run_search(
     """Try full JOIN search, then enrichment-only, then basic SCH — degrade gracefully."""
     attempts = (
         (_SEARCH_SELECT_ENRICHED, "s."),
+        (_SEARCH_SELECT_ENRICHED_NO_PREV, "s."),
         (_SEARCH_SELECT_ENRICH_ONLY, "s."),
+        (_SEARCH_SELECT_ENRICH_ONLY_NO_PREV, "s."),
         (_SEARCH_SELECT_BASIC, ""),
+        (_SEARCH_SELECT_BASIC_NO_PREV, ""),
     )
     last_err: Exception | None = None
     empty_query = not (query and query.strip())
@@ -446,8 +521,12 @@ def _run_search(
                     "mf_scheme_enrichment",
                     "mf_scheme_returns",
                     "mf_sip_rule",
+                    "prev_nav",
+                    "change_1d_pct",
                     "does not exist",
                     "undefinedtable",
+                    "undefinedcolumn",
+                    "undefined column",
                 )
             ):
                 log.warning("MF search join degraded: %s", e)
@@ -479,6 +558,16 @@ def _search_order_by(*, empty_query: bool, alias: str, select_sql: str) -> str:
     return "ORDER BY scheme_name LIMIT %s"
 
 
+def _attach_prev_nav(item: dict[str, Any], prev_nav: Any, prev_nav_date: Any, change_1d: Any) -> None:
+    if prev_nav is not None:
+        item["prevNav"] = float(prev_nav)
+    prev_date = _date_str(prev_nav_date)
+    if prev_date:
+        item["prevNavDate"] = prev_date
+    if change_1d is not None:
+        item["changePct"] = float(change_1d)
+
+
 def _map_search_row(row: tuple) -> dict[str, Any]:
     item: dict[str, Any] = {
         "schemeCode": row[0],
@@ -494,19 +583,25 @@ def _map_search_row(row: tuple) -> dict[str, Any]:
     }
     if len(row) > 9:
         item["newPurchaseMinAmount"] = row[9]
-    # enrich-only: cols 10-14 + source at 15
-    # full: cols 10-14 enrich, 15-19 returns, 20-21 sip, 22 source
-    if len(row) > 14:
+    # Shapes (with optional trailing prev_nav trio):
+    # basic: 10 | 13
+    # enrich-only: 16 | 19
+    # full: 23 | 26
+    n = len(row)
+    has_prev_tail = n in (13, 19, 26)
+    core_n = n - 3 if has_prev_tail else n
+
+    if core_n > 14:
         item["aum"] = float(row[10]) if row[10] is not None else None
         item["expenseRatio"] = float(row[11]) if row[11] is not None else None
         item["riskometer"] = row[12]
         item["sebiCategory"] = row[13]
         item["sebiSubCategory"] = row[14]
-    if len(row) == 16:
+    if core_n == 16:
         # enrich-only + source
         if row[15]:
             item["enrichmentSource"] = row[15]
-    if len(row) > 19:
+    if core_n > 19:
         returns: dict[str, Optional[float]] = {
             "1M": float(row[15]) if row[15] is not None else None,
             "3M": float(row[16]) if row[16] is not None else None,
@@ -516,18 +611,49 @@ def _map_search_row(row: tuple) -> dict[str, Any]:
         }
         if any(v is not None for v in returns.values()):
             item["returnsPct"] = returns
-    if len(row) > 21:
+    if core_n > 21:
         if row[20]:
             item["amcName"] = row[20]
         if row[21] is not None:
             item["sipMinAmount"] = row[21]
             item["minSip"] = row[21]
-    if len(row) > 22 and row[22]:
+    if core_n > 22 and row[22]:
         item["enrichmentSource"] = row[22]
+    if has_prev_tail:
+        _attach_prev_nav(item, row[-3], row[-2], row[-1])
     return item
 
 
+def _scheme_basic_width(row: tuple) -> int:
+    """How many leading SCH columns before enrichment.
+
+    With prev_nav trio + face/cutoffs = 28.
+    Without prev + face/cutoffs = 25.
+    Legacy (no face) = 22.
+
+    Enriched lengths: 28+6=34, 28+12=40 (vendor); 25+6=31, 25+12=37.
+    """
+    n = len(row)
+    if n >= 40:
+        return 28
+    if n >= 37:
+        return 25
+    if n >= 34:
+        return 28
+    if n >= 31:
+        return 25
+    if n >= 28:
+        return 28
+    if n >= 25:
+        return 25
+    if n >= 22:
+        return 22
+    return n
+
+
 def _map_scheme_row_basic(row: tuple) -> dict[str, Any]:
+    # Width 28 means prev cols present; width 25/22 means not.
+    has_prev = _scheme_basic_width(row) == 28
     m: dict[str, Any] = {
         "schemeCode": row[0],
         "schemeName": row[1],
@@ -547,24 +673,32 @@ def _map_scheme_row_basic(row: tuple) -> dict[str, Any]:
         "rtaAgentCode": row[15],
         "nav": float(row[16]) if row[16] is not None else None,
         "navDate": _date_str(row[17]),
-        "exitLoadFlag": row[18],
-        "exitLoad": row[19],
-        "lockInPeriodFlag": row[20],
-        "lockInPeriod": row[21],
     }
-    # SCH trading fields (face value / cutoffs) when selected.
-    if len(row) > 22:
-        m["faceValue"] = row[22]
-    if len(row) > 23:
-        m["purchaseCutoffTime"] = row[23]
-    if len(row) > 24:
-        m["redemptionCutoffTime"] = row[24]
+    if has_prev:
+        _attach_prev_nav(m, row[18], row[19], row[20])
+        exit_i = 21
+    else:
+        exit_i = 18
+
+    if len(row) > exit_i:
+        m["exitLoadFlag"] = row[exit_i]
+    if len(row) > exit_i + 1:
+        m["exitLoad"] = row[exit_i + 1]
+    if len(row) > exit_i + 2:
+        m["lockInPeriodFlag"] = row[exit_i + 2]
+    if len(row) > exit_i + 3:
+        m["lockInPeriod"] = row[exit_i + 3]
+    if len(row) > exit_i + 4:
+        m["faceValue"] = row[exit_i + 4]
+    if len(row) > exit_i + 5:
+        m["purchaseCutoffTime"] = row[exit_i + 5]
+    if len(row) > exit_i + 6:
+        m["redemptionCutoffTime"] = row[exit_i + 6]
     return m
 
 
 def _map_scheme_row_enriched(row: tuple) -> dict[str, Any]:
-    # basic = 0..24 (25 cols), enrich starts at 25
-    basic_n = 25 if len(row) >= 25 else 22
+    basic_n = _scheme_basic_width(row)
     m = _map_scheme_row_basic(row[:basic_n])
     if len(row) <= basic_n:
         return m
@@ -576,7 +710,6 @@ def _map_scheme_row_enriched(row: tuple) -> dict[str, Any]:
     m["sebiSubCategory"] = row[base + 4]
     if len(row) > base + 5 and row[base + 5]:
         m["enrichmentSource"] = row[base + 5]
-    # Vendor analytics (optional; only after V3 / AMFI-extended CSV).
     if len(row) > base + 6 and row[base + 6]:
         m["benchmarkName"] = row[base + 6]
     if len(row) > base + 7 and row[base + 7]:

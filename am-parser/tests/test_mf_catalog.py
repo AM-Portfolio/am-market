@@ -53,7 +53,7 @@ def test_search_maps_camel_case_and_price_type():
         "u",
         "p",
     )
-    # Full enriched + returns + sip row shape from _SEARCH_SELECT_ENRICHED
+    # Full enriched + returns + sip + prev_nav trio from _SEARCH_SELECT_ENRICHED
     row = (
         "SC1",
         "HDFC Flexi",
@@ -78,6 +78,9 @@ def test_search_maps_camel_case_and_price_type():
         "HDFC Mutual Fund",
         "500",
         "amfi",
+        120.0,
+        date(2026, 11, 4),
+        2.875,
     )
     cur = MagicMock()
     cur.fetchall.return_value = [row]
@@ -107,6 +110,9 @@ def test_search_maps_camel_case_and_price_type():
     assert item["amcName"] == "HDFC Mutual Fund"
     assert item["minSip"] == "500"
     assert item["enrichmentSource"] == "amfi"
+    assert item["prevNav"] == 120.0
+    assert item["prevNavDate"] == "2026-11-04"
+    assert item["changePct"] == 2.875
 
 
 def test_empty_query_order_by_avoids_scheme_name_only():
@@ -225,6 +231,55 @@ def test_details_orders_by_scheme_code():
     sql = cur.execute.call_args[0][0]
     assert "ORDER BY" in sql.upper()
     assert "scheme_code" in sql.lower()
+
+
+def test_details_maps_prev_nav_when_present():
+    from am_mf_catalog.service import _map_scheme_row_enriched
+
+    # 28 SCH (with prev) + 6 enrich
+    row = (
+        "SC1",
+        "Fund",
+        "INF1",
+        "AMC",
+        "Open",
+        "G",
+        "Y",
+        "Y",
+        "Y",
+        "Y",
+        "Y",
+        "Y",
+        "DP",
+        "500",
+        "DP",
+        "CAMS",
+        110.0,
+        date(2026, 11, 25),
+        100.0,
+        date(2026, 11, 24),
+        10.0,
+        "N",
+        None,
+        "N",
+        None,
+        "10",
+        "14:30",
+        "14:30",
+        12000.0,
+        0.55,
+        "VERY HIGH",
+        "Equity",
+        "Flexi Cap",
+        "amfi",
+    )
+    out = _map_scheme_row_enriched(row)
+    assert out["nav"] == 110.0
+    assert out["navDate"] == "2026-11-25"
+    assert out["prevNav"] == 100.0
+    assert out["prevNavDate"] == "2026-11-24"
+    assert out["changePct"] == 10.0
+    assert out["enrichmentSource"] == "amfi"
 
 
 def test_history_requires_from_to_shape():
