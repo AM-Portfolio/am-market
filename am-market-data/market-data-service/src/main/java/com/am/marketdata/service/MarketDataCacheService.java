@@ -157,7 +157,14 @@ public class MarketDataCacheService {
         }
         String exchange = canonicalExchange(symbol);
         LocalDate expectedQuoteDate = expectedQuoteSessionDate(exchange);
-        if (expectedQuoteDate == null) return null;
+        // A transient calendar failure must not disable the entire enrichment
+        // path. During an active NSE session, today's Kolkata date is the safe
+        // session key; Redis/Mongo/provider validation still rejects invalid or
+        // stale baselines below.
+        if (expectedQuoteDate == null) {
+            expectedQuoteDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+            log.warn("getPreviousClose", "Calendar returned no session for {}; using current Kolkata date for lookup", symbol);
+        }
         String hotKey = exchange + ":" + normalizedSymbol;
         SessionClose hot = hotPreviousCloses.get(hotKey);
         if (hot != null && expectedQuoteDate.equals(hot.sessionDate())) return hot.price();
@@ -208,6 +215,22 @@ public class MarketDataCacheService {
                     double close = docOpt.get().getPreviousClose();
                     hotPreviousCloses.put(hotKey, new SessionClose(expectedQuoteDate, close));
                     missingCloseRetryAt.remove(hotKey);
+                    return close;
+                }
+                // A scheduler can persist the latest valid session close before the
+                // calendar row for the current session is visible to this pod. The
+                // document is symbol-scoped and represents the latest close, so a
+                // recent, dated snapshot is still safe to use while the session
+                // metadata catches up. Never use an old unbounded value.
+                if (docOpt.isPresent() && docOpt.get().getPreviousClose() != null
+                        && Double.isFinite(docOpt.get().getPreviousClose())
+                        && docOpt.get().getPreviousClose() > 0
+                        && docOpt.get().getUpdatedAt() != null
+                        && java.time.Duration.between(docOpt.get().getUpdatedAt(), java.time.Instant.now()).toHours() <= 72) {
+                    double close = docOpt.get().getPreviousClose();
+                    hotPreviousCloses.put(hotKey, new SessionClose(expectedQuoteDate, close));
+                    missingCloseRetryAt.remove(hotKey);
+                    log.info("getPreviousClose", "Using recent persisted previousClose for {} while session metadata catches up", symbol);
                     return close;
                 }
             } catch (Exception mongoEx) {

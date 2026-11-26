@@ -206,7 +206,11 @@ public class StreamerManager implements StreamerListener {
             if (streamer.isConnected()) {
                 log.info("StreamerManager",
                         "Streamer connected - subscribing to " + subscribedSymbols.size() + " symbols");
-                streamer.subscribe(subscribedSymbols, DEFAULT_MODE);
+                try {
+                    streamer.subscribe(subscribedSymbols, DEFAULT_MODE);
+                } catch (Exception e) {
+                    log.warn("StreamerManager", "Failed to subscribe symbols: " + e.getMessage(), e);
+                }
             } else {
                 log.info("StreamerManager", "Streamer not connected - will subscribe when connection opens");
             }
@@ -646,6 +650,17 @@ public class StreamerManager implements StreamerListener {
                         // 2. Fall back to the streaming tick's previousClose if the cache is empty
                         if (prevClose == null || !Double.isFinite(prevClose) || prevClose <= 0.0) {
                             prevClose = quote.getPreviousClose();
+                            // Some provider paths expose the session move but not the
+                            // baseline. Derive the baseline from that verified move;
+                            // never use today's OHLC close as yesterday's close.
+                            if ((prevClose == null || !Double.isFinite(prevClose) || prevClose <= 0.0)
+                                    && quote.getChange() != null
+                                    && Double.isFinite(quote.getChange())) {
+                                double derivedPreviousClose = lastPrice - quote.getChange();
+                                if (Double.isFinite(derivedPreviousClose) && derivedPreviousClose > 0.0) {
+                                    prevClose = derivedPreviousClose;
+                                }
+                            }
                             // Dynamically populate Redis so subsequent updates don't hit the fallback logic
                             if (prevClose != null && Double.isFinite(prevClose) && prevClose > 0.0) {
                                 cacheService.setPreviousClose(symbol, prevClose);
@@ -667,6 +682,9 @@ public class StreamerManager implements StreamerListener {
                         } else {
                             quote.setChange(null);
                             quote.setChangePercent(null);
+                            log.warn("StreamerManager",
+                                    "No session previousClose for live symbol {}; publishing price without daily change",
+                                    symbol);
                         }
 
                         MarketDataUpdate.QuoteChange changeObj = MarketDataUpdate.QuoteChange.builder()

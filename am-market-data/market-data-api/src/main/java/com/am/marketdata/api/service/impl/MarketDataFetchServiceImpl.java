@@ -607,8 +607,8 @@ public class MarketDataFetchServiceImpl implements MarketDataFetchService {
         // Adjust query dates to the last active trading session if they fall on weekends or holidays.
         // This prevents querying empty holiday/weekend ranges and avoids Upstox API rejections.
         java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
-        java.time.LocalDate localTo = toDate.toInstant().atZone(kolkataZone).toLocalDate();
-        java.time.LocalDate localFrom = fromDate.toInstant().atZone(kolkataZone).toLocalDate();
+        java.time.LocalDate localTo = java.time.Instant.ofEpochMilli(toDate.getTime()).atZone(kolkataZone).toLocalDate();
+        java.time.LocalDate localFrom = java.time.Instant.ofEpochMilli(fromDate.getTime()).atZone(kolkataZone).toLocalDate();
 
         // Roll to-date back to the last active trading day if currently closed
         localTo = adjustToLastTradingDay(localTo);

@@ -382,8 +382,12 @@ public class UpstoxMarketDataStreamer implements MarketDataStreamer {
         Mode sdkMode = parseMode(mode);
 
         log.info("UpstoxStreamer", "Subscribing to instrument keys: " + instrumentKeys);
-        activeStreamer.subscribe(instrumentKeys, sdkMode);
-        log.info("UpstoxStreamer", "Subscription successful for " + instrumentKeys.size() + " instruments");
+        try {
+            activeStreamer.subscribe(instrumentKeys, sdkMode);
+            log.info("UpstoxStreamer", "Subscription successful for " + instrumentKeys.size() + " instruments");
+        } catch (Exception e) {
+            log.warn("UpstoxStreamer", "Subscription failed: " + e.getMessage());
+        }
     }
 
     @Override
