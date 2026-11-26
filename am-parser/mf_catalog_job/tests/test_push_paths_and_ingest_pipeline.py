@@ -24,8 +24,10 @@ def test_migration_sql_resolves_for_docker_and_checkout() -> None:
     text = push.MIGRATION.read_text(encoding="utf-8")
     assert "CREATE TABLE IF NOT EXISTS mf_scheme" in text
     assert "CREATE TABLE IF NOT EXISTS mf_nav_eod" in text
-    resolved = str(push.MIGRATION).replace("\\", "/")
-    assert "/am-market/am-market/" not in resolved
+    # Vendored next to _push_core (not a broken relative walk into am-market/am-market/...).
+    # Note: GitHub Actions checkout path is .../work/am-market/am-market/... — that is OK.
+    assert push.MIGRATION.parent.name == "mf_catalog_job"
+    assert push.MIGRATION.resolve() == (ROOT / "V1__mf_catalog.sql").resolve()
 
 
 def test_dockerfile_and_vendored_files_present() -> None:
