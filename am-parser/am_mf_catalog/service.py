@@ -399,10 +399,26 @@ def _search_where(
     if amc and amc.strip():
         sql += f"AND UPPER({prefix}amc_code) = %s "
         params.append(amc.strip().upper())
-    if purchase_allowed and purchase_allowed.strip():
+    pa = _normalize_purchase_allowed(purchase_allowed)
+    if pa:
         sql += f"AND UPPER({prefix}purchase_allowed) = %s "
-        params.append(purchase_allowed.strip().upper())
+        params.append(pa)
     return sql, params
+
+
+def _normalize_purchase_allowed(value: Optional[str]) -> Optional[str]:
+    """Map true/yes/1 → Y and false/no/0 → N so Explore bool query params match SCH."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    upper = raw.upper()
+    if upper in {"Y", "YES", "TRUE", "1", "T"}:
+        return "Y"
+    if upper in {"N", "NO", "FALSE", "0", "F"}:
+        return "N"
+    return upper
 
 
 def _run_search(

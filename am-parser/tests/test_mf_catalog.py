@@ -8,7 +8,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from am_common.jdbc import jdbc_to_pg_params, safe_jdbc_label
-from am_mf_catalog.service import MfCatalogService, PRICE_TYPE, SOURCE
+from am_mf_catalog.service import (
+    MfCatalogService,
+    PRICE_TYPE,
+    SOURCE,
+    _normalize_purchase_allowed,
+)
+
+
+def test_normalize_purchase_allowed_boolish():
+    assert _normalize_purchase_allowed("true") == "Y"
+    assert _normalize_purchase_allowed("1") == "Y"
+    assert _normalize_purchase_allowed("yes") == "Y"
+    assert _normalize_purchase_allowed("Y") == "Y"
+    assert _normalize_purchase_allowed("false") == "N"
+    assert _normalize_purchase_allowed(None) is None
 
 
 def test_jdbc_to_pg_params_strips_jdbc_and_honors_schema():
