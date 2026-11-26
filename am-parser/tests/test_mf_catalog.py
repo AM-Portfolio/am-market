@@ -67,7 +67,7 @@ def test_search_maps_camel_case_and_price_type():
         "u",
         "p",
     )
-    # Full enriched + returns + sip row shape from _SEARCH_SELECT_ENRICHED
+    # Enriched + returns + source (no SIP lateral — list search must stay fast)
     row = (
         "SC1",
         "HDFC Flexi",
@@ -89,8 +89,6 @@ def test_search_maps_camel_case_and_price_type():
         12.5,
         None,
         None,
-        "HDFC Mutual Fund",
-        "500",
         "amfi",
     )
     cur = MagicMock()
@@ -118,9 +116,8 @@ def test_search_maps_camel_case_and_price_type():
     assert item["aum"] == 5000.0
     assert item["expenseRatio"] == 0.45
     assert item["returnsPct"]["1Y"] == 12.5
-    assert item["amcName"] == "HDFC Mutual Fund"
-    assert item["minSip"] == "500"
     assert item["enrichmentSource"] == "amfi"
+    assert "minSip" not in item
 
 
 def test_empty_query_order_by_avoids_scheme_name_only():

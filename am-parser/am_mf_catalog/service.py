@@ -72,21 +72,18 @@ WHERE scheme_code = %s OR isin = %s
 ORDER BY nav_date ASC
 """
 
-# Explore search: SCH identity + min invest + enrichment (+ optional returns denorm / SIP).
+# Explore search: SCH + enrichment + returns.
+# Do NOT LATERAL-join mf_sip_rule here — per-row OR lookup made limit=100 hang (>120s)
+# and Explore fell through to seed (null NAV). SIP mins stay on scheme details.
 _SEARCH_SELECT_ENRICHED = (
     "SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
     "s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
     "e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, "
     "r.ret_1m, r.ret_3m, r.ret_1y, r.ret_3y, r.ret_5y, "
-    "sip.amc_name, sip.sip_min_installment_amount, e.source "
+    "e.source "
     "FROM mf_scheme s "
     "LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin "
     "LEFT JOIN mf_scheme_returns r ON r.isin = s.isin "
-    "LEFT JOIN LATERAL ("
-    "  SELECT amc_name, sip_min_installment_amount FROM mf_sip_rule "
-    "  WHERE scheme_code = s.scheme_code OR scheme_isin = s.isin "
-    "  ORDER BY scheme_code LIMIT 1"
-    ") sip ON TRUE "
 )
 
 _SEARCH_SELECT_BASIC = (
@@ -445,6 +442,11 @@ def _run_search(
                 cur.connection.rollback()
             except Exception:
                 pass
+            # Bound each join attempt so a slow plan cannot hang Explore → BFF seed.
+            try:
+                cur.execute("SET LOCAL statement_timeout = '12s'")
+            except Exception:
+                pass
             cur.execute(sql, list(params) + [limit])
             return [_map_search_row(row) for row in cur.fetchall()]
         except Exception as e:
@@ -458,6 +460,9 @@ def _run_search(
                     "mf_sip_rule",
                     "does not exist",
                     "undefinedtable",
+                    "statement timeout",
+                    "querycanceled",
+                    "canceling statement",
                 )
             ):
                 log.warning("MF search join degraded: %s", e)
@@ -511,7 +516,8 @@ def _map_search_row(row: tuple) -> dict[str, Any]:
         # enrich-only + source
         if row[15]:
             item["enrichmentSource"] = row[15]
-    if len(row) > 19:
+    if len(row) == 21:
+        # enrich + returns + source (no SIP lateral)
         returns: dict[str, Optional[float]] = {
             "1M": float(row[15]) if row[15] is not None else None,
             "3M": float(row[16]) if row[16] is not None else None,
@@ -521,14 +527,26 @@ def _map_search_row(row: tuple) -> dict[str, Any]:
         }
         if any(v is not None for v in returns.values()):
             item["returnsPct"] = returns
+        if row[20]:
+            item["enrichmentSource"] = row[20]
     if len(row) > 21:
+        # Legacy shape with SIP cols (amc_name, sip_min) before source
+        returns = {
+            "1M": float(row[15]) if row[15] is not None else None,
+            "3M": float(row[16]) if row[16] is not None else None,
+            "1Y": float(row[17]) if row[17] is not None else None,
+            "3Y": float(row[18]) if row[18] is not None else None,
+            "5Y": float(row[19]) if row[19] is not None else None,
+        }
+        if any(v is not None for v in returns.values()):
+            item["returnsPct"] = returns
         if row[20]:
             item["amcName"] = row[20]
         if row[21] is not None:
             item["sipMinAmount"] = row[21]
             item["minSip"] = row[21]
-    if len(row) > 22 and row[22]:
-        item["enrichmentSource"] = row[22]
+        if len(row) > 22 and row[22]:
+            item["enrichmentSource"] = row[22]
     return item
 
 
