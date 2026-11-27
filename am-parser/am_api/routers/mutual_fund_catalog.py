@@ -6,6 +6,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
 from am_api.deps import get_mf_catalog_service
 from am_common.logging.request_logging import get_logger
@@ -13,6 +14,10 @@ from am_mf_catalog.service import MfCatalogService
 
 log = get_logger("mf_catalog_api")
 router = APIRouter(tags=["Mutual Fund Catalog"])
+
+
+class NavBatchRequest(BaseModel):
+    isins: list[str] = Field(default_factory=list, max_length=200)
 
 
 @router.get("/search")
@@ -24,6 +29,26 @@ def search_schemes(
     catalog: MfCatalogService = Depends(get_mf_catalog_service),
 ):
     result = catalog.search_schemes(q, amc, purchaseAllowed, limit)
+    if result.get("error") == "Mutual fund catalog not configured":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=result,
+        )
+    if result.get("error"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=result,
+        )
+    return result
+
+
+@router.post("/nav/batch")
+def nav_batch(
+    body: NavBatchRequest,
+    catalog: MfCatalogService = Depends(get_mf_catalog_service),
+):
+    """Bulk latest + previous EOD NAV for portfolio MF books (one round trip)."""
+    result = catalog.get_nav_batch(body.isins)
     if result.get("error") == "Mutual fund catalog not configured":
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
