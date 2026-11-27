@@ -28,13 +28,13 @@ public class CacheThreadPoolConfig {
 
     private static final Logger log = LoggerFactory.getLogger(CacheThreadPoolConfig.class);
 
-    @Value("${market.cache.async-backfill.core-pool-size:5}")
+    @Value("${market.cache.async-backfill.core-pool-size:10}")
     private int corePoolSize;
 
-    @Value("${market.cache.async-backfill.max-pool-size:15}")
+    @Value("${market.cache.async-backfill.max-pool-size:30}")
     private int maxPoolSize;
 
-    @Value("${market.cache.async-backfill.queue-capacity:500}")
+    @Value("${market.cache.async-backfill.queue-capacity:2000}")
     private int queueCapacity;
 
     @Bean(name = "cacheBackfillExecutor")

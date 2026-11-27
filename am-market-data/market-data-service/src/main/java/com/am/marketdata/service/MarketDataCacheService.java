@@ -83,6 +83,25 @@ public class MarketDataCacheService {
     @org.springframework.beans.factory.annotation.Qualifier("upstoxMarketDataProvider")
     private MarketDataProvider upstoxMarketDataProvider;
 
+    /**
+     * Dedicated executor for on-demand provider baseline lookups.
+     * Decoupled from cacheBackfillExecutor so that discarded/queued background cache writes
+     * never block or cancel required baseline resolutions.
+     */
+    private final java.util.concurrent.ExecutorService baselineLookupExecutor = java.util.concurrent.Executors.newFixedThreadPool(4, r -> {
+        Thread thread = new Thread(r, "market-baseline-lookup");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    @jakarta.annotation.PreDestroy
+    public void shutdown() {
+        try {
+            baselineLookupExecutor.shutdownNow();
+        } catch (Exception ignored) {
+        }
+    }
+
     @Value("${market.data.depth.max.age.seconds:60}")
     private long marketDepthMaxAgeSeconds = 60;
 
@@ -271,7 +290,7 @@ public class MarketDataCacheService {
                                     providerEx);
                         }
                         return null;
-                    }, cacheBackfillExecutor != null ? cacheBackfillExecutor : CompletableFuture.delayedExecutor(0, TimeUnit.MILLISECONDS))
+                    }, baselineLookupExecutor)
                             .whenComplete((value, error) -> previousCloseProviderLoads.remove(hotKey)));
             try {
                 Double providerClose = load.get(1500, TimeUnit.MILLISECONDS);
@@ -1655,10 +1674,18 @@ public class MarketDataCacheService {
                 String symbol = normalizedSymbols.get(i);
                 String existingValue = existingCloseMetadata != null && i < existingCloseMetadata.size()
                         ? existingCloseMetadata.get(i) : null;
-                existingPrevCloseBySymbol.put(symbol, existingValue);
                 int dateIndex = normalizedSymbols.size() + i;
                 String existingDate = existingCloseMetadata != null && dateIndex < existingCloseMetadata.size()
                         ? existingCloseMetadata.get(dateIndex) : null;
+                if (existingValue == null) {
+                    SessionClose hot = hotPreviousCloses.get("NSE:" + symbol);
+                    if (hot == null) hot = hotPreviousCloses.get("BSE:" + symbol);
+                    if (hot != null) {
+                        existingValue = String.valueOf(hot.price());
+                        existingDate = hot.sessionDate() != null ? hot.sessionDate().toString() : null;
+                    }
+                }
+                existingPrevCloseBySymbol.put(symbol, existingValue);
                 existingPrevCloseDateBySymbol.put(symbol, existingDate);
             }
 
@@ -1705,6 +1732,7 @@ public class MarketDataCacheService {
                     prevCloseRedisWrites.put("market:prev-close:" + symbol, String.valueOf(previousClose));
                     if (quoteTradeDate != null) {
                         prevCloseRedisWrites.put("market:prev-close-date:" + symbol, quoteTradeDate.toString());
+                        hotPreviousCloses.put("NSE:" + symbol, new SessionClose(quoteTradeDate, previousClose));
                     }
 
                     if (previousCloseRepository != null && quoteTradeDate != null) {
