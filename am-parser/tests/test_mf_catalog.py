@@ -8,7 +8,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from am_common.jdbc import jdbc_to_pg_params, safe_jdbc_label
-from am_mf_catalog.service import MfCatalogService, PRICE_TYPE, SOURCE
+from am_mf_catalog.service import (
+    MfCatalogService,
+    PRICE_TYPE,
+    SOURCE,
+    _normalize_purchase_allowed,
+)
+
+
+def test_normalize_purchase_allowed_boolish():
+    assert _normalize_purchase_allowed("true") == "Y"
+    assert _normalize_purchase_allowed("1") == "Y"
+    assert _normalize_purchase_allowed("yes") == "Y"
+    assert _normalize_purchase_allowed("Y") == "Y"
+    assert _normalize_purchase_allowed("false") == "N"
+    assert _normalize_purchase_allowed(None) is None
 
 
 def test_jdbc_to_pg_params_strips_jdbc_and_honors_schema():
@@ -53,7 +67,7 @@ def test_search_maps_camel_case_and_price_type():
         "u",
         "p",
     )
-    # Full enriched + returns + sip row shape from _SEARCH_SELECT_ENRICHED
+    # Enriched + returns + source (no SIP lateral — list search must stay fast)
     row = (
         "SC1",
         "HDFC Flexi",
@@ -75,8 +89,6 @@ def test_search_maps_camel_case_and_price_type():
         12.5,
         None,
         None,
-        "HDFC Mutual Fund",
-        "500",
         "amfi",
     )
     cur = MagicMock()
@@ -104,9 +116,8 @@ def test_search_maps_camel_case_and_price_type():
     assert item["aum"] == 5000.0
     assert item["expenseRatio"] == 0.45
     assert item["returnsPct"]["1Y"] == 12.5
-    assert item["amcName"] == "HDFC Mutual Fund"
-    assert item["minSip"] == "500"
     assert item["enrichmentSource"] == "amfi"
+    assert "minSip" not in item
 
 
 def test_empty_query_order_by_avoids_scheme_name_only():
@@ -163,6 +174,54 @@ def test_search_degrades_when_enrichment_missing():
     assert out["count"] == 1
     assert out["items"][0]["schemeName"] == "SBI Bluechip"
     assert out["items"][0]["newPurchaseMinAmount"] == "500"
+
+
+def test_search_prefers_returns_cte_before_enrich_only():
+    """Explore list must try CTE+returns first so returnsPct is not permanently skipped."""
+    from am_mf_catalog.service import _run_search
+
+    cur = MagicMock()
+    cur.connection = MagicMock()
+    seen: list[str] = []
+
+    def execute(sql, params=None):
+        if isinstance(sql, str) and sql.startswith("SET LOCAL"):
+            return
+        if isinstance(sql, str) and "SELECT" in sql.upper():
+            seen.append(sql)
+            # First attempt succeeds with returns shape
+            cur.fetchall.return_value = [
+                (
+                    "SC1",
+                    "Fund",
+                    "INF1",
+                    "AMC",
+                    "Open",
+                    "G",
+                    "Y",
+                    10.0,
+                    date(2026, 11, 26),
+                    "100",
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    12.0,
+                    None,
+                    None,
+                    "amfi",
+                )
+            ]
+
+    cur.execute.side_effect = execute
+    items = _run_search(cur, "HDFC", None, "true", 5)
+    assert seen, "expected a SELECT attempt"
+    assert "WITH base AS" in seen[0]
+    assert "mf_scheme_returns" in seen[0]
+    assert items[0]["returnsPct"]["1Y"] == 12.0
 
 
 def test_details_orders_by_scheme_code():

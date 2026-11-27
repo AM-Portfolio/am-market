@@ -1,0 +1,4 @@
+# am-parser mf_catalog_job CronJob only (not the parser API / MF BFF).
+psycopg2-binary>=2.9.9
+requests>=2.32.0
+pycryptodome>=3.21.0

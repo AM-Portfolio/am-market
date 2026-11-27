@@ -10,7 +10,8 @@ Exit 0 = search returns items with nav/navDate and source=nse-master-download.
 Exit 2 = empty / missing NAV (catalog DB may be unpopulated for that env).
 Exit 1 = HTTP/connect failure.
 
-Preprod/prod: run only after mf_catalog is populated for that env's Postgres.
+Preprod/prod: run only after mf_catalog is populated for that env's Postgres
+(am-parser mf_catalog_job / docs/mf-catalog-nav-ownership.md).
 """
 from __future__ import annotations
 
@@ -28,7 +29,14 @@ def main() -> int:
         return 1
     url = f"{base}/v1/mutual-fund/search?q=HDFC&limit=5"
     try:
-        req = Request(url, headers={"Accept": "application/json"})
+        # Ingress/WAF may 403 bare urllib User-Agent; curl-style UA works on dig.
+        req = Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "am-parser-smoke-mf-catalog/1.0",
+            },
+        )
         with urlopen(req, timeout=20) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except HTTPError as e:
