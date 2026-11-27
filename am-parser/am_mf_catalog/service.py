@@ -66,6 +66,57 @@ WHERE (scheme_code = %s OR isin = %s) AND nav_date >= %s AND nav_date <= %s
 ORDER BY nav_date ASC
 """
 
+# Portfolio bulk NAV: one row per ISIN. Prefer denormalized prev_nav; else prior EOD
+# (no 3-day clamp — weekends/holidays). DISTINCT ON collapses multi-scheme ISINs.
+_EOD_PREV_SUBQUERY = """
+(
+  SELECT n.nav
+  FROM mf_nav_eod n
+  WHERE (n.isin = s.isin OR n.scheme_code = s.scheme_code)
+    AND s.latest_nav_date IS NOT NULL
+    AND n.nav_date::date < s.latest_nav_date::date
+    AND n.nav IS NOT NULL
+    AND n.nav > 0
+  ORDER BY n.nav_date::date DESC
+  LIMIT 1
+)
+"""
+
+_BATCH_NAV_SQL = f"""
+SELECT DISTINCT ON (UPPER(s.isin))
+       s.isin,
+       s.scheme_name,
+       s.latest_nav,
+       s.latest_nav_date,
+       COALESCE(s.prev_nav, {_EOD_PREV_SUBQUERY}) AS previous_nav
+FROM mf_scheme s
+WHERE s.isin IS NOT NULL
+  AND btrim(s.isin) <> ''
+  AND UPPER(s.isin) = ANY(%s)
+ORDER BY UPPER(s.isin),
+         (UPPER(COALESCE(s.purchase_allowed, '')) = 'Y') DESC,
+         s.scheme_code
+"""
+
+# Fallback when prev_nav column is not migrated yet (V1 DDL only has latest_nav*).
+_BATCH_NAV_SQL_NO_PREV_COL = f"""
+SELECT DISTINCT ON (UPPER(s.isin))
+       s.isin,
+       s.scheme_name,
+       s.latest_nav,
+       s.latest_nav_date,
+       {_EOD_PREV_SUBQUERY} AS previous_nav
+FROM mf_scheme s
+WHERE s.isin IS NOT NULL
+  AND btrim(s.isin) <> ''
+  AND UPPER(s.isin) = ANY(%s)
+ORDER BY UPPER(s.isin),
+         (UPPER(COALESCE(s.purchase_allowed, '')) = 'Y') DESC,
+         s.scheme_code
+"""
+
+_MAX_BATCH_ISINS = 200
+
 _PERF_SQL = """
 SELECT nav_date, nav FROM mf_nav_eod
 WHERE scheme_code = %s OR isin = %s
@@ -228,6 +279,91 @@ class MfCatalogService:
         m["source"] = SOURCE
         m["priceType"] = PRICE_TYPE
         return m
+
+    def get_nav_batch(self, isins: list[str] | None) -> dict[str, Any]:
+        """One-shot NAV + previousNav for portfolio MF books (one mark per ISIN)."""
+        out: dict[str, Any] = {
+            "source": SOURCE,
+            "priceType": PRICE_TYPE,
+            "marks": [],
+            "missing": [],
+        }
+        if not self.is_configured():
+            out["error"] = "Mutual fund catalog not configured"
+            return out
+
+        keys: list[str] = []
+        seen: set[str] = set()
+        for raw in isins or []:
+            key = (raw or "").strip().upper()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
+            if len(keys) >= _MAX_BATCH_ISINS:
+                break
+
+        if not keys:
+            return out
+
+        found: set[str] = set()
+        marks: list[dict[str, Any]] = []
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    rows = self._fetch_nav_batch_rows(conn, cur, keys)
+                    for row in rows:
+                        isin = (row[0] or "").strip().upper()
+                        if not isin:
+                            continue
+                        nav = float(row[2]) if row[2] is not None else None
+                        if nav is None or nav <= 0:
+                            continue
+                        previous = float(row[4]) if row[4] is not None else None
+                        if previous is not None and previous <= 0:
+                            previous = None
+                        found.add(isin)
+                        marks.append(
+                            {
+                                "isin": isin,
+                                "schemeName": row[1],
+                                "nav": nav,
+                                "previousNav": previous,
+                                "navDate": _date_str(row[3]),
+                            }
+                        )
+        except Exception as e:
+            log.error(
+                "MF catalog nav batch failed count=%s target=%s err=%s",
+                len(keys),
+                safe_jdbc_label(self._jdbc_url),
+                e,
+            )
+            out["error"] = "Mutual fund nav batch failed"
+            out["message"] = str(e)
+            return out
+
+        out["marks"] = marks
+        out["missing"] = [k for k in keys if k not in found]
+        out["count"] = len(marks)
+        return out
+
+    def _fetch_nav_batch_rows(self, conn: Any, cur: Any, keys: list[str]) -> list[tuple]:
+        """Prefer prev_nav column; degrade if not migrated yet."""
+        try:
+            cur.execute(_BATCH_NAV_SQL, (keys,))
+            return list(cur.fetchall())
+        except Exception as e:
+            msg = str(e).lower()
+            if "prev_nav" not in msg and "undefinedcolumn" not in msg:
+                raise
+            log.warning("MF nav batch prev_nav missing; falling back: %s", e)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            cur.execute(_BATCH_NAV_SQL_NO_PREV_COL, (keys,))
+            return list(cur.fetchall())
 
     def get_nav_history(
         self,
