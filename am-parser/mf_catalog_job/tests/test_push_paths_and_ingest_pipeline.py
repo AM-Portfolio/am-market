@@ -58,7 +58,7 @@ def test_cronjob_pins_sha_and_softens_morning_stale() -> None:
     assert image_lines, "expected CronJob image lines"
     assert all(":latest" not in ln for ln in image_lines)
     assert all(
-        "am-parser-mf-catalog-job:b3ce727fe2bcdaea7f3f799415fa7daa52068d6a" in ln
+        "am-parser-mf-catalog-job:133d977fd2cf6aa21bb87e87882af521e9ca67fb" in ln
         for ln in image_lines
     )
     # Evening keeps fail-on-stale; morning allows weekend lag.
@@ -88,7 +88,7 @@ def test_cronjobs_cover_dev_preprod_prod_without_cross_env() -> None:
             "am-parser-synced-secrets",
         ),
     }
-    pin = "am-parser-mf-catalog-job:b3ce727fe2bcdaea7f3f799415fa7daa52068d6a"
+    pin = "am-parser-mf-catalog-job:133d977fd2cf6aa21bb87e87882af521e9ca67fb"
     for name, (ns, db_token, nse_secret, jdbc_secret) in cases.items():
         text = (cron / name).read_text(encoding="utf-8")
         assert f"namespace: {ns}" in text

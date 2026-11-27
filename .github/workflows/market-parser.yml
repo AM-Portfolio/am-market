@@ -59,7 +59,7 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          pip install -r requirements.txt pytest
+          pip install -r requirements.txt -r mf_catalog_job/requirements-job.txt pytest
           pytest tests/test_mf_catalog.py mf_catalog_job/tests -q
 
   publish:
