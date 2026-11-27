@@ -19,19 +19,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SQLITE = Path(os.environ.get("MF_CATALOG_SQLITE", ROOT / "data" / "mf_catalog.db"))
-ENV_FILE = ROOT.parent / "mf_service" / ".env"
-MIGRATION = (
-    ROOT.parents[1]
-    / "am-market"
-    / "am-market-data"
-    / "market-data-api"
-    / "src"
-    / "main"
-    / "resources"
-    / "db"
-    / "migration"
-    / "V1__mf_catalog.sql"
-)
+# Optional local dotenv (CronJob / dig use env Secrets — no mf_service here).
+ENV_FILE = ROOT / "data" / ".env"
+# Prefer vendored DDL (Docker-safe); same as _push_core.
+MIGRATION = ROOT / "V1__mf_catalog.sql"
+if not MIGRATION.is_file():
+    MIGRATION = (
+        ROOT.parents[1]
+        / "am-market-data"
+        / "market-data-api"
+        / "src"
+        / "main"
+        / "resources"
+        / "db"
+        / "migration"
+        / "V1__mf_catalog.sql"
+    )
 
 
 def load_dotenv(path: Path) -> None:

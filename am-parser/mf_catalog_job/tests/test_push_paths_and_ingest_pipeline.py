@@ -34,6 +34,9 @@ def test_dockerfile_and_vendored_files_present() -> None:
     df = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY mf_catalog_job/" in df
     assert 'CMD ["python", "mf_catalog_job/daily_job.py", "--fail-on-stale"]' in df
+    # Never bake dig JDBC into the image (CronJob/env supplies DSN).
+    assert "user_platform_dev" not in df
+    assert "AM_MARKET_MF_JDBC_URL=" not in df
     for name in (
         "V1__mf_catalog.sql",
         "daily_job.py",
@@ -45,6 +48,63 @@ def test_dockerfile_and_vendored_files_present() -> None:
         "requirements-job.txt",
     ):
         assert (ROOT / name).is_file(), name
+
+
+def test_cronjob_pins_sha_and_softens_morning_stale() -> None:
+    text = (
+        ROOT.parent / "helm" / "cronjobs" / "mf-catalog-nav-daily.yaml"
+    ).read_text(encoding="utf-8")
+    image_lines = [ln for ln in text.splitlines() if "image:" in ln and "am-parser-mf-catalog-job" in ln]
+    assert image_lines, "expected CronJob image lines"
+    assert all(":latest" not in ln for ln in image_lines)
+    assert all(
+        "am-parser-mf-catalog-job:58a96a1653c6ddbbb6226a9debd8ac6c67a5c9d5" in ln
+        for ln in image_lines
+    )
+    # Evening keeps fail-on-stale; morning allows weekend lag.
+    assert text.count("--fail-on-stale") == 1
+    assert "--alert-if-nav-lag-days 3" in text
+
+
+def test_cronjobs_cover_dev_preprod_prod_without_cross_env() -> None:
+    cron = ROOT.parent / "helm" / "cronjobs"
+    cases = {
+        "mf-catalog-nav-daily.yaml": (
+            "am-apps-dev",
+            "user_platform_dev",
+            "am-mutual-fund-dev-synced-secrets",
+            "am-parser-dev-synced-secrets",
+        ),
+        "mf-catalog-nav-preprod.yaml": (
+            "am-apps-preprod",
+            "user_platform_preprod",
+            "am-mutual-fund-preprod-synced-secrets",
+            "am-parser-preprod-synced-secrets",
+        ),
+        "mf-catalog-nav-prod.yaml": (
+            "am-apps-prod",
+            "user_platform?",  # JDBC path …/user_platform?currentSchema=
+            "am-mutual-fund-synced-secrets",
+            "am-parser-synced-secrets",
+        ),
+    }
+    pin = "am-parser-mf-catalog-job:58a96a1653c6ddbbb6226a9debd8ac6c67a5c9d5"
+    for name, (ns, db_token, nse_secret, jdbc_secret) in cases.items():
+        text = (cron / name).read_text(encoding="utf-8")
+        assert f"namespace: {ns}" in text
+        assert db_token in text
+        assert nse_secret in text
+        assert jdbc_secret in text
+        assert pin in text
+        img_lines = [
+            ln for ln in text.splitlines() if "image:" in ln and "mf-catalog-job" in ln
+        ]
+        assert img_lines and all(":latest" not in ln for ln in img_lines)
+        # No accidental dig DB in non-dev manifests
+        if name != "mf-catalog-nav-daily.yaml":
+            assert "user_platform_dev" not in text
+            assert "am-apps-dev" not in text
+            assert "suspend: true" in text
 
 
 def test_sch_nav_ingest_sets_latest_and_prev(tmp_path: Path) -> None:

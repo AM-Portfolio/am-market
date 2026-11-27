@@ -25,7 +25,6 @@ RUN mkdir -p /app/mf_catalog_job/data/masters \
 USER appuser
 WORKDIR /app
 
-# Non-secret JDBC URL shape (credentials from Vault / env at runtime).
-ENV AM_MARKET_MF_JDBC_URL="jdbc:postgresql://postgres.asrax.in:5432/user_platform_dev?currentSchema=mf_catalog"
+# JDBC URL/user/password MUST come from CronJob / local env — do not bake dig DSN here.
 
 CMD ["python", "mf_catalog_job/daily_job.py", "--fail-on-stale"]

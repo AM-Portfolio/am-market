@@ -1,0 +1,207 @@
+# Prod CronJob: daily SCH/NAV ingest → Postgres mf_catalog (am-parser owns write).
+# See am-parser/docs/mf-catalog-nav-ownership.md and helm/cronjobs/README.md
+#
+# Contabo / fleet: CSI-synced K8s Secrets (no Vault Agent Injector on Contabo dig pattern):
+#   NSE_*  → am-mutual-fund-synced-secrets
+#   JDBC   → am-parser-synced-secrets (AM_MARKET_MF_JDBC_USER/PASSWORD)
+# Default suspend=true — unsuspend only after secrets exist and MF dual-writer is off.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: am-parser-mf-catalog-nav-daily
+  namespace: am-apps-prod
+  labels:
+    app.kubernetes.io/name: am-parser-mf-catalog-job
+    app.kubernetes.io/part-of: am-parser
+spec:
+  # 19:30 IST = 14:00 UTC (approx; IST no DST)
+  schedule: "0 14 * * 1-5"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  suspend: true
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: am-parser-mf-catalog-job
+        spec:
+          serviceAccountName: am-backend-sa
+          restartPolicy: OnFailure
+          imagePullSecrets:
+            - name: ghcr-creds
+          containers:
+            - name: catalog-nav
+              # Pin digest/SHA — never :latest for dig/preprod/prod (repin after GHCR publish).
+              image: ghcr.io/am-portfolio/am-market/am-parser-mf-catalog-job:58a96a1653c6ddbbb6226a9debd8ac6c67a5c9d5
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  if [ -z "$NSE_API_KEY" ] || [ -z "$AM_MARKET_MF_JDBC_PASSWORD" ]; then
+                    echo "FAIL: NSE or JDBC secrets missing from synced Secrets"
+                    exit 1
+                  fi
+                  # Evening: fail if NAV lag > 1 weekday (NSE late publish).
+                  exec python mf_catalog_job/daily_job.py --fail-on-stale
+              env:
+                - name: TZ
+                  value: Asia/Kolkata
+                - name: AM_MARKET_MF_JDBC_URL
+                  value: "jdbc:postgresql://postgres.asrax.in:5432/user_platform?currentSchema=mf_catalog"
+                - name: MF_CATALOG_PUSH_CHUNK
+                  value: "100"
+                - name: NSE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-synced-secrets
+                      key: NSE_URL
+                - name: NSE_LOGIN
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-synced-secrets
+                      key: NSE_LOGIN
+                - name: NSE_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-synced-secrets
+                      key: NSE_API_KEY
+                - name: NSE_API_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-synced-secrets
+                      key: NSE_API_SECRET
+                - name: NSE_MEMBER
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-synced-secrets
+                      key: NSE_MEMBER
+                - name: AM_MARKET_MF_JDBC_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-parser-synced-secrets
+                      key: AM_MARKET_MF_JDBC_USER
+                - name: AM_MARKET_MF_JDBC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-parser-synced-secrets
+                      key: AM_MARKET_MF_JDBC_PASSWORD
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 512Mi
+                limits:
+                  cpu: "1"
+                  memory: 2Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: true
+                runAsUser: 1000
+---
+# Morning catch-up (09:30 IST = 04:00 UTC weekdays)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: am-parser-mf-catalog-nav-morning
+  namespace: am-apps-prod
+  labels:
+    app.kubernetes.io/name: am-parser-mf-catalog-job
+    app.kubernetes.io/part-of: am-parser
+spec:
+  schedule: "0 4 * * 1-5"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  startingDeadlineSeconds: 3600
+  suspend: true
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: am-parser-mf-catalog-job
+        spec:
+          serviceAccountName: am-backend-sa
+          restartPolicy: OnFailure
+          imagePullSecrets:
+            - name: ghcr-creds
+          containers:
+            - name: catalog-nav
+              # Same pin as evening — repin together after job image publish.
+              image: ghcr.io/am-portfolio/am-market/am-parser-mf-catalog-job:58a96a1653c6ddbbb6226a9debd8ac6c67a5c9d5
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  if [ -z "$NSE_API_KEY" ] || [ -z "$AM_MARKET_MF_JDBC_PASSWORD" ]; then
+                    echo "FAIL: NSE or JDBC secrets missing from synced Secrets"
+                    exit 1
+                  fi
+                  # Morning: allow weekend lag (Fri NAV → Mon lag 2–3). Still CRIT-fail on empty/shrink.
+                  exec python mf_catalog_job/daily_job.py --alert-if-nav-lag-days 3
+              env:
+                - name: TZ
+                  value: Asia/Kolkata
+                - name: AM_MARKET_MF_JDBC_URL
+                  value: "jdbc:postgresql://postgres.asrax.in:5432/user_platform?currentSchema=mf_catalog"
+                - name: MF_CATALOG_PUSH_CHUNK
+                  value: "100"
+                - name: NSE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-synced-secrets
+                      key: NSE_URL
+                - name: NSE_LOGIN
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-synced-secrets
+                      key: NSE_LOGIN
+                - name: NSE_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-synced-secrets
+                      key: NSE_API_KEY
+                - name: NSE_API_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-synced-secrets
+                      key: NSE_API_SECRET
+                - name: NSE_MEMBER
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-mutual-fund-synced-secrets
+                      key: NSE_MEMBER
+                - name: AM_MARKET_MF_JDBC_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-parser-synced-secrets
+                      key: AM_MARKET_MF_JDBC_USER
+                - name: AM_MARKET_MF_JDBC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: am-parser-synced-secrets
+                      key: AM_MARKET_MF_JDBC_PASSWORD
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 512Mi
+                limits:
+                  cpu: "1"
+                  memory: 2Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: true
+                runAsUser: 1000

@@ -37,11 +37,35 @@ jobs:
               - 'am-common-investment-data/**'
               - '.github/workflows/market-parser.yml'
 
-  publish:
-    name: Publish Parser
+  unit-tests:
+    name: MF catalog unit tests
     needs: changes
     if: |
       always() &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (needs.changes.result == 'success' && needs.changes.outputs.service == 'true')
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install + pytest (catalog read path)
+        working-directory: am-parser
+        run: |
+          pip install -r requirements.txt pytest
+          pytest tests/test_mf_catalog.py mf_catalog_job/tests -q
+
+  publish:
+    name: Publish Parser
+    needs: [changes, unit-tests]
+    if: |
+      always() &&
+      needs.unit-tests.result == 'success' &&
       (
         github.event_name == 'workflow_dispatch' ||
         (needs.changes.result == 'success' && needs.changes.outputs.service == 'true')

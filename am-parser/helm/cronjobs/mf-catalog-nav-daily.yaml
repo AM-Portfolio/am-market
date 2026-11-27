@@ -1,5 +1,6 @@
-# Dig CronJob: daily SCH/NAV ingest → Postgres mf_catalog (am-parser owns write).
-# See am-parser/docs/mf-catalog-nav-ownership.md
+# Dev/dig CronJob: daily SCH/NAV ingest → Postgres mf_catalog (am-parser owns write).
+# Sibling manifests: mf-catalog-nav-preprod.yaml, mf-catalog-nav-prod.yaml (same job, different DB/secrets).
+# See am-parser/docs/mf-catalog-nav-ownership.md and helm/cronjobs/README.md
 #
 # Dig Contabo has NO Vault Agent Injector — use CSI-synced K8s Secrets instead:
 #   NSE_*  → am-mutual-fund-dev-synced-secrets
@@ -35,7 +36,8 @@ spec:
             - name: ghcr-creds
           containers:
             - name: catalog-nav
-              image: ghcr.io/am-portfolio/am-market/am-parser-mf-catalog-job:latest
+              # Pin digest/SHA — never :latest for dig/preprod/prod (repin after GHCR publish).
+              image: ghcr.io/am-portfolio/am-market/am-parser-mf-catalog-job:58a96a1653c6ddbbb6226a9debd8ac6c67a5c9d5
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/sh
@@ -46,6 +48,7 @@ spec:
                     echo "FAIL: NSE or JDBC secrets missing from synced Secrets"
                     exit 1
                   fi
+                  # Evening: fail if NAV lag > 1 weekday (NSE late publish).
                   exec python mf_catalog_job/daily_job.py --fail-on-stale
               env:
                 - name: TZ
@@ -133,7 +136,8 @@ spec:
             - name: ghcr-creds
           containers:
             - name: catalog-nav
-              image: ghcr.io/am-portfolio/am-market/am-parser-mf-catalog-job:latest
+              # Same pin as evening — repin together after job image publish.
+              image: ghcr.io/am-portfolio/am-market/am-parser-mf-catalog-job:58a96a1653c6ddbbb6226a9debd8ac6c67a5c9d5
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/sh
@@ -144,7 +148,8 @@ spec:
                     echo "FAIL: NSE or JDBC secrets missing from synced Secrets"
                     exit 1
                   fi
-                  exec python mf_catalog_job/daily_job.py --fail-on-stale
+                  # Morning: allow weekend lag (Fri NAV → Mon lag 2–3). Still CRIT-fail on empty/shrink.
+                  exec python mf_catalog_job/daily_job.py --alert-if-nav-lag-days 3
               env:
                 - name: TZ
                   value: Asia/Kolkata

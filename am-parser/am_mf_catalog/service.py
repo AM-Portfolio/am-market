@@ -432,10 +432,14 @@ def _run_search(
     purchase_allowed: Optional[str],
     limit: int,
 ) -> list[dict[str, Any]]:
-    """Try enrich-only first (fast Explore), then returns CTE, then basic SCH."""
+    """Prefer limit-first CTE + returns (Explore 1Y/3Y/5Y), then enrich-only, then basic.
+
+    SIP lateral stays out — that join hung Explore past browser timeouts.
+    statement_timeout bounds each attempt so a slow returns join falls back.
+    """
     attempts = (
-        (_SEARCH_SELECT_ENRICH_ONLY, "s.", False),
         (_SEARCH_SELECT_ENRICHED, "s.", True),
+        (_SEARCH_SELECT_ENRICH_ONLY, "s.", False),
         (_SEARCH_SELECT_BASIC, "", False),
     )
     last_err: Exception | None = None
@@ -515,7 +519,8 @@ def _map_search_row(row: tuple) -> dict[str, Any]:
     if len(row) > 9:
         item["newPurchaseMinAmount"] = row[9]
     # enrich-only: cols 10-14 + source at 15
-    # full: cols 10-14 enrich, 15-19 returns, 20-21 sip, 22 source
+    # CTE+returns: cols 10-14 enrich, 15-19 returns, 20 source
+    # legacy: … + SIP cols 20-21 then source
     if len(row) > 14:
         item["aum"] = float(row[10]) if row[10] is not None else None
         item["expenseRatio"] = float(row[11]) if row[11] is not None else None

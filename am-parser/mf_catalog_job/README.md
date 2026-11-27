@@ -6,6 +6,8 @@ NSE `MASTER_DOWNLOAD` (SCH/NAV/SIP/STP/SWP/SET) → SQLite → Postgres `mf_cata
 
 This replaces `am-mutual-fund/catalog` as the **writer**. The long-running parser API only **reads** JDBC and serves `/v1/mutual-fund/*`.
 
+Daily CronJob push (`_push_core`): **`mf_scheme` + `mf_nav_eod` + enrichment** (+ returns denorm). SIP/STP/SWP masters stay in job SQLite unless you run a full manual push. CronJob image must be **SHA-pinned** (see `helm/cronjobs/mf-catalog-nav-daily.yaml`).
+
 ## Local
 
 ```bash

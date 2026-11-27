@@ -176,6 +176,54 @@ def test_search_degrades_when_enrichment_missing():
     assert out["items"][0]["newPurchaseMinAmount"] == "500"
 
 
+def test_search_prefers_returns_cte_before_enrich_only():
+    """Explore list must try CTE+returns first so returnsPct is not permanently skipped."""
+    from am_mf_catalog.service import _run_search
+
+    cur = MagicMock()
+    cur.connection = MagicMock()
+    seen: list[str] = []
+
+    def execute(sql, params=None):
+        if isinstance(sql, str) and sql.startswith("SET LOCAL"):
+            return
+        if isinstance(sql, str) and "SELECT" in sql.upper():
+            seen.append(sql)
+            # First attempt succeeds with returns shape
+            cur.fetchall.return_value = [
+                (
+                    "SC1",
+                    "Fund",
+                    "INF1",
+                    "AMC",
+                    "Open",
+                    "G",
+                    "Y",
+                    10.0,
+                    date(2026, 11, 26),
+                    "100",
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    12.0,
+                    None,
+                    None,
+                    "amfi",
+                )
+            ]
+
+    cur.execute.side_effect = execute
+    items = _run_search(cur, "HDFC", None, "true", 5)
+    assert seen, "expected a SELECT attempt"
+    assert "WITH base AS" in seen[0]
+    assert "mf_scheme_returns" in seen[0]
+    assert items[0]["returnsPct"]["1Y"] == 12.0
+
+
 def test_details_orders_by_scheme_code():
     """ISIN lookup must use ORDER BY scheme_code (deterministic)."""
     svc = MfCatalogService(

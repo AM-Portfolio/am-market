@@ -192,6 +192,21 @@ def main() -> int:
                     continue
                 print(f"  stmt {i} ERR {name}: {e}", flush=True)
                 raise
+        # Apply deferred indexes after tables exist (empty greenfield preprod/prod).
+        print("migrate… indexes…", flush=True)
+        for i, stmt in enumerate(split_sql(MIGRATION.read_text(encoding="utf-8")), 1):
+            if not stmt.lstrip().upper().startswith("CREATE INDEX"):
+                continue
+            try:
+                cur.execute("SET statement_timeout = '120s'")
+                cur.execute(stmt)
+                pg.commit()
+                print(f"  index {i} ok", flush=True)
+            except Exception as e:
+                pg.rollback()
+                cur.execute(f"SET search_path TO {schema}, public")
+                pg.commit()
+                print(f"  index {i} skip ({type(e).__name__}: {e})", flush=True)
         cur.execute(f"SET search_path TO {schema}, public")
 
     cur.execute("SET statement_timeout = '180s'")
