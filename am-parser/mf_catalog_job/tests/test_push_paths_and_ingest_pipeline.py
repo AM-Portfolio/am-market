@@ -120,13 +120,13 @@ def test_cronjobs_cover_dev_preprod_prod_without_cross_env() -> None:
         ),
         "mf-catalog-nav-preprod.yaml": (
             "am-apps-preprod",
-            "user_platform_preprod",
+            "user_platform?currentSchema=mf_catalog_preprod",
             "am-mutual-fund-preprod-synced-secrets",
             "am-parser-preprod-synced-secrets",
         ),
         "mf-catalog-nav-prod.yaml": (
             "am-apps-prod",
-            "user_platform?",  # JDBC path …/user_platform?currentSchema=
+            "user_platform?currentSchema=mf_catalog",
             "am-mutual-fund-synced-secrets",
             "am-parser-synced-secrets",
         ),

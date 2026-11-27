@@ -55,7 +55,7 @@ spec:
                 - name: TZ
                   value: Asia/Kolkata
                 - name: AM_MARKET_MF_JDBC_URL
-                  value: "jdbc:postgresql://postgres.asrax.in:5432/user_platform_preprod?currentSchema=mf_catalog"
+                  value: "jdbc:postgresql://postgres.asrax.in:5432/user_platform?currentSchema=mf_catalog_preprod"
                 - name: MF_CATALOG_PUSH_CHUNK
                   value: "100"
                 - name: NSE_URL
@@ -155,7 +155,7 @@ spec:
                 - name: TZ
                   value: Asia/Kolkata
                 - name: AM_MARKET_MF_JDBC_URL
-                  value: "jdbc:postgresql://postgres.asrax.in:5432/user_platform_preprod?currentSchema=mf_catalog"
+                  value: "jdbc:postgresql://postgres.asrax.in:5432/user_platform?currentSchema=mf_catalog_preprod"
                 - name: MF_CATALOG_PUSH_CHUNK
                   value: "100"
                 - name: NSE_URL
