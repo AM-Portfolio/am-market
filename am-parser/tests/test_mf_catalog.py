@@ -310,3 +310,109 @@ def test_history_requires_from_to_shape():
     assert out["count"] == 2
     assert out["priceType"] == PRICE_TYPE
     assert out["points"][1]["nav"] == 10.5
+
+
+def test_nav_batch_not_configured():
+    svc = MfCatalogService("", "", "")
+    out = svc.get_nav_batch(["INF123"])
+    assert out["error"] == "Mutual fund catalog not configured"
+    assert out["marks"] == []
+
+
+def test_nav_batch_maps_marks_and_missing():
+    svc = MfCatalogService(
+        "jdbc:postgresql://localhost:5432/db?currentSchema=mf_catalog",
+        "u",
+        "p",
+    )
+    cur = MagicMock()
+    cur.fetchall.return_value = [
+        ("INF247L01999", "Motilal Oswal Large Cap", 40.6665, date(2026, 11, 19), 40.513),
+    ]
+    cur.__enter__ = MagicMock(return_value=cur)
+    cur.__exit__ = MagicMock(return_value=False)
+    conn = MagicMock()
+    conn.cursor.return_value = cur
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=False)
+
+    with patch.object(svc, "_connect", return_value=conn):
+        out = svc.get_nav_batch(["inf247l01999", "INFMISSING", "inf247l01999"])
+
+    assert out["source"] == SOURCE
+    assert out["priceType"] == PRICE_TYPE
+    assert out["count"] == 1
+    mark = out["marks"][0]
+    assert mark["isin"] == "INF247L01999"
+    assert mark["nav"] == 40.6665
+    assert mark["previousNav"] == 40.513
+    assert mark["navDate"] == "2026-11-19"
+    assert out["missing"] == ["INFMISSING"]
+    sql = cur.execute.call_args[0][0]
+    assert "DISTINCT ON" in sql.upper()
+    assert "prev_nav" in sql.lower()
+    assert "interval '3 days'" not in sql.lower()
+
+
+def test_nav_batch_one_mark_per_isin_when_sql_dedupes():
+    """Service trusts DISTINCT ON query — two result rows same ISIN must not both land."""
+    svc = MfCatalogService(
+        "jdbc:postgresql://localhost:5432/db?currentSchema=mf_catalog",
+        "u",
+        "p",
+    )
+    cur = MagicMock()
+    # Simulate DB already DISTINCT ON — only one row returned.
+    cur.fetchall.return_value = [
+        ("INF179K01400", "HDFC VALUE FUND - IDCW", 38.432, date(2026, 11, 26), 38.1),
+    ]
+    cur.__enter__ = MagicMock(return_value=cur)
+    cur.__exit__ = MagicMock(return_value=False)
+    conn = MagicMock()
+    conn.cursor.return_value = cur
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=False)
+
+    with patch.object(svc, "_connect", return_value=conn):
+        out = svc.get_nav_batch(["INF179K01400"])
+
+    assert out["count"] == 1
+    assert [m["isin"] for m in out["marks"]] == ["INF179K01400"]
+
+
+def test_nav_batch_falls_back_when_prev_nav_column_missing():
+    svc = MfCatalogService(
+        "jdbc:postgresql://localhost:5432/db?currentSchema=mf_catalog",
+        "u",
+        "p",
+    )
+    cur = MagicMock()
+
+    def _execute(sql, params=None):
+        if "COALESCE(s.prev_nav" in sql or "s.prev_nav," in sql.replace("\n", " "):
+            # First attempt uses prev_nav column.
+            if "COALESCE(s.prev_nav" in sql:
+                raise Exception('column "prev_nav" does not exist')
+        return None
+
+    cur.execute.side_effect = _execute
+    cur.fetchall.return_value = [
+        ("INF247L01999", "Fund", 40.0, date(2026, 11, 19), 39.5),
+    ]
+    cur.__enter__ = MagicMock(return_value=cur)
+    cur.__exit__ = MagicMock(return_value=False)
+    conn = MagicMock()
+    conn.cursor.return_value = cur
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=False)
+    conn.rollback = MagicMock()
+
+    with patch.object(svc, "_connect", return_value=conn):
+        out = svc.get_nav_batch(["INF247L01999"])
+
+    assert out["count"] == 1
+    assert out["marks"][0]["previousNav"] == 39.5
+    assert cur.execute.call_count == 2
+    fallback_sql = cur.execute.call_args_list[1][0][0]
+    assert "COALESCE(s.prev_nav" not in fallback_sql
+    assert "DISTINCT ON" in fallback_sql.upper()

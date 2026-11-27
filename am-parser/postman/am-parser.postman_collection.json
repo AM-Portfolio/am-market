@@ -1,0 +1,1094 @@
+{
+  "info": {
+    "name": "Asrax am-parser (all endpoints)",
+    "description": "am-parser HTTP APIs. Env: Asrax am-parser \u2014 dig. baseUrl=https://am-dev.asrax.in/parser (also preprod/prod /parser). MF Catalog NAV comes from NSE MASTER_DOWNLOAD via CronJob.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://am-dev.asrax.in/parser"
+    },
+    {
+      "key": "schemeId",
+      "value": "IIIFEDG-GR-L1"
+    },
+    {
+      "key": "symbol",
+      "value": "NIFTYBEES"
+    },
+    {
+      "key": "isin",
+      "value": "INF204KB14I6"
+    },
+    {
+      "key": "jobId",
+      "value": "replace-me"
+    },
+    {
+      "key": "fileId",
+      "value": "replace-me"
+    },
+    {
+      "key": "portfolioId",
+      "value": "replace-me"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Liveness / readiness probes",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "API root metadata (version + endpoint list)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /health/live",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "description": "Process liveness \u2014 does not check Mongo/JDBC. Use for k8s liveness."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Readiness \u2014 checks Mongo portfolio DB connectivity."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /debug/mongo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/debug/mongo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "debug",
+                "mongo"
+              ]
+            },
+            "description": "Debug which Mongo URI this pod is using (no secrets)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "MF Catalog (NSE MASTER_DOWNLOAD)",
+      "description": "EOD scheme catalog + NAV from Postgres mf_catalog (writer = mf_catalog_job from NSE MASTER_DOWNLOAD). Prefer these for Explore / NAV.",
+      "item": [
+        {
+          "name": "Search schemes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/mutual-fund/search?q=HDFC&limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "mutual-fund",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "HDFC"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Search MF schemes by name/code/ISIN. Returns EOD NAV, purchaseAllowed, source=nse-master-download."
+          },
+          "response": []
+        },
+        {
+          "name": "NAV batch (portfolio)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/mutual-fund/nav/batch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "mutual-fund",
+                "nav",
+                "batch"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isins\": [\n    \"INF179K01400\",\n    \"INF247L01999\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Bulk latest + previousNav for portfolio MF books. One mark per ISIN (max 200). source=nse-master-download."
+          },
+          "response": []
+        },
+        {
+          "name": "Scheme details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/mutual-fund/{{schemeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "mutual-fund",
+                "{{schemeId}}"
+              ]
+            },
+            "description": "Single scheme card: metadata + latest NAV for schemeId (NSE scheme code)."
+          },
+          "response": []
+        },
+        {
+          "name": "Scheme history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/mutual-fund/{{schemeId}}/history?from=2025-01-01&to=2025-12-31",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "mutual-fund",
+                "{{schemeId}}",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2025-01-01"
+                },
+                {
+                  "key": "to",
+                  "value": "2025-12-31"
+                }
+              ]
+            },
+            "description": "NAV time series between from/to dates (query: from, to as YYYY-MM-DD)."
+          },
+          "response": []
+        },
+        {
+          "name": "Scheme performance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/mutual-fund/{{schemeId}}/performance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "mutual-fund",
+                "{{schemeId}}",
+                "performance"
+              ]
+            },
+            "description": "Computed returns (1Y/3Y/5Y etc.) for a scheme from catalog NAV history."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Funds v2",
+      "description": "Unified funds API (ETF-first; MF-ready).",
+      "item": [
+        {
+          "name": "Search funds",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v2/funds/search?q=NIFTY&limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "funds",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "NIFTY"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Search funds (default productType ETF)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST holdings lookup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/funds/holdings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "funds",
+                "holdings"
+              ]
+            },
+            "description": "Batch holdings lookup by symbols/items + optional productTypes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    \"NIFTYBEES\"\n  ],\n  \"productTypes\": [\n    \"ETF\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET holdings bulk",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v2/funds/holdings/bulk?symbols=NIFTYBEES",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "funds",
+                "holdings",
+                "bulk"
+              ],
+              "query": [
+                {
+                  "key": "symbols",
+                  "value": "NIFTYBEES"
+                }
+              ]
+            },
+            "description": "Bulk holdings by query symbols."
+          },
+          "response": []
+        },
+        {
+          "name": "POST performance batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/funds/performance/batch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "funds",
+                "performance",
+                "batch"
+              ]
+            },
+            "description": "Read cached performance for many symbols.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\n    \"NIFTYBEES\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST performance refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/funds/performance/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "funds",
+                "performance",
+                "refresh"
+              ]
+            },
+            "description": "Force-refresh performance cache then return.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\n    \"NIFTYBEES\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "ETF v1",
+      "description": "Legacy/dedicated ETF holdings + stats routes under /v1/etf.",
+      "item": [
+        {
+          "name": "Search ETF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/search?q=NIFTY&limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "etf",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "NIFTY"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Search ETF universe by name/symbol."
+          },
+          "response": []
+        },
+        {
+          "name": "POST holdings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/holdings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "etf",
+                "holdings"
+              ]
+            },
+            "description": "Lookup ETF holdings for a list of items.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    \"NIFTYBEES\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET holdings bulk",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/holdings/bulk?symbols=NIFTYBEES",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "etf",
+                "holdings",
+                "bulk"
+              ],
+              "query": [
+                {
+                  "key": "symbols",
+                  "value": "NIFTYBEES"
+                }
+              ]
+            },
+            "description": "Bulk ETF holdings."
+          },
+          "response": []
+        },
+        {
+          "name": "GET holdings by symbol",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/holdings/{{symbol}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "etf",
+                "holdings",
+                "{{symbol}}"
+              ]
+            },
+            "description": "Holdings for one symbol or ISIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST fetch-holdings symbol",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/fetch-holdings/{{symbol}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "etf",
+                "fetch-holdings",
+                "{{symbol}}"
+              ]
+            },
+            "description": "Trigger fetch/refresh holdings for one symbol (may enqueue work)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST fetch-all-holdings",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/fetch-all-holdings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "etf",
+                "fetch-all-holdings"
+              ]
+            },
+            "description": "Enqueue job to fetch holdings for all tracked ETFs."
+          },
+          "response": []
+        },
+        {
+          "name": "GET cache-stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/cache-stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "etf",
+                "cache-stats"
+              ]
+            },
+            "description": "ETF holdings cache statistics."
+          },
+          "response": []
+        },
+        {
+          "name": "GET stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "etf",
+                "stats"
+              ]
+            },
+            "description": "ETF catalog / coverage stats."
+          },
+          "response": []
+        },
+        {
+          "name": "POST load-from-json",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/load-from-json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "etf",
+                "load-from-json"
+              ]
+            },
+            "description": "Ops: load ETF data from a JSON payload/file path.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET holdings by-query deprecated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/etf/holdings/by-query?q=NIFTYBEES",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "etf",
+                "holdings",
+                "by-query"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "NIFTYBEES"
+                }
+              ]
+            },
+            "description": "Deprecated holdings query \u2014 prefer POST /holdings."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Background Jobs",
+      "description": "Async Excel upload / job queue (auth required on some).",
+      "item": [
+        {
+          "name": "Upload excel async",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/upload-excel-async",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "upload-excel-async"
+              ]
+            },
+            "description": "Upload Excel for async parse; returns jobId immediately. (multipart file in Postman Body\u2192form-data)."
+          },
+          "response": []
+        },
+        {
+          "name": "List jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1"
+              ]
+            },
+            "description": "List background jobs."
+          },
+          "response": []
+        },
+        {
+          "name": "Job status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/{{jobId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "{{jobId}}",
+                "status"
+              ]
+            },
+            "description": "Poll job status by id."
+          },
+          "response": []
+        },
+        {
+          "name": "Job result",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/{{jobId}}/result",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "{{jobId}}",
+                "result"
+              ]
+            },
+            "description": "Fetch completed job result payload."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete job",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Delete/cancel a job record."
+          },
+          "response": []
+        },
+        {
+          "name": "Admin fix stuck job",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/fix-stuck-job/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "fix-stuck-job",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Ops: mark/fix one stuck job."
+          },
+          "response": []
+        },
+        {
+          "name": "Admin recover stuck jobs",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/recover-stuck-jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "recover-stuck-jobs"
+              ]
+            },
+            "description": "Ops: recover all stuck jobs."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Portfolios / Upload (v1)",
+      "description": "Mongo-backed portfolio CRUD + Excel parse pipeline (older MF portfolio path; not NSE catalog).",
+      "item": [
+        {
+          "name": "Save portfolio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/portfolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "portfolios"
+              ]
+            },
+            "description": "Create/save a mutual-fund portfolio document.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List portfolios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/portfolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "portfolios"
+              ]
+            },
+            "description": "List portfolios."
+          },
+          "response": []
+        },
+        {
+          "name": "Get portfolio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/portfolios/{{portfolioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "portfolios",
+                "{{portfolioId}}"
+              ]
+            },
+            "description": "Get one portfolio by id."
+          },
+          "response": []
+        },
+        {
+          "name": "Search portfolios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/portfolios/search?fund_name=HDFC",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "portfolios",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "fund_name",
+                  "value": "HDFC"
+                }
+              ]
+            },
+            "description": "Search portfolios by fund_name."
+          },
+          "response": []
+        },
+        {
+          "name": "Holdings by ISIN",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/holdings/{{isin}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "holdings",
+                "{{isin}}"
+              ]
+            },
+            "description": "Find holdings matching an ISIN across portfolios."
+          },
+          "response": []
+        },
+        {
+          "name": "Holdings bulk",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/holdings/bulk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "holdings",
+                "bulk"
+              ]
+            },
+            "description": "Bulk holdings lookup."
+          },
+          "response": []
+        },
+        {
+          "name": "Fund statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/funds/HDFC/statistics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "funds",
+                "HDFC",
+                "statistics"
+              ]
+            },
+            "description": "Aggregated stats for a fund name."
+          },
+          "response": []
+        },
+        {
+          "name": "List files",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "files"
+              ]
+            },
+            "description": "List uploaded Excel/files."
+          },
+          "response": []
+        },
+        {
+          "name": "Get file",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/files/{{fileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "files",
+                "{{fileId}}"
+              ]
+            },
+            "description": "Get one uploaded file metadata."
+          },
+          "response": []
+        },
+        {
+          "name": "Process file",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/process/{{fileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "process",
+                "{{fileId}}"
+              ]
+            },
+            "description": "Start processing an uploaded file."
+          },
+          "response": []
+        },
+        {
+          "name": "Parse sheet",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/parse/{{fileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "parse",
+                "{{fileId}}"
+              ]
+            },
+            "description": "Parse a single sheet/file id."
+          },
+          "response": []
+        },
+        {
+          "name": "Parse all",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/parse-all/{{fileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "parse-all",
+                "{{fileId}}"
+              ]
+            },
+            "description": "Parse all sheets for an upload."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
