@@ -58,7 +58,11 @@ public class MarketDataIngestionScheduler {
         if (enabled && marketHoursService.isMarketOpen()) {
             log.info("init", "Application started during market hours. Starting live data path (websocket={}, poll={}).",
                     useWebSocket, pollEnabled);
-            startLiveMarketData();
+            try {
+                startLiveMarketData();
+            } catch (Exception e) {
+                log.warn("init", "Failed to start live market data on startup: {}", e.getMessage(), e);
+            }
         }
     }
 

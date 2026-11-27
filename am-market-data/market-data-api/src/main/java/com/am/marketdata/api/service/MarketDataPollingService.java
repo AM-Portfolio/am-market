@@ -111,12 +111,15 @@ public class MarketDataPollingService {
                             providerKey,
                             update.getQuotes() != null ? update.getQuotes().size() : 0);
                     webSocketHandler.broadcast(update);
-                    try {
-                        Map<String, OHLCQuote> ohlcQuotes = convertToOHLCQuotes(update);
-                        processor.processUpdate(ohlcQuotes, providerKey);
-                    } catch (Exception ex) {
-                        log.error("Failed to publish polling data to Kafka/processor", ex);
-                    }
+                    // FRESHNESS & WRITE DECOUPLING (Rule 5): Never persist polling responses back
+                    // to Kafka, MongoDB, or InfluxDB. Polling is strictly a UI websocket client fallback.
+                    // Persisting polling ticks triggered write loops with unvalidated timestamps.
+                    // try {
+                    //     Map<String, OHLCQuote> ohlcQuotes = convertToOHLCQuotes(update);
+                    //     processor.processUpdate(ohlcQuotes, providerKey);
+                    // } catch (Exception ex) {
+                    //     log.error("Failed to publish polling data to Kafka/processor", ex);
+                    // }
                 } else {
                     log.warn("Fetched market data update is null for provider: {}", providerKey);
                 }

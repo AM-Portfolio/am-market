@@ -20,13 +20,17 @@ public class MarketDataEodSyncScheduler {
     private final java.util.Optional<com.am.marketdata.service.SymbolOrchestratorService> symbolOrchestratorService;
 
     /**
-     * Runs Monday to Friday at 3:40 PM IST (15:40) to sync final EOD prices 
+     * Runs Monday to Friday at 4:00 PM IST (16:00) to sync final EOD prices 
      * from Redis back to MongoDB for permanent storage.
      * 
-     * Cron expression: "0 40 15 * * MON-FRI"
+     * At 15:40 the exchange post-closing session is still underway. Running at 16:00 IST
+     * ensures all final VWAP weighted calculations and block trade reconciliations
+     * have settled before capturing closing records for the 709 active stock universe.
+     * 
+     * Cron expression: "0 0 16 * * MON-FRI"
      * TimeZone: "Asia/Kolkata"
      */
-    @Scheduled(cron = "0 40 15 * * MON-FRI", zone = "Asia/Kolkata")
+    @Scheduled(cron = "0 0 16 * * MON-FRI", zone = "Asia/Kolkata")
     @com.am.scheduler.annotation.TrackedAndLockedScheduler(name = "marketEodSyncJob", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void syncEodIndexPrices() {
         String methodName = "syncEodIndexPrices";

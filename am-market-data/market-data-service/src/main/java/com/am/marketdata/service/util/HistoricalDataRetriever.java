@@ -140,8 +140,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
             // For multi-day intervals (e.g. 1W with 30m), we verify start date coverage.
             // For daily/weekly/monthly charts, we keep the original tolerance check.
             java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
-            boolean isMultiDay = fromDate.toInstant().atZone(kolkataZone).toLocalDate()
-                    .isBefore(toDate.toInstant().atZone(kolkataZone).toLocalDate());
+            boolean isMultiDay = java.time.Instant.ofEpochMilli(fromDate.getTime()).atZone(kolkataZone).toLocalDate()
+                    .isBefore(java.time.Instant.ofEpochMilli(toDate.getTime()).atZone(kolkataZone).toLocalDate());
             boolean missingEarlyData;
             if (isMultiDay) {
                 java.time.LocalDate firstCandleDate = firstPointTime.toLocalDate();
@@ -234,8 +234,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
         boolean isMultiDay = false;
         if (fromDate != null && toDate != null) {
             java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
-            isMultiDay = fromDate.toInstant().atZone(zone).toLocalDate()
-                    .isBefore(toDate.toInstant().atZone(zone).toLocalDate());
+            isMultiDay = java.time.Instant.ofEpochMilli(fromDate.getTime()).atZone(zone).toLocalDate()
+                    .isBefore(java.time.Instant.ofEpochMilli(toDate.getTime()).atZone(zone).toLocalDate());
         }
         String val = interval.getApiValue() != null ? interval.getApiValue().toLowerCase() : "";
         boolean intraday = (val.contains("m") || val.contains("h")) && !isMultiDay;
@@ -296,8 +296,8 @@ public class HistoricalDataRetriever extends AbstractMarketDataRetriever<String,
                 long validationEndMs = getLastExpectedCandleTimeMs(requiredEndMs);
 
                 java.time.ZoneId kolkataZone = java.time.ZoneId.of("Asia/Kolkata");
-                boolean isMultiDay = fromDate.toInstant().atZone(kolkataZone).toLocalDate()
-                        .isBefore(toDate.toInstant().atZone(kolkataZone).toLocalDate());
+                boolean isMultiDay = java.time.Instant.ofEpochMilli(fromDate.getTime()).atZone(kolkataZone).toLocalDate()
+                        .isBefore(java.time.Instant.ofEpochMilli(toDate.getTime()).atZone(kolkataZone).toLocalDate());
                 boolean missingEarlyData;
                 if (isMultiDay) {
                     java.time.LocalDate firstCandleDate = firstPointTime.toLocalDate();

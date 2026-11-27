@@ -201,6 +201,23 @@ class StreamerManagerResilienceTest {
     }
 
     @Test
+    void providerChangeCanSupplyTheBaselineWhenPreviousCloseIsAbsent() {
+        when(cacheService.getPreviousClose("NIFTY 50")).thenReturn(null);
+        when(cacheService.cacheLatestPrices(any())).thenReturn(true);
+        OHLCQuote quote = OHLCQuote.builder()
+                .lastPrice(25838.95)
+                .change(38.35)
+                .quoteTimestamp(Instant.now())
+                .build();
+
+        manager.onMessage(Map.of("NIFTY 50", quote));
+
+        org.junit.jupiter.api.Assertions.assertEquals(25800.60, quote.getPreviousClose(), 0.001);
+        org.junit.jupiter.api.Assertions.assertEquals(38.35, quote.getChange(), 0.001);
+        org.junit.jupiter.api.Assertions.assertEquals(0.14864, quote.getChangePercent(), 0.00001);
+    }
+
+    @Test
     void missingBaselineRemainsUnavailableInsteadOfPublishingFalseZero() {
         when(cacheService.getPreviousClose("TCS")).thenReturn(null);
         when(cacheService.cacheLatestPrices(any())).thenReturn(true);
