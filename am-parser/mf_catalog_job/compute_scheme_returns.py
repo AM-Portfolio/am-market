@@ -12,46 +12,13 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
-
 ROOT = Path(__file__).resolve().parent
 # Optional local dotenv (CronJob uses Vault env; no mf_service under am-parser).
 ENV = ROOT / "data" / ".env"
 CHUNK = int(os.environ.get("MF_RETURNS_CHUNK", "200"))
 
-
-def load_dotenv(path: Path) -> None:
-    if not path.is_file():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        key = key.strip()
-        val = val.strip().strip('"').strip("'")
-        if key and key not in os.environ:
-            os.environ[key] = val
-
-
-def dig_dsn(jdbc_or_url: str) -> tuple[str, str]:
-    raw = jdbc_or_url.replace("jdbc:", "").strip()
-    parsed = urlparse(raw)
-    qs = parse_qs(parsed.query)
-    schema = (qs.get("currentSchema") or ["mf_catalog"])[0]
-    path = (parsed.path or "").rstrip("/")
-    if path.endswith("/mf_catalog") or path == "/mf_catalog":
-        path = "/user_platform_dev"
-    qs.pop("currentSchema", None)
-    query = urlencode({k: v[0] for k, v in qs.items()}) if qs else ""
-    host = parsed.hostname or ""
-    if not host:
-        raise ValueError("AM_MARKET_MF_JDBC_URL missing host")
-    netloc = host
-    if parsed.port:
-        netloc = f"{host}:{parsed.port}"
-    dsn = urlunparse((parsed.scheme or "postgresql", netloc, path, "", query, ""))
-    return dsn, schema
+# Same env-safe DSN parse as push (never rewrite DB path to dig).
+from _push_core import dig_dsn, load_dotenv  # noqa: E402
 
 
 def require_jdbc() -> tuple[str, str, str, str]:
@@ -64,7 +31,6 @@ def require_jdbc() -> tuple[str, str, str, str]:
         raise SystemExit("FAIL: AM_MARKET_MF_JDBC_USER/PASSWORD unset")
     dsn, schema = dig_dsn(url)
     return dsn, schema, user, password
-
 
 def _to_date(v: object) -> Optional[date]:
     if v is None:

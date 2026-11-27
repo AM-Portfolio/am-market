@@ -66,6 +66,49 @@ def test_cronjob_pins_sha_and_softens_morning_stale() -> None:
     assert "--alert-if-nav-lag-days 3" in text
 
 
+def test_dig_dsn_never_rewrites_db_path_to_dev() -> None:
+    """Prod/preprod must not silently land on user_platform_dev."""
+    import importlib
+
+    if "_push_core" in sys.modules:
+        del sys.modules["_push_core"]
+    push = importlib.import_module("_push_core")
+
+    cases = [
+        (
+            "jdbc:postgresql://postgres.asrax.in:5432/user_platform?currentSchema=mf_catalog",
+            "postgresql://postgres.asrax.in:5432/user_platform",
+            "mf_catalog",
+        ),
+        (
+            "jdbc:postgresql://postgres.asrax.in:5432/user_platform_preprod?currentSchema=mf_catalog",
+            "postgresql://postgres.asrax.in:5432/user_platform_preprod",
+            "mf_catalog",
+        ),
+        (
+            "jdbc:postgresql://postgres.asrax.in:5432/user_platform_dev?currentSchema=mf_catalog",
+            "postgresql://postgres.asrax.in:5432/user_platform_dev",
+            "mf_catalog",
+        ),
+        (
+            "jdbc:postgresql://postgres.asrax.in:5432/mf_catalog",
+            "postgresql://postgres.asrax.in:5432/mf_catalog",
+            "mf_catalog",
+        ),
+    ]
+    for jdbc, expect_dsn, expect_schema in cases:
+        dsn, schema = push.dig_dsn(jdbc)
+        assert dsn == expect_dsn, jdbc
+        assert schema == expect_schema, jdbc
+        assert "user_platform_dev" not in dsn or "user_platform_dev" in jdbc
+
+
+def test_push_to_postgres_has_no_dig_fallback_dsn() -> None:
+    text = (ROOT / "push_to_postgres.py").read_text(encoding="utf-8")
+    assert "DIG_FALLBACK_DSN" not in text
+    assert "using dig fallback" not in text.lower()
+
+
 def test_cronjobs_cover_dev_preprod_prod_without_cross_env() -> None:
     cron = ROOT.parent / "helm" / "cronjobs"
     cases = {

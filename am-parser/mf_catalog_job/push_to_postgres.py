@@ -50,10 +50,6 @@ def load_dotenv(path: Path) -> None:
             os.environ[key] = val
 
 
-DIG_FALLBACK_DSN = "postgresql://postgres.asrax.in:5432/user_platform_dev"
-DIG_FALLBACK_SCHEMA = "mf_catalog"
-
-
 def strip_query(dsn: str) -> str:
     return dsn.split("?", 1)[0]
 
@@ -71,13 +67,26 @@ def connect_kwargs(dsn: str, user: str | None, password: str | None) -> dict:
 
 
 def ensure_target(dsn: str, user: str | None, password: str | None) -> tuple[str, str | None]:
-    """Return (effective_dsn, schema). Prefer dedicated mf_catalog DB; dig falls back to schema."""
+    """Return (effective_dsn, schema). Never rewrite to another env's database.
+
+    Prefer dedicated DB when URL path is /mf_catalog; otherwise use currentSchema
+    (default mf_catalog) on the database named in the URL. Fail hard if CREATE
+    DATABASE is blocked — do not fall back to user_platform_dev.
+    """
     import psycopg2
     from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+    from urllib.parse import parse_qs, urlparse
 
-    # Try CREATE DATABASE mf_catalog when URL targets that name
-    if "/mf_catalog" in strip_query(dsn):
-        maint = re.sub(r"/[^/?]+(\?.*)?$", r"/postgres\1", strip_query(dsn))
+    raw = dsn.replace("jdbc:", "").strip()
+    parsed = urlparse(raw)
+    qs = parse_qs(parsed.query)
+    schema_q = (qs.get("currentSchema") or [None])[0]
+    path = (parsed.path or "").rstrip("/")
+    base = strip_query(raw)
+
+    # Dedicated catalog DB (path ends with /mf_catalog, no schema hosting)
+    if path.endswith("/mf_catalog") and not schema_q:
+        maint = re.sub(r"/[^/?]+(\?.*)?$", r"/postgres\1", base)
         try:
             conn = psycopg2.connect(**connect_kwargs(maint, user, password))
             conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
@@ -90,21 +99,23 @@ def ensure_target(dsn: str, user: str | None, password: str | None) -> tuple[str
                 print("Database mf_catalog already exists")
             cur.close()
             conn.close()
-            return strip_query(dsn), None
+            return base, None
         except Exception as e:
-            print(f"CREATE DATABASE mf_catalog blocked ({type(e).__name__}); using dig fallback")
-            dsn = DIG_FALLBACK_DSN
+            raise SystemExit(
+                f"FAIL: CREATE DATABASE mf_catalog blocked ({type(e).__name__}: {e}). "
+                "Set AM_MARKET_MF_JDBC_URL to the platform DB + currentSchema=mf_catalog "
+                "(e.g. …/user_platform?currentSchema=mf_catalog) — never dig fallback."
+            ) from e
 
-    # Schema-hosted catalog (dig_vault_seed pattern)
-    schema = DIG_FALLBACK_SCHEMA
-    conn = psycopg2.connect(**connect_kwargs(dsn, user, password))
+    schema = schema_q or "mf_catalog"
+    conn = psycopg2.connect(**connect_kwargs(base, user, password))
     conn.autocommit = True
     cur = conn.cursor()
     cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
-    print(f"Using database {strip_query(dsn).rsplit('/', 1)[-1]} schema {schema}")
+    print(f"Using database {base.rsplit('/', 1)[-1]} schema {schema}")
     cur.close()
     conn.close()
-    return strip_query(dsn), schema
+    return base, schema
 
 # Dig browse needs scheme+NAV only; set MF_PUSH_FULL=1 to include SIP/STP/SWP rules.
 _CORE_TABLES = ["mf_scheme", "mf_nav_eod"]

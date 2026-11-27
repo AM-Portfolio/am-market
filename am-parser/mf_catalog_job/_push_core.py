@@ -69,14 +69,20 @@ def load_dotenv(path: Path) -> None:
 
 
 def dig_dsn(jdbc_or_url: str) -> tuple[str, str]:
-    """Return (psycopg2 dsn without password, schema). Prefer user_platform_dev + mf_catalog."""
+    """Return (psycopg2 dsn without password, schema).
+
+    Never rewrite the database path. CronJobs must set the exact DB
+    (user_platform / user_platform_preprod / user_platform_dev) via
+    AM_MARKET_MF_JDBC_URL; rewriting /mf_catalog → user_platform_dev
+    would dump prod/preprod into dig.
+    """
     raw = jdbc_or_url.replace("jdbc:", "").strip()
     parsed = urlparse(raw)
     qs = parse_qs(parsed.query)
     schema = (qs.get("currentSchema") or ["mf_catalog"])[0]
-    path = (parsed.path or "").rstrip("/")
-    if path.endswith("/mf_catalog") or path == "/mf_catalog":
-        path = "/user_platform_dev"
+    path = (parsed.path or "").rstrip("/") or "/"
+    if path in ("/", ""):
+        raise ValueError("AM_MARKET_MF_JDBC_URL missing database path")
     qs.pop("currentSchema", None)
     query = urlencode({k: v[0] for k, v in qs.items()}) if qs else ""
     # Strip any embedded userinfo from URL — credentials come from env only.
