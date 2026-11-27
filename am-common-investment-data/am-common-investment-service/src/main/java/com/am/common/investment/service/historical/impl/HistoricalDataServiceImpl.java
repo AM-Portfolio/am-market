@@ -270,30 +270,15 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
                 return Collections.emptyList();
             }
 
-            // Outlier Guard: Reject points that deviate >1.5% from the day's median price before calculating candles
-            List<Double> validPrices = orderedPrices.stream()
-                    .map(this::getValidIndexPriceSample)
-                    .filter(java.util.Objects::nonNull)
-                    .sorted()
+            // Price Sanity Guard: Filter out corrupt or non-positive index prices, retaining legitimate intraday moves
+            orderedPrices = orderedPrices.stream()
+                    .filter(p -> {
+                        Double val = getValidIndexPriceSample(p);
+                        return val != null && Double.isFinite(val) && val > 0.0;
+                    })
                     .toList();
-            if (!validPrices.isEmpty()) {
-                double median = validPrices.get(validPrices.size() / 2);
-                orderedPrices = orderedPrices.stream()
-                        .filter(p -> {
-                            Double val = getValidIndexPriceSample(p);
-                            if (val == null) return false;
-                            double deviation = Math.abs(val - median) / median;
-                            if (deviation > 0.015) {
-                                logger.warn("Rejected outlier index point: symbol={}, time={}, price={}, median={}, dev={}%",
-                                        p.getSymbol(), p.getTime(), val, median, String.format("%.2f", deviation * 100));
-                                return false;
-                            }
-                            return true;
-                        })
-                        .toList();
-                if (orderedPrices.isEmpty()) {
-                    return Collections.emptyList();
-                }
+            if (orderedPrices.isEmpty()) {
+                return Collections.emptyList();
             }
         }
         
@@ -376,10 +361,9 @@ public class HistoricalDataServiceImpl implements HistoricalDataService {
                 }
             }
 
-            if (uniquePrices.size() == 1) {
-                result.add(uniquePrices.values().iterator().next());
-            } else if (uniquePrices.size() > 1) {
-                conflictingTimestamps++;
+            if (!uniquePrices.isEmpty()) {
+                // Retain the latest valid index price observation for this timestamp
+                result.add(orderedPrices.get(end - 1));
             }
             start = end;
         }

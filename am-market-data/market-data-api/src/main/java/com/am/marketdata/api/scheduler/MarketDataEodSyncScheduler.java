@@ -20,6 +20,24 @@ public class MarketDataEodSyncScheduler {
     private final java.util.Optional<com.am.marketdata.service.SymbolOrchestratorService> symbolOrchestratorService;
 
     /**
+     * If the application boots after 16:00 IST on a weekday (e.g. evening deployment or recovery restart),
+     * automatically trigger the EOD sync asynchronously so MongoDB & Redis receive today's closing snapshot
+     * without waiting for user action or next day's cron.
+     */
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void onApplicationReady() {
+        java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+        java.time.DayOfWeek day = istNow.getDayOfWeek();
+        boolean isWeekday = day != java.time.DayOfWeek.SATURDAY && day != java.time.DayOfWeek.SUNDAY;
+        boolean isPostMarketEod = istNow.toLocalTime().isAfter(java.time.LocalTime.of(16, 0));
+
+        if (isWeekday && isPostMarketEod) {
+            log.info("onApplicationReady", "Post-market startup detected past 16:00 IST. Initiating asynchronous catch-up EOD sync.");
+            java.util.concurrent.CompletableFuture.runAsync(this::syncEodIndexPrices);
+        }
+    }
+
+    /**
      * Runs Monday to Friday at 4:00 PM IST (16:00) to sync final EOD prices 
      * from Redis back to MongoDB for permanent storage.
      * 

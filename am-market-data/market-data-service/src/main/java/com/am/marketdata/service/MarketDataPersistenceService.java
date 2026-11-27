@@ -329,7 +329,7 @@ public class MarketDataPersistenceService implements com.am.marketdata.common.se
                     .index(symbol)
                     .indexSymbol(symbol)
                     .marketData(marketData)
-                    .timestamp(LocalDateTime.now(ZoneId.of("Asia/Kolkata")))
+                    .timestamp(LocalDateTime.now(ZoneOffset.UTC))
                     .build();
 
             marketIndexIndicesService.save(indexData);

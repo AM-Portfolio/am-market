@@ -271,6 +271,45 @@ class HistoricalDataServiceImplTest {
         verify(equityService).getPriceHistoryBySymbols(List.of("TCS", "INFY"), from, to, "1d");
     }
 
+    @Test
+    void shouldResampleIndexCrashWithoutDroppingRealDropCandles() {
+        String symbol = "NIFTY 50";
+        // 2026-11-27: 09:15 IST (03:45:00 UTC) to 15:30 IST (10:00:00 UTC)
+        Instant from = Instant.parse("2026-11-27T03:45:00Z");
+        Instant to = Instant.parse("2026-11-27T10:00:00Z");
+
+        // Simulate Friday's real crash: market starts at 25905 and drops gradually to 25607 (drop of ~300 pts)
+        List<MarketIndexIndices> crashSessionIndices = new java.util.ArrayList<>();
+        for (int i = 0; i < 375; i++) {
+            Instant minuteTime = from.plus(i, ChronoUnit.MINUTES);
+            MarketIndexIndices item = new MarketIndexIndices();
+            item.setIndexSymbol(symbol);
+            item.setTimestamp(LocalDateTime.ofInstant(minuteTime, ZoneOffset.UTC));
+
+            double price = 25905.0 - (i * (298.0 / 374.0));
+            MarketData md = new MarketData();
+            md.setOpen(price + 2.0);
+            md.setHigh(price + 5.0);
+            md.setLow(price - 5.0);
+            md.setLast(price);
+            item.setMarketData(md);
+            crashSessionIndices.add(item);
+        }
+
+        when(marketIndexIndicesService.getByIndexSymbolAndTimeBetween(eq(symbol), eq(from), eq(to)))
+                .thenReturn(crashSessionIndices);
+
+        Optional<HistoricalData> res5m = historicalDataService.getHistoricalData(symbol, from, to, "5m", true);
+        assertThat(res5m).isPresent();
+        List<OHLCVTPoint> candles = res5m.get().getDataPoints();
+        assertThat(candles).hasSize(75);
+
+        // First candle should open near 25905
+        assertThat(candles.get(0).getOpen()).isCloseTo(25907.0, org.assertj.core.data.Offset.offset(1.0));
+        // Last candle should close near 25607 (not getting stuck at 25900!)
+        assertThat(candles.get(74).getClose()).isCloseTo(25607.0, org.assertj.core.data.Offset.offset(1.0));
+    }
+
     private EquityPrice equityPrice(String symbol, String timestamp, double close) {
         return EquityPrice.builder()
                 .symbol(symbol)

@@ -95,7 +95,7 @@ public class MarketIndexIndicesMapper {
                 .key(measurement.getKey())
                 .index(measurement.getIndex())
                 .indexSymbol(measurement.getIndexSymbol())
-                .timestamp(LocalDateTime.ofInstant(measurement.getTime(), ZoneOffset.UTC))
+                .timestamp(measurement.getTime() != null ? LocalDateTime.ofInstant(measurement.getTime(), ZoneOffset.UTC) : null)
                 .marketData(MarketData.builder()
                     .open(measurement.getMarketDataOpen())
                     .previousClose(measurement.getMarketDataPreviousClose())
