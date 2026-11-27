@@ -37,7 +37,7 @@ spec:
           containers:
             - name: catalog-nav
               # Pin digest/SHA — never :latest for dig/preprod/prod (repin after GHCR publish).
-              image: ghcr.io/am-portfolio/am-market/am-parser-mf-catalog-job:58a96a1653c6ddbbb6226a9debd8ac6c67a5c9d5
+              image: ghcr.io/am-portfolio/am-market/am-parser-mf-catalog-job:b3ce727fe2bcdaea7f3f799415fa7daa52068d6a
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/sh
@@ -137,7 +137,7 @@ spec:
           containers:
             - name: catalog-nav
               # Same pin as evening — repin together after job image publish.
-              image: ghcr.io/am-portfolio/am-market/am-parser-mf-catalog-job:58a96a1653c6ddbbb6226a9debd8ac6c67a5c9d5
+              image: ghcr.io/am-portfolio/am-market/am-parser-mf-catalog-job:b3ce727fe2bcdaea7f3f799415fa7daa52068d6a
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/sh
