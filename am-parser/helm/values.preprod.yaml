@@ -5,7 +5,8 @@ env:
   ETF_LIST_CACHE_MINUTES: "60"
   ETF_HOLDINGS_CACHE_DAYS: "1"
   # Platform DB + mf_catalog schema; populate via am-parser mf_catalog_job before expecting NAV
-  AM_MARKET_MF_JDBC_URL: "jdbc:postgresql://postgres.asrax.in:5432/user_platform_preprod?currentSchema=mf_catalog"
+  # user_platform_preprod DB does not exist — isolate via schema on shared user_platform
+  AM_MARKET_MF_JDBC_URL: "jdbc:postgresql://postgres.asrax.in:5432/user_platform?currentSchema=mf_catalog_preprod"
 
 environment: preprod
 
