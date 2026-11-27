@@ -128,10 +128,14 @@ def probe_service_via_catalog_module() -> int:
         os.environ.get("AM_MARKET_MF_JDBC_URL")
         or "jdbc:postgresql://postgres.asrax.in:5432/user_platform_dev?currentSchema=mf_catalog"
     )
-    # Prefer platform DB if .env points at wrong db name
-    if "user_platform_dev" not in jdbc and "mf_catalog" in jdbc and "currentSchema" not in jdbc:
-        jdbc = "jdbc:postgresql://postgres.asrax.in:5432/user_platform_dev?currentSchema=mf_catalog"
-        print("SERVICE using platform_dev JDBC (env URL was db=mf_catalog without schema)")
+    # Never rewrite JDBC to dig — set AM_MARKET_MF_JDBC_URL explicitly per env.
+    if "/mf_catalog" in jdbc.split("?", 1)[0] and "currentSchema" not in jdbc:
+        print(
+            "SERVICE FAIL: JDBC path is /mf_catalog without currentSchema; "
+            "set …/user_platform[_preprod|_dev]?currentSchema=mf_catalog "
+            "(do not auto-rewrite to dig)"
+        )
+        return 1
     svc = MfCatalogService(
         jdbc,
         os.environ.get("AM_MARKET_MF_JDBC_USER", ""),

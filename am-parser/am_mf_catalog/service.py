@@ -72,21 +72,25 @@ WHERE scheme_code = %s OR isin = %s
 ORDER BY nav_date ASC
 """
 
-# Explore search: SCH identity + min invest + enrichment (+ optional returns denorm / SIP).
+# Explore search: rank+limit SCH(+enrich) first, then attach returns.
+# Joining returns/sip before LIMIT scanned the full purchaseAllowed universe and
+# made limit=100 hang past browser timeouts → BFF seed (null NAV).
 _SEARCH_SELECT_ENRICHED = (
-    "SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
-    "s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
-    "e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, "
-    "r.ret_1m, r.ret_3m, r.ret_1y, r.ret_3y, r.ret_5y, "
-    "sip.amc_name, sip.sip_min_installment_amount, e.source "
-    "FROM mf_scheme s "
-    "LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin "
-    "LEFT JOIN mf_scheme_returns r ON r.isin = s.isin "
-    "LEFT JOIN LATERAL ("
-    "  SELECT amc_name, sip_min_installment_amount FROM mf_sip_rule "
-    "  WHERE scheme_code = s.scheme_code OR scheme_isin = s.isin "
-    "  ORDER BY scheme_code LIMIT 1"
-    ") sip ON TRUE "
+    "WITH base AS ("
+    "  SELECT s.scheme_code, s.scheme_name, s.isin, s.amc_code, s.scheme_type, s.plan_type, "
+    "  s.purchase_allowed, s.latest_nav, s.latest_nav_date, s.new_purchase_min_amount, "
+    "  e.aum, e.expense_ratio, e.riskometer, e.sebi_category, e.sebi_sub_category, e.source "
+    "  FROM mf_scheme s "
+    "  LEFT JOIN mf_scheme_enrichment e ON e.isin = s.isin "
+)
+# Closed after WHERE+ORDER+LIMIT in _run_search when using CTE.
+_SEARCH_SELECT_ENRICHED_TAIL = (
+    ") SELECT b.scheme_code, b.scheme_name, b.isin, b.amc_code, b.scheme_type, b.plan_type, "
+    "b.purchase_allowed, b.latest_nav, b.latest_nav_date, b.new_purchase_min_amount, "
+    "b.aum, b.expense_ratio, b.riskometer, b.sebi_category, b.sebi_sub_category, "
+    "r.ret_1m, r.ret_3m, r.ret_1y, r.ret_3y, r.ret_5y, b.source "
+    "FROM base b "
+    "LEFT JOIN mf_scheme_returns r ON r.isin = b.isin "
 )
 
 _SEARCH_SELECT_BASIC = (
@@ -399,10 +403,26 @@ def _search_where(
     if amc and amc.strip():
         sql += f"AND UPPER({prefix}amc_code) = %s "
         params.append(amc.strip().upper())
-    if purchase_allowed and purchase_allowed.strip():
+    pa = _normalize_purchase_allowed(purchase_allowed)
+    if pa:
         sql += f"AND UPPER({prefix}purchase_allowed) = %s "
-        params.append(purchase_allowed.strip().upper())
+        params.append(pa)
     return sql, params
+
+
+def _normalize_purchase_allowed(value: Optional[str]) -> Optional[str]:
+    """Map true/yes/1 → Y and false/no/0 → N so Explore bool query params match SCH."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    upper = raw.upper()
+    if upper in {"Y", "YES", "TRUE", "1", "T"}:
+        return "Y"
+    if upper in {"N", "NO", "FALSE", "0", "F"}:
+        return "N"
+    return upper
 
 
 def _run_search(
@@ -412,21 +432,33 @@ def _run_search(
     purchase_allowed: Optional[str],
     limit: int,
 ) -> list[dict[str, Any]]:
-    """Try full JOIN search, then enrichment-only, then basic SCH — degrade gracefully."""
+    """Prefer limit-first CTE + returns (Explore 1Y/3Y/5Y), then enrich-only, then basic.
+
+    SIP lateral stays out — that join hung Explore past browser timeouts.
+    statement_timeout bounds each attempt so a slow returns join falls back.
+    """
     attempts = (
-        (_SEARCH_SELECT_ENRICHED, "s."),
-        (_SEARCH_SELECT_ENRICH_ONLY, "s."),
-        (_SEARCH_SELECT_BASIC, ""),
+        (_SEARCH_SELECT_ENRICHED, "s.", True),
+        (_SEARCH_SELECT_ENRICH_ONLY, "s.", False),
+        (_SEARCH_SELECT_BASIC, "", False),
     )
     last_err: Exception | None = None
     empty_query = not (query and query.strip())
-    for select_sql, alias in attempts:
+    for select_sql, alias, use_cte in attempts:
         where, params = _search_where(query, amc, purchase_allowed, alias=alias)
         order = _search_order_by(empty_query=empty_query, alias=alias, select_sql=select_sql)
-        sql = select_sql + where + order
+        if use_cte:
+            sql = select_sql + where + order + _SEARCH_SELECT_ENRICHED_TAIL
+        else:
+            sql = select_sql + where + order
         try:
             try:
                 cur.connection.rollback()
+            except Exception:
+                pass
+            # Bound each join attempt so a slow plan cannot hang Explore → BFF seed.
+            try:
+                cur.execute("SET LOCAL statement_timeout = '8s'")
             except Exception:
                 pass
             cur.execute(sql, list(params) + [limit])
@@ -442,6 +474,9 @@ def _run_search(
                     "mf_sip_rule",
                     "does not exist",
                     "undefinedtable",
+                    "statement timeout",
+                    "querycanceled",
+                    "canceling statement",
                 )
             ):
                 log.warning("MF search join degraded: %s", e)
@@ -484,7 +519,8 @@ def _map_search_row(row: tuple) -> dict[str, Any]:
     if len(row) > 9:
         item["newPurchaseMinAmount"] = row[9]
     # enrich-only: cols 10-14 + source at 15
-    # full: cols 10-14 enrich, 15-19 returns, 20-21 sip, 22 source
+    # CTE+returns: cols 10-14 enrich, 15-19 returns, 20 source
+    # legacy: … + SIP cols 20-21 then source
     if len(row) > 14:
         item["aum"] = float(row[10]) if row[10] is not None else None
         item["expenseRatio"] = float(row[11]) if row[11] is not None else None
@@ -495,7 +531,8 @@ def _map_search_row(row: tuple) -> dict[str, Any]:
         # enrich-only + source
         if row[15]:
             item["enrichmentSource"] = row[15]
-    if len(row) > 19:
+    if len(row) == 21:
+        # enrich + returns + source (no SIP lateral)
         returns: dict[str, Optional[float]] = {
             "1M": float(row[15]) if row[15] is not None else None,
             "3M": float(row[16]) if row[16] is not None else None,
@@ -505,14 +542,26 @@ def _map_search_row(row: tuple) -> dict[str, Any]:
         }
         if any(v is not None for v in returns.values()):
             item["returnsPct"] = returns
+        if row[20]:
+            item["enrichmentSource"] = row[20]
     if len(row) > 21:
+        # Legacy shape with SIP cols (amc_name, sip_min) before source
+        returns = {
+            "1M": float(row[15]) if row[15] is not None else None,
+            "3M": float(row[16]) if row[16] is not None else None,
+            "1Y": float(row[17]) if row[17] is not None else None,
+            "3Y": float(row[18]) if row[18] is not None else None,
+            "5Y": float(row[19]) if row[19] is not None else None,
+        }
+        if any(v is not None for v in returns.values()):
+            item["returnsPct"] = returns
         if row[20]:
             item["amcName"] = row[20]
         if row[21] is not None:
             item["sipMinAmount"] = row[21]
             item["minSip"] = row[21]
-    if len(row) > 22 and row[22]:
-        item["enrichmentSource"] = row[22]
+        if len(row) > 22 and row[22]:
+            item["enrichmentSource"] = row[22]
     return item
 
 
